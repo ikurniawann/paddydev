@@ -114,7 +114,7 @@ func (s *service) enrich(ctx context.Context, rows []Employee) ([]employeeView, 
 func (s *service) listUsers(ctx context.Context, q listQuery) (*userListPage, error) {
 	rows, total, err := s.ports.Employees.List(ctx, s.db, EmployeeFilter{
 		Search: q.search, DepartmentID: q.departmentID, EmploymentStatus: q.employmentStatus,
-		IsActive: q.isActive, IsAccessApp: q.isAccessApp, SortBy: q.sortBy, Asc: q.asc,
+		IsActive: q.isActive, IsAccessApp: q.isAccessApp, ScheduleType: q.scheduleType, SortBy: q.sortBy, Asc: q.asc,
 		Limit: q.limit, Offset: (q.page - 1) * q.limit,
 	})
 	if err != nil {
@@ -227,6 +227,11 @@ func (s *service) createUser(ctx context.Context, actorID string, b *employeeBod
 		{"join_date", *b.str("join_date")}, {"employment_status", *b.str("employment_status")},
 		{"is_access_app", *b.isAccessApp},
 	}
+	scheduleType := "shift"
+	if b.scheduleType != nil {
+		scheduleType = *b.scheduleType
+	}
+	cols = append(cols, Column{"schedule_type", scheduleType})
 	for _, c := range insertColumns {
 		cols = append(cols, Column{c, b.str(c)})
 	}

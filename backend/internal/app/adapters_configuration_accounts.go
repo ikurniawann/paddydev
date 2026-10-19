@@ -133,7 +133,7 @@ var _ accounts.Employees = accountsEmployees{}
 // manager embed aliases the inner employees so reporting_to is the outer
 // row's.
 const employeeSelect = `SELECT id::text, user_id::text, full_name, nip, email, phone, join_date, end_date,
-  employment_status, is_active, is_access_app, department_id::text, section_id::text, job_title_id::text,
+  employment_status, is_active, is_access_app, schedule_type, department_id::text, section_id::text, job_title_id::text,
   reporting_to::text, ktp, npwp, birth_date, gender::text, marital_status::text, address, city, province,
   postal_code, bank_name, bank_account, bpjs_tk, bpjs_kesehatan, emergency_contact_name,
   emergency_contact_phone, emergency_contact_relationship, photo_url, notes, created_at, updated_at,
@@ -147,7 +147,7 @@ func scanEmployee(r pgx.CollectableRow) (accounts.Employee, error) {
 	var e accounts.Employee
 	var dept, section, job, manager []byte
 	err := r.Scan(&e.ID, &e.UserID, &e.FullName, &e.NIP, &e.Email, &e.Phone, &e.JoinDate, &e.EndDate,
-		&e.EmploymentStatus, &e.IsActive, &e.IsAccessApp, &e.DepartmentID, &e.SectionID, &e.JobTitleID,
+		&e.EmploymentStatus, &e.IsActive, &e.IsAccessApp, &e.ScheduleType, &e.DepartmentID, &e.SectionID, &e.JobTitleID,
 		&e.ReportingTo, &e.KTP, &e.NPWP, &e.BirthDate, &e.Gender, &e.MaritalStatus, &e.Address, &e.City, &e.Province,
 		&e.PostalCode, &e.BankName, &e.BankAccount, &e.BPJSTK, &e.BPJSKesehatan, &e.EmergencyName,
 		&e.EmergencyPhone, &e.EmergencyRelation, &e.PhotoURL, &e.Notes, &e.CreatedAt, &e.UpdatedAt,
@@ -178,6 +178,9 @@ func (accountsEmployees) List(ctx context.Context, q database.Querier, f account
 	}
 	if f.IsAccessApp != nil {
 		where = append(where, `"is_access_app" = `+param(*f.IsAccessApp))
+	}
+	if f.ScheduleType != nil {
+		where = append(where, `"schedule_type" = `+param(*f.ScheduleType))
 	}
 	if f.Search != nil {
 		p := param(strings.ReplaceAll("%"+*f.Search+"%", "*", "%"))
@@ -246,7 +249,7 @@ func (accountsEmployees) NIPTaken(ctx context.Context, q database.Querier, nip s
 // employeeWritable are the columns the account flows write.
 var employeeWritable = map[string]bool{
 	"nip": true, "full_name": true, "email": true, "phone": true, "join_date": true, "end_date": true,
-	"employment_status": true, "is_active": true, "is_access_app": true, "user_id": true,
+	"employment_status": true, "is_active": true, "is_access_app": true, "user_id": true, "schedule_type": true,
 	"department_id": true, "section_id": true, "job_title_id": true, "reporting_to": true, "ktp": true,
 	"npwp": true, "birth_date": true, "gender": true, "marital_status": true, "address": true, "city": true,
 	"province": true, "postal_code": true, "bank_name": true, "bank_account": true, "bpjs_tk": true,

@@ -20,6 +20,7 @@ type employeeView struct {
 	EmploymentStatus             string          `json:"employmentStatus"`
 	IsActive                     bool            `json:"isActive"`
 	IsAccessApp                  bool            `json:"isAccessApp"`
+	ScheduleType                 string          `json:"scheduleType"`
 	DepartmentID                 *string         `json:"departmentId"`
 	SectionID                    *string         `json:"sectionId"`
 	JobTitleID                   *string         `json:"jobTitleId"`
@@ -92,7 +93,7 @@ func mapEmployee(e Employee, app *appUser) (employeeView, error) {
 	v := employeeView{
 		ID: e.ID, UserID: e.UserID, FullName: e.FullName, NIP: e.NIP, Email: e.Email, Phone: e.Phone,
 		JoinDate: httpx.JSTime(e.JoinDate), EndDate: httpx.NewJSTime(e.EndDate),
-		EmploymentStatus: e.EmploymentStatus, IsActive: e.IsActive, IsAccessApp: e.IsAccessApp,
+		EmploymentStatus: e.EmploymentStatus, IsActive: e.IsActive, IsAccessApp: e.IsAccessApp, ScheduleType: e.ScheduleType,
 		DepartmentID: e.DepartmentID, SectionID: e.SectionID, JobTitleID: e.JobTitleID, ReportingTo: e.ReportingTo,
 		KTP: e.KTP, NPWP: e.NPWP, BirthDate: httpx.NewJSTime(e.BirthDate), Gender: e.Gender,
 		MaritalStatus: e.MaritalStatus, Address: e.Address, City: e.City, Province: e.Province,

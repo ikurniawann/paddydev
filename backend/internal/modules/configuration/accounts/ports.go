@@ -82,6 +82,7 @@ type Column struct {
 // the query builder's ilike filter wraps it in % and turns * into %.
 type EmployeeFilter struct {
 	Search, DepartmentID, EmploymentStatus *string
+	ScheduleType                           *string // "shift" | "non_shift"
 	IsActive, IsAccessApp                  *bool
 	SortBy                                 string
 	Asc                                    bool
@@ -96,6 +97,7 @@ type Employee struct {
 	JoinDate                                          time.Time
 	EndDate, BirthDate                                *time.Time
 	IsActive, IsAccessApp                             bool
+	ScheduleType                                      string
 	DepartmentID, SectionID, JobTitleID, ReportingTo  *string
 	KTP, NPWP, Gender, MaritalStatus, Address         *string
 	City, Province, PostalCode, BankName, BankAccount *string

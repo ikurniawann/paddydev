@@ -197,7 +197,7 @@ func TestListUsers(t *testing.T) {
 }
 
 var employeeKeys = []string{"id", "userId", "fullName", "nip", "email", "phone", "joinDate", "endDate",
-	"employmentStatus", "isActive", "isAccessApp", "departmentId", "sectionId", "jobTitleId", "reportingTo",
+	"employmentStatus", "isActive", "isAccessApp", "scheduleType", "departmentId", "sectionId", "jobTitleId", "reportingTo",
 	"ktp", "npwp", "birthDate", "gender", "maritalStatus", "address", "city", "province", "postalCode",
 	"bankName", "bankAccount", "bpjsTk", "bpjsKesehatan", "emergencyContactName", "emergencyContactPhone",
 	"emergencyContactRelationship", "photoUrl", "notes", "createdAt", "updatedAt", "department", "section",
@@ -586,4 +586,30 @@ func TestResendingSameRoleKeepsIamRoles(t *testing.T) {
 	if got := roles(); got != "finance_staff" {
 		t.Fatalf("role change IAM roles = %q, want finance_staff", got)
 	}
+}
+
+func TestEmployeeScheduleType(t *testing.T) {
+	e := setup(t, map[string][]string{"hris.kepegawaian.users": {"read", "create", "update"}})
+	email := uniqueEmail()
+	body := employeeBody(email)
+	body["schedule_type"] = "non_shift"
+	code, out, raw := e.do("POST", "/api/users", body)
+	if code != 201 {
+		t.Fatalf("create = %d %s", code, raw)
+	}
+	data := out["data"].(map[string]any)
+	id := data["id"].(string)
+	if data["scheduleType"] != "non_shift" {
+		t.Fatalf("scheduleType = %v", data["scheduleType"])
+	}
+	code, out, raw = e.do("PUT", "/api/users/"+id, map[string]any{"schedule_type": "shift", "full_name": "Budi Dua"})
+	if code != 200 || out["data"].(map[string]any)["scheduleType"] != "non_shift" {
+		t.Fatalf("PUT must not change schedule_type: %d %s", code, raw)
+	}
+	code, out, _ = e.do("GET", "/api/users?schedule_type=non_shift&search="+email, nil)
+	if list, _ := out["data"].([]any); code != 200 || len(list) != 1 {
+		t.Fatalf("filtered list = %d %v", code, out)
+	}
+	code, out, _ = e.do("GET", "/api/users?schedule_type=libur", nil)
+	wantError(t, code, out, 400, "Parameter tidak valid")
 }

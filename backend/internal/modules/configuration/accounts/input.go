@@ -141,6 +141,9 @@ type employeeBody struct {
 	branchID, defaultWarehouseID        *string
 	warehouseIDs                        []string
 	canSwitchStall, canCentralCheckout  *bool
+	// scheduleType is create-only: changes go through the HRIS
+	// schedule-type endpoint so its transition rules always run.
+	scheduleType *string
 }
 
 func (b *employeeBody) has(key string) bool {
@@ -211,6 +214,7 @@ func parseEmployeeBody(f *validate.Form, create bool) *employeeBody {
 		}
 	}
 	if create {
+		b.scheduleType = f.Enum("schedule_type", optional, []string{"shift", "non_shift"})
 		access := f.BoolDefault("is_access_app", false)
 		b.isAccessApp = &access
 	} else {
@@ -331,6 +335,7 @@ var listSortColumns = []string{"full_name", "nip", "email", "join_date", "employ
 
 type listQuery struct {
 	search, departmentID, employmentStatus, role *string
+	scheduleType                                 *string
 	isActive, isAccessApp                        *bool
 	page, limit                                  int
 	sortBy                                       string
@@ -378,6 +383,7 @@ func parseListQuery(values url.Values) (listQuery, error) {
 	q.isActive = flag("is_active")
 	q.isAccessApp = flag("is_access_app")
 	q.role = text("role", 32)
+	q.scheduleType = f.Enum("schedule_type", optional, []string{"shift", "non_shift"})
 	q.page, q.limit = 1, 20
 	if n := coerceNumber(f, "page", withDefault, validate.NumOpts{Integer: true, Min: validate.Bound(1)}); n != nil {
 		q.page = int(*n)
