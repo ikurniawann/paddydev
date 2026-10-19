@@ -240,6 +240,30 @@ func (accountsEmployees) EmailTaken(ctx context.Context, q database.Querier, ema
 	return taken, err
 }
 
+func (accountsEmployees) EmailOwner(ctx context.Context, q database.Querier, email string) (*accounts.EmailOwnerRow, error) {
+	var o accounts.EmailOwnerRow
+	err := q.QueryRow(ctx, `SELECT id::text, nip, full_name, is_active, end_date, user_id::text
+		FROM hris.employees WHERE lower(email) = lower($1) ORDER BY is_active DESC, updated_at DESC NULLS LAST LIMIT 1`, email).
+		Scan(&o.ID, &o.NIP, &o.FullName, &o.IsActive, &o.EndDate, &o.UserID)
+	if database.IsNoRows(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &o, nil
+}
+
+func (accountsEmployees) ReleaseEmail(ctx context.Context, q database.Querier, id, archive string) (*string, error) {
+	var userID *string
+	if err := q.QueryRow(ctx, `SELECT user_id::text FROM hris.employees WHERE id = $1::text::uuid FOR UPDATE`, id).Scan(&userID); err != nil {
+		return nil, err
+	}
+	_, err := q.Exec(ctx, `UPDATE hris.employees SET email = $2, user_id = NULL, is_access_app = false, updated_at = now()
+		WHERE id = $1::text::uuid`, id, archive)
+	return userID, err
+}
+
 func (accountsEmployees) NIPTaken(ctx context.Context, q database.Querier, nip string) (bool, error) {
 	var taken bool
 	err := q.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM hris.employees WHERE nip = $1)`, nip).Scan(&taken)

@@ -144,6 +144,9 @@ type employeeBody struct {
 	// scheduleType is create-only: changes go through the HRIS
 	// schedule-type endpoint so its transition rules always run.
 	scheduleType *string
+	// releaseEmail (create only) confirms taking an email held by a
+	// resigned employee (EPIC-056 §1.2).
+	releaseEmail bool
 }
 
 func (b *employeeBody) has(key string) bool {
@@ -215,6 +218,7 @@ func parseEmployeeBody(f *validate.Form, create bool) *employeeBody {
 	}
 	if create {
 		b.scheduleType = f.Enum("schedule_type", optional, []string{"shift", "non_shift"})
+		b.releaseEmail = f.BoolDefault("release_email", false)
 		access := f.BoolDefault("is_access_app", false)
 		b.isAccessApp = &access
 	} else {

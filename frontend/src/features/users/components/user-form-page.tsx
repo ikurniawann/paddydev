@@ -26,6 +26,9 @@ import {
 import type { CreateUserEmployeeInput, UserEmployeeItem } from "../types";
 import { EMPLOYEES_ROUTES, emptyUserForm } from "../constants";
 import { useCreateUser, useUpdateUser } from "../mutations";
+import { fetchEmailOwner } from "../api";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { emailCheck } from "@/lib/hris/email-release";
 import { useUserDetail, useUserFormLookups } from "../queries";
 import { AppAccessFormSection } from "./app-access-form-section";
 import { ResetPasswordDialog } from "./reset-password-dialog";
@@ -73,6 +76,7 @@ function UserEmployeeForm({
     detail ? userFormFromItem(detail) : emptyUserForm
   );
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
+  const [releasePrompt, setReleasePrompt] = useState<string | null>(null);
 
   const hasExistingAppAccount = Boolean(detail?.userId);
   const isSubmitting = createMutation.isPending || updateMutation.isPending;
@@ -82,7 +86,7 @@ function UserEmployeeForm({
     setForm((prev) => ({ ...prev, ...patch }));
   }
 
-  async function handleSubmit() {
+  async function handleSubmit(releaseEmail = false) {
     const values = canManageAccounts ? form : { ...form, is_access_app: false };
     const invalid = validateUserForm(values, { isEdit, hasExistingAppAccount });
     if (invalid) {
@@ -90,7 +94,26 @@ function UserEmployeeForm({
       return;
     }
 
+    // Tambah karyawan: email karyawan aktif ditolak, email karyawan resign
+    // perlu konfirmasi "lepas email" (EPIC-056).
+    if (!isEdit && !releaseEmail) {
+      try {
+        const check = emailCheck((await fetchEmailOwner(values.email)).data);
+        if (check.kind === "taken") {
+          toast.error(check.message);
+          return;
+        }
+        if (check.kind === "release") {
+          setReleasePrompt(check.message);
+          return;
+        }
+      } catch {
+        // pemeriksaan gagal: biarkan server yang memutuskan (409)
+      }
+    }
+
     const payload = buildUserPayload(values, isEdit);
+    if (releaseEmail) payload.release_email = true;
     // Tanpa Manajemen User: tidak ada field akun sama sekali saat edit (akun yang ada tidak disentuh).
     if (!canManageAccounts && isEdit) delete payload.is_access_app;
     try {
@@ -179,7 +202,7 @@ function UserEmployeeForm({
           Cancel
         </Button>
         <Button
-          onClick={handleSubmit}
+          onClick={() => void handleSubmit()}
           disabled={isSubmitting}
           className="h-10 gap-2 rounded-lg bg-pink-600 px-4 text-sm font-semibold text-white shadow-sm hover:bg-pink-700"
         >
@@ -187,6 +210,25 @@ function UserEmployeeForm({
           {isSubmitting ? "Saving..." : isEdit ? "Save Changes" : "Add Employee"}
         </Button>
       </FormPageFooter>
+
+      <ConfirmDialog
+        open={releasePrompt !== null}
+        onOpenChange={(open) => !open && setReleasePrompt(null)}
+        title="Email milik karyawan resign"
+        confirmLabel="Lepas email & simpan"
+        variant="default"
+        loading={isSubmitting}
+        onConfirm={() => {
+          setReleasePrompt(null);
+          void handleSubmit(true);
+        }}
+      >
+        <p className="text-sm text-gray-700">{releasePrompt}</p>
+        <p className="mt-2 text-xs text-gray-500">
+          Email data lama diganti alamat arsip; riwayat data lama tetap tersimpan. Bila data lama punya akun login, akun itu
+          dipindah ke karyawan baru.
+        </p>
+      </ConfirmDialog>
 
       {editId && canManageAccounts ? (
         <ResetPasswordDialog

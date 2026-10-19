@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -13,6 +14,7 @@ import (
 
 	"nuhabit/backend/internal/modules/configuration/accounts/domain"
 	"nuhabit/backend/internal/modules/configuration/kit"
+	platformaudit "nuhabit/backend/internal/platform/audit"
 	"nuhabit/backend/internal/platform/database"
 	"nuhabit/backend/internal/platform/httpx"
 	"nuhabit/backend/internal/platform/validate"
@@ -204,14 +206,34 @@ func orEmpty(p *string) string {
 	return *p
 }
 
+const emailHeldByResigned = "Email ini milik karyawan resign — konfirmasi lepas email"
+
+// archiveEmail is the address a resigned employee's email is replaced
+// with when a new employee takes it (".invalid" never delivers).
+func archiveEmail(nip string) string {
+	clean := strings.Map(func(r rune) rune {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '-':
+			return r
+		case r >= 'A' && r <= 'Z':
+			return r + 32
+		}
+		return -1
+	}, nip)
+	return "arsip-" + clean + "@resign.invalid"
+}
+
 func (s *service) createUser(ctx context.Context, actorID string, b *employeeBody) (*employeeView, error) {
 	email := *b.str("email")
-	taken, err := s.ports.Employees.EmailTaken(ctx, s.db, email, "")
+	owner, err := s.ports.Employees.EmailOwner(ctx, s.db, email)
 	if err != nil {
 		return nil, err
 	}
-	if taken {
+	if owner != nil && owner.IsActive {
 		return nil, httpx.Conflict(emailInUseMessage)
+	}
+	if owner != nil && !b.releaseEmail {
+		return nil, httpx.Conflict(emailHeldByResigned)
 	}
 	nip := ""
 	if n := b.str("nip"); n != nil {
@@ -235,11 +257,45 @@ func (s *service) createUser(ctx context.Context, actorID string, b *employeeBod
 	for _, c := range insertColumns {
 		cols = append(cols, Column{c, b.str(c)})
 	}
-	id, err := s.ports.Employees.Insert(ctx, s.db, cols)
+	var id string
+	movedAccount := false
+	err = database.WithTx(ctx, s.db, func(tx pgx.Tx) error {
+		var prev *string
+		if owner != nil {
+			archive := archiveEmail(owner.NIP)
+			if prev, err = s.ports.Employees.ReleaseEmail(ctx, tx, owner.ID, archive); err != nil {
+				return err
+			}
+			if err := platformaudit.Write(ctx, tx, platformaudit.Entry{ActorID: actorID, Action: "employee.email_released",
+				Entity: "hris.employees", EntityID: &owner.ID, EntityLabel: &owner.FullName,
+				Before: map[string]any{"email": email}, After: map[string]any{"email": archive}}); err != nil {
+				return err
+			}
+		}
+		if id, err = s.ports.Employees.Insert(ctx, tx, cols); err != nil {
+			return emailConflictOr(err)
+		}
+		if prev == nil {
+			return nil
+		}
+		// The same person keeps their login: move the account to the new record.
+		if err := s.ports.Employees.Update(ctx, tx, id, []Column{{"user_id", *prev}, {"is_access_app", true}}); err != nil {
+			return err
+		}
+		ban := false
+		if _, err := s.ports.Identity.UpdateUser(ctx, tx, *prev, AuthUpdate{Ban: &ban}); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `UPDATE configuration.users SET status = 'active', updated_at = $1 WHERE id = $2`, s.stamp(), *prev); err != nil {
+			return err
+		}
+		movedAccount = true
+		return nil
+	})
 	if err != nil {
-		return nil, emailConflictOr(err)
+		return nil, err
 	}
-	if *b.isAccessApp && orEmpty(b.password) != "" && b.role != nil {
+	if !movedAccount && *b.isAccessApp && orEmpty(b.password) != "" && b.role != nil {
 		if err := s.provision(ctx, actorID, id, b, email, *b.str("full_name")); err != nil {
 			return nil, err
 		}

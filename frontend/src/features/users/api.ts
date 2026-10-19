@@ -359,3 +359,8 @@ export const resignEmployee = (
   id: string,
   body: { effective_date: string; resign_type: string; reason: string | null }
 ) => apiPost<{ data: unknown; message?: string }>(`/api/hris/employees/${id}/resign`, body);
+
+export const fetchEmailOwner = (email: string) =>
+  apiGet<{ data: import("@/lib/hris/email-release").EmailOwner | null }>(
+    `/api/users/email-owner?email=${encodeURIComponent(email)}`
+  );

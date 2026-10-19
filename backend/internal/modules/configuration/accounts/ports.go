@@ -64,12 +64,26 @@ type Employees interface {
 	Access(ctx context.Context, q database.Querier, id string) (*EmployeeAccess, error)
 	// EmailTaken reports another row (id <> exceptID when set) with email.
 	EmailTaken(ctx context.Context, q database.Querier, email, exceptID string) (bool, error)
+	// EmailOwner is the employee holding email (case-insensitive), the
+	// active one first; nil when none.
+	EmailOwner(ctx context.Context, q database.Querier, email string) (*EmailOwnerRow, error)
+	// ReleaseEmail sets the row's email to archive and unlinks its login
+	// account; it returns the user_id it had.
+	ReleaseEmail(ctx context.Context, q database.Querier, id, archive string) (*string, error)
 	// NIPTaken reports a row with nip.
 	NIPTaken(ctx context.Context, q database.Querier, nip string) (bool, error)
 	// Insert adds a row with the given columns and returns its id.
 	Insert(ctx context.Context, q database.Querier, cols []Column) (string, error)
 	// Update sets the given columns on the row.
 	Update(ctx context.Context, q database.Querier, id string, cols []Column) error
+}
+
+// EmailOwnerRow is the employee an email belongs to.
+type EmailOwnerRow struct {
+	ID, NIP, FullName string
+	IsActive          bool
+	EndDate           *time.Time
+	UserID            *string
 }
 
 // Column is one hris.employees column and its value (nil is NULL).

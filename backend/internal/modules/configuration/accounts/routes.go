@@ -9,6 +9,7 @@ import (
 	"crypto/rand"
 	"net/http"
 	"slices"
+	"strings"
 
 	"nuhabit/backend/internal/modules/configuration/kit"
 	"nuhabit/backend/internal/platform/database"
@@ -28,6 +29,7 @@ func Routes(d module.Deps, db database.DB, p Ports) []module.Route {
 	return []module.Route{
 		{Pattern: "GET /api/users", Handler: httpx.Handle(h.listUsers)},
 		{Pattern: "POST /api/users", Handler: httpx.Handle(h.createUser)},
+		{Pattern: "GET /api/users/email-owner", Handler: httpx.Handle(h.emailOwner)},
 		{Pattern: "GET /api/users/{id}", Handler: httpx.Handle(h.getUser)},
 		{Pattern: "PUT /api/users/{id}", Handler: httpx.Handle(h.updateUser)},
 		{Pattern: "POST /api/users/{id}/reset-password", Handler: httpx.Handle(h.resetUserPassword)},
@@ -139,6 +141,31 @@ func (h handlers) createUser(w http.ResponseWriter, r *http.Request) error {
 		return rethrowUserServiceError(err)
 	}
 	return httpx.JSON(w, http.StatusCreated, dataMessage{Data: data, Message: "Employee created successfully"})
+}
+
+// emailOwner tells the create form who holds an email (EPIC-056 §1.2).
+func (h handlers) emailOwner(w http.ResponseWriter, r *http.Request) error {
+	if _, _, err := h.writeGuard(r, "create"); err != nil {
+		return err
+	}
+	email := strings.TrimSpace(r.URL.Query().Get("email"))
+	if email == "" {
+		return httpx.JSON(w, http.StatusOK, map[string]any{"data": nil})
+	}
+	o, err := h.svc.ports.Employees.EmailOwner(r.Context(), h.svc.db, email)
+	if err != nil {
+		return err
+	}
+	if o == nil {
+		return httpx.JSON(w, http.StatusOK, map[string]any{"data": nil})
+	}
+	var end *string
+	if o.EndDate != nil {
+		d := o.EndDate.Format("2006-01-02")
+		end = &d
+	}
+	return httpx.JSON(w, http.StatusOK, map[string]any{"data": map[string]any{
+		"id": o.ID, "nip": o.NIP, "full_name": o.FullName, "is_active": o.IsActive, "end_date": end}})
 }
 
 func (h handlers) getUser(w http.ResponseWriter, r *http.Request) error {

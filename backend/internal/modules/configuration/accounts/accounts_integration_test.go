@@ -613,3 +613,61 @@ func TestEmployeeScheduleType(t *testing.T) {
 	code, out, _ = e.do("GET", "/api/users?schedule_type=libur", nil)
 	wantError(t, code, out, 400, "Parameter tidak valid")
 }
+
+func insertEmployee(t *testing.T, e *env, name, email, nip string, active bool, userID *string) string {
+	t.Helper()
+	var id string
+	if err := e.tx.QueryRow(context.Background(), `INSERT INTO hris.employees
+		(full_name, nip, email, phone, join_date, employment_status, is_active, user_id)
+		VALUES ($1, $2, $3, '', '2023-01-02', 'permanent', $4, $5) RETURNING id::text`,
+		name, nip, email, active, userID).Scan(&id); err != nil {
+		t.Fatal(err)
+	}
+	return id
+}
+
+func TestCreateEmployeeReleasesResignedEmail(t *testing.T) {
+	// The login account is created before setup's transaction so the
+	// rollback runs first on cleanup (the account row is locked by the tx).
+	login := testutil.CreateStaff(t, testutil.StaffOptions{Role: "employee"})
+	e := setup(t, map[string][]string{"hris.kepegawaian.users": {"read", "create", "update"}})
+	nip := "T" + testutil.RandomHex(5)
+	email := login.Email
+	e.tx.Exec(context.Background(), `UPDATE auth.users SET banned_until = now() + interval '1 year' WHERE id = $1`, login.UserID)
+	oldID := insertEmployee(t, e, "Rina Lama", email, nip, false, &login.UserID)
+
+	body := employeeBody(strings.ToUpper(email))
+	code, out, _ := e.do("POST", "/api/users", body)
+	wantError(t, code, out, 409, "Email ini milik karyawan resign — konfirmasi lepas email")
+
+	code, out, _ = e.do("GET", "/api/users/email-owner?email="+strings.ToUpper(email), nil)
+	if code != 200 || out["data"].(map[string]any)["nip"] != nip {
+		t.Fatalf("owner = %d %v", code, out)
+	}
+
+	body["release_email"] = true
+	code, out, raw := e.do("POST", "/api/users", body)
+	if code != 201 {
+		t.Fatalf("create = %d %s", code, raw)
+	}
+	newID := out["data"].(map[string]any)["id"].(string)
+	if got := e.scalar(`SELECT email FROM hris.employees WHERE id = $1`, oldID); got != "arsip-"+strings.ToLower(nip)+"@resign.invalid" {
+		t.Fatalf("old email = %v", got)
+	}
+	if got := e.scalar(`SELECT user_id::text FROM hris.employees WHERE id = $1`, newID); got != login.UserID {
+		t.Fatalf("login account not moved: %v", got)
+	}
+	if got := e.scalar(`SELECT banned_until IS NULL FROM auth.users WHERE id = $1`, login.UserID); got != true {
+		t.Fatal("login account must be unbanned")
+	}
+	if got := e.scalar(`SELECT count(*) FROM audit.audit_log WHERE entity_id = $1 AND action = 'employee.email_released'`, oldID); got != int64(1) {
+		t.Fatalf("audit = %v", got)
+	}
+
+	active := uniqueEmail()
+	insertEmployee(t, e, "Aktif", active, "T"+testutil.RandomHex(5), true, nil)
+	again := employeeBody(active)
+	again["release_email"] = true
+	code, out, _ = e.do("POST", "/api/users", again)
+	wantError(t, code, out, 409, "Email sudah dipakai akun lain")
+}
