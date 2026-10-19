@@ -18,3 +18,10 @@ it("wajib tanggal & jenis, lalu mengirim resign", async () => {
   );
   expect(onDone).toHaveBeenCalled();
 });
+
+it("menolak tanggal efektif di masa depan", () => {
+  render(<ResignDialog open employeeId="e1" employeeName="Rina" joinDate="2025-01-10" today="2026-10-21" onOpenChange={() => {}} onDone={() => {}} />);
+  fireEvent.change(screen.getByDisplayValue("2026-10-21"), { target: { value: "2026-11-05" } });
+  expect(screen.getByText(/Tidak boleh setelah hari ini/)).toBeTruthy();
+  expect((screen.getByRole("button", { name: "Resign" }) as HTMLButtonElement).disabled).toBe(true);
+});

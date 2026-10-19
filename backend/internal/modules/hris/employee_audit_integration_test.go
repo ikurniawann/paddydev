@@ -12,7 +12,7 @@ func TestEmployeeAuditTrail(t *testing.T) {
 	hr, _ := h.staff("hrd", iam.HrisKepegawaian, false)
 	e := h.employee(emp{name: "Audit Satu"})
 	h.do(&hr, http.MethodPut, "/api/hris/employees/"+e+"/schedule-type", map[string]any{"schedule_type": "non_shift", "effective_from": "2026-10-06"})
-	h.do(&hr, http.MethodPost, "/api/hris/employees/"+e+"/resign", map[string]any{"effective_date": "2026-10-07", "resign_type": "resign"})
+	h.do(&hr, http.MethodPost, "/api/hris/employees/"+e+"/resign", map[string]any{"effective_date": "2026-10-05", "resign_type": "resign"})
 	c := h.do(&hr, http.MethodGet, "/api/hris/employees/"+e+"/audit", nil)
 	expect(t, c, http.StatusOK, "")
 	list := c.list()

@@ -23,6 +23,11 @@ type resignInput struct {
 var resignStatus = map[string]string{"resign": "resigned", "end_of_contract": "resigned", "terminated": "terminated"}
 
 func (s *Service) ResignEmployee(ctx context.Context, actor *auth.User, id string, in resignInput) (map[string]any, error) {
+	// Resign langsung menonaktifkan & memblokir login: tanggal efektif = hari
+	// terakhir kerja, tidak boleh di masa depan (EPIC-056 review I8).
+	if in.EffectiveDate > domain.TodayWIB(s.clock()) {
+		return nil, httpx.BadRequest("Tanggal efektif tidak boleh setelah hari ini — catat resign pada hari terakhir kerja")
+	}
 	var out map[string]any
 	err := s.repo.InTx(ctx, func(r Repository) error {
 		q := r.querier()

@@ -28,7 +28,13 @@ export function ResignDialog({ open, employeeId, employeeName, joinDate, today, 
   const [type, setType] = useState<(typeof TYPES)[number]["value"]>("resign");
   const [reason, setReason] = useState("");
   const [saving, setSaving] = useState(false);
-  const dateError = !date ? "Tanggal efektif wajib diisi" : date < joinDate ? "Tidak boleh sebelum tanggal masuk" : null;
+  const dateError = !date
+    ? "Tanggal efektif wajib diisi"
+    : date < joinDate
+      ? "Tidak boleh sebelum tanggal masuk"
+      : date > today
+        ? "Tidak boleh setelah hari ini — catat pada hari terakhir kerja"
+        : null;
 
   async function submit() {
     if (dateError) return;
@@ -57,7 +63,7 @@ export function ResignDialog({ open, employeeId, employeeName, joinDate, today, 
           </p>
           <label className="block">
             Tanggal efektif *
-            <Input type="date" min={joinDate} value={date} onChange={(e) => setDate(e.target.value)} className="mt-1" />
+            <Input type="date" min={joinDate} max={today} value={date} onChange={(e) => setDate(e.target.value)} className="mt-1" />
             {dateError ? <span className="text-danger">{dateError}</span> : null}
           </label>
           <fieldset className="space-y-1">
