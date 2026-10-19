@@ -364,3 +364,62 @@ export const fetchEmailOwner = (email: string) =>
   apiGet<{ data: import("@/lib/hris/email-release").EmailOwner | null }>(
     `/api/users/email-owner?email=${encodeURIComponent(email)}`
   );
+
+/* ── Import Data Karyawan (EPIC-056) ────────────────────────────────── */
+
+export interface EmployeeImportIssue {
+  line: number;
+  column: string;
+  name: string;
+  message: string;
+}
+
+export interface EmployeeImportPreview {
+  summary: { create: number; update: number; skip: number };
+  errors?: EmployeeImportIssue[];
+  warnings?: EmployeeImportIssue[];
+  rows?: { line: number; action: string; nip: string; name: string }[];
+  changes?: { line: number; nip: string; name: string; field: string; before: string; after: string }[];
+}
+
+type EmployeeImportInput = {
+  file: File;
+  mode: "add" | "replace";
+  step: "preview" | "commit" | "error_file";
+  release_emails?: boolean;
+};
+
+function employeeImportForm(input: EmployeeImportInput): FormData {
+  const form = new FormData();
+  form.append("file", input.file);
+  form.append("mode", input.mode);
+  form.append("step", input.step);
+  if (input.release_emails) form.append("release_emails", "true");
+  return form;
+}
+
+export async function importEmployeesFile(
+  input: Omit<EmployeeImportInput, "step"> & { step: "preview" | "commit" }
+): Promise<{ data: EmployeeImportPreview; message?: string }> {
+  const res = await fetch("/api/hris/employees/import", { method: "POST", body: employeeImportForm(input) });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error((json as { error?: string }).error ?? `Import gagal (${res.status})`);
+  return json as { data: EmployeeImportPreview; message?: string };
+}
+
+export async function downloadEmployeeImportErrors(input: { file: File; mode: "add" | "replace" }): Promise<void> {
+  const res = await fetch("/api/hris/employees/import", {
+    method: "POST",
+    body: employeeImportForm({ ...input, step: "error_file" }),
+  });
+  if (!res.ok) throw new Error(`Gagal membuat file error (${res.status})`);
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `Error - ${input.file.name}`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}

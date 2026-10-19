@@ -30,6 +30,7 @@ import {
 } from "./users-list-filters";
 import { UsersTable } from "./users-table";
 import { BulkScheduleTypeDialog } from "./bulk-schedule-type-dialog";
+import { EmployeeImportDialog } from "./employee-import-dialog";
 import type { ScheduleType } from "@/lib/hris/schedule-type";
 import { todayWib } from "@/lib/dates";
 import { NAV_FROM_EMPLOYEES } from "@/lib/iam/nav-context";
@@ -68,6 +69,7 @@ export function UsersListPage({ variant = "directory" }: UsersListPageProps) {
   const canBulkSchedule = !isAccountsView && hasPrefix(IAM.hrisKepegawaian);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkOpen, setBulkOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
 
   const perPage = 15;
 
@@ -255,6 +257,16 @@ export function UsersListPage({ variant = "directory" }: UsersListPageProps) {
                 Export
               </Button>
             ) : null}
+            {canBulkSchedule ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="h-10 flex-shrink-0 rounded-lg border-gray-200/80"
+                onClick={() => setImportOpen(true)}
+              >
+                Import
+              </Button>
+            ) : null}
             {(search || isFilterActive || page > 1) && (
               <Button
                 variant="outline"
@@ -347,6 +359,10 @@ export function UsersListPage({ variant = "directory" }: UsersListPageProps) {
           if (!open) setResetTarget(null);
         }}
       />
+
+      {importOpen ? (
+        <EmployeeImportDialog open onOpenChange={setImportOpen} onDone={() => void refetchList()} />
+      ) : null}
 
       {bulkOpen ? (
         <BulkScheduleTypeDialog

@@ -2,6 +2,7 @@ package domain
 
 import (
 	"regexp"
+	"strconv"
 	"testing"
 )
 
@@ -26,4 +27,86 @@ func TestEmployeeColumnsAreHuman(t *testing.T) {
 	if k, ok := EmployeeHeaderKey("  nama lengkap * "); !ok || k != "full_name" {
 		t.Fatalf("header key = %q", k)
 	}
+}
+
+func lk() EmployeeLookups {
+	return EmployeeLookups{
+		Statuses:    map[string]string{"kontrak (pkwt)": "contract", "masa percobaan": "probation"},
+		Branches:    map[string]string{"ppln": "b1"},
+		Departments: map[string]string{"retail operational": "d1"},
+		Positions:   map[string]string{"shopkeeper staff": "p1"},
+		ExistingNIP: map[string]EmployeeRef{"202505272": {ID: "e1", NIP: "202505272", Name: "Feti", Active: true}},
+		EmailOwner: map[string]EmployeeRef{
+			"feti@x.id": {ID: "e1", NIP: "202505272", Name: "Feti", Active: true},
+			"lama@x.id": {ID: "e9", NIP: "201901001", Name: "Lama", Active: false},
+		},
+		ManagerNIP: map[string]string{"202310037": "m1"},
+	}
+}
+
+var hdr = []string{"NIP", "Nama Lengkap *", "Email *", "No. HP", "Tanggal Masuk *", "Status Kepegawaian *", "Tipe Jadwal *", "Cabang Utama *", "Jenis Kelamin", "NIK (KTP)", "Status Aktif"}
+
+func TestValidateEmployeeImportAdd(t *testing.T) {
+	rows := [][]string{
+		{"", "Baru Satu", "baru@x.id", "0812-3456-7890", "21/10/2026", "Kontrak (PKWT)", "Shift", "PPLN", "Perempuan", "3273012345678901", "Aktif"},
+		{"202505272", "Feti", "feti@x.id", "", "01/06/2025", "Kontrak (PKWT)", "Shift", "PPLN", "", "", ""},
+		{"", "Tanpa Email", "", "", "21/10/2026", "Kontrak (PKWT)", "Shift", "PPLN", "", "", ""},
+		{"", "Status Salah", "s@x.id", "", "21/10/2026", "Karyawan Tetap", "Shift", "PPLN", "", "", ""},
+		{"", "NIK Pendek", "n@x.id", "", "2026-10-21", "Kontrak (PKWT)", "shift", "ppln", "", "3273", ""},
+		{"", "Email Lama", "lama@x.id", "", "21/10/2026", "Kontrak (PKWT)", "Shift", "PPLN", "", "", ""},
+	}
+	out, errs, warns := ValidateEmployeeImport("add", hdr, rows, 2, lk())
+	wantErr := []string{
+		"Baris 3: NIP 202505272 sudah ada (mode Tambah hanya untuk karyawan baru)",
+		"Baris 4, kolom Email: wajib diisi untuk karyawan baru",
+		"Baris 5, kolom Status Kepegawaian: 'Karyawan Tetap' tidak ada di daftar pilihan",
+		"Baris 6, kolom NIK (KTP): harus 16 angka",
+	}
+	for _, w := range wantErr {
+		if !issueText(errs, w) {
+			t.Errorf("missing error %q in %+v", w, errs)
+		}
+	}
+	if !issueText(warns, "Baris 7, kolom Email: lama@x.id milik Lama (NIP 201901001, resign) — akan dilepas bila dikonfirmasi") {
+		t.Errorf("warnings %+v", warns)
+	}
+	if out[0].Action != "create" || out[0].Set["phone"] != "081234567890" || out[0].Set["join_date"] != "2026-10-21" ||
+		out[0].Set["gender"] != "female" || out[0].Set["schedule_type"] != "shift" || out[0].Branch != "b1" {
+		t.Fatalf("row 1 = %+v", out[0])
+	}
+	if _, ok := out[0].Set["active"]; ok {
+		t.Fatal("export-only column must be ignored")
+	}
+	if out[5].ReleaseEmailFrom != "e9" {
+		t.Fatalf("release = %q", out[5].ReleaseEmailFrom)
+	}
+}
+
+func TestValidateEmployeeImportReplaceKeepsBlankCells(t *testing.T) {
+	rows := [][]string{{"202505272", "Feti P.", "", "", "", "", "Non-Shift", "", "", "", ""}}
+	out, errs, _ := ValidateEmployeeImport("replace", hdr, rows, 2, lk())
+	if len(errs) != 0 {
+		t.Fatalf("errors %+v", errs)
+	}
+	if out[0].Action != "update" || len(out[0].Set) != 2 || out[0].Set["full_name"] != "Feti P." || out[0].Set["schedule_type"] != "non_shift" {
+		t.Fatalf("set = %+v (blank cells must not overwrite)", out[0].Set)
+	}
+	missing, errs2, _ := ValidateEmployeeImport("replace", hdr, [][]string{{"", "X", "x@x.id", "", "21/10/2026", "Kontrak (PKWT)", "Shift", "PPLN", "", "", ""}}, 2, lk())
+	_ = missing
+	if !issueText(errs2, "Baris 2, kolom NIP: wajib diisi di mode Timpa") {
+		t.Fatalf("errors %+v", errs2)
+	}
+}
+
+func issueText(list []UploadIssue, text string) bool {
+	for _, i := range list {
+		got := "Baris " + strconv.Itoa(i.Line)
+		if i.Column != "" {
+			got += ", kolom " + i.Column
+		}
+		if got+": "+i.Message == text {
+			return true
+		}
+	}
+	return false
 }

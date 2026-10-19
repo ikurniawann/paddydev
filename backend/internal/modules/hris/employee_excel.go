@@ -2,7 +2,9 @@ package hris
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -10,6 +12,7 @@ import (
 	"nuhabit/backend/internal/modules/hris/domain"
 	"nuhabit/backend/internal/platform/auth"
 	"nuhabit/backend/internal/platform/database"
+	"nuhabit/backend/internal/platform/httpx"
 	"nuhabit/backend/internal/platform/xlsx"
 )
 
@@ -305,4 +308,411 @@ func (h handlers) employeeImportTemplate(w http.ResponseWriter, r *http.Request,
 		return err
 	}
 	return writeFile(w, f)
+}
+
+/* ── Import (Spec §1.5) ──────────────────────────────────────────────── */
+
+type employeeImportInput struct {
+	Data          []byte
+	FileName      string
+	Mode          string // add | replace
+	Step          string // preview | commit | error_file
+	ReleaseEmails bool
+}
+
+type employeeImportChange struct {
+	Line   int    `json:"line"`
+	NIP    string `json:"nip"`
+	Name   string `json:"name"`
+	Field  string `json:"field"`
+	Before string `json:"before"`
+	After  string `json:"after"`
+}
+
+func readEmployeeMatrix(data []byte, fileName string) ([][]string, error) {
+	if strings.HasSuffix(strings.ToLower(fileName), ".csv") {
+		return xlsx.SpreadsheetMatrix(data, fileName)
+	}
+	return xlsx.ParseMatrix(data, xlsx.ReadOptions{PreferSheet: employeeSheet})
+}
+
+func importLookups(ctx context.Context, q database.Querier, l *employeeLists, today string) (domain.EmployeeLookups, error) {
+	lk := domain.EmployeeLookups{Statuses: l.statusCodes, Branches: l.branches, Departments: l.departments,
+		Positions: l.positions, ExistingNIP: map[string]domain.EmployeeRef{}, EmailOwner: map[string]domain.EmployeeRef{},
+		ManagerNIP: map[string]string{}, Today: today}
+	rows, err := q.Query(ctx, `SELECT id::text, nip, full_name, lower(email), is_active FROM hris.employees ORDER BY is_active, updated_at NULLS FIRST`)
+	if err != nil {
+		return lk, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var r domain.EmployeeRef
+		var email string
+		if err := rows.Scan(&r.ID, &r.NIP, &r.Name, &email, &r.Active); err != nil {
+			return lk, err
+		}
+		lk.ExistingNIP[r.NIP] = r
+		lk.EmailOwner[email] = r // active rows come last, so they win
+		if r.Active {
+			lk.ManagerNIP[r.NIP] = r.ID
+		}
+	}
+	return lk, rows.Err()
+}
+
+// displayValue turns a column value into the label the file shows.
+func displayValue(key string, v any, l *employeeLists, names map[string]string) string {
+	if v == nil {
+		return ""
+	}
+	s := fmt.Sprint(v)
+	switch key {
+	case "employment_status":
+		if n := l.statusName[s]; n != "" {
+			return n
+		}
+	case "schedule_type":
+		return domain.LabelOf(domain.ScheduleTypeLabels, s)
+	case "gender":
+		return domain.LabelOf(domain.GenderLabels, s)
+	case "marital_status":
+		return domain.LabelOf(domain.MaritalLabels, s)
+	case "join_date", "birth_date":
+		return domain.FormatDateID(s[:min(len(s), 10)])
+	case "department_id", "job_title_id", "reporting_to", "branch":
+		if n := names[s]; n != "" {
+			return n
+		}
+	}
+	return s
+}
+
+var fieldHeader = map[string]string{"department_id": "Departemen", "job_title_id": "Jabatan", "reporting_to": "NIP Atasan", "branch": "Cabang Utama"}
+
+func headerOf(key string) string {
+	if h := fieldHeader[key]; h != "" {
+		return h
+	}
+	for _, c := range domain.EmployeeColumns {
+		if c.Key == key {
+			return c.Header
+		}
+	}
+	return key
+}
+
+// currentValues are the hris.employees columns (as text) and primary branch.
+func currentValues(ctx context.Context, q database.Querier, id string) (map[string]any, string, error) {
+	var raw []byte
+	var branch *string
+	err := q.QueryRow(ctx, `SELECT to_jsonb(e), (SELECT ep.branch_id::text FROM hris.employee_placements ep
+		WHERE ep.employee_id = e.id AND ep.is_primary AND ep.start_date <= current_date
+		  AND (ep.end_date IS NULL OR ep.end_date >= current_date) ORDER BY ep.start_date DESC LIMIT 1)
+		FROM hris.employees e WHERE e.id = $1`, id).Scan(&raw, &branch)
+	if err != nil {
+		return nil, "", err
+	}
+	m := map[string]any{}
+	if err := json.Unmarshal(raw, &m); err != nil {
+		return nil, "", err
+	}
+	b := ""
+	if branch != nil {
+		b = *branch
+	}
+	return m, b, nil
+}
+
+func sameValue(cur any, next any) bool {
+	if cur == nil {
+		return next == nil || fmt.Sprint(next) == ""
+	}
+	c := fmt.Sprint(cur)
+	n := fmt.Sprint(next)
+	if len(c) >= 10 && len(n) == 10 && c[4] == '-' && n[4] == '-' {
+		return c[:10] == n
+	}
+	return c == n
+}
+
+func (s *Service) ImportEmployees(ctx context.Context, actor *auth.User, in employeeImportInput) (map[string]any, *exportFile, error) {
+	if in.Mode != "add" && in.Mode != "replace" {
+		return nil, nil, httpx.BadRequest("Pilih mode Tambah atau Timpa")
+	}
+	matrix, err := readEmployeeMatrix(in.Data, in.FileName)
+	if err != nil || len(matrix) == 0 {
+		return nil, nil, httpx.BadRequest("File tidak bisa dibaca — pakai template .xlsx dari halaman Karyawan")
+	}
+	today := domain.TodayWIB(s.clock())
+	var out map[string]any
+	var errFile *exportFile
+	err = s.repo.InTx(ctx, func(r Repository) error {
+		q := r.querier()
+		l, err := loadEmployeeLists(ctx, q)
+		if err != nil {
+			return err
+		}
+		lk, err := importLookups(ctx, q, l, today)
+		if err != nil {
+			return err
+		}
+		rows, errs, warns := domain.ValidateEmployeeImport(in.Mode, matrix[0], matrix[1:], 2, lk)
+		if in.Step == "error_file" {
+			data, err := errorWorkbook(matrix, 0, append(append([]domain.UploadIssue{}, errs...), warns...), employeeSheet)
+			if err != nil {
+				return err
+			}
+			errFile = &exportFile{data, xlsx.ContentType, "Error - " + in.FileName}
+			return nil
+		}
+		names := map[string]string{}
+		for n, id := range l.branches {
+			names[id] = n
+		}
+		for n, id := range l.departments {
+			names[id] = n
+		}
+		for n, id := range l.positions {
+			names[id] = n
+		}
+		for nip, id := range lk.ManagerNIP {
+			names[id] = nip
+		}
+		// Diff each update row against today's data: unchanged cells drop out.
+		summary := map[string]int{"create": 0, "update": 0, "skip": 0}
+		changes := []employeeImportChange{}
+		list := []map[string]any{}
+		type plan struct {
+			row    domain.EmployeeImportRow
+			id     string
+			before map[string]any
+			branch string // new branch to place, "" = keep
+		}
+		var plans []plan
+		for _, row := range rows {
+			p := plan{row: row}
+			if row.Action == "update" {
+				p.id = lk.ExistingNIP[row.NIP].ID
+				cur, curBranch, err := currentValues(ctx, q, p.id)
+				if err != nil {
+					return err
+				}
+				set := map[string]any{}
+				before := map[string]any{}
+				for k, v := range row.Set {
+					if !sameValue(cur[k], v) {
+						set[k], before[k] = v, cur[k]
+					}
+				}
+				if row.Branch != "" && row.Branch != curBranch {
+					p.branch = row.Branch
+					before["branch"], set["branch"] = curBranch, row.Branch
+				}
+				p.row.Set, p.before = set, before
+				if len(set) == 0 {
+					summary["skip"]++
+					continue
+				}
+				summary["update"]++
+				for k, v := range set {
+					if len(changes) < 500 {
+						changes = append(changes, employeeImportChange{Line: row.Line, NIP: row.NIP, Name: row.Name, Field: headerOf(k),
+							Before: displayValue(k, before[k], l, names), After: displayValue(k, v, l, names)})
+					}
+				}
+			} else {
+				p.branch = row.Branch
+				summary["create"]++
+			}
+			plans = append(plans, p)
+			if len(list) < 200 {
+				list = append(list, map[string]any{"line": row.Line, "action": row.Action, "nip": row.NIP, "name": row.Name})
+			}
+		}
+		if in.Step != "commit" {
+			out = map[string]any{"summary": summary, "errors": errs, "warnings": warns, "rows": list, "changes": changes}
+			return nil
+		}
+		if len(errs) > 0 {
+			return httpx.BadRequest("File masih punya error — perbaiki lalu unggah ulang")
+		}
+		for _, p := range plans {
+			if p.row.ReleaseEmailFrom != "" && !in.ReleaseEmails {
+				return httpx.BadRequest("Konfirmasi lepas email karyawan resign dulu")
+			}
+		}
+		for _, p := range plans {
+			if err := s.applyImportRow(ctx, r, actor, p.row, p.id, p.before, p.branch, today); err != nil {
+				return err
+			}
+		}
+		out = map[string]any{"summary": summary, "message": fmt.Sprintf("%d karyawan ditambahkan, %d diperbarui",
+			summary["create"], summary["update"])}
+		return nil
+	})
+	return out, errFile, err
+}
+
+// applyImportRow writes one validated row inside the import transaction.
+func (s *Service) applyImportRow(ctx context.Context, r Repository, actor *auth.User, row domain.EmployeeImportRow,
+	id string, before map[string]any, branch, today string) error {
+	q := r.querier()
+	set := map[string]any{}
+	for k, v := range row.Set {
+		if k != "branch" {
+			set[k] = v
+		}
+	}
+	var movedUser *string
+	if row.ReleaseEmailFrom != "" {
+		var oldNIP, oldName string
+		if err := q.QueryRow(ctx, `SELECT nip, full_name, user_id::text FROM hris.employees WHERE id = $1 FOR UPDATE`,
+			row.ReleaseEmailFrom).Scan(&oldNIP, &oldName, &movedUser); err != nil {
+			return err
+		}
+		archive := archiveEmail(oldNIP)
+		if _, err := q.Exec(ctx, `UPDATE hris.employees SET email = $2, user_id = NULL, is_access_app = false, updated_at = now() WHERE id = $1`,
+			row.ReleaseEmailFrom, archive); err != nil {
+			return err
+		}
+		if err := writeEmployeeAudit(ctx, q, actor, "employee.email_released", row.ReleaseEmailFrom, oldName,
+			map[string]any{"email": row.Set["email"]}, map[string]any{"email": archive}); err != nil {
+			return err
+		}
+	}
+	scheduleTo, _ := set["schedule_type"].(string)
+	if row.Action == "create" {
+		if _, ok := set["nip"]; !ok {
+			nip, err := nextEmployeeNIP(ctx, q, today[:4])
+			if err != nil {
+				return err
+			}
+			set["nip"] = nip
+		}
+		if _, ok := set["phone"]; !ok {
+			set["phone"] = ""
+		}
+		cols, args, marks := []string{}, []any{}, []string{}
+		for k, v := range set {
+			cols = append(cols, k)
+			args = append(args, v)
+			marks = append(marks, fmt.Sprintf("$%d", len(args)))
+		}
+		if err := q.QueryRow(ctx, `INSERT INTO hris.employees (`+strings.Join(cols, ", ")+`) VALUES (`+strings.Join(marks, ", ")+`) RETURNING id::text`,
+			args...).Scan(&id); err != nil {
+			return httpx.BadRequest(fmt.Sprintf("Baris %d: gagal disimpan (%s)", row.Line, err.Error()))
+		}
+		if scheduleTo == scheduleNonShift {
+			if _, err := applyFixedSchedule(ctx, r, id, today, actor.FullName); err != nil {
+				return err
+			}
+		}
+	} else {
+		delete(set, "schedule_type")
+		if len(set) > 0 {
+			parts, args := []string{}, []any{id}
+			for k, v := range set {
+				args = append(args, v)
+				parts = append(parts, fmt.Sprintf("%s = $%d", k, len(args)))
+			}
+			if _, err := q.Exec(ctx, `UPDATE hris.employees SET `+strings.Join(parts, ", ")+`, updated_at = now() WHERE id = $1`, args...); err != nil {
+				return httpx.BadRequest(fmt.Sprintf("Baris %d: gagal disimpan (%s)", row.Line, err.Error()))
+			}
+		}
+		if scheduleTo != "" {
+			if _, err := changeScheduleTypeTx(ctx, r, actor, []string{id}, scheduleTo, today, false); err != nil {
+				return err
+			}
+		}
+	}
+	if movedUser != nil {
+		for _, sql := range []string{
+			`UPDATE hris.employees SET user_id = $2, is_access_app = true WHERE id = $1`,
+		} {
+			if _, err := q.Exec(ctx, sql, id, *movedUser); err != nil {
+				return err
+			}
+		}
+		if _, err := q.Exec(ctx, `UPDATE auth.users SET banned_until = NULL WHERE id = $1`, *movedUser); err != nil {
+			return err
+		}
+		if _, err := q.Exec(ctx, `UPDATE configuration.users SET status = 'active', updated_at = now() WHERE id = $1`, *movedUser); err != nil {
+			return err
+		}
+	}
+	if branch != "" {
+		steps := []string{
+			`DELETE FROM hris.employee_placements WHERE employee_id = $1 AND is_primary AND start_date >= $2::date`,
+			`UPDATE hris.employee_placements SET end_date = $2::date - 1 WHERE employee_id = $1 AND is_primary
+			   AND start_date < $2::date AND (end_date IS NULL OR end_date >= $2::date)`,
+		}
+		for _, sql := range steps {
+			if _, err := q.Exec(ctx, sql, id, today); err != nil {
+				return err
+			}
+		}
+		if _, err := q.Exec(ctx, `INSERT INTO hris.employee_placements (employee_id, branch_id, is_primary, start_date, notes)
+			VALUES ($1, $2, true, $3::date, 'Import Data Karyawan')`, id, branch, today); err != nil {
+			return httpx.BadRequest(fmt.Sprintf("Baris %d: penempatan cabang bentrok dengan penempatan lain", row.Line))
+		}
+	}
+	after := map[string]any{}
+	for k, v := range row.Set {
+		after[k] = v
+	}
+	return writeEmployeeAudit(ctx, q, actor, "employee.import", id, row.Name, before, after)
+}
+
+// nextEmployeeNIP is the first free EMP-<year>-<seq> (same scheme as /api/users).
+func nextEmployeeNIP(ctx context.Context, q database.Querier, year string) (string, error) {
+	var n int
+	err := q.QueryRow(ctx, `SELECT coalesce(max(substring(nip from '^EMP-'||$1||'-(\d+)$')::int), 0) + 1
+		FROM hris.employees WHERE nip LIKE 'EMP-'||$1||'-%'`, year).Scan(&n)
+	return fmt.Sprintf("EMP-%s-%05d", year, n), err
+}
+
+// archiveEmail mirrors the accounts rule (Spec §1.2).
+func archiveEmail(nip string) string {
+	clean := strings.Map(func(r rune) rune {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '-':
+			return r
+		case r >= 'A' && r <= 'Z':
+			return r + 32
+		}
+		return -1
+	}, nip)
+	return "arsip-" + clean + "@resign.invalid"
+}
+
+func (h handlers) importEmployees(w http.ResponseWriter, r *http.Request, u *auth.User) error {
+	if err := r.ParseMultipartForm(8 << 20); err != nil {
+		return httpx.BadRequest("Unggah file .xlsx atau .csv data karyawan (maks 5 MB)")
+	}
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		return httpx.BadRequest("Unggah file .xlsx atau .csv data karyawan (maks 5 MB)")
+	}
+	defer file.Close()
+	data, err := io.ReadAll(io.LimitReader(file, 5<<20+1))
+	if err != nil {
+		return err
+	}
+	if len(data) > 5<<20 {
+		return httpx.BadRequest("Ukuran file maksimal 5 MB")
+	}
+	in := employeeImportInput{Data: data, FileName: header.Filename, Mode: r.FormValue("mode"), Step: r.FormValue("step"),
+		ReleaseEmails: r.FormValue("release_emails") == "true"}
+	out, errFile, err := h.svc.ImportEmployees(r.Context(), u, in)
+	if err != nil {
+		return err
+	}
+	if errFile != nil {
+		return writeFile(w, errFile)
+	}
+	if in.Step == "commit" {
+		msg, _ := out["message"].(string)
+		return ok(w, dataMsg(map[string]any{"summary": out["summary"]}, msg))
+	}
+	return ok(w, dataOf(out))
 }

@@ -122,50 +122,11 @@ func (s *Service) ChangeScheduleType(ctx context.Context, actor *auth.User, ids 
 	if err := s.checkScheduleFrom(ctx, from); err != nil {
 		return nil, err
 	}
-	res := &scheduleTypeResult{Warnings: []string{}}
+	var res *scheduleTypeResult
 	err := s.repo.InTx(ctx, func(r Repository) error {
-		q := r.querier()
-		targets, err := loadScheduleTargets(ctx, q, ids)
-		if err != nil {
-			return err
-		}
-		for _, t := range targets {
-			if t.Type == to {
-				continue
-			}
-			res.Changed++
-			if dryRun {
-				var n int
-				if to == scheduleNonShift {
-					if err := q.QueryRow(ctx, `SELECT count(*) FROM hris.employee_shift_days WHERE employee_id = $1 AND work_date >= $2::date`, t.ID, from).Scan(&n); err != nil {
-						return err
-					}
-				}
-				res.ClearedDays += n
-				continue
-			}
-			if to == scheduleNonShift {
-				n, err := applyFixedSchedule(ctx, r, t.ID, from, actor.FullName)
-				if err != nil {
-					return err
-				}
-				res.ClearedDays += n
-			} else {
-				if err := stopWeeklyPattern(ctx, q, t.ID, from); err != nil {
-					return err
-				}
-				res.Warnings = append(res.Warnings, fmt.Sprintf("%sKaryawan belum punya jadwal shift mulai %s; tugaskan di Jadwal Kerja",
-					namePrefix(len(targets), t.Name), domain.FormatDateID(from)))
-			}
-			if _, err := q.Exec(ctx, `UPDATE hris.employees SET schedule_type = $2, updated_at = now() WHERE id = $1`, t.ID, to); err != nil {
-				return err
-			}
-			if err := writeEmployeeAudit(ctx, q, actor, "employee.schedule_type", t.ID, t.Name,
-				map[string]any{"schedule_type": t.Type}, map[string]any{"schedule_type": to, "effective_from": from}); err != nil {
-				return err
-			}
-		}
-		return nil
+		var err error
+		res, err = changeScheduleTypeTx(ctx, r, actor, ids, to, from, dryRun)
+		return err
 	})
 	return res, err
 }
@@ -327,4 +288,52 @@ func (h handlers) applyFixedSchedule(w http.ResponseWriter, r *http.Request, u *
 		return err
 	}
 	return ok(w, dataMsg(res, fmt.Sprintf("Jadwal tetap diterapkan ke %d karyawan", res.Changed)))
+}
+
+// changeScheduleTypeTx is ChangeScheduleType on r (callers own the
+// transaction and the from-date check); the import reuses it.
+func changeScheduleTypeTx(ctx context.Context, r Repository, actor *auth.User, ids []string, to, from string, dryRun bool) (*scheduleTypeResult, error) {
+	res := &scheduleTypeResult{Warnings: []string{}}
+	q := r.querier()
+	targets, err := loadScheduleTargets(ctx, q, ids)
+	if err != nil {
+		return nil, err
+	}
+	for _, t := range targets {
+		if t.Type == to {
+			continue
+		}
+		res.Changed++
+		if dryRun {
+			var n int
+			if to == scheduleNonShift {
+				if err := q.QueryRow(ctx, `SELECT count(*) FROM hris.employee_shift_days WHERE employee_id = $1 AND work_date >= $2::date`, t.ID, from).Scan(&n); err != nil {
+					return nil, err
+				}
+			}
+			res.ClearedDays += n
+			continue
+		}
+		if to == scheduleNonShift {
+			n, err := applyFixedSchedule(ctx, r, t.ID, from, actor.FullName)
+			if err != nil {
+				return nil, err
+			}
+			res.ClearedDays += n
+		} else {
+			if err := stopWeeklyPattern(ctx, q, t.ID, from); err != nil {
+				return nil, err
+			}
+			res.Warnings = append(res.Warnings, fmt.Sprintf("%sKaryawan belum punya jadwal shift mulai %s; tugaskan di Jadwal Kerja",
+				namePrefix(len(targets), t.Name), domain.FormatDateID(from)))
+		}
+		if _, err := q.Exec(ctx, `UPDATE hris.employees SET schedule_type = $2, updated_at = now() WHERE id = $1`, t.ID, to); err != nil {
+			return nil, err
+		}
+		if err := writeEmployeeAudit(ctx, q, actor, "employee.schedule_type", t.ID, t.Name,
+			map[string]any{"schedule_type": t.Type}, map[string]any{"schedule_type": to, "effective_from": from}); err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
 }
