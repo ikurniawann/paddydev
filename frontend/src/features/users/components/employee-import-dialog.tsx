@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { buildListUrl } from "@/lib/api-client";
 import {
   downloadEmployeeImportErrors,
   importEmployeesFile,
@@ -106,7 +107,8 @@ export function EmployeeImportDialog({ open, onOpenChange, onDone }: Props) {
                 type="button"
                 className="text-pink-600 underline"
                 onClick={() => {
-                  window.location.href = "/api/hris/employees/import-template";
+                  // Unduhan file (route API), bukan navigasi halaman.
+                  window.location.href = buildListUrl("/api/hris/employees/import-template", {});
                 }}
               >
                 template import
