@@ -326,9 +326,10 @@ func (s *store) ESSSchedule(ctx context.Context, employeeID string) ([]domain.ES
 	rows, err := s.db.Query(ctx, `SELECT es.day_of_week, es.shift_id::text,
 		es.effective_from::text, es.effective_to::text,
 		s.name, s.start_time::text, s.end_time::text, s.late_tolerance_minutes
-		FROM hris.employee_shifts es
+		FROM hris.v_employee_schedule es
 		LEFT JOIN hris.shifts s ON s.id = es.shift_id
-		WHERE es.employee_id = $1`, employeeID)
+		WHERE es.employee_id = $1
+		ORDER BY es.priority`, employeeID)
 	if err != nil {
 		return nil, err
 	}

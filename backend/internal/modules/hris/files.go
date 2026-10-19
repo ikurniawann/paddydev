@@ -67,9 +67,10 @@ func (s *store) ShiftPattern(ctx context.Context, employeeID string) ([]*Row, er
 		es.effective_from::text, es.effective_to::text,
 		s.name, s.start_time::text, s.end_time::text,
 		s.late_tolerance_minutes, s.is_overnight
-		FROM hris.employee_shifts es
+		FROM hris.v_employee_schedule es
 		LEFT JOIN hris.shifts s ON s.id = es.shift_id
-		WHERE es.employee_id = $1`, employeeID)
+		WHERE es.employee_id = $1
+		ORDER BY es.priority`, employeeID)
 }
 
 func (s *store) InsertAttendance(ctx context.Context, f fields) (*Row, error) {

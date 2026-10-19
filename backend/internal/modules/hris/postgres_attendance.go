@@ -78,11 +78,11 @@ func (s *store) DeleteAttendance(ctx context.Context, id string) error {
 func (s *store) RosterRows(ctx context.Context, date string, dow int, superAdmins []string) ([]*Row, error) {
 	return queryRows(ctx, s.db, `WITH scheduled AS (
 		  SELECT DISTINCT ON (es.employee_id) es.employee_id, es.shift_id
-		  FROM hris.employee_shifts es
+		  FROM hris.v_employee_schedule es
 		  WHERE es.day_of_week = $2
 		    AND es.effective_from <= $1::date
 		    AND (es.effective_to IS NULL OR es.effective_to >= $1::date)
-		  ORDER BY es.employee_id, es.effective_from DESC
+		  ORDER BY es.employee_id, es.effective_from DESC, es.priority
 		)
 		SELECT e.id AS employee_id, e.full_name, e.nip, e.photo_url,
 		       d.name AS department_name, p.title AS job_title,
@@ -155,8 +155,8 @@ func (s *store) ScheduleRows(ctx context.Context, employeeID string) ([]*Row, er
 		es.effective_from::text, es.effective_to::text,
 		s.name AS shift_name, s.start_time::text, s.end_time::text,
 		s.is_overnight
-		FROM hris.employee_shifts es
+		FROM hris.v_employee_schedule es
 		LEFT JOIN hris.shifts s ON s.id = es.shift_id
 		WHERE es.employee_id = $1
-		ORDER BY es.effective_from DESC, es.day_of_week ASC`, employeeID)
+		ORDER BY es.effective_from DESC, es.priority, es.day_of_week ASC`, employeeID)
 }
