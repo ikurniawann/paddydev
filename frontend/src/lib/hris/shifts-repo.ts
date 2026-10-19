@@ -11,6 +11,8 @@ const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/;
 
 export interface ShiftRow {
   id: string;
+  code: string;
+  is_default?: boolean;
   name: string;
   start_time: string;
   end_time: string;

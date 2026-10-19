@@ -32,3 +32,11 @@ func TestGoLiveSchema(t *testing.T) {
 		t.Fatalf("menu rows = %s", got)
 	}
 }
+
+func TestShiftCodeDefaultsForLegacyInserts(t *testing.T) {
+	h := newHarness(t)
+	code := h.scalar(`INSERT INTO hris.shifts (name, start_time, end_time) VALUES ('Lama', '08:00', '16:00') RETURNING code`)
+	if len(code) < 2 || code[0] != 'S' {
+		t.Fatalf("auto code = %q, want S<n>", code)
+	}
+}

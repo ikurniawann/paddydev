@@ -9,6 +9,7 @@ export function hhmm(time: string | null | undefined, fallback = "—"): string 
 }
 
 interface ShiftForm {
+  code: string;
   name: string;
   start_time: string;
   end_time: string;
@@ -18,6 +19,7 @@ interface ShiftForm {
 }
 
 export interface ShiftPayload {
+  code: string;
   name: string;
   start_time: string;
   end_time: string;
@@ -27,6 +29,7 @@ export interface ShiftPayload {
 }
 
 export const EMPTY_SHIFT_FORM: ShiftForm = {
+  code: "",
   name: "",
   start_time: "08:00",
   end_time: "16:00",
@@ -36,6 +39,7 @@ export const EMPTY_SHIFT_FORM: ShiftForm = {
 };
 
 export function shiftFormFrom(shift: {
+  code?: string | null;
   name: string;
   start_time: string;
   end_time: string;
@@ -44,6 +48,7 @@ export function shiftFormFrom(shift: {
   is_overnight: boolean;
 }): ShiftForm {
   return {
+    code: shift.code ?? "",
     name: shift.name,
     start_time: hhmm(shift.start_time),
     end_time: hhmm(shift.end_time),
@@ -55,6 +60,7 @@ export function shiftFormFrom(shift: {
 
 export function shiftPayload(form: ShiftForm): ShiftPayload {
   return {
+    code: form.code.trim().toUpperCase(),
     name: form.name.trim(),
     start_time: form.start_time,
     end_time: form.end_time,
@@ -62,4 +68,9 @@ export function shiftPayload(form: ShiftForm): ShiftPayload {
     late_tolerance_minutes: Number(form.late_tolerance_minutes) || 0,
     is_overnight: form.is_overnight,
   };
+}
+
+/** Kode shift dipakai di file upload Jadwal Kerja: 1–12 huruf/angka, tanpa spasi. */
+export function shiftCodeError(code: string): string | null {
+  return /^[A-Z0-9]{1,12}$/.test(code.trim().toUpperCase()) ? null : "Kode 1–12 huruf/angka tanpa spasi";
 }

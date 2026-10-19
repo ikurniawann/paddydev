@@ -36,6 +36,7 @@ func (h handlers) createShift(w http.ResponseWriter, r *http.Request, _ *auth.Us
 		return err
 	}
 	var in shiftInput
+	rawCode := f.Str("code", optional, validate.StrOpts{})
 	in.Name = reqStr(f, "name", shiftNameRequired, validate.StrOpts{Trim: true, Check: minLen(1, shiftNameRequired)})
 	in.StartTime = reqStr(f, "start_time", shiftStartInvalid, validate.StrOpts{Check: matches(shiftTimeRe, shiftStartInvalid)})
 	in.EndTime = reqStr(f, "end_time", shiftEndInvalid, validate.StrOpts{Check: matches(shiftTimeRe, shiftEndInvalid)})
@@ -61,6 +62,13 @@ func (h handlers) createShift(w http.ResponseWriter, r *http.Request, _ *auth.Us
 	if err := formErr(f, ""); err != nil {
 		return err
 	}
+	// Kode dicek setelah field lain agar pesan lama (nama/jam) tetap duluan.
+	if in.Code, err = normalizeShiftCode(rawCode); err != nil {
+		return err
+	}
+	if in.Code == nil {
+		return httpx.BadRequest(shiftCodeInvalid)
+	}
 	row, err := h.svc.CreateShift(r.Context(), in)
 	if err != nil {
 		return err
@@ -78,6 +86,7 @@ func (h handlers) updateShift(w http.ResponseWriter, r *http.Request, _ *auth.Us
 		return err
 	}
 	in := shiftInput{
+		Code:          f.Str("code", optional, validate.StrOpts{}),
 		Name:          f.Str("name", optional, validate.StrOpts{}),
 		StartTime:     f.Str("start_time", optional, validate.StrOpts{Check: matches(shiftTimeRe, "Jam mulai tidak valid")}),
 		EndTime:       f.Str("end_time", optional, validate.StrOpts{Check: matches(shiftTimeRe, "Jam selesai tidak valid")}),
@@ -88,6 +97,9 @@ func (h handlers) updateShift(w http.ResponseWriter, r *http.Request, _ *auth.Us
 		SortOrder:     f.Int("sort_order", optional, validate.NumOpts{}),
 	}
 	if err := formErr(f, ""); err != nil {
+		return err
+	}
+	if in.Code, err = normalizeShiftCode(in.Code); err != nil {
 		return err
 	}
 	if err := h.svc.UpdateShift(r.Context(), id, in); err != nil {

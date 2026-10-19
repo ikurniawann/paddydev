@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { EMPTY_SHIFT_FORM, shiftFormFrom, shiftPayload } from "@/lib/hris/shifts-view";
+import { EMPTY_SHIFT_FORM, shiftCodeError, shiftFormFrom, shiftPayload } from "@/lib/hris/shifts-view";
 import { useSaveShift } from "../mutations";
 import type { ShiftRow } from "../types";
 
@@ -33,8 +33,13 @@ export function ShiftFormDialog({ open, shift, onOpenChange }: ShiftFormDialogPr
 function ShiftFormBody({ shift, onClose }: { shift: ShiftRow | null; onClose: () => void }) {
   const [form, setForm] = useState(() => (shift ? shiftFormFrom(shift) : EMPTY_SHIFT_FORM));
   const save = useSaveShift();
+  const codeError = shiftCodeError(form.code);
 
   function handleSave() {
+    if (codeError) {
+      toast.error(codeError);
+      return;
+    }
     if (!form.name.trim()) {
       toast.error("Nama shift wajib diisi");
       return;
@@ -54,6 +59,21 @@ function ShiftFormBody({ shift, onClose }: { shift: ShiftRow | null; onClose: ()
   return (
     <>
       <div className="space-y-3">
+        <div>
+          <label htmlFor="shift-code" className="mb-1 block text-xs font-medium text-gray-600">
+            Kode <span className="text-danger">*</span>
+          </label>
+          <Input
+            id="shift-code"
+            placeholder="cth. SPG1"
+            value={form.code}
+            maxLength={12}
+            onChange={(e) => setForm((f) => ({ ...f, code: e.target.value.toUpperCase() }))}
+          />
+          <p className={`mt-1 text-xs ${form.code && codeError ? "text-danger" : "text-gray-500"}`}>
+            {form.code && codeError ? codeError : "Dipakai di file upload Jadwal Kerja"}
+          </p>
+        </div>
         <div>
           <label className="mb-1 block text-xs font-medium text-gray-600">Nama shift</label>
           <Input
@@ -113,7 +133,7 @@ function ShiftFormBody({ shift, onClose }: { shift: ShiftRow | null; onClose: ()
         <Button variant="outline" onClick={onClose}>
           Batal
         </Button>
-        <Button onClick={handleSave} disabled={save.isPending}>
+        <Button onClick={handleSave} disabled={save.isPending || !!codeError}>
           {save.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Simpan"}
         </Button>
       </DialogFooter>

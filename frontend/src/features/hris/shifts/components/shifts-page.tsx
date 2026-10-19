@@ -69,7 +69,13 @@ export function ShiftsPage() {
               <div className="flex items-start justify-between">
                 <div>
                   <p className="flex items-center gap-1.5 font-semibold text-gray-900">
+                    <span className="rounded-md bg-gray-100 px-1.5 py-0.5 font-mono text-xs text-gray-700">
+                      {shift.code}
+                    </span>
                     {shift.name}
+                    {shift.is_default && (
+                      <span className="rounded-full bg-info-soft px-2 py-0.5 text-xs text-info">Bawaan</span>
+                    )}
                     {shift.is_overnight && <MoonIcon className="h-4 w-4 text-indigo-500" />}
                     {!shift.is_active && (
                       <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs">Nonaktif</span>
@@ -88,14 +94,17 @@ export function ShiftsPage() {
                   <Button size="sm" variant="ghost" onClick={() => openDialog(shift)}>
                     <PencilIcon className="h-4 w-4" />
                   </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="text-red-600"
-                    onClick={() => handleDelete(shift)}
-                  >
-                    <TrashIcon className="h-4 w-4" />
-                  </Button>
+                  {/* DEF/NS dipakai jadwal bawaan & jadwal tetap Non-Shift: tidak bisa dihapus */}
+                  {shift.code !== "DEF" && shift.code !== "NS" && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="text-red-600"
+                      onClick={() => handleDelete(shift)}
+                    >
+                      <TrashIcon className="h-4 w-4" />
+                    </Button>
+                  )}
                 </div>
               </div>
             </div>

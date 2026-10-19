@@ -4,7 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
+
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"nuhabit/backend/internal/modules/hris/domain"
 	"nuhabit/backend/internal/platform/database"
@@ -214,19 +217,20 @@ func (s *Service) DecideOvertime(ctx context.Context, a *Actor, id, action strin
 
 /* ── Shift master ────────────────────────────────────────────────────── */
 
-const shiftColumns = `id, name, start_time, end_time, break_minutes,
-  late_tolerance_minutes, is_overnight, is_active, sort_order`
+const shiftColumns = `id, code, name, start_time, end_time, break_minutes,
+  late_tolerance_minutes, is_overnight, is_active, is_default, sort_order`
 
 func (s *store) ListShifts(ctx context.Context) ([]*Row, error) {
 	return queryRows(ctx, s.db, `SELECT `+shiftColumns+` FROM hris.shifts ORDER BY sort_order ASC, name ASC`)
 }
 
 func (s *store) CreateShift(ctx context.Context, in shiftInput) (*Row, error) {
-	return queryRow(ctx, s.db, `INSERT INTO hris.shifts
-		(name, start_time, end_time, break_minutes, late_tolerance_minutes, is_overnight, sort_order)
-		VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING `+shiftColumns,
-		strOr(in.Name), strOr(in.StartTime), strOr(in.EndTime), intOr(in.BreakMinutes, 60),
+	row, err := queryRow(ctx, s.db, `INSERT INTO hris.shifts
+		(code, name, start_time, end_time, break_minutes, late_tolerance_minutes, is_overnight, sort_order)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING `+shiftColumns,
+		strOr(in.Code), strOr(in.Name), strOr(in.StartTime), strOr(in.EndTime), intOr(in.BreakMinutes, 60),
 		intOr(in.LateTolerance, 10), in.IsOvernight != nil && *in.IsOvernight, intOr(in.SortOrder, 0))
+	return row, shiftCodeConflict(err, strOr(in.Code))
 }
 
 func intOr(p *int, def int) int {
@@ -250,10 +254,11 @@ func (s *store) UpdateShift(ctx context.Context, id string, in shiftInput) (bool
 		late_tolerance_minutes = COALESCE($6, late_tolerance_minutes),
 		is_overnight           = COALESCE($7, is_overnight),
 		is_active              = COALESCE($8, is_active),
-		sort_order             = COALESCE($9, sort_order)
+		sort_order             = COALESCE($9, sort_order),
+		code                   = COALESCE($10, code)
 		WHERE id = $1`, id, name, in.StartTime, in.EndTime, in.BreakMinutes, in.LateTolerance,
-		in.IsOvernight, in.IsActive, in.SortOrder)
-	return tag.RowsAffected() > 0, err
+		in.IsOvernight, in.IsActive, in.SortOrder, in.Code)
+	return tag.RowsAffected() > 0, shiftCodeConflict(err, strOr(in.Code))
 }
 
 // DeleteShift deletes an unused shift, else deactivates it; "" = not found.
@@ -286,7 +291,7 @@ type ScheduleRepo interface {
 
 // shiftInput is createShiftSchema / updateShiftSchema.
 type shiftInput struct {
-	Name, StartTime, EndTime               *string
+	Code, Name, StartTime, EndTime         *string
 	BreakMinutes, LateTolerance, SortOrder *int
 	IsOvernight, IsActive                  *bool
 }
@@ -298,6 +303,11 @@ func (s *Service) CreateShift(ctx context.Context, in shiftInput) (*Row, error) 
 }
 
 func (s *Service) UpdateShift(ctx context.Context, id string, in shiftInput) error {
+	if in.IsActive != nil && !*in.IsActive {
+		if err := guardShiftDeactivate(ctx, s.repo.querier(), id, domain.TodayWIB(s.clock())); err != nil {
+			return err
+		}
+	}
 	found, err := s.repo.UpdateShift(ctx, id, in)
 	if err == nil && !found {
 		return httpx.NotFound("Shift tidak ditemukan")
@@ -306,6 +316,9 @@ func (s *Service) UpdateShift(ctx context.Context, id string, in shiftInput) err
 }
 
 func (s *Service) DeleteShift(ctx context.Context, id string) (string, error) {
+	if err := guardShiftDeactivate(ctx, s.repo.querier(), id, domain.TodayWIB(s.clock())); err != nil {
+		return "", err
+	}
 	msg, err := s.repo.DeleteShift(ctx, id)
 	if err == nil && msg == "" {
 		return "", httpx.NotFound("Shift tidak ditemukan")
@@ -390,4 +403,57 @@ func (s *store) OvertimeForDecision(ctx context.Context, id string) (*Row, error
 
 func (s *store) DecideOvertime(ctx context.Context, id string, f fields) (*Row, error) {
 	return updateOne(ctx, s.db, "hris.overtime_requests", f, fields{{"id", id}, {"status", "pending"}}, "*")
+}
+
+/* ── Shift codes (Spec 2026-10-19 §2.1) ──────────────────────────────── */
+
+const (
+	shiftCodeInvalid  = "Kode shift 1–12 huruf/angka tanpa spasi"
+	shiftBuiltinFixed = "Shift bawaan DEF/NS tidak bisa dihapus atau dinonaktifkan"
+)
+
+var shiftCodeRe = regexp.MustCompile(`^[A-Z0-9]{1,12}$`)
+
+// normalizeShiftCode upper-cases and trims a sent code; nil when absent.
+func normalizeShiftCode(p *string) (*string, error) {
+	if p == nil {
+		return nil, nil
+	}
+	c := strings.ToUpper(strings.TrimSpace(*p))
+	if !shiftCodeRe.MatchString(c) {
+		return nil, httpx.BadRequest(shiftCodeInvalid)
+	}
+	return &c, nil
+}
+
+func shiftCodeConflict(err error, code string) error {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == "shifts_code_key" {
+		return httpx.Conflict("Kode shift " + code + " sudah dipakai")
+	}
+	return err
+}
+
+// guardShiftDeactivate blocks turning off DEF/NS or a shift still on a
+// schedule from today on (per-date or a running weekly pattern).
+func guardShiftDeactivate(ctx context.Context, q database.Querier, id, today string) error {
+	var code string
+	var used int
+	if err := q.QueryRow(ctx, `SELECT s.code,
+		(SELECT count(*) FROM hris.employee_shift_days d WHERE d.shift_id = s.id AND d.work_date >= $2::date)
+		+ (SELECT count(DISTINCT es.employee_id) FROM hris.employee_shifts es
+		   WHERE es.shift_id = s.id AND (es.effective_to IS NULL OR es.effective_to >= $2::date))
+		FROM hris.shifts s WHERE s.id = $1`, id, today).Scan(&code, &used); err != nil {
+		if database.IsNoRows(err) {
+			return httpx.NotFound("Shift tidak ditemukan")
+		}
+		return err
+	}
+	if code == "DEF" || code == "NS" {
+		return httpx.BadRequest(shiftBuiltinFixed)
+	}
+	if used > 0 {
+		return httpx.BadRequest(fmt.Sprintf("Shift masih dipakai %d jadwal mulai hari ini — ganti dulu jadwalnya", used))
+	}
+	return nil
 }

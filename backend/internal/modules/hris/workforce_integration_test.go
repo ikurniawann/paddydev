@@ -195,7 +195,7 @@ func TestOvertimeAndShifts(t *testing.T) {
 	expect(t, h.do(&hr, "POST", "/api/hris/shifts", map[string]any{"start_time": "08:00", "end_time": "16:00"}), 400, "Nama shift wajib diisi")
 	expect(t, h.do(&hr, "POST", "/api/hris/shifts", map[string]any{"name": "Malam", "start_time": "22:00", "end_time": "06:00"}), 400,
 		"Jam selesai harus setelah jam mulai — atau tandai sebagai shift malam (lewat tengah malam)")
-	shift := h.do(&hr, "POST", "/api/hris/shifts", map[string]any{"name": " Malam ", "start_time": "22:00", "end_time": "06:00", "is_overnight": true})
+	shift := h.do(&hr, "POST", "/api/hris/shifts", map[string]any{"code": "malam1", "name": " Malam ", "start_time": "22:00", "end_time": "06:00", "is_overnight": true})
 	expect(t, shift, 201, "")
 	if shift.body["message"] != `Shift "Malam" dibuat` || shift.data()["late_tolerance_minutes"] != 10.0 {
 		t.Fatalf("shift = %s", shift.raw)
