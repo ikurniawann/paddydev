@@ -1,11 +1,9 @@
-import { redirect } from "next/navigation";
+import { requireIamPage } from "@/lib/auth/require-user";
+import { IAM } from "@/lib/iam/prefixes";
+import { SchedulesPage } from "@/features/hris/schedules";
 
-/**
- * Halaman Schedules lama (pola `staff_schedules` berbasis tabel `staff`) sudah
- * digantikan Shift Kerja (`hris.shifts` + `hris.employee_shifts`) yang jadi
- * sumber kebenaran jadwal untuk absensi, cuti, lembur, dan payroll (EPIC-015).
- * Redirect permanen untuk bookmark lama.
- */
-export default function Page() {
-  redirect("/dashboard/hris/shifts");
+/** Jadwal Kerja per cabang (EPIC-056): bulk upload jadwal shift 7–45 hari. */
+export default async function HrisSchedulesPage() {
+  await requireIamPage(IAM.hrisKepegawaian);
+  return <SchedulesPage />;
 }
