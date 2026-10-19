@@ -64,11 +64,14 @@ func errorOf(t *testing.T, rec *httptest.ResponseRecorder, status int, msg strin
 
 func TestPayslipPDFRoute(t *testing.T) {
 	none := map[string][]string{"go_test_none": nil}
+	// HR sees any slip only with the Penggajian menu (EPIC-057); without it
+	// an hrd account is limited to its own like everyone else.
 	staff, scalar, serve := payrollFilesSetup(t,
-		testutil.StaffOptions{Role: "hrd", Menus: none},
+		testutil.StaffOptions{Role: "hrd", Menus: map[string][]string{"hris.compensation": nil}},
 		testutil.StaffOptions{Role: "pos", Menus: none},
-		testutil.StaffOptions{Role: "pos", Menus: none})
-	hr, owner, other := &staff[0], &staff[1], &staff[2]
+		testutil.StaffOptions{Role: "pos", Menus: none},
+		testutil.StaffOptions{Role: "hrd", Menus: none})
+	hr, owner, other, hrNoPayroll := &staff[0], &staff[1], &staff[2], &staff[3]
 	emp := scalar(`INSERT INTO hris.employees (full_name, nip, email, phone, join_date, user_id)
 		VALUES ('Budi Slip', 'SLIP-1', $2, '08', '2024-01-01', $1) RETURNING id::text`, owner.UserID, testutil.RandomHex(4)+"@slip.test")
 	scalar(`INSERT INTO hris.employees (full_name, nip, email, phone, join_date, user_id)
@@ -86,6 +89,7 @@ func TestPayslipPDFRoute(t *testing.T) {
 	errorOf(t, serve(owner, "GET", "/api/hris/payslips/abc/pdf", nil), 400, "ID slip tidak valid")
 	errorOf(t, serve(owner, "GET", "/api/hris/payslips/11111111-1111-4111-8111-111111111111/pdf", nil), 404, "Slip gaji tidak ditemukan")
 	errorOf(t, serve(other, "GET", path, nil), 403, "Insufficient permissions")
+	errorOf(t, serve(hrNoPayroll, "GET", path, nil), 403, "Insufficient permissions")
 	if rec := serve(hr, "GET", path, nil); rec.Code != 200 {
 		t.Fatalf("hr = %d %s", rec.Code, rec.Body)
 	}
