@@ -11,6 +11,15 @@ export const ACTION_LABELS: Record<string, string> = {
   "vendor_credit.approve": "Kredit vendor disetujui",
   "vendor_credit.apply": "Kredit vendor dipakai",
   "purchase_return.revise": "Revisi retur",
+  // HRIS karyawan & jadwal (EPIC-056)
+  "employee.create": "Karyawan ditambahkan",
+  "employee.update": "Data karyawan diubah",
+  "employee.resign": "Karyawan resign",
+  "employee.email_released": "Email karyawan dilepas",
+  "employee.schedule_type": "Tipe jadwal diubah",
+  "employee.import": "Karyawan diubah lewat import",
+  "schedule.fixed_apply": "Jadwal tetap diterapkan",
+  "schedule.bulk_upload": "Jadwal diunggah",
 };
 
 export const ENTITY_LABELS: Record<string, string> = {
@@ -22,6 +31,7 @@ export const ENTITY_LABELS: Record<string, string> = {
   ap_payment: "Pembayaran AP",
   vendor_credit: "Kredit vendor",
   purchase_return: "Retur pembelian",
+  "hris.employees": "Karyawan",
 };
 
-export const DESTRUCTIVE_ACTIONS = new Set(["ap_payment.void", "po.cancel", "stock.scrap"]);
+export const DESTRUCTIVE_ACTIONS = new Set(["ap_payment.void", "po.cancel", "stock.scrap", "employee.resign"]);

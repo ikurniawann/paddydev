@@ -266,7 +266,7 @@ func (s *service) createUser(ctx context.Context, actorID string, b *employeeBod
 			if prev, err = s.ports.Employees.ReleaseEmail(ctx, tx, owner.ID, archive); err != nil {
 				return err
 			}
-			if err := platformaudit.Write(ctx, tx, platformaudit.Entry{ActorID: actorID, Action: "employee.email_released",
+			if err := platformaudit.Write(ctx, tx, platformaudit.Entry{ActorID: actorID, ActorName: s.actorName(ctx, actorID), Action: "employee.email_released",
 				Entity: "hris.employees", EntityID: &owner.ID, EntityLabel: &owner.FullName,
 				Before: map[string]any{"email": email}, After: map[string]any{"email": archive}}); err != nil {
 				return err
@@ -300,7 +300,65 @@ func (s *service) createUser(ctx context.Context, actorID string, b *employeeBod
 			return nil, err
 		}
 	}
+	name := *b.str("full_name")
+	_ = platformaudit.Write(ctx, s.db, platformaudit.Entry{ActorID: actorID, ActorName: s.actorName(ctx, actorID), Action: "employee.create",
+		Entity: employeeEntity, EntityID: &id, EntityLabel: &name, After: map[string]any{
+			"nip": nip, "full_name": name, "email": email, "join_date": *b.str("join_date"),
+			"employment_status": *b.str("employment_status"), "schedule_type": scheduleType}})
 	return s.reload(ctx, id)
+}
+
+const employeeEntity = "hris.employees"
+
+// actorName is the signed-in account's name for audit rows (nil if unknown).
+func (s *service) actorName(ctx context.Context, actorID string) *string {
+	var n string
+	if err := s.db.QueryRow(ctx, `SELECT full_name FROM configuration.users WHERE id = $1`, actorID).Scan(&n); err != nil {
+		return nil
+	}
+	return &n
+}
+
+func dateText(t *time.Time) any {
+	if t == nil {
+		return nil
+	}
+	return t.Format("2006-01-02")
+}
+
+func textOrNil(p *string) any {
+	if p == nil {
+		return nil
+	}
+	return *p
+}
+
+// employeeAuditFields are the editable hris.employees columns of an
+// employee, keyed by column name, for the employee.update audit diff.
+func employeeAuditFields(e *Employee) map[string]any {
+	return map[string]any{
+		"full_name": e.FullName, "email": e.Email, "phone": e.Phone, "join_date": e.JoinDate.Format("2006-01-02"),
+		"employment_status": e.EmploymentStatus, "nip": e.NIP, "is_active": e.IsActive, "end_date": dateText(e.EndDate),
+		"birth_date": dateText(e.BirthDate), "ktp": textOrNil(e.KTP), "npwp": textOrNil(e.NPWP), "gender": textOrNil(e.Gender),
+		"marital_status": textOrNil(e.MaritalStatus), "address": textOrNil(e.Address), "city": textOrNil(e.City),
+		"province": textOrNil(e.Province), "postal_code": textOrNil(e.PostalCode), "department_id": textOrNil(e.DepartmentID),
+		"section_id": textOrNil(e.SectionID), "job_title_id": textOrNil(e.JobTitleID), "reporting_to": textOrNil(e.ReportingTo),
+		"bank_name": textOrNil(e.BankName), "bank_account": textOrNil(e.BankAccount), "bpjs_tk": textOrNil(e.BPJSTK),
+		"bpjs_kesehatan": textOrNil(e.BPJSKesehatan), "emergency_contact_name": textOrNil(e.EmergencyName),
+		"emergency_contact_phone": textOrNil(e.EmergencyPhone), "emergency_contact_relationship": textOrNil(e.EmergencyRelation),
+		"notes": textOrNil(e.Notes), "is_access_app": e.IsAccessApp,
+	}
+}
+
+// changedFields keeps only the keys whose value differs.
+func changedFields(before, after map[string]any) (map[string]any, map[string]any) {
+	b, a := map[string]any{}, map[string]any{}
+	for k, v := range after {
+		if fmt.Sprint(before[k]) != fmt.Sprint(v) {
+			b[k], a[k] = before[k], v
+		}
+	}
+	return b, a
 }
 
 // stall is stallProfileFields.
@@ -391,6 +449,10 @@ func (s *service) updateUser(ctx context.Context, actorID, id string, b *employe
 	if err != nil || existing == nil {
 		return nil, errEmployeeNotFound
 	}
+	var beforeFields map[string]any
+	if prev, err := s.ports.Employees.Get(ctx, s.db, id); err == nil && prev != nil {
+		beforeFields = employeeAuditFields(prev)
+	}
 	if e := b.str("email"); !accounts && existing.UserID != nil && e != nil && *e != existing.Email {
 		return nil, errLoginEmailNeedsSettings
 	}
@@ -450,6 +512,14 @@ func (s *service) updateUser(ctx context.Context, actorID, id string, b *employe
 	}
 	if err != nil {
 		return nil, err
+	}
+	if beforeFields != nil {
+		if now, err := s.ports.Employees.Get(ctx, s.db, id); err == nil && now != nil {
+			if bf, af := changedFields(beforeFields, employeeAuditFields(now)); len(af) > 0 {
+				_ = platformaudit.Write(ctx, s.db, platformaudit.Entry{ActorID: actorID, ActorName: s.actorName(ctx, actorID), Action: "employee.update",
+					Entity: employeeEntity, EntityID: &id, EntityLabel: &now.FullName, Before: bf, After: af})
+			}
+		}
 	}
 	return s.reload(ctx, id)
 }

@@ -6,6 +6,7 @@ import {
   ArrowLeftIcon,
   ArrowPathIcon,
   BriefcaseIcon,
+  ClipboardDocumentListIcon,
   BuildingStorefrontIcon,
   CalendarDaysIcon,
   ClockIcon,
@@ -28,6 +29,7 @@ import { EmployeeContractsTab } from "./employee-contracts-tab";
 import { EmployeeDocumentsTab } from "./employee-documents-tab";
 import { EmployeeLifecycleTab } from "./employee-lifecycle-tab";
 import { EmployeeShiftsTab } from "./employee-shifts-tab";
+import { EmployeeAuditTab } from "./detail/employee-audit-tab";
 import { ScheduleTypeDialog } from "./schedule-type-dialog";
 import { ResignDialog } from "./resign-dialog";
 import { todayWib } from "@/lib/dates";
@@ -40,6 +42,7 @@ const TABS = [
   { key: "shifts", label: "Jadwal Shift", icon: ClockIcon },
   { key: "placements", label: "Penempatan", icon: BuildingStorefrontIcon },
   { key: "employment", label: "Employment History", icon: BriefcaseIcon },
+  { key: "audit", label: "Riwayat Perubahan", icon: ClipboardDocumentListIcon },
   { key: "documents", label: "Dokumen", icon: DocumentTextIcon },
   { key: "attendance", label: "Attendance", icon: ClockIcon },
   { key: "leave", label: "Leave Balance", icon: CalendarDaysIcon },
@@ -94,6 +97,7 @@ export function UserDetailPage({ params }: { params: Promise<{ id: string }> }) 
     shifts: <EmployeeShiftsTab employeeId={id} scheduleType={employee.schedule_type ?? "shift"} />,
     placements: <EmployeePlacementsTab employeeId={id} employeeName={employee.full_name} />,
     employment: <EmploymentHistoryTab employeeId={id} />,
+    audit: isHR ? <EmployeeAuditTab employeeId={id} /> : <p className="py-10 text-center text-sm text-gray-400">Khusus HR.</p>,
     documents: <EmployeeDocumentsTab employeeId={id} />,
     attendance: <EmployeeAttendanceTab employeeId={id} />,
     leave: <LeaveBalanceTab employeeId={id} />,

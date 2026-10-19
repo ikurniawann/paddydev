@@ -612,6 +612,13 @@ func TestEmployeeScheduleType(t *testing.T) {
 	}
 	code, out, _ = e.do("GET", "/api/users?schedule_type=libur", nil)
 	wantError(t, code, out, 400, "Parameter tidak valid")
+	if got := e.scalar(`SELECT before->>'full_name' || '>' || (after->>'full_name') FROM audit.audit_log
+		WHERE entity_id = $1 AND action = 'employee.update'`, id); got != "Budi Santoso>Budi Dua" {
+		t.Fatalf("update audit = %v", got)
+	}
+	if got := e.scalar(`SELECT count(*) FROM audit.audit_log WHERE entity_id = $1 AND action = 'employee.create'`, id); got != int64(1) {
+		t.Fatalf("create audit = %v", got)
+	}
 }
 
 func insertEmployee(t *testing.T, e *env, name, email, nip string, active bool, userID *string) string {
