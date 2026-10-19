@@ -2,6 +2,7 @@ import { BriefcaseIcon } from "@heroicons/react/24/outline";
 import { FormFieldLabel, formComboboxClassName } from "@/components/layout/form-field";
 import { FormSectionCard } from "@/components/layout/form-section-card";
 import { Combobox } from "@/components/ui/combobox";
+import { SCHEDULE_TYPE_OPTIONS, scheduleTypeLabel } from "@/lib/hris/schedule-type";
 import type { UserEmployeeFormValues } from "@/lib/hris/users-form";
 import type { UserFormLookups } from "../../types";
 import { TextField } from "./text-field";
@@ -10,9 +11,11 @@ interface EmploymentSectionProps {
   form: UserEmployeeFormValues;
   lookups: UserFormLookups | undefined;
   onChange: (patch: Partial<UserEmployeeFormValues>) => void;
+  /** Edit: tipe jadwal hanya ditampilkan (diubah lewat dialog di detail karyawan). */
+  isEdit?: boolean;
 }
 
-export function EmploymentSection({ form, lookups, onChange }: EmploymentSectionProps) {
+export function EmploymentSection({ form, lookups, onChange, isEdit = false }: EmploymentSectionProps) {
   const departments = lookups?.departments ?? [];
   const selectedDeptName = departments.find((d) => d.id === form.department_id)?.name;
   // posisi hanya dari departemen terpilih
@@ -54,6 +57,29 @@ export function EmploymentSection({ form, lookups, onChange }: EmploymentSection
             emptyMessage="No status found"
             className={formComboboxClassName}
           />
+        </div>
+        <div>
+          <FormFieldLabel required>Tipe Jadwal</FormFieldLabel>
+          {isEdit ? (
+            <p className="flex h-10 items-center text-sm text-gray-700">
+              {scheduleTypeLabel(form.schedule_type)}
+              <span className="ml-2 text-xs text-gray-400">(ubah lewat &quot;Ubah tipe jadwal&quot; di detail karyawan)</span>
+            </p>
+          ) : (
+            <div role="radiogroup" aria-label="Tipe Jadwal" className="flex h-10 items-center gap-4 text-sm">
+              {SCHEDULE_TYPE_OPTIONS.map((o) => (
+                <label key={o.value} className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    name="schedule_type"
+                    checked={form.schedule_type === o.value}
+                    onChange={() => onChange({ schedule_type: o.value })}
+                  />
+                  {o.label}
+                </label>
+              ))}
+            </div>
+          )}
         </div>
         <div>
           <FormFieldLabel>Department</FormFieldLabel>

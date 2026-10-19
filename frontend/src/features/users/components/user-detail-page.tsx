@@ -28,6 +28,8 @@ import { EmployeeContractsTab } from "./employee-contracts-tab";
 import { EmployeeDocumentsTab } from "./employee-documents-tab";
 import { EmployeeLifecycleTab } from "./employee-lifecycle-tab";
 import { EmployeeShiftsTab } from "./employee-shifts-tab";
+import { ScheduleTypeDialog } from "./schedule-type-dialog";
+import { todayWib } from "@/lib/dates";
 import { ResetPasswordDialog } from "./reset-password-dialog";
 
 const TABS = [
@@ -59,8 +61,10 @@ export function UserDetailPage({ params }: { params: Promise<{ id: string }> }) 
   });
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const [createAccountOpen, setCreateAccountOpen] = useState(false);
+  const [scheduleTypeOpen, setScheduleTypeOpen] = useState(false);
+  const isHR = useIamAccess().hasPrefix(IAM.hrisKepegawaian);
 
-  const { data: employee, isLoading } = useHRISEmployeeDetail(id);
+  const { data: employee, isLoading, refetch: refetchEmployee } = useHRISEmployeeDetail(id);
 
   if (isLoading) {
     return (
@@ -85,7 +89,7 @@ export function UserDetailPage({ params }: { params: Promise<{ id: string }> }) 
     info: <EmployeeInfoTab employee={employee} />,
     lifecycle: <EmployeeLifecycleTab employeeId={id} />,
     contracts: <EmployeeContractsTab employeeId={id} />,
-    shifts: <EmployeeShiftsTab employeeId={id} />,
+    shifts: <EmployeeShiftsTab employeeId={id} scheduleType={employee.schedule_type ?? "shift"} />,
     placements: <EmployeePlacementsTab employeeId={id} employeeName={employee.full_name} />,
     employment: <EmploymentHistoryTab employeeId={id} />,
     documents: <EmployeeDocumentsTab employeeId={id} />,
@@ -114,7 +118,19 @@ export function UserDetailPage({ params }: { params: Promise<{ id: string }> }) 
         canManageUsers={canManageUsers}
         onCreateAccount={() => setCreateAccountOpen(true)}
         onResetPassword={() => setResetDialogOpen(true)}
+        onChangeScheduleType={isHR ? () => setScheduleTypeOpen(true) : undefined}
       />
+
+      {scheduleTypeOpen ? (
+        <ScheduleTypeDialog
+          open
+          employeeId={id}
+          employeeName={employee.full_name}
+          today={todayWib()}
+          onOpenChange={setScheduleTypeOpen}
+          onDone={() => void refetchEmployee()}
+        />
+      ) : null}
 
       <div className="border-b border-gray-200">
         <div className="flex gap-1 overflow-x-auto">

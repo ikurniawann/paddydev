@@ -121,13 +121,19 @@ export function EssShiftTimPage() {
                 </div>
                 {/* Sudah punya jadwal → tombol netral "Ubah Jadwal"; belum →
                     tombol utama "Atur Jadwal" supaya yang kosong menonjol. */}
-                <Button
-                  variant={member.schedule_summary ? "outline" : "default"}
-                  size="sm"
-                  onClick={() => setEditing(member)}
-                >
-                  {member.schedule_summary ? "Ubah Jadwal" : "Atur Jadwal"}
-                </Button>
+                {member.schedule_type === "non_shift" ? (
+                  <span className="flex-none rounded-full bg-info-soft px-2 py-0.5 text-[11px] font-semibold text-info">
+                    Non-Shift — jadwal tetap
+                  </span>
+                ) : (
+                  <Button
+                    variant={member.schedule_summary ? "outline" : "default"}
+                    size="sm"
+                    onClick={() => setEditing(member)}
+                  >
+                    {member.schedule_summary ? "Ubah Jadwal" : "Atur Jadwal"}
+                  </Button>
+                )}
               </CardContent>
             </Card>
           ))}

@@ -28,6 +28,9 @@ import {
   type UserListFilters,
 } from "./users-list-filters";
 import { UsersTable } from "./users-table";
+import { BulkScheduleTypeDialog } from "./bulk-schedule-type-dialog";
+import type { ScheduleType } from "@/lib/hris/schedule-type";
+import { todayWib } from "@/lib/dates";
 import { NAV_FROM_EMPLOYEES } from "@/lib/iam/nav-context";
 import type { UserEmployeeItem } from "@/lib/users/user-mapper";
 
@@ -60,6 +63,10 @@ export function UsersListPage({ variant = "directory" }: UsersListPageProps) {
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const [createAccountTarget, setCreateAccountTarget] = useState<UserEmployeeItem | null>(null);
   const [loginAsEmployeeId, setLoginAsEmployeeId] = useState<string | null>(null);
+  // Ubah massal tipe jadwal: hanya direktori Karyawan untuk HR.
+  const canBulkSchedule = !isAccountsView && hasPrefix(IAM.hrisKepegawaian);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkOpen, setBulkOpen] = useState(false);
 
   const perPage = 15;
 
@@ -70,13 +77,17 @@ export function UsersListPage({ variant = "directory" }: UsersListPageProps) {
     is_active: filters.active !== "all" ? filters.active : undefined,
     is_access_app: filters.access !== "all" ? filters.access : undefined,
     role: filters.role || undefined,
+    schedule_type:
+      filters.scheduleType === "shift" || filters.scheduleType === "non_shift"
+        ? (filters.scheduleType as ScheduleType)
+        : undefined,
     page,
     limit: perPage,
     sort_by: "full_name",
     sort_order: "asc" as const,
   };
 
-  const { data, isLoading, isError } = useUserList(listParams);
+  const { data, isLoading, isError, refetch: refetchList } = useUserList(listParams);
   const { data: departments = [] } = useDepartmentList();
   const { data: stats = { total: 0, active: 0, withAccess: 0 } } = useUserDirectoryStats();
   const rows = data?.data ?? [];
@@ -268,8 +279,21 @@ export function UsersListPage({ variant = "directory" }: UsersListPageProps) {
           </div>
         ) : (
           <>
+            {canBulkSchedule && selectedIds.size > 0 ? (
+              <div className="mx-4 mb-2 flex flex-wrap items-center gap-2 rounded-lg bg-info-soft px-3 py-2 text-sm text-info">
+                <span>{selectedIds.size} karyawan dipilih</span>
+                <Button size="sm" onClick={() => setBulkOpen(true)}>
+                  Set Shift / Non-Shift ({selectedIds.size})
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())}>
+                  Batal pilih
+                </Button>
+              </div>
+            ) : null}
             <div className="px-4">
               <UsersTable
+                selectedIds={canBulkSchedule ? selectedIds : undefined}
+                onSelectedChange={canBulkSchedule ? setSelectedIds : undefined}
                 rows={rows}
                 onView={(id) => router.push(EMPLOYEES_ROUTES.detail(id))}
                 onEdit={(id) => router.push(EMPLOYEES_ROUTES.edit(id))}
@@ -303,6 +327,19 @@ export function UsersListPage({ variant = "directory" }: UsersListPageProps) {
           if (!open) setResetTarget(null);
         }}
       />
+
+      {bulkOpen ? (
+        <BulkScheduleTypeDialog
+          open
+          ids={[...selectedIds]}
+          today={todayWib()}
+          onOpenChange={setBulkOpen}
+          onDone={() => {
+            setSelectedIds(new Set());
+            void refetchList();
+          }}
+        />
+      ) : null}
 
       {createAccountTarget && (
         <CreateAccountDialog

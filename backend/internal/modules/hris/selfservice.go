@@ -397,7 +397,7 @@ func (s *store) AnnouncementHeadlines(ctx context.Context, employeeID string) ([
 }
 
 func (s *store) DirectReports(ctx context.Context, managerID string) ([]*Row, error) {
-	return queryRows(ctx, s.db, `SELECT e.id, e.full_name, e.nip, e.photo_url,
+	return queryRows(ctx, s.db, `SELECT e.id, e.full_name, e.nip, e.photo_url, e.schedule_type,
 		p.title AS position_title, d.name AS department_name
 		FROM hris.employees e
 		LEFT JOIN hris.positions p ON p.id = e.job_title_id

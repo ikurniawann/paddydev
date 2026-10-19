@@ -15,6 +15,7 @@ export type UserListParams = {
   employment_status?: string;
   is_active?: string;
   is_access_app?: string;
+  schedule_type?: "shift" | "non_shift";
   role?: string;
   page?: number;
   limit?: number;

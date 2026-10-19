@@ -12,6 +12,8 @@ export interface UserListFilters {
   access: string;
   /** "" = semua role */
   role: string;
+  /** "all" | "shift" | "non_shift" (EPIC-056) */
+  scheduleType: string;
 }
 
 export const DEFAULT_USER_LIST_FILTERS: UserListFilters = {
@@ -20,6 +22,7 @@ export const DEFAULT_USER_LIST_FILTERS: UserListFilters = {
   active: "all",
   access: "all",
   role: "",
+  scheduleType: "all",
 };
 
 /** Daftar Karyawan dibuka dengan karyawan aktif saja; Manajemen User tetap semua. */
@@ -39,6 +42,7 @@ export function countActiveFilters(
     filters.active !== defaults.active,
     filters.access !== defaults.access,
     filters.role !== defaults.role,
+    filters.scheduleType !== defaults.scheduleType,
   ].filter(Boolean).length;
 }
 
@@ -55,6 +59,11 @@ const ACCESS_FILTER_OPTIONS = [
   { value: "all", label: "All Access" },
   { value: "true", label: "With App Access" },
   { value: "false", label: "Without App Access" },
+];
+const SCHEDULE_TYPE_FILTER_OPTIONS = [
+  { value: "all", label: "Semua" },
+  { value: "shift", label: "Shift" },
+  { value: "non_shift", label: "Non-Shift" },
 ];
 const ROLE_FILTER_OPTIONS = [{ value: "all", label: "All Roles" }, ...ROLE_OPTIONS];
 
@@ -118,6 +127,17 @@ export function UsersListFiltersPanel({
             placeholder="Active"
             searchPlaceholder="Search..."
             emptyMessage="Not found"
+            className={filterComboboxClassName}
+          />
+        </FilterField>
+        <FilterField label="Tipe Jadwal">
+          <Combobox
+            options={SCHEDULE_TYPE_FILTER_OPTIONS}
+            value={filters.scheduleType}
+            onChange={(scheduleType) => onChange({ scheduleType })}
+            placeholder="Tipe Jadwal"
+            searchPlaceholder="Cari..."
+            emptyMessage="Tidak ada"
             className={filterComboboxClassName}
           />
         </FilterField>

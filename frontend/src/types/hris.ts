@@ -77,6 +77,8 @@ export interface Employee {
   end_date: string | null;
   employment_status: EmploymentStatus;
   is_active: boolean;
+  /** Tipe jadwal (EPIC-056): shift = Jadwal Kerja, non_shift = jadwal tetap. */
+  schedule_type?: "shift" | "non_shift";
   
   // Organization Structure
   department_id: string | null;

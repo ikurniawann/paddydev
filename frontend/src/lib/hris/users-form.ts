@@ -4,6 +4,7 @@
  */
 import { APPROVAL_WORKFLOWS } from "@/lib/admin/user-management";
 import { normalizeBusinessScopePayload } from "@/lib/configuration/business-scope";
+import type { ScheduleType } from "@/lib/hris/schedule-type";
 import type { UserEmployeeItem } from "@/lib/users/user-mapper";
 import type { UserRole } from "@/types";
 
@@ -19,6 +20,8 @@ export interface ApprovalPermission {
 }
 
 export interface UserEmployeeFormValues {
+  /** Tipe jadwal (EPIC-056); dikirim hanya saat tambah karyawan. */
+  schedule_type: ScheduleType;
   full_name: string;
   email: string;
   phone: string;
@@ -64,6 +67,7 @@ export interface UserEmployeeFormValues {
 }
 
 export const emptyUserForm: UserEmployeeFormValues = {
+  schedule_type: "shift",
   full_name: "",
   email: "",
   phone: "",
@@ -113,6 +117,7 @@ const dateOnly = (value: string | null | undefined) => value?.slice(0, 10) ?? ""
 export function userFormFromItem(detail: UserEmployeeItem): UserEmployeeFormValues {
   const account = detail.appAccount;
   return {
+    schedule_type: detail.scheduleType ?? "shift",
     full_name: detail.fullName,
     email: detail.email,
     phone: detail.phone ?? "",
@@ -176,6 +181,7 @@ export function validateUserForm(
   if (!form.full_name || !form.email || !form.join_date || !form.employment_status) {
     return "Full name, email, join date, and employment status are required";
   }
+  if (!opts.isEdit && !form.schedule_type) return "Tipe jadwal wajib dipilih";
 
   if (form.is_access_app) {
     const needsNewPassword = !opts.isEdit || !opts.hasExistingAppAccount;
@@ -240,6 +246,9 @@ export function buildUserPayload(
     if (typeof value === "boolean") payload[key] = value;
     else if (typeof value === "string") payload[key] = value === "" ? null : value;
   }
+
+  // Tipe jadwal hanya saat tambah; perubahan lewat dialog "Ubah tipe jadwal".
+  if (isEdit) delete payload.schedule_type;
 
   payload.is_access_app = form.is_access_app;
   if (!form.is_access_app) return payload;

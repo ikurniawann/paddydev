@@ -221,3 +221,18 @@ describe("userFormFromItem", () => {
     expect(form.approval_permissions[0].id).toBe("p1");
   });
 });
+
+describe("tipe jadwal", () => {
+  it("default Shift dan wajib dipilih", () => {
+    expect(emptyUserForm.schedule_type).toBe("shift");
+    const form = { ...emptyUserForm, full_name: "A", email: "a@b.id", join_date: "2026-10-21", employment_status: "contract" };
+    expect(validateUserForm({ ...form, schedule_type: "" as never }, { isEdit: false, hasExistingAppAccount: false })).toBe(
+      "Tipe jadwal wajib dipilih"
+    );
+  });
+  it("dikirim hanya saat tambah karyawan", () => {
+    const form = { ...emptyUserForm, schedule_type: "non_shift" as const };
+    expect(buildUserPayload(form, false).schedule_type).toBe("non_shift");
+    expect("schedule_type" in buildUserPayload(form, true)).toBe(false);
+  });
+});

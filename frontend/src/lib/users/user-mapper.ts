@@ -13,6 +13,7 @@ export type EmployeeUserRow = {
   employment_status: string;
   is_active: boolean;
   is_access_app: boolean;
+  schedule_type?: "shift" | "non_shift" | null;
   department_id: string | null;
   section_id: string | null;
   job_title_id: string | null;
@@ -89,6 +90,7 @@ export function mapEmployeeUserRow(row: EmployeeUserRow) {
     employmentStatus: row.employment_status,
     isActive: row.is_active,
     isAccessApp: row.is_access_app,
+    scheduleType: (row.schedule_type ?? "shift") as "shift" | "non_shift",
     departmentId: row.department_id,
     sectionId: row.section_id,
     jobTitleId: row.job_title_id,

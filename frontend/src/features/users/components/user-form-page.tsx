@@ -136,7 +136,7 @@ function UserEmployeeForm({
 
       <FormPageBody>
         <PersonalSection form={form} onChange={setField} emailLocked={!canManageAccounts && hasExistingAppAccount} />
-        <EmploymentSection form={form} lookups={lookups} onChange={setField} />
+        <EmploymentSection form={form} lookups={lookups} onChange={setField} isEdit={isEdit} />
         <ContactSections form={form} onChange={setField} />
 
         {canManageAccounts ? (

@@ -375,6 +375,12 @@ func (s *Service) EmployeeShifts(ctx context.Context, employeeID string) ([]*Row
 
 func (s *Service) SaveShiftPattern(ctx context.Context, employeeID, effectiveFrom string, days []patternDay, actorName string) error {
 	return s.repo.InTx(ctx, func(r Repository) error {
+		// Non-Shift memakai jadwal tetap (EPIC-056); pola bebas hanya untuk Shift.
+		var name, typ string
+		if err := r.querier().QueryRow(ctx, `SELECT full_name, schedule_type FROM hris.employees WHERE id = $1`, employeeID).
+			Scan(&name, &typ); err == nil && typ == scheduleNonShift {
+			return httpx.BadRequest(name + " Non-Shift memakai jadwal tetap — ubah tipe jadwal ke Shift dulu")
+		}
 		return r.SaveShiftPattern(ctx, employeeID, effectiveFrom, days, actorName)
 	})
 }

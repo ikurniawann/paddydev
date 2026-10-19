@@ -68,3 +68,16 @@ func TestApplyFixedScheduleRejectsShiftEmployees(t *testing.T) {
 		"employee_ids": []string{shiftEmp}, "effective_from": "2026-10-01"})
 	expect(t, past, http.StatusBadRequest, "Tanggal mulai tidak boleh sebelum hari ini")
 }
+
+func TestWeeklyPatternRejectedForNonShift(t *testing.T) {
+	h := newHarness(t)
+	hr, _ := h.staff("hrd", iam.HrisKepegawaian, false)
+	e := h.employee(emp{name: "Kantor Pusat"})
+	h.exec(`UPDATE hris.employees SET schedule_type = 'non_shift' WHERE id = $1`, e)
+	days := []map[string]any{}
+	for d := 1; d <= 7; d++ {
+		days = append(days, map[string]any{"day_of_week": d, "shift_id": nil})
+	}
+	c := h.do(&hr, http.MethodPut, "/api/hris/employees/"+e+"/shifts", map[string]any{"effective_from": "2026-10-06", "days": days})
+	expect(t, c, http.StatusBadRequest, "Kantor Pusat Non-Shift memakai jadwal tetap — ubah tipe jadwal ke Shift dulu")
+}

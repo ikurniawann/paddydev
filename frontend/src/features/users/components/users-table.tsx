@@ -17,6 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { TableRow } from "@/components/ui/table";
 import { formatDate } from "@/lib/format";
+import { scheduleTypeLabel } from "@/lib/hris/schedule-type";
 import type { UserEmployeeItem } from "@/lib/users/user-mapper";
 import { ROLE_LABELS, STATUS_COLORS, STATUS_LABELS } from "../constants";
 
@@ -31,6 +32,9 @@ interface UsersTableProps {
   onLoginAs?: (row: UserEmployeeItem) => void;
   loginAsEmployeeId?: string | null;
   showAppActions?: boolean;
+  /** Seleksi baris untuk ubah massal tipe jadwal (direktori Karyawan). */
+  selectedIds?: Set<string>;
+  onSelectedChange?: (ids: Set<string>) => void;
 }
 
 export function UsersTable({
@@ -42,12 +46,34 @@ export function UsersTable({
   onLoginAs,
   loginAsEmployeeId = null,
   showAppActions = false,
+  selectedIds,
+  onSelectedChange,
 }: UsersTableProps) {
+  const selectable = !!selectedIds && !!onSelectedChange;
+  const allSelected = selectable && rows.length > 0 && rows.every((r) => selectedIds?.has(r.id));
+  const toggle = (id: string) => {
+    if (!selectedIds || !onSelectedChange) return;
+    const next = new Set(selectedIds);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    onSelectedChange(next);
+  };
+  const toggleAll = () => {
+    if (!selectedIds || !onSelectedChange) return;
+    const next = new Set(selectedIds);
+    rows.forEach((r) => (allSelected ? next.delete(r.id) : next.add(r.id)));
+    onSelectedChange(next);
+  };
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
           <TableRow className="border-b border-gray-200/70 bg-gray-50/80 text-xs uppercase tracking-wide text-gray-500 hover:bg-gray-50/80">
+            {selectable ? (
+              <th className="w-10 px-4 py-3">
+                <input type="checkbox" aria-label="Pilih semua di halaman ini" checked={allSelected} onChange={toggleAll} />
+              </th>
+            ) : null}
             <th className="px-4 py-3 text-left font-semibold">Employee</th>
             <th className="px-4 py-3 text-left font-semibold">Employee ID</th>
             <th className="px-4 py-3 text-left font-semibold">Department</th>
@@ -65,6 +91,16 @@ export function UsersTable({
               className="cursor-pointer transition-colors hover:bg-gray-50/80"
               onClick={() => onView(emp.id)}
             >
+              {selectable ? (
+                <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                  <input
+                    type="checkbox"
+                    aria-label={`Pilih ${emp.fullName}`}
+                    checked={selectedIds?.has(emp.id) ?? false}
+                    onChange={() => toggle(emp.id)}
+                  />
+                </td>
+              ) : null}
               <td className="px-4 py-3">
                 <div className="flex items-center gap-3">
                   {emp.photoUrl ? (
@@ -113,6 +149,9 @@ export function UsersTable({
                 >
                   {STATUS_LABELS[emp.employmentStatus] || emp.employmentStatus}
                 </Badge>
+                {!showAppActions ? (
+                  <p className="mt-1 text-[11px] text-gray-500">{scheduleTypeLabel(emp.scheduleType)}</p>
+                ) : null}
               </td>
               <td className="px-4 py-3">
                 {emp.isAccessApp && emp.appAccount ? (

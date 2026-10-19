@@ -156,6 +156,8 @@ export interface EssTeamMember {
   department_name: string | null;
   photo_url: string | null;
   schedule_summary: string | null;
+  /** EPIC-056: Non-Shift memakai jadwal tetap (read-only di Shift Tim). */
+  schedule_type?: "shift" | "non_shift";
   schedule_since: string | null;
 }
 

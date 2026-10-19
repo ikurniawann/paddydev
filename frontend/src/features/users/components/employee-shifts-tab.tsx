@@ -15,6 +15,8 @@ import {
   summarizeShiftHistory,
   type ShiftPatternDraft,
 } from "@/lib/hris/employee-profile-shifts";
+import type { ScheduleType } from "@/lib/hris/schedule-type";
+import { applyFixedSchedule } from "../api";
 import { useSaveEmployeeShiftPattern } from "../mutations";
 import { useActiveShiftOptions, useEmployeeShiftSchedule } from "../queries";
 
@@ -24,7 +26,16 @@ import { useActiveShiftOptions, useEmployeeShiftSchedule } from "../queries";
  * tertentu. Absensi karyawan dinilai (terlambat/tidak) terhadap jadwal ini.
  */
 
-export function EmployeeShiftsTab({ employeeId }: { employeeId: string }) {
+export function EmployeeShiftsTab({
+  employeeId,
+  scheduleType = "shift",
+}: {
+  employeeId: string;
+  /** Non-Shift: pola dikunci ke jadwal tetap (EPIC-056). */
+  scheduleType?: ScheduleType;
+}) {
+  const locked = scheduleType === "non_shift";
+  const [applying, setApplying] = useState(false);
   const shiftsQuery = useActiveShiftOptions();
   const scheduleQuery = useEmployeeShiftSchedule(employeeId);
   const saveMutation = useSaveEmployeeShiftPattern(employeeId);
@@ -50,6 +61,19 @@ export function EmployeeShiftsTab({ employeeId }: { employeeId: string }) {
     })),
   ];
 
+  async function handleApplyFixed() {
+    setApplying(true);
+    try {
+      const res = await applyFixedSchedule({ employee_ids: [employeeId], effective_from: effectiveFrom });
+      toast.success(res.message ?? "Jadwal tetap diterapkan");
+      await scheduleQuery.refetch?.();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Gagal menerapkan jadwal tetap");
+    } finally {
+      setApplying(false);
+    }
+  }
+
   async function handleSave() {
     try {
       const res = await saveMutation.mutateAsync({
@@ -65,11 +89,19 @@ export function EmployeeShiftsTab({ employeeId }: { employeeId: string }) {
   return (
     <div className="space-y-5">
       <div>
-        <h3 className="text-sm font-semibold text-gray-800">Pola Shift Mingguan</h3>
-        <p className="text-xs text-gray-500">
-          Absensi karyawan dinilai terhadap jadwal ini (terlambat dihitung dari jam mulai shift +
-          toleransi). Perubahan disimpan sebagai pola baru — riwayat lama tetap tercatat.
-        </p>
+        <h3 className="text-sm font-semibold text-gray-800">
+          {locked ? "Jadwal tetap (Non-Shift)" : "Pola Shift Mingguan"}
+        </h3>
+        {locked ? (
+          <p className="text-xs text-gray-500">
+            Senin–Jumat 09.00–18.00, Sabtu–Minggu libur. Ubah tipe jadwal ke Shift untuk mengatur shift.
+          </p>
+        ) : (
+          <p className="text-xs text-gray-500">
+            Absensi karyawan dinilai terhadap jadwal ini (terlambat dihitung dari jam mulai shift +
+            toleransi). Perubahan disimpan sebagai pola baru — riwayat lama tetap tercatat.
+          </p>
+        )}
         {(shiftsQuery.isError || scheduleQuery.isError) && (
           <p className="mt-1 text-xs text-red-600">Gagal memuat jadwal</p>
         )}
@@ -90,6 +122,7 @@ export function EmployeeShiftsTab({ employeeId }: { employeeId: string }) {
                 onChange={(value) => setEdits((prev) => ({ ...prev, [day]: value }))}
                 placeholder="Pilih shift"
                 className="h-11 flex-1"
+                disabled={locked}
               />
             </div>
           );
@@ -106,9 +139,15 @@ export function EmployeeShiftsTab({ employeeId }: { employeeId: string }) {
             className="w-44"
           />
         </div>
-        <Button onClick={handleSave} disabled={saveMutation.isPending}>
-          {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Simpan Jadwal"}
-        </Button>
+        {locked ? (
+          <Button onClick={handleApplyFixed} disabled={applying}>
+            {applying ? <Loader2 className="h-4 w-4 animate-spin" /> : "Terapkan jadwal tetap"}
+          </Button>
+        ) : (
+          <Button onClick={handleSave} disabled={saveMutation.isPending}>
+            {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Simpan Jadwal"}
+          </Button>
+        )}
       </div>
 
       {history.length > 0 && (

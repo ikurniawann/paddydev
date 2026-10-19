@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatDate } from "@/lib/format";
 import { calculateTenure } from "@/lib/hris/employee-profile-summary";
+import { scheduleTypeLabel } from "@/lib/hris/schedule-type";
 import type { Employee } from "@/types/hris";
 import { EMPLOYEES_ROUTES, STATUS_COLORS, STATUS_LABELS } from "../../constants";
 
@@ -24,6 +25,8 @@ interface EmployeeProfileHeaderProps {
   canManageUsers: boolean;
   onCreateAccount: () => void;
   onResetPassword: () => void;
+  /** HR: buka dialog ubah tipe jadwal (Shift / Non-Shift). */
+  onChangeScheduleType?: () => void;
 }
 
 export function EmployeeProfileHeader({
@@ -31,6 +34,7 @@ export function EmployeeProfileHeader({
   canManageUsers,
   onCreateAccount,
   onResetPassword,
+  onChangeScheduleType,
 }: EmployeeProfileHeaderProps) {
   const router = useRouter();
 
@@ -69,6 +73,9 @@ export function EmployeeProfileHeader({
                   <XCircleIcon className="w-3.5 h-3.5" /> Inactive
                 </span>
               )}
+              <Badge variant={employee.schedule_type === "non_shift" ? "info" : "secondary"}>
+                {scheduleTypeLabel(employee.schedule_type ?? "shift")}
+              </Badge>
             </div>
             <p className="text-sm text-gray-500 mt-1">
               {employee.job_title?.title || "—"} · {employee.department?.name || "—"}
@@ -93,6 +100,11 @@ export function EmployeeProfileHeader({
             </div>
           </div>
           <div className="flex gap-2 shrink-0">
+            {onChangeScheduleType && employee.is_active ? (
+              <Button variant="outline" size="sm" onClick={onChangeScheduleType}>
+                Ubah tipe jadwal
+              </Button>
+            ) : null}
             {canManageUsers && !employee.user_id ? (
               <Button
                 variant="outline"

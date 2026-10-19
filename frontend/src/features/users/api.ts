@@ -1,5 +1,6 @@
 import { apiGet, apiPost, apiPut, apiPatch, apiDelete, buildListUrl } from "@/lib/api-client";
 import type { ShiftScheduleRowLike } from "@/lib/hris/employee-profile-shifts";
+import type { ScheduleType } from "@/lib/hris/schedule-type";
 import type { CreateUserEmployeeInput, UpdateUserEmployeeInput } from "@/lib/users/schemas";
 import type { UserEmployeeItem } from "@/lib/users/user-mapper";
 import type { Employee } from "@/types/hris";
@@ -329,3 +330,27 @@ export const saveEmployeeShiftPattern = (
     days: { day_of_week: number; shift_id: string | null }[];
   }
 ) => apiPut<{ message: string }>(`/api/hris/employees/${employeeId}/shifts`, payload);
+
+/* ── Tipe jadwal Shift / Non-Shift (EPIC-056) ───────────────────────── */
+
+export interface ScheduleTypeResult {
+  changed: number;
+  cleared_days: number;
+  warnings: string[];
+}
+
+export const fetchScheduleType = (id: string) =>
+  apiGet<{ data: { schedule_type: ScheduleType; future_days: number } }>(`/api/hris/employees/${id}/schedule-type`);
+
+export const saveScheduleType = (id: string, body: { schedule_type: ScheduleType; effective_from: string }) =>
+  apiPut<{ data: ScheduleTypeResult; message?: string }>(`/api/hris/employees/${id}/schedule-type`, body);
+
+export const bulkScheduleType = (body: {
+  employee_ids: string[];
+  schedule_type: ScheduleType;
+  effective_from: string;
+  dry_run?: boolean;
+}) => apiPost<{ data: ScheduleTypeResult; message?: string }>("/api/hris/employees/schedule-type/bulk", body);
+
+export const applyFixedSchedule = (body: { branch_id?: string; employee_ids?: string[]; effective_from: string }) =>
+  apiPost<{ data: ScheduleTypeResult; message?: string }>("/api/hris/schedules/fixed", body);
