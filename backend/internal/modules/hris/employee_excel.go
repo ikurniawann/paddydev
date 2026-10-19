@@ -111,10 +111,12 @@ func loadEmployeeLists(ctx context.Context, q database.Querier) (*employeeLists,
 				return nil, err
 			}
 			l.names[id] = name
-			if _, dup := s.into[strings.ToLower(name)]; !dup {
-				s.into[strings.ToLower(name)] = id
-				l.options[s.key] = append(l.options[s.key], name)
+			if _, dup := s.into[strings.ToLower(name)]; dup {
+				s.into[strings.ToLower(name)] = "" // ambiguous: the import refuses it
+				continue
 			}
+			s.into[strings.ToLower(name)] = id
+			l.options[s.key] = append(l.options[s.key], name)
 		}
 		rows.Close()
 	}

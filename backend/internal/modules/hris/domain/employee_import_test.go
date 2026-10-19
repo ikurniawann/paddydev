@@ -133,3 +133,13 @@ func TestValidateEmployeeImportReplaceSkipsUnchangedCells(t *testing.T) {
 		t.Fatalf("changed invalid phone must fail: %+v", errs)
 	}
 }
+
+func TestValidateEmployeeImportAmbiguousMasterName(t *testing.T) {
+	l := lk()
+	l.Positions["store manager"] = "" // dua jabatan bernama sama
+	h := []string{"NIP", "Nama Lengkap *", "Jabatan"}
+	_, errs, _ := ValidateEmployeeImport("replace", h, [][]string{{"202505272", "Feti", "Store Manager"}}, 2, l)
+	if !issueText(errs, "Baris 2, kolom Jabatan: 'Store Manager' ada lebih dari satu di master — pilih lewat form karyawan") {
+		t.Fatalf("errs = %+v", errs)
+	}
+}

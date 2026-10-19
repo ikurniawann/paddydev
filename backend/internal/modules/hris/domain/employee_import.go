@@ -279,6 +279,10 @@ func ValidateEmployeeImport(mode string, header []string, rows [][]string, first
 					fail(k, fmt.Sprintf("'%s' tidak ada di daftar pilihan", val))
 					continue
 				}
+				if id == "" { // nama kembar di master: tidak bisa dipilih lewat file
+					fail(k, fmt.Sprintf("'%s' ada lebih dari satu di master — pilih lewat form karyawan", val))
+					continue
+				}
 				switch k {
 				case "branch":
 					row.Branch = id
