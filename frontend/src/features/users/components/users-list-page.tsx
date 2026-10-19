@@ -8,6 +8,7 @@ import { Filter, Search, Users, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { buildListUrl } from "@/lib/api-client";
 import { useDepartmentList } from "@/features/master-data/departments";
 import { PurchasingListSection } from "@/features/purchasing/components/shared/purchasing-list-section";
 import { PurchasingTablePagination } from "@/features/purchasing/components/shared/purchasing-table-pagination";
@@ -235,6 +236,25 @@ export function UsersListPage({ variant = "directory" }: UsersListPageProps) {
               ) : null}
             </Button>
 
+            {!isAccountsView ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="h-10 flex-shrink-0 rounded-lg border-gray-200/80"
+                onClick={() => {
+                  // Export mengikuti pencarian & filter yang sedang aktif.
+                  window.location.href = buildListUrl("/api/hris/employees/export", {
+                    search: listParams.search,
+                    department_id: listParams.department_id,
+                    employment_status: listParams.employment_status,
+                    is_active: listParams.is_active,
+                    schedule_type: listParams.schedule_type,
+                  });
+                }}
+              >
+                Export
+              </Button>
+            ) : null}
             {(search || isFilterActive || page > 1) && (
               <Button
                 variant="outline"

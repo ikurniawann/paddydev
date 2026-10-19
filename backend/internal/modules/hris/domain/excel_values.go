@@ -112,3 +112,11 @@ func NormalizePhone(s string) (string, string) {
 func NormalizeHeader(s string) string {
 	return squash(strings.TrimSuffix(strings.TrimSpace(s), "*"))
 }
+
+// EmploymentStatusLabels are the status names of hris.employment_statuses
+// on live (19-10-2026); hris.employment_statuses wins when it has the code.
+var EmploymentStatusLabels = []Choice{
+	{"probation", "Masa Percobaan"}, {"contract", "Kontrak (PKWT)"}, {"permanent", "Tetap (PKWTT)"},
+	{"intern", "Magang"}, {"freelance", "Freelance"}, {"daily_worker", "Pekerja Harian"}, {"pkwt", "PKWT"},
+	{"resigned", "Resign"}, {"terminated", "Diberhentikan"},
+}
