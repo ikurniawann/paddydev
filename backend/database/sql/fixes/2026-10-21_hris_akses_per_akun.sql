@@ -12,14 +12,19 @@ SELECT * FROM (VALUES
   ('paddy.peopledevelopment@gmail.com', 'hris_non_payroll'),
   ('paddyhroperation@gmail.com', 'hris_non_rekrutmen_kpi')) v(email, role_code);
 
-SELECT count(*) = 3 AS ok FROM hr_akses a
-JOIN auth.users u ON lower(u.email) = a.email
-JOIN iam.roles r ON r.code = a.role_code AND r.deleted_at IS NULL \gset
+-- Role turunan mengikuti grant admin_hris terbaru sebelum dipasang.
+SELECT iam.sync_hris_staff_roles();
+
+SELECT (SELECT count(*) FROM hr_akses a
+        JOIN auth.users u ON lower(u.email) = a.email
+        JOIN iam.roles r ON r.code = a.role_code AND r.deleted_at IS NULL) = 3
+   AND (SELECT count(DISTINCT r.code) FROM iam.roles r
+        JOIN iam.role_menu_permissions p ON p.role_id = r.id AND p.is_active
+        WHERE r.code IN (SELECT role_code FROM hr_akses)) = 3 AS ok \gset
 \if :ok
 \else
-  \echo 'Akun atau role tidak lengkap (harus 3) — tidak ada perubahan.'
-  ROLLBACK;
-  \quit
+  -- Gagal dengan kode error (psql keluar 3 dengan ON_ERROR_STOP); transaksi batal.
+  DO $$ BEGIN RAISE EXCEPTION 'EPIC-057: akun atau role (dengan grant aktif) tidak lengkap — tidak ada perubahan'; END $$;
 \endif
 
 \echo 'Sebelum:'
