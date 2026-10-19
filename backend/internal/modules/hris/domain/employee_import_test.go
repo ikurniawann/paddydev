@@ -143,3 +143,42 @@ func TestValidateEmployeeImportAmbiguousMasterName(t *testing.T) {
 		t.Fatalf("errs = %+v", errs)
 	}
 }
+
+func TestValidateEmployeeImportEmailAndIdentityRules(t *testing.T) {
+	l := lk()
+	l.ExistingNIP["202505272"] = EmployeeRef{ID: "e1", NIP: "202505272", Name: "Feti", Active: true, HasLogin: true}
+	l.ExistingNIP["202310037"] = EmployeeRef{ID: "e2", NIP: "202310037", Name: "Nanda", Active: true}
+	l.KTPOwner = map[string]EmployeeRef{"3273012345678901": {ID: "e2", NIP: "202310037", Name: "Nanda", Active: true}}
+	l.NPWPOwner = map[string]EmployeeRef{}
+	h := []string{"NIP", "Nama Lengkap *", "Email *", "NIK (KTP)", "NPWP", "Tanggal Masuk *", "Status Kepegawaian *", "Tipe Jadwal *", "Cabang Utama *"}
+	newRow := func(email, ktp, npwp string) []string {
+		return []string{"", "Baru", email, ktp, npwp, "21/10/2026", "Kontrak (PKWT)", "Shift", "PPLN"}
+	}
+	_, errs, _ := ValidateEmployeeImport("replace", h, [][]string{
+		{"202505272", "Feti", "feti.baru@x.id", "", "", "", "", "", ""}, // punya akun login: email tidak boleh diubah lewat import
+		{"202310037", "Nanda", "lama@x.id", "", "", "", "", "", ""},     // email karyawan resign untuk karyawan yang sudah ada
+	}, 2, l)
+	for _, want := range []string{
+		"Baris 2, kolom Email: karyawan ini punya akun login — ubah email lewat Manajemen User",
+		"Baris 3, kolom Email: lama@x.id milik Lama (NIP 201901001, resign) — untuk karyawan yang sudah ada, ubah lewat form karyawan",
+	} {
+		if !issueText(errs, want) {
+			t.Errorf("missing %q in %+v", want, errs)
+		}
+	}
+	_, errs, _ = ValidateEmployeeImport("add", h, [][]string{
+		newRow("a@x.id", "3273012345678901", ""),
+		newRow("b@x.id", "3273012345678999", "123456789012345"),
+		newRow("b@x.id", "3273012345678999", "123456789012345"),
+	}, 2, l)
+	for _, want := range []string{
+		"Baris 2, kolom NIK (KTP): NIK 3273012345678901 sudah dipakai Nanda (NIP 202310037)",
+		"Baris 4, kolom Email: b@x.id ganda di file (baris 3 & 4)",
+		"Baris 4, kolom NIK (KTP): NIK 3273012345678999 ganda di file (baris 3 & 4)",
+		"Baris 4, kolom NPWP: NPWP 123456789012345 ganda di file (baris 3 & 4)",
+	} {
+		if !issueText(errs, want) {
+			t.Errorf("missing %q in %+v", want, errs)
+		}
+	}
+}

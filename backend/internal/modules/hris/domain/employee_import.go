@@ -69,6 +69,7 @@ const MaxEmployeeImportRows = 1000
 type EmployeeRef struct {
 	ID, NIP, Name string
 	Active        bool
+	HasLogin      bool // linked to a login account (email syncs to it)
 }
 
 // EmployeeLookups are the masters and existing rows an import is checked
@@ -81,7 +82,9 @@ type EmployeeLookups struct {
 	ExistingNIP map[string]EmployeeRef
 	EmailOwner  map[string]EmployeeRef
 	ManagerNIP  map[string]string
-	Today       string // "" skips the birth-date-in-the-future check
+	KTPOwner    map[string]EmployeeRef // NIK (digits) → employee
+	NPWPOwner   map[string]EmployeeRef // NPWP (digits) → employee
+	Today       string                 // "" skips the birth-date-in-the-future check
 	// Current is each existing employee's values as the export writes them
 	// (NIP → column key → text; dates ISO). In Replace mode a cell equal
 	// to it is unchanged: not validated again, not overwritten.
@@ -157,6 +160,19 @@ func ValidateEmployeeImport(mode string, header []string, rows [][]string, first
 		return out, errs, warns
 	}
 	seen := map[string]int{}
+	seenIn := map[string]map[string]int{"email": {}, "ktp": {}, "npwp": {}}
+	// unique checks a value against the file and the database (NIK, NPWP,
+	// email); "" when fine, else the message.
+	unique := func(key, label, value string, line int, owners map[string]EmployeeRef, self string) string {
+		if first, dup := seenIn[key][strings.ToLower(value)]; dup {
+			return fmt.Sprintf("%s ganda di file (baris %d & %d)", strings.TrimSpace(label+" "+value), first, line)
+		}
+		seenIn[key][strings.ToLower(value)] = line
+		if o, ok := owners[value]; ok && o.NIP != self {
+			return fmt.Sprintf("%s %s sudah dipakai %s (NIP %s)", label, value, o.Name, o.NIP)
+		}
+		return ""
+	}
 	for i, cells := range rows {
 		line := firstLine + i
 		v := map[string]string{}
@@ -229,11 +245,22 @@ func ValidateEmployeeImport(mode string, header []string, rows [][]string, first
 					fail(k, "format email tidak valid")
 					continue
 				}
+				if m := unique("email", "", val, line, nil, nip); m != "" {
+					fail(k, m)
+					continue
+				}
+				if row.Action == "update" && existing.HasLogin {
+					fail(k, "karyawan ini punya akun login — ubah email lewat Manajemen User")
+					continue
+				}
 				row.Set[k] = val
 				if o, ok := lk.EmailOwner[strings.ToLower(val)]; ok && o.NIP != nip {
-					if o.Active {
+					switch {
+					case o.Active:
 						fail(k, fmt.Sprintf("sudah dipakai %s (NIP %s)", o.Name, o.NIP))
-					} else {
+					case row.Action == "update":
+						fail(k, fmt.Sprintf("%s milik %s (NIP %s, resign) — untuk karyawan yang sudah ada, ubah lewat form karyawan", val, o.Name, o.NIP))
+					default:
 						warns = append(warns, UploadIssue{Line: line, Column: c.Header,
 							Message: fmt.Sprintf("%s milik %s (NIP %s, resign) — akan dilepas bila dikonfirmasi", val, o.Name, o.NIP)})
 						row.ReleaseEmailFrom = o.ID
@@ -304,11 +331,19 @@ func ValidateEmployeeImport(mode string, header []string, rows [][]string, first
 					fail(k, "harus 16 angka")
 					continue
 				}
+				if m := unique("ktp", "NIK", d, line, lk.KTPOwner, nip); m != "" {
+					fail(k, m)
+					continue
+				}
 				row.Set[k] = d
 			case k == "npwp":
 				d := CleanDigits(val)
 				if !isDigits(d) || len(d) < 15 || len(d) > 16 {
 					fail(k, "harus 15–16 angka")
+					continue
+				}
+				if m := unique("npwp", "NPWP", d, line, lk.NPWPOwner, nip); m != "" {
+					fail(k, m)
 					continue
 				}
 				row.Set[k] = d

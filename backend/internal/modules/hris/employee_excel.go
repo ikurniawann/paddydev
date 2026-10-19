@@ -343,17 +343,26 @@ func readEmployeeMatrix(data []byte, fileName string) ([][]string, error) {
 func importLookups(ctx context.Context, q database.Querier, l *employeeLists, today string) (domain.EmployeeLookups, error) {
 	lk := domain.EmployeeLookups{Statuses: l.statusCodes, Branches: l.branches, Departments: l.departments,
 		Positions: l.positions, ExistingNIP: map[string]domain.EmployeeRef{}, EmailOwner: map[string]domain.EmployeeRef{},
-		ManagerNIP: map[string]string{}, Today: today}
-	rows, err := q.Query(ctx, `SELECT id::text, nip, full_name, lower(email), is_active FROM hris.employees ORDER BY is_active, updated_at NULLS FIRST`)
+		ManagerNIP: map[string]string{}, KTPOwner: map[string]domain.EmployeeRef{}, NPWPOwner: map[string]domain.EmployeeRef{},
+		Today: today}
+	rows, err := q.Query(ctx, `SELECT id::text, nip, full_name, lower(email), is_active, user_id IS NOT NULL,
+		regexp_replace(coalesce(ktp, ''), '\D', '', 'g'), regexp_replace(coalesce(npwp, ''), '\D', '', 'g')
+		FROM hris.employees ORDER BY is_active, updated_at NULLS FIRST`)
 	if err != nil {
 		return lk, err
 	}
 	defer rows.Close()
 	for rows.Next() {
 		var r domain.EmployeeRef
-		var email string
-		if err := rows.Scan(&r.ID, &r.NIP, &r.Name, &email, &r.Active); err != nil {
+		var email, ktp, npwp string
+		if err := rows.Scan(&r.ID, &r.NIP, &r.Name, &email, &r.Active, &r.HasLogin, &ktp, &npwp); err != nil {
 			return lk, err
+		}
+		if ktp != "" {
+			lk.KTPOwner[ktp] = r
+		}
+		if npwp != "" {
+			lk.NPWPOwner[npwp] = r
 		}
 		lk.ExistingNIP[r.NIP] = r
 		lk.EmailOwner[email] = r // active rows come last, so they win
@@ -603,7 +612,7 @@ func (s *Service) applyImportRow(ctx context.Context, r Repository, actor *auth.
 		}
 		if err := q.QueryRow(ctx, `INSERT INTO hris.employees (`+strings.Join(cols, ", ")+`) VALUES (`+strings.Join(marks, ", ")+`) RETURNING id::text`,
 			args...).Scan(&id); err != nil {
-			return httpx.BadRequest(fmt.Sprintf("Baris %d: gagal disimpan (%s)", row.Line, err.Error()))
+			return importRowError(row.Line, err)
 		}
 		if scheduleTo == scheduleNonShift {
 			if _, err := applyFixedSchedule(ctx, r, id, today, actor.FullName); err != nil {
@@ -619,7 +628,7 @@ func (s *Service) applyImportRow(ctx context.Context, r Repository, actor *auth.
 				parts = append(parts, fmt.Sprintf("%s = $%d", k, len(args)))
 			}
 			if _, err := q.Exec(ctx, `UPDATE hris.employees SET `+strings.Join(parts, ", ")+`, updated_at = now() WHERE id = $1`, args...); err != nil {
-				return httpx.BadRequest(fmt.Sprintf("Baris %d: gagal disimpan (%s)", row.Line, err.Error()))
+				return importRowError(row.Line, err)
 			}
 		}
 		if scheduleTo != "" {
@@ -745,4 +754,19 @@ func (s *Service) currentExportValues(ctx context.Context, q database.Querier, l
 		out[m["nip"]] = m
 	}
 	return out, nil
+}
+
+// importRowError turns a database error of one row into a message for HR
+// (no raw SQL text): unique violations name the column.
+func importRowError(line int, err error) error {
+	msg := err.Error()
+	switch {
+	case strings.Contains(msg, "ktp"):
+		return httpx.BadRequest(fmt.Sprintf("Baris %d: NIK sudah dipakai karyawan lain", line))
+	case strings.Contains(msg, "npwp"):
+		return httpx.BadRequest(fmt.Sprintf("Baris %d: NPWP sudah dipakai karyawan lain", line))
+	case strings.Contains(msg, "nip"):
+		return httpx.BadRequest(fmt.Sprintf("Baris %d: NIP sudah dipakai karyawan lain", line))
+	}
+	return httpx.BadRequest(fmt.Sprintf("Baris %d: gagal disimpan — periksa isi baris ini", line))
 }
