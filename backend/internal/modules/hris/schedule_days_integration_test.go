@@ -183,3 +183,44 @@ func TestScheduleUploadReportsReplacedCellsAndErrorFile(t *testing.T) {
 		t.Fatalf("error file status %d", ef.status)
 	}
 }
+
+// Review C1: upload cabang A tidak boleh menghapus jadwal per tanggal
+// karyawan dua cabang pada tanggal ia ditempatkan di cabang lain.
+func TestScheduleUploadKeepsOtherBranchDays(t *testing.T) {
+	h := newHarness(t)
+	hr, _ := h.staff("hrd", iam.HrisKepegawaian, false)
+	branch, _, budi := scheduleFixture(h)
+	def := h.scalar(`SELECT id::text FROM hris.shifts WHERE code = 'DEF'`)
+	// Jadwal Budi dari cabang utamanya (branch2) untuk 05–07/10.
+	h.exec(`INSERT INTO hris.employee_shift_days (employee_id, work_date, shift_id, batch_id)
+		SELECT $1, d::date, $2, gen_random_uuid() FROM generate_series('2026-10-05'::date, '2026-10-07', interval '1 day') d`, budi, def)
+	nip := h.scalar(`SELECT nip FROM hris.employees WHERE id = $1`, budi)
+	f := excelize.NewFile()
+	_ = f.SetSheetName("Sheet1", "Jadwal")
+	head := []string{"NIP", "Nama Karyawan", "Jabatan", "Sen 05/10", "Sel 06/10", "Rab 07/10", "Kam 08/10", "Jum 09/10", "Sab 10/10", "Min 11/10"}
+	row := []string{nip, "Budi", "", "-", "-", "-", "DEF", "DEF", "L", "L"}
+	for i := range head {
+		c1, _ := excelize.CoordinatesToCellName(i+1, 3)
+		c2, _ := excelize.CoordinatesToCellName(i+1, 4)
+		_ = f.SetCellStr("Jadwal", c1, head[i])
+		_ = f.SetCellStr("Jadwal", c2, row[i])
+	}
+	_, _ = f.NewSheet("Info")
+	for i, kv := range [][2]string{{"Cabang ID", branch}, {"Dari", "2026-10-05"}, {"Sampai", "2026-10-11"}} {
+		_ = f.SetCellStr("Info", "A"+strconv.Itoa(i+1), kv[0])
+		_ = f.SetCellStr("Info", "B"+strconv.Itoa(i+1), kv[1])
+	}
+	var buf bytes.Buffer
+	_ = f.Write(&buf)
+	fields := map[string]string{"branch_id": branch, "from": "2026-10-05", "to": "2026-10-11", "step": "preview"}
+	pre := upload(t, h, &hr, fields, buf.Bytes())
+	expect(t, pre, http.StatusOK, "")
+	fields["step"], fields["fingerprint"], fields["ack_warnings"] = "commit", pre.data()["fingerprint"].(string), "true"
+	expect(t, upload(t, h, &hr, fields, buf.Bytes()), http.StatusOK, "")
+	if got := h.scalar(`SELECT count(*)::text FROM hris.employee_shift_days WHERE employee_id = $1 AND work_date <= '2026-10-07'`, budi); got != "3" {
+		t.Fatalf("Budi's other-branch days = %s, want 3 kept", got)
+	}
+	if got := h.scalar(`SELECT count(*)::text FROM hris.employee_shift_days WHERE employee_id = $1 AND work_date >= '2026-10-08'`, budi); got != "4" {
+		t.Fatalf("Budi's uploaded days = %s, want 4", got)
+	}
+}

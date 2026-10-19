@@ -529,12 +529,25 @@ func uploadContext(ctx context.Context, q database.Querier, rng *scheduleRange, 
 	return c, names, nil
 }
 
-func scheduleFingerprint(ctx context.Context, q database.Querier, ids []string, from, to string) (string, error) {
+// assignmentKeys are the (employee, date) pairs an upload writes: only the
+// dates each employee is placed at this branch, so per-date rows another
+// branch uploaded for its own days are never touched (review C1).
+func assignmentKeys(as []domain.ScheduleAssignment) ([]string, []string) {
+	ids, dates := make([]string, len(as)), make([]string, len(as))
+	for i, a := range as {
+		ids[i], dates[i] = a.EmployeeID, a.Date
+	}
+	return ids, dates
+}
+
+func scheduleFingerprint(ctx context.Context, q database.Querier, as []domain.ScheduleAssignment) (string, error) {
+	ids, dates := assignmentKeys(as)
 	var fp string
-	err := q.QueryRow(ctx, `SELECT coalesce(md5(string_agg(employee_id::text || work_date::text || coalesce(shift_id::text, 'L'), ','
-		ORDER BY employee_id, work_date)), '')
-		FROM hris.employee_shift_days WHERE employee_id = ANY($1::uuid[]) AND work_date BETWEEN $2::date AND $3::date`,
-		ids, from, to).Scan(&fp)
+	err := q.QueryRow(ctx, `SELECT coalesce(md5(string_agg(d.employee_id::text || d.work_date::text || coalesce(d.shift_id::text, 'L'), ','
+		ORDER BY d.employee_id, d.work_date)), '')
+		FROM hris.employee_shift_days d
+		JOIN unnest($1::uuid[], $2::date[]) AS k(employee_id, work_date)
+		  ON k.employee_id = d.employee_id AND k.work_date = d.work_date`, ids, dates).Scan(&fp)
 	return fp, err
 }
 
@@ -618,7 +631,7 @@ func (s *Service) ImportSchedule(ctx context.Context, actor *auth.User, in sched
 		if err != nil {
 			return err
 		}
-		fp, err := scheduleFingerprint(ctx, q, res.EmployeeIDs, rng.from(), rng.to())
+		fp, err := scheduleFingerprint(ctx, q, res.Assignments)
 		if err != nil {
 			return err
 		}
@@ -639,8 +652,10 @@ func (s *Service) ImportSchedule(ctx context.Context, actor *auth.User, in sched
 		if err := q.QueryRow(ctx, `SELECT gen_random_uuid()::text`).Scan(&batch); err != nil {
 			return err
 		}
-		if _, err := q.Exec(ctx, `DELETE FROM hris.employee_shift_days
-			WHERE employee_id = ANY($1::uuid[]) AND work_date BETWEEN $2::date AND $3::date`, res.EmployeeIDs, rng.from(), rng.to()); err != nil {
+		ids, dates := assignmentKeys(res.Assignments)
+		if _, err := q.Exec(ctx, `DELETE FROM hris.employee_shift_days d
+			USING unnest($1::uuid[], $2::date[]) AS k(employee_id, work_date)
+			WHERE d.employee_id = k.employee_id AND d.work_date = k.work_date`, ids, dates); err != nil {
 			return err
 		}
 		days := map[string]int{}
