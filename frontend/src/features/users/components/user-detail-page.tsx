@@ -29,6 +29,7 @@ import { EmployeeDocumentsTab } from "./employee-documents-tab";
 import { EmployeeLifecycleTab } from "./employee-lifecycle-tab";
 import { EmployeeShiftsTab } from "./employee-shifts-tab";
 import { ScheduleTypeDialog } from "./schedule-type-dialog";
+import { ResignDialog } from "./resign-dialog";
 import { todayWib } from "@/lib/dates";
 import { ResetPasswordDialog } from "./reset-password-dialog";
 
@@ -62,6 +63,7 @@ export function UserDetailPage({ params }: { params: Promise<{ id: string }> }) 
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const [createAccountOpen, setCreateAccountOpen] = useState(false);
   const [scheduleTypeOpen, setScheduleTypeOpen] = useState(false);
+  const [resignOpen, setResignOpen] = useState(false);
   const isHR = useIamAccess().hasPrefix(IAM.hrisKepegawaian);
 
   const { data: employee, isLoading, refetch: refetchEmployee } = useHRISEmployeeDetail(id);
@@ -119,7 +121,20 @@ export function UserDetailPage({ params }: { params: Promise<{ id: string }> }) 
         onCreateAccount={() => setCreateAccountOpen(true)}
         onResetPassword={() => setResetDialogOpen(true)}
         onChangeScheduleType={isHR ? () => setScheduleTypeOpen(true) : undefined}
+        onResign={isHR ? () => setResignOpen(true) : undefined}
       />
+
+      {resignOpen ? (
+        <ResignDialog
+          open
+          employeeId={id}
+          employeeName={employee.full_name}
+          joinDate={employee.join_date.slice(0, 10)}
+          today={todayWib()}
+          onOpenChange={setResignOpen}
+          onDone={() => void refetchEmployee()}
+        />
+      ) : null}
 
       {scheduleTypeOpen ? (
         <ScheduleTypeDialog

@@ -354,3 +354,8 @@ export const bulkScheduleType = (body: {
 
 export const applyFixedSchedule = (body: { branch_id?: string; employee_ids?: string[]; effective_from: string }) =>
   apiPost<{ data: ScheduleTypeResult; message?: string }>("/api/hris/schedules/fixed", body);
+
+export const resignEmployee = (
+  id: string,
+  body: { effective_date: string; resign_type: string; reason: string | null }
+) => apiPost<{ data: unknown; message?: string }>(`/api/hris/employees/${id}/resign`, body);

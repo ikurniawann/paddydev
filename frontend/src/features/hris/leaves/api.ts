@@ -25,7 +25,7 @@ export const approveLeave = (body: ApproveLeavePayload) =>
   apiPost<{ data: LeaveItem; wa_link?: string | null }>(`${BASE}/approve`, body);
 
 export const fetchLeaveEmployees = () =>
-  apiGet<{ data: LeaveEmployeeLite[] }>("/api/hris/employees?limit=100").then(
+  apiGet<{ data: LeaveEmployeeLite[] }>("/api/hris/employees?is_active=true&limit=500&sort_by=full_name&sort_order=asc").then(
     (res) => res.data
   );
 

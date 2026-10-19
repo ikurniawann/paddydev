@@ -27,6 +27,8 @@ interface EmployeeProfileHeaderProps {
   onResetPassword: () => void;
   /** HR: buka dialog ubah tipe jadwal (Shift / Non-Shift). */
   onChangeScheduleType?: () => void;
+  /** HR: buka dialog Resign (hanya karyawan aktif). */
+  onResign?: () => void;
 }
 
 export function EmployeeProfileHeader({
@@ -35,6 +37,7 @@ export function EmployeeProfileHeader({
   onCreateAccount,
   onResetPassword,
   onChangeScheduleType,
+  onResign,
 }: EmployeeProfileHeaderProps) {
   const router = useRouter();
 
@@ -100,6 +103,17 @@ export function EmployeeProfileHeader({
             </div>
           </div>
           <div className="flex gap-2 shrink-0">
+            {onResign && employee.is_active ? (
+              <Button variant="outline" size="sm" onClick={onResign} className="border-danger/30 text-danger hover:bg-danger-soft">
+                Resign
+              </Button>
+            ) : null}
+            {!employee.is_active ? (
+              <Badge variant="destructive">
+                {employee.employment_status === "terminated" ? "Diberhentikan" : "Resign"}
+                {employee.end_date ? ` · ${formatDate(employee.end_date)}` : ""}
+              </Badge>
+            ) : null}
             {onChangeScheduleType && employee.is_active ? (
               <Button variant="outline" size="sm" onClick={onChangeScheduleType}>
                 Ubah tipe jadwal
