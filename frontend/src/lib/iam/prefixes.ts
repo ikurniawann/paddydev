@@ -32,6 +32,10 @@ export const IAM = {
   hrisPlacements: ["hris.master.placements"],
   hrisPerformance: ["hris.performance"],
   hrisRecruitment: ["hris.recruitment"],
+  /** Pinjaman (Kepegawaian → Pinjaman); Penggajian tetap boleh seperti dulu. */
+  hrisLoans: ["hris.kepegawaian.loans", "hris.compensation"],
+  /** Analytics rekrutmen — membaca data kandidat. */
+  hrisAnalytics: ["hris.insights.analytics"],
   accounting: ["accounting"],
   crm: ["crm"],
   crmSettings: ["crm.settings"],
