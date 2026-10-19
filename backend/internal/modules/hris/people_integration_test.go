@@ -202,7 +202,7 @@ func TestLogbookReportsMaster(t *testing.T) {
 	h := newHarness(t)
 	dept := h.department("Logbook Dept")
 	other := h.department("Logbook Lain")
-	hr, _ := h.staff("hrd", []string{"hris.insights", "hris.master"}, true)
+	hr, _ := h.staff("hrd", []string{"hris.insights", "hris.master", "hris.performance"}, true)
 	staff, _ := h.staff("pos", nil, true, emp{dept: &dept})
 
 	me := h.do(&staff, "GET", "/api/hris/logbook?resource=me", nil)

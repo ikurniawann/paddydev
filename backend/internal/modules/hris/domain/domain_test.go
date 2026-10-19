@@ -367,9 +367,9 @@ func TestLeavesCSV(t *testing.T) {
 }
 
 func TestLogbook(t *testing.T) {
-	eq(t, HasFullLogbookAccess("admin"), true)
-	eq(t, HasFullLogbookAccess("purchasing_manager"), false)
-	eq(t, CanReviewLogbook("admin"), false)
+	eq(t, HasFullLogbookAccess("admin", true), true)
+	eq(t, HasFullLogbookAccess("purchasing_manager", true), false)
+	eq(t, CanReviewLogbook("admin", true), false)
 	allowed, dept := ResolveDepartmentScope(true, nil, "")
 	eq(t, allowed, true)
 	eq(t, dept == nil, true)

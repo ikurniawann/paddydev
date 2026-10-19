@@ -14,13 +14,16 @@ import (
 // LogbookNoteMaxLength caps notes and review notes.
 const LogbookNoteMaxLength = 20000
 
-// HasFullLogbookAccess: super_admin, admin and hrd see every department.
-func HasFullLogbookAccess(role string) bool {
-	return role == "super_admin" || role == "admin" || role == "hrd"
+// HasFullLogbookAccess: super_admin, admin and hrd holding the Kinerja menu
+// (performance) see every department; without it they see their own only.
+func HasFullLogbookAccess(role string, performance bool) bool {
+	return performance && (role == "super_admin" || role == "admin" || role == "hrd")
 }
 
-// CanReviewLogbook: super_admin and hrd review entries.
-func CanReviewLogbook(role string) bool { return role == "super_admin" || role == "hrd" }
+// CanReviewLogbook: super_admin and hrd holding the Kinerja menu review entries.
+func CanReviewLogbook(role string, performance bool) bool {
+	return performance && (role == "super_admin" || role == "hrd")
+}
 
 // ResolveDepartmentScope: full access may pick any department (or all);
 // everyone else is locked to their own and denied without one.

@@ -46,7 +46,7 @@ func logbookForbidden() error {
 }
 
 func (a *Actor) logbookScope(requested string) (bool, *string) {
-	return domain.ResolveDepartmentScope(domain.HasFullLogbookAccess(a.Role), a.DepartmentID, requested)
+	return domain.ResolveDepartmentScope(domain.HasFullLogbookAccess(a.Role, a.PerformanceMenu), a.DepartmentID, requested)
 }
 
 func (a *Actor) assertDepartment(departmentID string) error {
@@ -71,8 +71,8 @@ func (s *Service) ReadLogbook(ctx context.Context, a *Actor, u *auth.User, q log
 			return nil, err
 		}
 		return obj("data", obj("id", u.ID, "full_name", u.FullName, "role", u.Role, "brand_id", u.BrandID,
-			"employee", nullable(emp), "can_review", domain.CanReviewLogbook(a.Role),
-			"is_full_access", domain.HasFullLogbookAccess(a.Role))), nil
+			"employee", nullable(emp), "can_review", domain.CanReviewLogbook(a.Role, a.PerformanceMenu),
+			"is_full_access", domain.HasFullLogbookAccess(a.Role, a.PerformanceMenu))), nil
 	case "departments":
 		rows, err := s.repo.ActiveDepartments(ctx)
 		return dataOf(rows), err
@@ -136,7 +136,7 @@ type templateInput struct {
 // CreateTemplate: non-full-access users always write their own department.
 func (s *Service) CreateTemplate(ctx context.Context, a *Actor, in templateInput) (*Row, error) {
 	departmentID := a.DepartmentID
-	if domain.HasFullLogbookAccess(a.Role) {
+	if domain.HasFullLogbookAccess(a.Role, a.PerformanceMenu) {
 		departmentID = in.DepartmentID
 	}
 	if departmentID == nil || *departmentID == "" {
@@ -300,7 +300,7 @@ func (s *Service) SubmitEntry(ctx context.Context, a *Actor, id string, notes an
 
 // ReviewEntry reviews or rejects a submitted entry (super_admin, hrd).
 func (s *Service) ReviewEntry(ctx context.Context, a *Actor, id string, status *string, reviewNotes any) (*Row, error) {
-	if !domain.CanReviewLogbook(a.Role) {
+	if !domain.CanReviewLogbook(a.Role, a.PerformanceMenu) {
 		return nil, httpx.Forbidden("Anda tidak berhak me-review logbook")
 	}
 	entry, err := s.guardEntry(ctx, a, id)

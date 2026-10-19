@@ -59,6 +59,8 @@ type Actor struct {
 	EmployeeID   *string
 	DepartmentID *string
 	IsHR         bool
+	// PerformanceMenu: the account holds the Kinerja menu (set by withLogbook).
+	PerformanceMenu bool
 }
 
 // ActorRepo resolves the employee behind an account.
