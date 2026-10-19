@@ -1931,6 +1931,26 @@
   },
   {
     "module": "hris",
+    "method": "GET",
+    "path": "/api/hris/employees/export"
+  },
+  {
+    "module": "hris",
+    "method": "POST",
+    "path": "/api/hris/employees/import"
+  },
+  {
+    "module": "hris",
+    "method": "GET",
+    "path": "/api/hris/employees/import-template"
+  },
+  {
+    "module": "hris",
+    "method": "POST",
+    "path": "/api/hris/employees/schedule-type/bulk"
+  },
+  {
+    "module": "hris",
     "method": "DELETE",
     "path": "/api/hris/employees/{id}"
   },
@@ -2488,6 +2508,26 @@
     "module": "hris",
     "method": "GET",
     "path": "/api/hris/reports"
+  },
+  {
+    "module": "hris",
+    "method": "GET",
+    "path": "/api/hris/schedules"
+  },
+  {
+    "module": "hris",
+    "method": "POST",
+    "path": "/api/hris/schedules/fixed"
+  },
+  {
+    "module": "hris",
+    "method": "POST",
+    "path": "/api/hris/schedules/import"
+  },
+  {
+    "module": "hris",
+    "method": "GET",
+    "path": "/api/hris/schedules/template"
   },
   {
     "module": "hris",
@@ -6968,6 +7008,11 @@
     "module": "configuration",
     "method": "POST",
     "path": "/api/users"
+  },
+  {
+    "module": "configuration",
+    "method": "GET",
+    "path": "/api/users/email-owner"
   },
   {
     "module": "configuration",
