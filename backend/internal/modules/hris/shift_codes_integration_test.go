@@ -34,3 +34,13 @@ func TestShiftCodes(t *testing.T) {
 	used := h.do(&hr, http.MethodPatch, "/api/hris/shifts/"+id, map[string]any{"is_active": false})
 	expect(t, used, http.StatusBadRequest, "Shift masih dipakai 1 jadwal mulai hari ini — ganti dulu jadwalnya")
 }
+
+func TestBuiltinShiftCodeIsFixed(t *testing.T) {
+	h := newHarness(t)
+	hr, _ := h.staff("hrd", iam.HrisKepegawaian, false)
+	ns := h.scalar(`SELECT id::text FROM hris.shifts WHERE code = 'NS'`)
+	c := h.do(&hr, http.MethodPatch, "/api/hris/shifts/"+ns, map[string]any{"code": "KANTOR"})
+	expect(t, c, http.StatusBadRequest, "Kode shift bawaan DEF/NS tidak bisa diubah")
+	ok := h.do(&hr, http.MethodPatch, "/api/hris/shifts/"+ns, map[string]any{"code": "ns", "name": "Non-Shift Kantor"})
+	expect(t, ok, http.StatusOK, "")
+}

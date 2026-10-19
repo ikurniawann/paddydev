@@ -303,6 +303,13 @@ func (s *Service) CreateShift(ctx context.Context, in shiftInput) (*Row, error) 
 }
 
 func (s *Service) UpdateShift(ctx context.Context, id string, in shiftInput) error {
+	if in.Code != nil {
+		var cur string
+		if err := s.repo.querier().QueryRow(ctx, `SELECT code FROM hris.shifts WHERE id = $1`, id).Scan(&cur); err == nil &&
+			(cur == "DEF" || cur == "NS") && *in.Code != cur {
+			return httpx.BadRequest("Kode shift bawaan DEF/NS tidak bisa diubah")
+		}
+	}
 	if in.IsActive != nil && !*in.IsActive {
 		if err := guardShiftDeactivate(ctx, s.repo.querier(), id, domain.TodayWIB(s.clock())); err != nil {
 			return err

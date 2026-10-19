@@ -68,6 +68,7 @@ function ShiftFormBody({ shift, onClose }: { shift: ShiftRow | null; onClose: ()
             placeholder="cth. SPG1"
             value={form.code}
             maxLength={12}
+            disabled={shift?.code === "DEF" || shift?.code === "NS"}
             onChange={(e) => setForm((f) => ({ ...f, code: e.target.value.toUpperCase() }))}
           />
           <p className={`mt-1 text-xs ${form.code && codeError ? "text-danger" : "text-gray-500"}`}>
