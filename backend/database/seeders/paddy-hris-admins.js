@@ -13,8 +13,13 @@
  *    tanpa struktur gaji, supaya Area Karyawan menampilkan profil sendiri. Karyawan dengan email sama
  *    dipakai ulang.
  *
+ * 4. Role turunan per akun (EPIC-057): hris_manager (seluruh HRIS), hris_non_payroll (tanpa Penggajian),
+ *    hris_non_rekrutmen_kpi (tanpa Rekrutmen & Kinerja) dibuat migrasi 20261019100000 dan disinkronkan
+ *    ulang dari admin_hris (iam.sync_hris_staff_roles) setiap seeder jalan. Akun yang sudah memegang
+ *    role HR tetap pada role itu, kecuali role ditulis di HRIS_ADMINS (email|Nama|role).
+ *
  * Usage (email & password tidak disimpan di repo):
- *   HRIS_ADMINS="email1|Nama 1;email2|Nama 2" HRIS_ADMIN_PASSWORD='...' pnpm db:seed:paddy-hris-admins
+ *   HRIS_ADMINS="email1|Nama 1;email2|Nama 2|hris_non_payroll" HRIS_ADMIN_PASSWORD='...' pnpm db:seed:paddy-hris-admins
  *   tambahkan --allow-remote untuk target non-lokal
  *   akun yang sudah ada dengan role lain TIDAK ditimpa kecuali --force
  *
@@ -32,12 +37,16 @@ const ROLE = { code: "admin_hris", name: "Admin HRIS", description: "Admin HRIS:
 const HQ_BRANCH = "MIZU-BANDUNG";
 const HQ_WAREHOUSE = "WH-01";
 const MARK = "Seeder Admin HRIS";
+const HR_ROLE_CODES = ["admin_hris", "hris_manager", "hris_non_payroll", "hris_non_rekrutmen_kpi"];
 
 function parseAdmins(raw) {
   return (raw || "").split(";").map((s) => s.trim()).filter(Boolean).map((pair) => {
-    const [email, name] = pair.split("|").map((x) => (x || "").trim());
-    if (!/^[^@\s]+@[^@\s]+$/.test(email) || !name) throw new Error(`HRIS_ADMINS tidak valid: "${pair}" (format email|Nama)`);
-    return { email: email.toLowerCase(), name };
+    const [email, name, role] = pair.split("|").map((x) => (x || "").trim());
+    if (!/^[^@\s]+@[^@\s]+$/.test(email) || !name) throw new Error(`HRIS_ADMINS tidak valid: "${pair}" (format email|Nama[|role])`);
+    if (role && !HR_ROLE_CODES.includes(role)) {
+      throw new Error(`HRIS_ADMINS tidak valid: role "${role}" (pilih: ${HR_ROLE_CODES.join(", ")})`);
+    }
+    return { email: email.toLowerCase(), name, role: role || undefined };
   });
 }
 
@@ -91,9 +100,10 @@ async function nextNip(c, year) {
 
 async function seedAccount(c, a, ref, passwordHash, today, force) {
   const existing = (await c.query(`SELECT u.id::text,
-       EXISTS (SELECT 1 FROM iam.user_roles ur WHERE ur.user_id = u.id AND ur.role_id = $2) AS is_admin_hris
-     FROM auth.users u WHERE lower(u.email) = $1`, [a.email, ref.roleId])).rows[0];
-  if (existing && !existing.is_admin_hris && !force) {
+       (SELECT r.code FROM iam.user_roles ur JOIN iam.roles r ON r.id = ur.role_id
+         WHERE ur.user_id = u.id AND r.code = ANY($2::text[]) ORDER BY ur.is_primary DESC LIMIT 1) AS hr_role
+     FROM auth.users u WHERE lower(u.email) = $1`, [a.email, HR_ROLE_CODES])).rows[0];
+  if (existing && !existing.hr_role && !force) {
     throw new Error(`${a.email} sudah punya akun dengan role lain — tidak ditimpa. Pakai --force bila memang disengaja.`);
   }
   const userId = (await c.query(
@@ -116,10 +126,14 @@ async function seedAccount(c, a, ref, passwordHash, today, force) {
   // Tanpa izin approval modul lain (approval PO, diskon, dll.).
   await c.query(`UPDATE configuration.user_approval_permissions SET is_active = false, updated_at = NOW()
      WHERE user_id = $1 AND is_active`, [userId]);
-  // Hanya role admin_hris: role IAM lain dicabut agar menu tidak melebar.
-  await c.query(`DELETE FROM iam.user_roles WHERE user_id = $1 AND role_id <> $2`, [userId, ref.roleId]);
+  // Hanya satu role HR: role IAM lain dicabut agar menu tidak melebar. Role yang sudah dipegang
+  // (mis. hris_non_payroll) dipertahankan kecuali HRIS_ADMINS menyebut role lain.
+  const roleCode = a.role || existing?.hr_role || ROLE.code;
+  const roleRow = (await c.query(`SELECT id::text FROM iam.roles WHERE code = $1 AND deleted_at IS NULL`, [roleCode])).rows[0];
+  if (!roleRow) throw new Error(`Role IAM ${roleCode} belum ada — jalankan migrasi dulu`);
+  await c.query(`DELETE FROM iam.user_roles WHERE user_id = $1 AND role_id <> $2`, [userId, roleRow.id]);
   await c.query(`INSERT INTO iam.user_roles (user_id, role_id, is_primary) VALUES ($1, $2, true)
-     ON CONFLICT (user_id, role_id) DO UPDATE SET is_primary = true`, [userId, ref.roleId]);
+     ON CONFLICT (user_id, role_id) DO UPDATE SET is_primary = true`, [userId, roleRow.id]);
 
   let emp = (await c.query(`SELECT id::text, nip, user_id::text FROM hris.employees WHERE lower(email) = $1
      ORDER BY created_at LIMIT 1`, [a.email])).rows[0];
@@ -143,7 +157,7 @@ async function seedAccount(c, a, ref, passwordHash, today, force) {
        VALUES ($1, $2, NOT EXISTS (SELECT 1 FROM hris.employee_placements WHERE employee_id = $1 AND is_primary
          AND (end_date IS NULL OR end_date >= $3::date)), $3, $4)`, [emp.id, ref.branchId, today, `HR kantor pusat · ${MARK}`]);
   }
-  return { userId, nip: emp.nip };
+  return { userId, nip: emp.nip, roleCode };
 }
 
 async function main() {
@@ -172,6 +186,10 @@ async function main() {
     const wh = await one(c, `SELECT id::text, name FROM configuration.warehouses WHERE code = $1 AND branch_id = $2`,
       [HQ_WAREHOUSE, branch.id], `Gudang ${HQ_WAREHOUSE} di ${HQ_BRANCH}`);
     const role = await ensureRole(c);
+    // Role turunan per akun mengikuti grant admin_hris terbaru (EPIC-057).
+    if ((await c.query(`SELECT to_regprocedure('iam.sync_hris_staff_roles()') IS NOT NULL AS ok`)).rows[0].ok) {
+      await c.query(`SELECT iam.sync_hris_staff_roles()`);
+    }
     const ref = { roleId: role.roleId, branchId: branch.id, companyId: branch.company_id, holdingId: branch.holding_id, warehouseId: wh.id };
     const out = [];
     const force = process.argv.includes("--force");
@@ -180,7 +198,7 @@ async function main() {
     console.log(`${MARK} selesai.`);
     console.log(`  role ${ROLE.code}: ${role.menus} menu (HRIS + Beranda dari HRD, Area Karyawan dari Karyawan)${role.revoked ? `, ${role.revoked} grant lain dicabut` : ""}`);
     console.log(`  lokasi: ${branch.name} (${branch.company}) · gudang ${wh.name}`);
-    for (const a of out) console.log(`  ${a.email.padEnd(36)} ${a.name.padEnd(26)} karyawan ${a.nip}`);
+    for (const a of out) console.log(`  ${a.email.padEnd(36)} ${a.name.padEnd(26)} karyawan ${a.nip} · role ${a.roleCode}`);
     console.log("  password: dari HRIS_ADMIN_PASSWORD (tidak dicetak)");
   } catch (err) {
     await c.query("ROLLBACK").catch(() => {});
@@ -190,7 +208,11 @@ async function main() {
   }
 }
 
-main().catch((err) => {
-  console.error(err.message || err);
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch((err) => {
+    console.error(err.message || err);
+    process.exit(1);
+  });
+}
+
+module.exports = { parseAdmins };

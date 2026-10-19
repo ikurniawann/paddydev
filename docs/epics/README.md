@@ -59,6 +59,7 @@ deploying-dev · ready-for-qa · blocked · done).
 | [EPIC-054](./EPIC-054-payroll-multi-entitas.md) | Payroll Multi-Entitas — Filter Entitas & Slip per Entitas (`MODULE-PAYROLL`) | ready-for-qa | 2026-10-15 |
 | [EPIC-055](./EPIC-055-payroll-paritas-odoo.md) | Payroll Paritas Rule Odoo — G1–G9 (`MODULE-PAYROLL`) | ready-for-qa | 2026-10-17 |
 | [EPIC-056](./EPIC-056-hris-golive-karyawan-jadwal.md) | HRIS Go-Live — Data Karyawan & Jadwal Shift (`MODULE-HRIS`) | ready-for-qa | 2026-10-19 |
+| [EPIC-057](./EPIC-057-hris-akses-per-akun.md) | Hak Akses HRIS per Akun Email — Manager / Non-Payroll / Non-Rekrutmen & KPI (`MODULE-HRIS`) | on-progress | 2026-10-20 |
 
 Aturan:
 - Epic + registry ini adalah sumber kebenaran status pekerjaan (canonical).
