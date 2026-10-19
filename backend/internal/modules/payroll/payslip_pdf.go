@@ -33,7 +33,7 @@ func (h *handler) fileRoutes() []module.Route {
 
 // GET /api/hris/payslips/{id}/pdf: generated from the payroll_details
 // snapshot, so a download next year shows the same numbers. Employees only
-// get their own slip; HR gets any. 30 per minute per account.
+// get their own slip; HR with the Penggajian menu gets any. 30 per minute per account.
 func (h *handler) payslipPDF(w http.ResponseWriter, r *http.Request, limiter *ratelimit.Limiter) error {
 	a, err := h.requireActor(r)
 	if err != nil {
@@ -57,7 +57,7 @@ func (h *handler) payslipPDF(w http.ResponseWriter, r *http.Request, limiter *ra
 	if slip == nil {
 		return httpx.NotFound("Slip gaji tidak ditemukan")
 	}
-	if !a.IsHR && (a.EmployeeID == nil || *a.EmployeeID != slip.employee.ID) {
+	if !(domain.IsHR(a.Role) && a.Payroll) && (a.EmployeeID == nil || *a.EmployeeID != slip.employee.ID) {
 		return httpx.Forbidden("Insufficient permissions")
 	}
 	pdf, err := buildPayslipPDF(slip)

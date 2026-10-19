@@ -251,7 +251,7 @@ func (s *service) listScorecards(ctx context.Context, a *actor, q scorecardQuery
 	// Non-HR is locked to their own scorecards; HR picks anyone (or "me").
 	var filter *string
 	switch {
-	case !a.IsHR:
+	case !a.PerformanceHR:
 		if a.EmployeeID == nil {
 			return &scorecardList{Data: []any{}}, nil
 		}

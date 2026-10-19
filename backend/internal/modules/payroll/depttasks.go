@@ -45,7 +45,7 @@ func (s *service) loadTaskActor(ctx context.Context, a *actor) (*taskActor, erro
 
 // targetDepartment: HR may pick a department; everyone else gets their own.
 func targetDepartment(me *taskActor, requested *string) *string {
-	if me.IsHR && requested != nil && uuidRE.MatchString(*requested) {
+	if me.PerformanceHR && requested != nil && uuidRE.MatchString(*requested) {
 		return requested
 	}
 	return me.DepartmentID
@@ -107,7 +107,7 @@ func departmentRows(depts []Department) []*obj {
 func (s *service) deptTaskBoard(ctx context.Context, me *taskActor, month string, requested *string) (*obj, error) {
 	departmentID := targetDepartment(me, requested)
 	departments := []*obj{}
-	if me.IsHR {
+	if me.PerformanceHR {
 		all, err := s.ports.Departments.All(ctx, s.db)
 		if err != nil {
 			return nil, err
@@ -116,7 +116,7 @@ func (s *service) deptTaskBoard(ctx context.Context, me *taskActor, month string
 	}
 	if departmentID == nil {
 		return object("department_id", nil, "tasks", []any{}, "occurrences", []any{}, "members", []any{},
-			"departments", departments, "can_manage", me.IsHR, "is_hr", me.IsHR), nil
+			"departments", departments, "can_manage", me.PerformanceHR, "is_hr", me.PerformanceHR), nil
 	}
 	dept := *departmentID
 	start, end := domain.MonthRange(month)
@@ -171,9 +171,9 @@ func (s *service) deptTaskBoard(ctx context.Context, me *taskActor, month string
 	}
 	return object("department_id", dept, "tasks", tasks, "occurrences", occurrences, "members", memberRows,
 		"subtasks", subtasks, "checked_items", checked, "departments", departments,
-		"can_manage", me.IsHR || me.HasSubordinates,
-		"can_review", me.IsHR || (me.HasSubordinates && me.DepartmentID != nil && dept == *me.DepartmentID),
-		"is_hr", me.IsHR, "my_employee_id", me.EmployeeID), nil
+		"can_manage", me.PerformanceHR || me.HasSubordinates,
+		"can_review", me.PerformanceHR || (me.HasSubordinates && me.DepartmentID != nil && dept == *me.DepartmentID),
+		"is_hr", me.PerformanceHR, "my_employee_id", me.EmployeeID), nil
 }
 
 // fillNames sets alias to the full name of the employee in column (a LEFT
@@ -210,7 +210,7 @@ func (s *service) createDeptTask(ctx context.Context, me *taskActor, deptParam, 
 	if departmentID == nil {
 		return "", httpx.BadRequest("Departemen tidak diketahui")
 	}
-	if !me.IsHR {
+	if !me.PerformanceHR {
 		if !me.HasSubordinates {
 			return "", httpx.Forbidden("Hanya HRD atau atasan (kepala tim) yang boleh membuat task departemen")
 		}
@@ -261,7 +261,7 @@ func (s *service) deactivateDeptTask(ctx context.Context, a *actor, id string) e
 	if err != nil {
 		return err
 	}
-	if !a.IsHR {
+	if !a.PerformanceHR {
 		if a.EmployeeID == nil {
 			return httpx.Forbidden("Akun tidak terhubung ke karyawan")
 		}
@@ -288,7 +288,7 @@ func (s *service) assertWorker(ctx context.Context, a *actor, occ occurrence) er
 	if occ.Status == "approved" {
 		return httpx.BadRequest("Sudah disetujui — tidak bisa diubah")
 	}
-	if a.IsHR {
+	if a.PerformanceHR {
 		return nil
 	}
 	if a.EmployeeID == nil {
@@ -363,7 +363,7 @@ func (s *service) occurrenceAction(ctx context.Context, a *actor, id string, in 
 		return nil, httpx.Forbidden("Akun ini tidak terhubung ke data karyawan, tidak bisa mereview task")
 	}
 	reviewer := *a.EmployeeID
-	if !a.IsHR {
+	if !a.PerformanceHR {
 		head, err := s.isDepartmentHead(ctx, reviewer, occ.DepartmentID, true)
 		if err != nil {
 			return nil, err

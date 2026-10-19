@@ -81,7 +81,7 @@ func (s *service) listReviewCycles(ctx context.Context) ([]*obj, error) {
 // copy of the active behavioural standards, then prefills each review's
 // work result from the quarter's KPI (outside the transaction, idempotent).
 func (s *service) openCycle(ctx context.Context, a *actor, year, quarter int) (*messageData, error) {
-	if !a.IsHR {
+	if !a.PerformanceHR {
 		return nil, httpx.Forbidden("Hanya HRD yang boleh membuka siklus review")
 	}
 	label := domain.QuarterLabel(year, quarter)
@@ -220,7 +220,7 @@ func (s *service) listReviews(ctx context.Context, a *actor, cycleID string) (*o
 		return nil, err
 	}
 	where, args := "", []any{cycleID}
-	if !a.IsHR {
+	if !a.PerformanceHR {
 		switch {
 		case isHead:
 			where = ` AND (r.employee_department_id = $2 OR r.employee_id = $3)`
@@ -250,7 +250,7 @@ func (s *service) listReviews(ctx context.Context, a *actor, cycleID string) (*o
 	if err != nil {
 		return nil, err
 	}
-	return object("reviews", reviews, "can_review", a.IsHR || isHead, "is_hr", a.IsHR, "my_employee_id", a.EmployeeID), nil
+	return object("reviews", reviews, "can_review", a.PerformanceHR || isHead, "is_hr", a.PerformanceHR, "my_employee_id", a.EmployeeID), nil
 }
 
 // withEmployeeNames fills full_name, nip and department_name, drops rows
@@ -320,7 +320,7 @@ func (s *service) realtimeKPI(ctx context.Context, a *actor, year, quarter float
 	}
 	var employees []EmployeeBrief
 	switch {
-	case a.IsHR:
+	case a.PerformanceHR:
 		employees = all
 	case isHead:
 		for _, e := range all {
@@ -396,7 +396,7 @@ func (s *service) realtimeKPI(ctx context.Context, a *actor, year, quarter float
 		}
 	}
 	return object("employees", sorted, "year", year, "quarter", quarter, "months", months,
-		"is_hr", a.IsHR, "my_employee_id", a.EmployeeID), nil
+		"is_hr", a.PerformanceHR, "my_employee_id", a.EmployeeID), nil
 }
 
 /* ── one review ──────────────────────────────────────────────────────── */
@@ -434,7 +434,7 @@ func (s *service) reviewDetail(ctx context.Context, a *actor, id string) (*obj, 
 	if err != nil {
 		return nil, err
 	}
-	if !a.IsHR && !access.IsHead && !access.IsOwner {
+	if !a.PerformanceHR && !access.IsHead && !access.IsOwner {
 		return nil, httpx.Forbidden("Tidak berhak melihat review ini")
 	}
 	review, err := queryObj(ctx, s.db, `SELECT r.*, r.start_date::text AS start_date, r.end_date::text AS end_date,
@@ -484,7 +484,7 @@ func (s *service) reviewDetail(ctx context.Context, a *actor, id string) (*obj, 
 		return nil, err
 	}
 	return object("review", review, "items", items, "kpi_months", kpi,
-		"can_rate", a.IsHR || access.IsHead, "can_finalize", a.IsHR, "is_owner", access.IsOwner), nil
+		"can_rate", a.PerformanceHR || access.IsHead, "can_finalize", a.PerformanceHR, "is_owner", access.IsOwner), nil
 }
 
 type reviewAction struct {
@@ -512,7 +512,7 @@ func (s *service) applyReviewAction(ctx context.Context, a *actor, id string, in
 	if access.Status == "final" && in.Action != "sign" {
 		return "", httpx.BadRequest("Review sudah final — tidak bisa diubah")
 	}
-	canRate := a.IsHR || access.IsHead
+	canRate := a.PerformanceHR || access.IsHead
 	myName := "HRD"
 	if a.EmployeeID != nil {
 		if myName, err = s.employeeName(ctx, a.EmployeeID, "—"); err != nil {
@@ -590,7 +590,7 @@ func (s *service) applyReviewAction(ctx context.Context, a *actor, id string, in
 			WHERE id = $1`, id, a.EmployeeID, myName)
 
 	case "finalize":
-		if !a.IsHR {
+		if !a.PerformanceHR {
 			return "", httpx.Forbidden("Hanya HRD yang boleh memfinalkan review")
 		}
 		if err := s.recalcReview(ctx, id); err != nil {
@@ -615,7 +615,7 @@ func (h *handler) listReviewCycles(w http.ResponseWriter, r *http.Request) error
 	if err != nil {
 		return err
 	}
-	return writeJSON(w, dataBody{object("cycles", cycles, "is_hr", a.IsHR)})
+	return writeJSON(w, dataBody{object("cycles", cycles, "is_hr", a.PerformanceHR)})
 }
 
 // POST /api/hris/performance/cycles { period_year, period_quarter }

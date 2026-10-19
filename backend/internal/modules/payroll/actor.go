@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"nuhabit/backend/internal/modules/payroll/domain"
+	"nuhabit/backend/internal/platform/iam"
 	"nuhabit/backend/internal/platform/httpx"
 )
 
@@ -15,7 +16,11 @@ type actor struct {
 	UserID     string
 	Role       string
 	EmployeeID *string
-	IsHR       bool
+	// PerformanceHR: an HR role holding the Kinerja menu (hris.performance)
+	// sees and manages every employee's KPI, reviews and department tasks.
+	PerformanceHR bool
+	// Payroll: the account holds the Penggajian menu (hris.compensation).
+	Payroll bool
 }
 
 // requireActor is requireWorkforceActor: any session (a profile row is not
@@ -39,6 +44,11 @@ func (h *handler) requireActor(r *http.Request) (*actor, error) {
 	if id != "" {
 		a.EmployeeID = &id
 	}
-	a.IsHR = domain.IsHR(a.Role)
+	granted, err := h.auth.GrantedMenuCodes(r.Context(), su.ID, a.Role)
+	if err != nil {
+		return nil, err
+	}
+	a.PerformanceHR = domain.IsHR(a.Role) && iam.HasAnyMenuPrefix(granted, iam.HrisPerformance)
+	a.Payroll = iam.HasAnyMenuPrefix(granted, iam.HrisCompensation)
 	return a, nil
 }

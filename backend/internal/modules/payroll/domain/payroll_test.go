@@ -408,19 +408,19 @@ func TestLoans(t *testing.T) {
 
 func TestAccessRules(t *testing.T) {
 	hr, staff := "hrd", "employee"
-	if got := ResolvePayslipScope(staff, ptr("emp-1"), ptr("emp-2")); got != (PayslipScope{MeView: true, EmployeeID: "emp-1"}) {
+	if got := ResolvePayslipScope(staff, false, ptr("emp-1"), ptr("emp-2")); got != (PayslipScope{MeView: true, EmployeeID: "emp-1"}) {
 		t.Fatal(got)
 	}
-	if got := ResolvePayslipScope(hr, ptr("emp-hr"), ptr("me")); got != (PayslipScope{MeView: true, EmployeeID: "emp-hr"}) {
+	if got := ResolvePayslipScope(hr, true, ptr("emp-hr"), ptr("me")); got != (PayslipScope{MeView: true, EmployeeID: "emp-hr"}) {
 		t.Fatal(got)
 	}
-	if got := ResolvePayslipScope(hr, ptr("emp-hr"), nil); got != (PayslipScope{}) {
+	if got := ResolvePayslipScope(hr, true, ptr("emp-hr"), nil); got != (PayslipScope{}) {
 		t.Fatal(got)
 	}
-	if got := ResolvePayslipScope(hr, nil, ptr("emp-9")); got != (PayslipScope{EmployeeID: "emp-9"}) {
+	if got := ResolvePayslipScope(hr, true, nil, ptr("emp-9")); got != (PayslipScope{EmployeeID: "emp-9"}) {
 		t.Fatal(got)
 	}
-	if !ResolvePayslipScope(staff, nil, nil).Skip {
+	if !ResolvePayslipScope(staff, false, nil, nil).Skip {
 		t.Fatal("no employee record")
 	}
 	if !CanTransitionRun("draft", "processing") || CanTransitionRun("draft", "paid") || CanTransitionRun("paid", "draft") {

@@ -25,7 +25,7 @@ const payslipRunEmbed = `NULL AS employee,
 	  WHERE r.id = d.payroll_run_id) e) AS payroll_run`
 
 func (s *service) listPayslips(ctx context.Context, a *actor, employeeParam, runID *string, year, month *int) ([]*obj, error) {
-	scope := domain.ResolvePayslipScope(a.Role, a.EmployeeID, employeeParam)
+	scope := domain.ResolvePayslipScope(a.Role, a.Payroll, a.EmployeeID, employeeParam)
 	if scope.Skip {
 		return []*obj{}, nil
 	}

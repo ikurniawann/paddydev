@@ -254,7 +254,7 @@ func (h *handler) createLoan(w http.ResponseWriter, r *http.Request) error {
 
 // POST /api/hris/loans/{id}/approve { approved, rejection_reason? }
 func (h *handler) decideLoan(w http.ResponseWriter, r *http.Request) error {
-	u, err := h.auth.RequireMenuPrefix(r, iam.HrisCompensation...)
+	u, err := h.auth.RequireMenuPrefix(r, iam.HrisLoans...)
 	if err != nil {
 		return err
 	}
