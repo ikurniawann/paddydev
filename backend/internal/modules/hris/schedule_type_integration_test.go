@@ -3,13 +3,11 @@ package hris
 import (
 	"net/http"
 	"testing"
-
-	"nuhabit/backend/internal/platform/iam"
 )
 
 func TestScheduleTypeToNonShiftClearsFutureDays(t *testing.T) {
 	h := newHarness(t)
-	hr, _ := h.staff("hrd", iam.HrisKepegawaian, false)
+	hr, _ := h.staff("hrd", scheduleTestMenus, false)
 	e := h.employee(emp{})
 	def := h.scalar(`SELECT id::text FROM hris.shifts WHERE code = 'DEF'`)
 	// fixedNow = Senin 2026-10-05; satu jadwal per tanggal lampau, dua ke depan.
@@ -59,7 +57,7 @@ func TestScheduleTypeToNonShiftClearsFutureDays(t *testing.T) {
 
 func TestApplyFixedScheduleRejectsShiftEmployees(t *testing.T) {
 	h := newHarness(t)
-	hr, _ := h.staff("hrd", iam.HrisKepegawaian, false)
+	hr, _ := h.staff("hrd", scheduleTestMenus, false)
 	shiftEmp := h.employee(emp{name: "Kasir Satu"})
 	c := h.do(&hr, http.MethodPost, "/api/hris/schedules/fixed", map[string]any{
 		"employee_ids": []string{shiftEmp}, "effective_from": "2026-10-06"})
@@ -71,7 +69,7 @@ func TestApplyFixedScheduleRejectsShiftEmployees(t *testing.T) {
 
 func TestWeeklyPatternRejectedForNonShift(t *testing.T) {
 	h := newHarness(t)
-	hr, _ := h.staff("hrd", iam.HrisKepegawaian, false)
+	hr, _ := h.staff("hrd", scheduleTestMenus, false)
 	e := h.employee(emp{name: "Kantor Pusat"})
 	h.exec(`UPDATE hris.employees SET schedule_type = 'non_shift' WHERE id = $1`, e)
 	days := []map[string]any{}

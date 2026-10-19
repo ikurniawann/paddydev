@@ -40,3 +40,17 @@ func TestShiftCodeDefaultsForLegacyInserts(t *testing.T) {
 		t.Fatalf("auto code = %q, want S<n>", code)
 	}
 }
+
+func TestJadwalKerjaGrantForAdminHRIS(t *testing.T) {
+	h := newHarness(t)
+	h.exec(`INSERT INTO iam.roles (code, name) VALUES ('admin_hris', 'Admin HRIS') ON CONFLICT (code) DO NOTHING`)
+	h.exec(`DELETE FROM iam.role_menu_permissions WHERE role_id = (SELECT id FROM iam.roles WHERE code = 'admin_hris')
+		AND menu_id = (SELECT id FROM iam.menus WHERE code = 'hris.kepegawaian.schedules')`)
+	h.exec(`SELECT hris.grant_jadwal_kerja_admin_hris()`)
+	got := h.scalar(`SELECT rmp.granted_actions::text FROM iam.role_menu_permissions rmp
+		JOIN iam.roles r ON r.id = rmp.role_id JOIN iam.menus m ON m.id = rmp.menu_id
+		WHERE r.code = 'admin_hris' AND m.code = 'hris.kepegawaian.schedules'`)
+	if got != `["read", "create", "update", "import", "export"]` {
+		t.Fatalf("admin_hris grant = %s", got)
+	}
+}

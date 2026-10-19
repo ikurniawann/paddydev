@@ -19,10 +19,10 @@ func (h handlers) routes() []module.Route {
 		// employees
 		r("GET /api/hris/employees", h.withMenu(employeeDirectoryReaders, h.listEmployees)),
 		r("POST /api/hris/employees", h.withMenu(employeeRecordManagers, h.createEmployee)),
-		r("POST /api/hris/employees/schedule-type/bulk", h.withMenu(kepegawaian, h.bulkScheduleType)),
+		r("POST /api/hris/employees/schedule-type/bulk", h.withAction("update", employeeRecordManagers, h.bulkScheduleType)),
 		r("GET /api/hris/employees/export", h.withMenu(employeeRecordManagers, h.exportEmployees)),
 		r("GET /api/hris/employees/import-template", h.withMenu(employeeRecordManagers, h.employeeImportTemplate)),
-		r("POST /api/hris/employees/import", h.withMenu(employeeRecordManagers, h.importEmployees)),
+		r("POST /api/hris/employees/import", h.withAction("update", employeeRecordManagers, h.importEmployees)),
 		r("GET /api/hris/employees/documents", handle(h.listEmployeeDocuments)),
 		r("POST /api/hris/employees/documents", h.withMenu(kepegawaian, h.createEmployeeDocument)),
 		r("GET /api/hris/employees/{id}", handle(h.getEmployee)),
@@ -75,10 +75,10 @@ func (h handlers) routes() []module.Route {
 		r("POST /api/hris/shifts", h.withMenu(kepegawaian, h.createShift)),
 		r("PATCH /api/hris/shifts/{id}", h.withMenu(kepegawaian, h.updateShift)),
 		r("DELETE /api/hris/shifts/{id}", h.withMenu(kepegawaian, h.deleteShift)),
-		r("POST /api/hris/schedules/fixed", h.withMenu(kepegawaian, h.applyFixedSchedule)),
+		r("POST /api/hris/schedules/fixed", h.withAction("update", scheduleManagers, h.applyFixedSchedule)),
 		r("GET /api/hris/schedules", h.withMenu(kepegawaian, h.getSchedules)),
 		r("GET /api/hris/schedules/template", h.withMenu(kepegawaian, h.getScheduleTemplate)),
-		r("POST /api/hris/schedules/import", h.withMenu(kepegawaian, h.importSchedules)),
+		r("POST /api/hris/schedules/import", h.withAction("update", scheduleManagers, h.importSchedules)),
 		r("GET /api/hris/overtime", h.withActor(h.listOvertime)),
 		r("POST /api/hris/overtime", h.withActor(h.createOvertime)),
 		r("POST /api/hris/overtime/decide", h.withActor(h.decideOvertime)),
@@ -153,6 +153,9 @@ func (h handlers) routes() []module.Route {
 // employeeSubroutes dispatches /api/hris/employees/{id}/{sub}:
 // documents/{doc_id} first (a static segment wins in Next), then the
 // profile tabs.
+// scheduleManagers edit Jadwal Kerja (upload, fixed schedule).
+var scheduleManagers = []string{"hris.kepegawaian.schedules"}
+
 func (h handlers) employeeSubroutes() http.Handler {
 	kepegawaian := iam.HrisKepegawaian
 	table := map[string]map[string]http.Handler{
@@ -170,11 +173,11 @@ func (h handlers) employeeSubroutes() http.Handler {
 			http.MethodGet: handle(h.employeeShifts),
 			http.MethodPut: handle(h.saveEmployeeShifts),
 		},
-		"resign": {http.MethodPost: h.withMenu(employeeRecordManagers, h.resignEmployee)},
+		"resign": {http.MethodPost: h.withAction("update", employeeRecordManagers, h.resignEmployee)},
 		"audit":  {http.MethodGet: h.withMenu(kepegawaian, h.employeeAudit)},
 		"schedule-type": {
 			http.MethodGet: h.withMenu(kepegawaian, h.getScheduleType),
-			http.MethodPut: h.withMenu(kepegawaian, h.putScheduleType),
+			http.MethodPut: h.withAction("update", employeeRecordManagers, h.putScheduleType),
 		},
 	}
 	documents := map[string]http.Handler{

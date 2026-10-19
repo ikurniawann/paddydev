@@ -15,6 +15,10 @@ import (
 	"nuhabit/backend/internal/platform/testutil"
 )
 
+// scheduleTestMenus: HR menus plus the Jadwal Kerja leaf menu (real roles
+// are granted leaf menus; write routes check the action on it).
+var scheduleTestMenus = append(append([]string{}, iam.HrisKepegawaian...), "hris.kepegawaian.schedules")
+
 // fixedNow = Senin 2026-10-05 → rentang uji 2026-10-05..2026-10-11.
 
 func scheduleFixture(h *harness) (branch, shiftEmp, other string) {
@@ -54,7 +58,7 @@ func upload(t *testing.T, h *harness, hr *testutil.Staff, fields map[string]stri
 
 func TestScheduleTemplateIncludesSecondaryPlacement(t *testing.T) {
 	h := newHarness(t)
-	hr, _ := h.staff("hrd", iam.HrisKepegawaian, false)
+	hr, _ := h.staff("hrd", scheduleTestMenus, false)
 	branch, _, _ := scheduleFixture(h)
 	grid := h.do(&hr, http.MethodGet, "/api/hris/schedules?branch_id="+branch+"&from=2026-10-05&to=2026-10-11", nil)
 	expect(t, grid, http.StatusOK, "")
@@ -75,7 +79,7 @@ func TestScheduleTemplateIncludesSecondaryPlacement(t *testing.T) {
 
 func TestScheduleUploadPreviewCommit(t *testing.T) {
 	h := newHarness(t)
-	hr, _ := h.staff("hrd", iam.HrisKepegawaian, false)
+	hr, _ := h.staff("hrd", scheduleTestMenus, false)
 	branch, ana, _ := scheduleFixture(h)
 	params := "?branch_id=" + branch + "&from=2026-10-05&to=2026-10-11"
 	r := testutil.AsStaff(httptest.NewRequest(http.MethodGet, "/api/hris/schedules/template"+params, nil), hr)
@@ -130,7 +134,7 @@ func TestScheduleUploadPreviewCommit(t *testing.T) {
 
 func TestScheduleUploadReportsReplacedCellsAndErrorFile(t *testing.T) {
 	h := newHarness(t)
-	hr, _ := h.staff("hrd", iam.HrisKepegawaian, false)
+	hr, _ := h.staff("hrd", scheduleTestMenus, false)
 	branch, ana, _ := scheduleFixture(h)
 	nip := h.scalar(`SELECT nip FROM hris.employees WHERE id = $1`, ana)
 	def := h.scalar(`SELECT id::text FROM hris.shifts WHERE code = 'DEF'`)
@@ -188,7 +192,7 @@ func TestScheduleUploadReportsReplacedCellsAndErrorFile(t *testing.T) {
 // karyawan dua cabang pada tanggal ia ditempatkan di cabang lain.
 func TestScheduleUploadKeepsOtherBranchDays(t *testing.T) {
 	h := newHarness(t)
-	hr, _ := h.staff("hrd", iam.HrisKepegawaian, false)
+	hr, _ := h.staff("hrd", scheduleTestMenus, false)
 	branch, _, budi := scheduleFixture(h)
 	def := h.scalar(`SELECT id::text FROM hris.shifts WHERE code = 'DEF'`)
 	// Jadwal Budi dari cabang utamanya (branch2) untuk 05–07/10.

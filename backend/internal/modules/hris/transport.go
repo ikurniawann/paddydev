@@ -175,3 +175,15 @@ func requireUUID(id, message string) (string, error) {
 	}
 	return id, nil
 }
+
+// withAction is requireIamAction: a menu under the prefixes must grant the
+// action (EPIC-056 write routes: resign, import, schedule changes).
+func (h handlers) withAction(action string, prefixes []string, fn func(w http.ResponseWriter, r *http.Request, u *auth.User) error) http.Handler {
+	return handle(func(w http.ResponseWriter, r *http.Request) error {
+		u, err := h.auth.RequireMenuAction(r, action, prefixes...)
+		if err != nil {
+			return err
+		}
+		return fn(w, r, u)
+	})
+}
