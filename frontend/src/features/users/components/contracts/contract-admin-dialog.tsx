@@ -32,10 +32,12 @@ interface ContractAdminDialogProps {
   /** Versi live dari cache query: status upload/hapus dokumen selalu segar. */
   contract: EmployeeContractRow;
   onClose: () => void;
+  /** Scan bertanda tangan memuat upah: hanya akses Penggajian yang bisa membukanya. */
+  canViewSalary: boolean;
 }
 
 /** Dokumen bertanda tangan dan tanggal administrasi (ttd, Kemnaker, kompensasi). */
-export function ContractAdminDialog({ employeeId, contract, onClose }: ContractAdminDialogProps) {
+export function ContractAdminDialog({ employeeId, contract, onClose, canViewSalary }: ContractAdminDialogProps) {
   const actionMutation = useContractAction(employeeId);
   const uploadMutation = useUploadContractSignedDocument(employeeId);
   const deleteSignedMutation = useDeleteContractSignedDocument(employeeId);
@@ -126,13 +128,15 @@ export function ContractAdminDialog({ employeeId, contract, onClose }: ContractA
               </Button>
               {contract.signed_document_url && (
                 <>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => window.open(contractSignedDocumentUrl(contract.id), "_blank")}
-                  >
-                    Lihat
-                  </Button>
+                  {canViewSalary && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => window.open(contractSignedDocumentUrl(contract.id), "_blank")}
+                    >
+                      Lihat
+                    </Button>
+                  )}
                   <Button
                     size="sm"
                     variant="ghost"

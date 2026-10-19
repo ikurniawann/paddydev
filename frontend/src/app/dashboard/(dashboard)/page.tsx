@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth/require-user";
+import { homeFor } from "@/lib/auth/home-for";
+import { loadGrantedMenuCodesForUser } from "@/lib/iam/has-menu";
 import { ExecutiveDashboardPage } from "@/features/dashboard/executive";
 
 /**
@@ -7,26 +9,17 @@ import { ExecutiveDashboardPage } from "@/features/dashboard/executive";
  * - super_admin + direksi → Ringkasan Eksekutif lintas modul.
  * - employee → Area Karyawan (aturan lama dipertahankan).
  * - Role lain diarahkan ke dashboard modul yang paling relevan dengan
- *   pekerjaannya (Fase B) — bukan lagi semua ke rekrutmen:
- *   purchasing → dashboard purchasing; pos → dashboard POS;
- *   finance → payroll; sisanya (hrd, admin, dst) → dashboard rekrutmen,
- *   konten yang sama dengan yang mereka lihat sebelum halaman ini berubah.
+ *   pekerjaannya (Fase B, lihat homeFor): purchasing → dashboard purchasing;
+ *   pos → dashboard POS; finance → payroll; sisanya (hrd, admin, dst) →
+ *   dashboard rekrutmen, kecuali HR tanpa menu Rekrutmen/Analytics → daftar
+ *   karyawan (EPIC-057).
  */
-
-const ROLE_HOME: Record<string, string> = {
-  purchasing_admin: "/dashboard/purchasing",
-  purchasing_manager: "/dashboard/purchasing",
-  purchasing_staff: "/dashboard/purchasing",
-  pos: "/dashboard/pos",
-  pos_supervisor: "/dashboard/pos",
-  finance_staff: "/dashboard/hris/payroll",
-};
-
 export default async function Page() {
   const user = await requireUser();
   if (user.role === "employee") redirect("/dashboard/me");
   if (user.role === "super_admin" || user.role === "direksi") {
     return <ExecutiveDashboardPage />;
   }
-  redirect(ROLE_HOME[user.role] ?? "/dashboard/rekrutmen");
+  const granted = await loadGrantedMenuCodesForUser(user.id, user.role);
+  redirect(homeFor(user.role, granted));
 }

@@ -46,15 +46,19 @@ export const useUserFormLookups = () =>
     queryFn: fetchUserFormLookups,
   });
 
+const employeeContractsQuery = (employeeId: string) => ({
+  queryKey: usersQueryKeys.contracts(employeeId),
+  queryFn: () => fetchEmployeeContracts(employeeId),
+  enabled: !!employeeId,
+});
+
 export const useEmployeeContracts = (employeeId: string) =>
-  useQuery({
-    queryKey: usersQueryKeys.contracts(employeeId),
-    queryFn: async () => {
-      const res = await fetchEmployeeContracts(employeeId);
-      return res.data ?? [];
-    },
-    enabled: !!employeeId,
-  });
+  useQuery({ ...employeeContractsQuery(employeeId), select: (res) => res.data ?? [] });
+
+/** false bila akun tanpa akses Penggajian: angka gaji & PDF kontrak disembunyikan. */
+export const useCanViewContractSalary = (employeeId: string) =>
+  useQuery({ ...employeeContractsQuery(employeeId), select: (res) => res.can_view_salary !== false }).data ??
+  false;
 
 export const useExpiringContracts = (days = 30) =>
   useQuery({

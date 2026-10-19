@@ -9,7 +9,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { contractActionMessage } from "@/lib/hris/employee-profile-contracts";
 import type { EmployeeContractRow } from "../api";
 import { useContractAction, useDeleteEmployeeContract } from "../mutations";
-import { useEmployeeContracts } from "../queries";
+import { useCanViewContractSalary, useEmployeeContracts } from "../queries";
 import { ContractAdminDialog } from "./contracts/contract-admin-dialog";
 import { ContractCard, type DirectContractAction } from "./contracts/contract-card";
 import { ContractFormDialog } from "./contracts/contract-form-dialog";
@@ -31,6 +31,7 @@ type OpenDialog =
 
 export function EmployeeContractsTab({ employeeId }: { employeeId: string }) {
   const { data: contracts = [], isLoading } = useEmployeeContracts(employeeId);
+  const canViewSalary = useCanViewContractSalary(employeeId);
   const actionMutation = useContractAction(employeeId);
   const deleteMutation = useDeleteEmployeeContract(employeeId);
   const [dialog, setDialog] = useState<OpenDialog | null>(null);
@@ -102,6 +103,7 @@ export function EmployeeContractsTab({ employeeId }: { employeeId: string }) {
               onRenew={() => setDialog({ kind: "renew", contract })}
               onTerminate={() => setDialog({ kind: "terminate", contract })}
               onDelete={() => setDialog({ kind: "delete", contract })}
+              canViewSalary={canViewSalary}
             />
           ))}
         </div>
@@ -113,6 +115,7 @@ export function EmployeeContractsTab({ employeeId }: { employeeId: string }) {
           employeeId={employeeId}
           contract={dialog.contract}
           onClose={close}
+          canViewSalary={canViewSalary}
         />
       )}
       {dialog?.kind === "renew" && (
@@ -126,7 +129,12 @@ export function EmployeeContractsTab({ employeeId }: { employeeId: string }) {
         />
       )}
       {adminContract && (
-        <ContractAdminDialog employeeId={employeeId} contract={adminContract} onClose={close} />
+        <ContractAdminDialog
+          employeeId={employeeId}
+          contract={adminContract}
+          onClose={close}
+          canViewSalary={canViewSalary}
+        />
       )}
       <ConfirmDialog
         open={dialog?.kind === "delete"}

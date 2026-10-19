@@ -16,7 +16,12 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { formatDate } from "@/lib/format";
-import { useEmployeeContracts, useEmployeeDocuments, useEmployeeRecruitmentDocs } from "../queries";
+import {
+  useCanViewContractSalary,
+  useEmployeeContracts,
+  useEmployeeDocuments,
+  useEmployeeRecruitmentDocs,
+} from "../queries";
 import { useDeleteEmployeeDocument } from "../mutations";
 import {
   CONTRACT_STATUS_BADGES,
@@ -42,6 +47,8 @@ const CONTRACT_TYPE_LABELS: Record<string, string> = {
 export function EmployeeDocumentsTab({ employeeId }: { employeeId: string }) {
   const { data: documents = [], isLoading: documentsLoading } = useEmployeeDocuments(employeeId);
   const { data: contracts = [], isLoading: contractsLoading } = useEmployeeContracts(employeeId);
+  // PDF & scan kontrak memuat upah: hanya akses Penggajian (EPIC-057).
+  const canViewSalary = useCanViewContractSalary(employeeId);
   const { data: recruitmentDocs, isLoading: recruitmentLoading } =
     useEmployeeRecruitmentDocs(employeeId);
   const deleteDocumentMutation = useDeleteEmployeeDocument(employeeId);
@@ -101,14 +108,16 @@ export function EmployeeDocumentsTab({ employeeId }: { employeeId: string }) {
                       </span>
                     }
                     action={
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => window.open(contractDocumentUrl(contract.id), "_blank")}
-                        className="gap-1"
-                      >
-                        <ArrowDownTrayIcon className="w-4 h-4" /> PDF
-                      </Button>
+                      canViewSalary ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => window.open(contractDocumentUrl(contract.id), "_blank")}
+                          className="gap-1"
+                        >
+                          <ArrowDownTrayIcon className="w-4 h-4" /> PDF
+                        </Button>
+                      ) : undefined
                     }
                   />
                   {contract.signed_document_url ? (
@@ -121,16 +130,18 @@ export function EmployeeDocumentsTab({ employeeId }: { employeeId: string }) {
                           : "Dokumen hasil scan yang diupload"
                       }
                       action={
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() =>
-                            window.open(contractSignedDocumentUrl(contract.id), "_blank")
-                          }
-                          className="gap-1"
-                        >
-                          <ArrowDownTrayIcon className="w-4 h-4" /> Lihat
-                        </Button>
+                        canViewSalary ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() =>
+                              window.open(contractSignedDocumentUrl(contract.id), "_blank")
+                            }
+                            className="gap-1"
+                          >
+                            <ArrowDownTrayIcon className="w-4 h-4" /> Lihat
+                          </Button>
+                        ) : undefined
                       }
                     />
                   ) : (

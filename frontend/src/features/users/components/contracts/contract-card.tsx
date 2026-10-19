@@ -29,6 +29,8 @@ interface ContractCardProps {
   onRenew: () => void;
   onTerminate: () => void;
   onDelete: () => void;
+  /** Akses Penggajian: gaji pokok, kompensasi, dan PDF (memuat upah). */
+  canViewSalary: boolean;
 }
 
 const rupiahOrDash = (value: string | null) => (value ? formatRupiah(value) : "-");
@@ -52,6 +54,7 @@ export function ContractCard({
   onRenew,
   onTerminate,
   onDelete,
+  canViewSalary,
 }: ContractCardProps) {
   const badge = CONTRACT_STATUS_BADGES[contract.status] ?? CONTRACT_STATUS_BADGES.draft;
   const isPkwt = contract.contract_type === "pkwt";
@@ -68,15 +71,17 @@ export function ContractCard({
           </span>
         </div>
         <div className="flex gap-1.5">
-          <Button
-            size="sm"
-            variant="ghost"
-            className="gap-1"
-            title="Unduh PDF surat perjanjian kerja"
-            onClick={() => window.open(contractDocumentUrl(contract.id), "_blank")}
-          >
-            <ArrowDownTrayIcon className="h-4 w-4" /> PDF
-          </Button>
+          {canViewSalary && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="gap-1"
+              title="Unduh PDF surat perjanjian kerja"
+              onClick={() => window.open(contractDocumentUrl(contract.id), "_blank")}
+            >
+              <ArrowDownTrayIcon className="h-4 w-4" /> PDF
+            </Button>
+          )}
           <Button
             size="sm"
             variant="ghost"
@@ -166,9 +171,11 @@ export function ContractCard({
             {isPkwt ? formatDate(contract.end_date) : "tanpa batas"}
           </p>
         </Field>
-        <Field label="Gaji pokok">
-          <p className="font-medium">{rupiahOrDash(contract.base_salary)}</p>
-        </Field>
+        {canViewSalary && (
+          <Field label="Gaji pokok">
+            <p className="font-medium">{rupiahOrDash(contract.base_salary ?? null)}</p>
+          </Field>
+        )}
         {contract.probation_end_date && (
           <Field label="Masa percobaan s.d.">
             <p className="font-medium">{formatDate(contract.probation_end_date)}</p>
@@ -179,7 +186,7 @@ export function ContractCard({
             <p className="font-medium">{contract.position_title}</p>
           </Field>
         )}
-        {contract.compensation_amount && (
+        {canViewSalary && contract.compensation_amount && (
           <Field label="Uang kompensasi (PP 35/2021)">
             <p className="font-medium">
               {rupiahOrDash(contract.compensation_amount)}

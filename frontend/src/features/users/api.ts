@@ -156,11 +156,12 @@ export interface EmployeeContractRow {
   position_title: string | null;
   department_name: string | null;
   work_location: string | null;
-  base_salary: string | null;
+  /** Tidak dikirim API untuk akun tanpa akses Penggajian (EPIC-057). */
+  base_salary?: string | null;
   signed_at: string | null;
   signed_document_url: string | null;
   kemnaker_registered_at: string | null;
-  compensation_amount: string | null;
+  compensation_amount?: string | null;
   compensation_paid_at: string | null;
   terminated_reason: string | null;
   notes: string | null;
@@ -231,7 +232,7 @@ export const fetchExpiringContracts = (days = 30) =>
   apiGet<{ data: ExpiringContractsData }>(`/api/hris/contracts/expiring?days=${days}`);
 
 export const fetchEmployeeContracts = (employeeId: string) =>
-  apiGet<{ data: EmployeeContractRow[] }>(`/api/hris/employees/${employeeId}/contracts`);
+  apiGet<{ data: EmployeeContractRow[]; can_view_salary?: boolean }>(`/api/hris/employees/${employeeId}/contracts`);
 
 export const createEmployeeContract = (employeeId: string, payload: CreateContractInput) =>
   apiPost<{ data: EmployeeContractRow; message: string }>(

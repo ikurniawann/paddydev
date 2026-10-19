@@ -35,10 +35,12 @@ interface ContractFormDialogProps {
   /** null = buat kontrak baru; isi = edit draft. */
   contract: EmployeeContractRow | null;
   onClose: () => void;
+  /** Tanpa akses Penggajian: kolom gaji pokok disembunyikan dan tidak dikirim. */
+  canViewSalary: boolean;
 }
 
 /** Buat kontrak baru atau edit isi draft. Dipasang ulang (key) tiap dibuka. */
-export function ContractFormDialog({ employeeId, contract, onClose }: ContractFormDialogProps) {
+export function ContractFormDialog({ employeeId, contract, onClose, canViewSalary }: ContractFormDialogProps) {
   const createMutation = useCreateEmployeeContract(employeeId);
   const actionMutation = useContractAction(employeeId);
   const [form, setForm] = useState<ContractFormValues>(() =>
@@ -54,7 +56,8 @@ export function ContractFormDialog({ employeeId, contract, onClose }: ContractFo
       toast.error("Tanggal mulai wajib diisi");
       return;
     }
-    const payload = contractFormPayload(form);
+    const { base_salary, ...rest } = contractFormPayload(form);
+    const payload = canViewSalary ? { ...rest, base_salary } : rest;
     try {
       if (contract) {
         const res = await actionMutation.mutateAsync({
@@ -127,14 +130,16 @@ export function ContractFormDialog({ employeeId, contract, onClose }: ContractFo
             )}
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <ContractField label="Gaji pokok (ops. — default gaji aktif)">
-              <Input
-                type="number"
-                placeholder="cth. 4500000"
-                value={form.base_salary}
-                onChange={(e) => setField({ base_salary: e.target.value })}
-              />
-            </ContractField>
+            {canViewSalary && (
+              <ContractField label="Gaji pokok (ops. — default gaji aktif)">
+                <Input
+                  type="number"
+                  placeholder="cth. 4500000"
+                  value={form.base_salary}
+                  onChange={(e) => setField({ base_salary: e.target.value })}
+                />
+              </ContractField>
+            )}
             <ContractField label="Lokasi kerja (ops.)">
               <Input
                 placeholder="cth. Kantor Pusat Jakarta"

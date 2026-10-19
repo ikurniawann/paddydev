@@ -39,7 +39,8 @@ interface ContractRowFields {
   end_date: string | null;
   probation_end_date: string | null;
   work_location: string | null;
-  base_salary: string | null;
+  /** Tidak dikirim API untuk akun tanpa akses Penggajian. */
+  base_salary?: string | null;
   notes: string | null;
   signed_at: string | null;
   kemnaker_registered_at: string | null;
