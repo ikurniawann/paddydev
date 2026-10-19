@@ -194,7 +194,11 @@ describe("Go route manifest", () => {
       "/api/hris/attendance-periods", "/api/hris/attendance-settings", "/api/hris/attendance-adjustments",
       "/api/hris/attendance/manual",
       // Komponen manual slip per run (EPIC-055, rule penggajian Odoo).
-      "/api/hris/payroll/{id}/inputs"];
+      "/api/hris/payroll/{id}/inputs",
+      // Go-live HRIS (EPIC-056): Jadwal Kerja per cabang, tipe jadwal,
+      // export/import karyawan, cek pemilik email.
+      "/api/hris/schedules", "/api/hris/employees/schedule-type", "/api/hris/employees/export",
+      "/api/hris/employees/import", "/api/hris/employees/import-template", "/api/users/email-owner"];
     const goNative = (p: string) =>
       goNativePrefixes.some((n) => p === n || p.startsWith(`${n}/`));
     const missing = switched
