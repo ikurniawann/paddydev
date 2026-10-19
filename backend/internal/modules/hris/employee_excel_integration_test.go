@@ -72,6 +72,10 @@ func TestEmployeeExportImportRoundTrip(t *testing.T) {
 	branch := h.scalar(`SELECT id::text FROM configuration.branches WHERE is_active LIMIT 1`)
 	h.exec(`INSERT INTO hris.employee_placements (employee_id, branch_id, is_primary, start_date) VALUES ($1, $2, true, '2025-01-10')`, e, branch)
 	h.exec(`UPDATE hris.employees SET nip = '0202500001', ktp = '3273012345678901', gender = 'male', marital_status = 'married' WHERE id = $1`, e)
+	// Data nyata live: No. HP tersimpan 62…, nama jabatan kembar di dua departemen.
+	h.exec(`INSERT INTO hris.positions (title, department, is_active) VALUES ('Kasir Uji', 'Dept A', true), ('Kasir Uji', 'Dept B', true)`)
+	h.exec(`UPDATE hris.employees SET phone = '6289522422791',
+		job_title_id = (SELECT id FROM hris.positions WHERE title = 'Kasir Uji' AND department = 'Dept B') WHERE id = $1`, e)
 	rec := getFile(t, h, &hr, "/api/hris/employees/export?search=Bolak")
 	pre := uploadEmployees(t, h, &hr, map[string]string{"mode": "replace", "step": "preview"}, rec.Body.Bytes())
 	expect(t, pre, http.StatusOK, "")

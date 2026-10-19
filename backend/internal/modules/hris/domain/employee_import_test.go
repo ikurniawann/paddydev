@@ -110,3 +110,26 @@ func issueText(list []UploadIssue, text string) bool {
 	}
 	return false
 }
+
+func TestValidateEmployeeImportReplaceSkipsUnchangedCells(t *testing.T) {
+	l := lk()
+	// Data sekarang persis seperti di file export (No. HP lama format 62…, NIK lama 15 digit).
+	l.Current = map[string]map[string]string{"202505272": {
+		"full_name": "Feti", "phone": "6289522422791", "ktp": "327301234567890", "join_date": "2025-06-01",
+		"schedule_type": "Shift", "branch": "PPLN",
+	}}
+	h := []string{"NIP", "Nama Lengkap *", "No. HP", "NIK (KTP)", "Tanggal Masuk *", "Tipe Jadwal *", "Cabang Utama *"}
+	out, errs, _ := ValidateEmployeeImport("replace", h, [][]string{
+		{"202505272", "Feti", "6289522422791", "327301234567890", "2025-06-01T00:00:00.000Z", "shift", "PPLN"},
+	}, 2, l)
+	if len(errs) != 0 || len(out[0].Set) != 0 || out[0].Branch != "" {
+		t.Fatalf("unchanged row: errs %+v set %+v branch %q", errs, out[0].Set, out[0].Branch)
+	}
+	// Sel yang benar-benar berubah tetap divalidasi.
+	_, errs, _ = ValidateEmployeeImport("replace", h, [][]string{
+		{"202505272", "Feti", "12345", "327301234567890", "01/06/2025", "Shift", "PPLN"},
+	}, 2, l)
+	if !issueText(errs, "Baris 2, kolom No. HP: No. HP harus diawali 08 / 62 / +62 dan berisi 10–14 angka") {
+		t.Fatalf("changed invalid phone must fail: %+v", errs)
+	}
+}

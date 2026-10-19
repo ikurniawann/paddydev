@@ -52,11 +52,12 @@ type employeeLists struct {
 	branches    map[string]string // lower(name) → id
 	departments map[string]string
 	positions   map[string]string
+	names       map[string]string // id → name as written in the masters
 }
 
 func loadEmployeeLists(ctx context.Context, q database.Querier) (*employeeLists, error) {
 	l := &employeeLists{statusName: map[string]string{}, statusCodes: map[string]string{}, options: map[string][]string{},
-		branches: map[string]string{}, departments: map[string]string{}, positions: map[string]string{}}
+		branches: map[string]string{}, departments: map[string]string{}, positions: map[string]string{}, names: map[string]string{}}
 	type src struct {
 		key, sql string
 		into     map[string]string
@@ -109,6 +110,7 @@ func loadEmployeeLists(ctx context.Context, q database.Querier) (*employeeLists,
 				rows.Close()
 				return nil, err
 			}
+			l.names[id] = name
 			if _, dup := s.into[strings.ToLower(name)]; !dup {
 				s.into[strings.ToLower(name)] = id
 				l.options[s.key] = append(l.options[s.key], name)
@@ -456,6 +458,11 @@ func (s *Service) ImportEmployees(ctx context.Context, actor *auth.User, in empl
 		if err != nil {
 			return err
 		}
+		if in.Mode == "replace" {
+			if lk.Current, err = s.currentExportValues(ctx, q, l); err != nil {
+				return err
+			}
+		}
 		rows, errs, warns := domain.ValidateEmployeeImport(in.Mode, matrix[0], matrix[1:], 2, lk)
 		if in.Step == "error_file" {
 			data, err := errorWorkbook(matrix, 0, append(append([]domain.UploadIssue{}, errs...), warns...), employeeSheet)
@@ -466,13 +473,7 @@ func (s *Service) ImportEmployees(ctx context.Context, actor *auth.User, in empl
 			return nil
 		}
 		names := map[string]string{}
-		for n, id := range l.branches {
-			names[id] = n
-		}
-		for n, id := range l.departments {
-			names[id] = n
-		}
-		for n, id := range l.positions {
+		for id, n := range l.names {
 			names[id] = n
 		}
 		for nip, id := range lk.ManagerNIP {
@@ -715,4 +716,31 @@ func (h handlers) importEmployees(w http.ResponseWriter, r *http.Request, u *aut
 		return ok(w, dataMsg(map[string]any{"summary": out["summary"]}, msg))
 	}
 	return ok(w, dataOf(out))
+}
+
+// currentExportValues is every employee's row as the export writes it,
+// keyed by NIP and column key (dates as ISO), so cells put back unchanged
+// are recognised in Replace mode.
+func (s *Service) currentExportValues(ctx context.Context, q database.Querier, l *employeeLists) (map[string]map[string]string, error) {
+	rows, err := s.exportEmployeeRows(ctx, q, employeeExportFilter{}, l)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]map[string]string, len(rows))
+	for _, r := range rows {
+		m := make(map[string]string, len(domain.EmployeeColumns))
+		for i, c := range domain.EmployeeColumns {
+			if i >= len(r) || r[i] == nil {
+				continue
+			}
+			switch v := r[i].(type) {
+			case time.Time:
+				m[c.Key] = v.Format(domain.DateLayout)
+			default:
+				m[c.Key] = fmt.Sprint(v)
+			}
+		}
+		out[m["nip"]] = m
+	}
+	return out, nil
 }

@@ -82,6 +82,20 @@ type EmployeeLookups struct {
 	EmailOwner  map[string]EmployeeRef
 	ManagerNIP  map[string]string
 	Today       string // "" skips the birth-date-in-the-future check
+	// Current is each existing employee's values as the export writes them
+	// (NIP → column key → text; dates ISO). In Replace mode a cell equal
+	// to it is unchanged: not validated again, not overwritten.
+	Current map[string]map[string]string
+}
+
+// sameAsCurrent: an export cell put back unchanged (dates compared as dates,
+// labels case-insensitively).
+func sameAsCurrent(key, cell, current string) bool {
+	if key == "join_date" || key == "birth_date" {
+		d, ok := ParseDateCell(cell)
+		return ok && d == current
+	}
+	return strings.EqualFold(strings.TrimSpace(cell), strings.TrimSpace(current))
 }
 
 // EmployeeImportRow is one file row: Set holds only the filled cells as
@@ -194,9 +208,16 @@ func ValidateEmployeeImport(mode string, header []string, rows [][]string, first
 				}
 			}
 		}
+		current := lk.Current[nip]
 		for _, c := range EmployeeColumns {
 			k, val := c.Key, v[c.Key]
 			if val == "" || c.ExportOnly || k == "nip" {
+				continue
+			}
+			if row.Action == "update" && current != nil && sameAsCurrent(k, val, current[k]) {
+				if k == "full_name" {
+					row.Name = val
+				}
 				continue
 			}
 			switch {
