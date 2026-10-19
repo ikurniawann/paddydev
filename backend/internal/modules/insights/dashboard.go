@@ -140,7 +140,7 @@ func (s *Service) weekly(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (s *Service) analyticsBrands(w http.ResponseWriter, r *http.Request) error {
-	if _, err := s.auth.RequireMenuPrefix(r, iam.HrisInsights...); err != nil {
+	if _, err := s.auth.RequireMenuPrefix(r, iam.HrisAnalytics...); err != nil {
 		return err
 	}
 	ctx := r.Context()
@@ -181,7 +181,7 @@ type analyticsOverview struct {
 }
 
 func (s *Service) analyticsOverview(w http.ResponseWriter, r *http.Request) error {
-	if _, err := s.auth.RequireMenuPrefix(r, iam.HrisInsights...); err != nil {
+	if _, err := s.auth.RequireMenuPrefix(r, iam.HrisAnalytics...); err != nil {
 		return err
 	}
 	ctx := r.Context()
@@ -232,7 +232,7 @@ func (s *Service) positionTitles(ctx context.Context, ids []string) (map[string]
 }
 
 func (s *Service) analyticsSources(w http.ResponseWriter, r *http.Request) error {
-	if _, err := s.auth.RequireMenuPrefix(r, iam.HrisInsights...); err != nil {
+	if _, err := s.auth.RequireMenuPrefix(r, iam.HrisAnalytics...); err != nil {
 		return err
 	}
 	start := domain.PeriodStartByCalendar(periodParam(r, "3month"), s.now())

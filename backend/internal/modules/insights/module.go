@@ -68,9 +68,10 @@ func assistantMemoryDir(getenv func(string) string) string {
 	return filepath.Join(storage.Dir(getenv), "assistant-memory")
 }
 
-// recruitmentReaders are the dashboard readers: the recruitment team and
-// HR insight readers (directors).
-var recruitmentReaders = append(append([]string{}, iam.HrisRecruitment...), iam.HrisInsights...)
+// recruitmentReaders are the dashboard readers: the recruitment team and the
+// recruitment Analytics menu (directors, hiring managers). Laporan HRIS alone
+// does not open it (EPIC-057: akun Non-Rekrutmen).
+var recruitmentReaders = append(append([]string{}, iam.HrisRecruitment...), iam.HrisAnalytics...)
 
 func (m mod) Routes() []module.Route {
 	s := m.s

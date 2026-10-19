@@ -65,7 +65,7 @@ func TestRecruitmentDashboardGuards(t *testing.T) {
 }
 
 func TestRecruitmentDashboard(t *testing.T) {
-	s := testutil.CreateStaff(t, testutil.StaffOptions{Menus: map[string][]string{"hris.insights": nil}})
+	s := testutil.CreateStaff(t, testutil.StaffOptions{Menus: map[string][]string{"hris.insights.analytics": nil}})
 	h := newTxHarness(t)
 	d := seedRecruitment(h)
 	q := "?brand_id=" + d.brand
