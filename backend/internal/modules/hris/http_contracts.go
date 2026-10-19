@@ -12,7 +12,7 @@ import (
 	"nuhabit/backend/internal/platform/validate"
 )
 
-func (h handlers) listEmployeeContracts(w http.ResponseWriter, r *http.Request, _ *auth.User) error {
+func (h handlers) listEmployeeContracts(w http.ResponseWriter, r *http.Request, u *auth.User) error {
 	id, err := requireUUID(r.PathValue("id"), "ID karyawan tidak valid")
 	if err != nil {
 		return err
@@ -21,7 +21,14 @@ func (h handlers) listEmployeeContracts(w http.ResponseWriter, r *http.Request, 
 	if err != nil {
 		return err
 	}
-	return ok(w, dataOf(rows))
+	see, err := h.canSeeSalary(r, u)
+	if err != nil {
+		return err
+	}
+	if !see {
+		hideKeys(rows, contractSalaryKeys)
+	}
+	return ok(w, obj("data", rows, "can_view_salary", see))
 }
 
 // zodGUID is z.guid(): any 8-4-4-4-12 hex string.
@@ -62,18 +69,35 @@ func (h handlers) createEmployeeContract(w http.ResponseWriter, r *http.Request,
 	if err := formErr(f, ""); err != nil {
 		return err
 	}
+	see, err := h.canSeeSalary(r, u)
+	if err != nil {
+		return err
+	}
+	if !see {
+		in.BaseSalary = nil // the active salary is used (EPIC-057 R4)
+	}
 	row, number, err := h.svc.CreateEmployeeContract(r.Context(), in)
 	if err != nil {
 		return err
 	}
+	if !see {
+		hideKeys([]*Row{row}, contractSalaryKeys)
+	}
 	return reply(w, http.StatusCreated, dataMsg(row, "Draft kontrak "+number+" dibuat"))
 }
 
-func (h handlers) listContracts(w http.ResponseWriter, r *http.Request, _ *auth.User) error {
+func (h handlers) listContracts(w http.ResponseWriter, r *http.Request, u *auth.User) error {
 	p := domain.ParseContractListParams(queryOf(r))
 	rows, total, err := h.svc.ListContracts(r.Context(), p)
 	if err != nil {
 		return err
+	}
+	see, err := h.canSeeSalary(r, u)
+	if err != nil {
+		return err
+	}
+	if !see {
+		hideKeys(rows, contractSalaryKeys)
 	}
 	return ok(w, obj("data", rows, "total", total, "page", p.Page, "limit", p.Limit))
 }
@@ -154,6 +178,13 @@ func (h handlers) patchContract(w http.ResponseWriter, r *http.Request, u *auth.
 	if err := formErr(f, ""); err != nil {
 		return err
 	}
+	see, err := h.canSeeSalary(r, u)
+	if err != nil {
+		return err
+	}
+	if !see {
+		in.BaseSalary, in.BaseSalarySent = nil, false // edit keeps the salary (EPIC-057 R4)
+	}
 	result, err := h.svc.RunContractAction(r.Context(), contract, in, u.ID, u.FullName)
 	if err != nil {
 		return err
@@ -162,7 +193,11 @@ func (h handlers) patchContract(w http.ResponseWriter, r *http.Request, u *auth.
 	if in.Action == "renew" {
 		status = http.StatusCreated
 	}
-	return reply(w, status, result.body())
+	body := result.body()
+	if !see {
+		body.Del("compensation_amount")
+	}
+	return reply(w, status, body)
 }
 
 func (h handlers) deleteContract(w http.ResponseWriter, r *http.Request, _ *auth.User) error {

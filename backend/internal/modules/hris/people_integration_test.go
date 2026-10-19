@@ -7,7 +7,7 @@ import (
 
 func TestContractLifecycle(t *testing.T) {
 	h := newHarness(t)
-	hr, _ := h.staff("hrd", []string{menuKepegawaian}, false)
+	hr, _ := h.staff("hrd", []string{menuKepegawaian, "hris.compensation"}, false)
 	e := h.employee(emp{status: "contract", name: "Kontrak Test"})
 	draft := func(body map[string]any) string {
 		c := h.do(&hr, "POST", "/api/hris/employees/"+e+"/contracts", body)

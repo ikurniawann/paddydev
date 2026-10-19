@@ -299,6 +299,15 @@ func (h handlers) listEmploymentHistory(w http.ResponseWriter, r *http.Request) 
 	if err != nil {
 		return err
 	}
+	u, err := h.auth.CurrentUser(r)
+	if err != nil {
+		return err
+	}
+	if see, err := h.canSeeSalary(r, u); err != nil {
+		return err
+	} else if !see {
+		hideKeys(rows, historySalaryKeys)
+	}
 	return ok(w, dataOf(rows))
 }
 

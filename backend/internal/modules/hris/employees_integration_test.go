@@ -224,7 +224,7 @@ func TestEmployeeTabs(t *testing.T) {
 
 func TestEmployeeContracts(t *testing.T) {
 	h := newHarness(t)
-	hr, _ := h.staff("hrd", []string{menuKepegawaian}, false)
+	hr, _ := h.staff("hrd", []string{menuKepegawaian, "hris.compensation"}, false)
 	e := h.employee(emp{status: "contract"})
 	base := "/api/hris/employees/" + e + "/contracts"
 

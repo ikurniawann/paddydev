@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"math"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -57,6 +58,15 @@ func (r *Row) Has(key string) bool { _, ok := r.vals[key]; return ok }
 
 // Get returns a value (nil when absent or NULL).
 func (r *Row) Get(key string) any { return r.vals[key] }
+
+// Del removes a key (a no-op when absent), keeping the other keys' order.
+func (r *Row) Del(key string) {
+	if _, ok := r.vals[key]; !ok {
+		return
+	}
+	delete(r.vals, key)
+	r.keys = slices.DeleteFunc(r.keys, func(k string) bool { return k == key })
+}
 
 // Str returns a text column, "" when NULL.
 func (r *Row) Str(key string) string {

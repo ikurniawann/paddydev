@@ -195,6 +195,9 @@ func (h handlers) contractDocument(w http.ResponseWriter, r *http.Request, u *au
 	if err != nil {
 		return err
 	}
+	if err := h.requireSalaryAccess(r, u); err != nil {
+		return err
+	}
 	win, err := h.svc.limiter.Fixed(r.Context(), "contract_pdf_"+u.ID, 30, time.Minute, h.svc.now())
 	if err != nil {
 		return err
@@ -225,7 +228,10 @@ func (h handlers) signedContract(r *http.Request) (*signedContract, error) {
 }
 
 // GET /api/hris/contracts/{id}/signed-document: the scan, inline.
-func (h handlers) signedDocument(w http.ResponseWriter, r *http.Request, _ *auth.User) error {
+func (h handlers) signedDocument(w http.ResponseWriter, r *http.Request, u *auth.User) error {
+	if err := h.requireSalaryAccess(r, u); err != nil {
+		return err
+	}
 	c, err := h.signedContract(r)
 	if err != nil {
 		return err

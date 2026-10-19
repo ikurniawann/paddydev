@@ -342,7 +342,7 @@ func multipartBody(t *testing.T, field, name string, data []byte) (*bytes.Buffer
 
 func TestContractDocuments(t *testing.T) {
 	h, dir := newFileHarness(t)
-	hr, _ := h.staff("hrd", []string{"hris.kepegawaian"}, true)
+	hr, _ := h.staff("hrd", []string{"hris.kepegawaian", "hris.compensation"}, true)
 	staff, _ := h.staff("pos", nil, true)
 	_, worker := h.staff("pos", nil, true, emp{name: "Budi Santoso"})
 	number := "GO-" + testutil.RandomHex(3) + "/PKWT/VII/2026"
