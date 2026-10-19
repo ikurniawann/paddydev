@@ -1,6 +1,6 @@
 # EPIC-056: HRIS Go-Live — Data Karyawan & Jadwal Shift (`MODULE-HRIS`)
 
-status: review
+status: ready-for-qa
 environment: dev
 retries: 0
 
@@ -84,3 +84,13 @@ Payroll tidak termasuk go-live ini.
   - resign menghilangkan karyawan dari pemilih;
   - skrip ops: 137 karyawan HQ+WH menjadi Non-Shift;
   - migrasi `-verify` bersih.
+- 2026-10-19 — **Deploy live.**
+  - **Backup:** `paddydev-db-before-epic056-deploy-20261019-201633.dump` dan `paddydev-db-before-epic056-non-shift-20261019-202201.dump`.
+  - **Merge & push:** `main` di-push ke remote `paddydev`. Mirror `origin` (repo mizu) belum di-push karena push ditolak classifier.
+  - **Migrasi:** 7 migrasi (`20261019090000`–`090600`), `-verify` bersih.
+  - **Container API & web:** `local-20261019-201743-epic056`.
+  - **Non-Shift go-live (keputusan user):** 105 karyawan kantor & gudang (HQ 34 + Warehouse 71) menjadi Non-Shift. Jadwal tetap Sen–Jum `NS` berlaku mulai 20-10-2026.
+  - **Tetap Shift:** shopkeeper event/freelance, Pasaraya, Crew Experience, Store Supervisor/Retail Ops Manager, dan akun sistem.
+  - **Menu:** menu lama "Schedules" disembunyikan.
+  - **Hak akses:** admin_hris mendapat hak kelola Jadwal Kerja (disetujui user).
+  - **Cek live:** export → preview import Timpa 648 tidak berubah, 0 error; Jadwal Kerja & template OK; console bersih.
