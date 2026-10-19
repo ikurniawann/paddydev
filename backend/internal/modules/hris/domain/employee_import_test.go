@@ -182,3 +182,19 @@ func TestValidateEmployeeImportEmailAndIdentityRules(t *testing.T) {
 		}
 	}
 }
+
+func TestValidateEmployeeImportReplaceRefusesResignedRows(t *testing.T) {
+	l := lk()
+	l.ExistingNIP["201901001"] = EmployeeRef{ID: "e9", NIP: "201901001", Name: "Lama", Active: false}
+	l.Current = map[string]map[string]string{"201901001": {"full_name": "Lama", "employment_status": "Resign"}}
+	h := []string{"NIP", "Nama Lengkap *", "Status Kepegawaian *"}
+	out, errs, _ := ValidateEmployeeImport("replace", h, [][]string{{"201901001", "Lama", "Kontrak (PKWT)"}}, 2, l)
+	if !issueText(errs, "Baris 2: NIP 201901001 (Lama) sudah resign — data karyawan resign tidak diubah lewat import") || len(out[0].Set) != 0 {
+		t.Fatalf("errs %+v set %+v", errs, out[0].Set)
+	}
+	// Baris resign yang tidak berubah tetap dilewati tanpa error.
+	_, errs, _ = ValidateEmployeeImport("replace", h, [][]string{{"201901001", "Lama", "Resign"}}, 2, l)
+	if len(errs) != 0 {
+		t.Fatalf("unchanged resigned row: %+v", errs)
+	}
+}

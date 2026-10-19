@@ -358,6 +358,13 @@ func ValidateEmployeeImport(mode string, header []string, rows [][]string, first
 				row.Set[k] = val
 			}
 		}
+		// A resigned employee is not edited through the file (an old export
+		// would otherwise put back an active status on an inactive row).
+		if row.Action == "update" && !existing.Active && (len(row.Set) > 0 || row.Branch != "") {
+			errs = append(errs, UploadIssue{Line: line, Message: fmt.Sprintf(
+				"NIP %s (%s) sudah resign — data karyawan resign tidak diubah lewat import", nip, existing.Name)})
+			row.Set, row.Branch = map[string]any{}, ""
+		}
 		out = append(out, row)
 	}
 	return out, errs, warns
