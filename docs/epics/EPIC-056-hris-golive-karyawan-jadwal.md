@@ -66,3 +66,21 @@ Payroll tidak termasuk go-live ini.
   - **Pola mingguan:** ditolak untuk karyawan Non-Shift di backend (bukan hanya di UI).
   - **Import Timpa:** baris tanpa perubahan dihitung "tidak berubah", tidak ikut diperbarui maupun diaudit.
 - Kegagalan test lama (sudah ada di `main`, bukan regresi): hris `TestAttendancePeriodClosing`, spa `TestTherapistPayrollTwiceAMonth`.
+- 2026-10-19 — Review akhir oleh reviewer terpisah: 2 Critical + 6 Important, semua diperbaiki dengan test RED → GREEN.
+  - Upload jadwal kini hanya mengganti tanggal yang diunggah, sehingga jadwal karyawan dua cabang di cabang lain tetap utuh.
+  - Import Timpa:
+    - sel yang sama dengan data sekarang dilewati;
+    - nama master kembar ditolak;
+    - email karyawan berakun dan email karyawan lama tidak bisa ditukar lewat file;
+    - NIK/NPWP/email ganda dicek.
+  - Route tulis wajib aksi `update`. Migrasi `20261019090500` memberi admin_hris hak kelola Jadwal Kerja.
+  - Kode `DEF`/`NS` dikunci.
+  - Resign tidak boleh bertanggal di masa depan.
+- 2026-10-19 — Uji di stack salinan DB live (akun admin_hris):
+  - export → import Timpa: 0 diperbarui, 0 error (373 karyawan);
+  - upload jadwal PPJA 11 karyawan × 14 hari, termasuk konfirmasi penggantian;
+  - roster memakai jadwal per tanggal;
+  - jadwal tetap 71 karyawan Warehouse;
+  - resign menghilangkan karyawan dari pemilih;
+  - skrip ops: 137 karyawan HQ+WH menjadi Non-Shift;
+  - migrasi `-verify` bersih.
