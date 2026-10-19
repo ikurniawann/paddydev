@@ -119,7 +119,8 @@ func (s *service) createLoan(ctx context.Context, a *actor, in loanInput) (*obj,
 	if err != nil {
 		return nil, err
 	}
-	if msg := domain.ValidateLoanLimits(raw, base, config.LoanMaxInstallmentPct, count, config.LoanMaxActivePerPerson); msg != "" {
+	showCap := a.Payroll || (a.EmployeeID != nil && *a.EmployeeID == target)
+	if msg := domain.ValidateLoanLimitsFor(raw, base, config.LoanMaxInstallmentPct, count, config.LoanMaxActivePerPerson, showCap); msg != "" {
 		return nil, httpx.BadRequest(msg)
 	}
 	row, err := queryObj(ctx, s.db, `INSERT INTO hris.loans (employee_id, loan_type, principal_amount, interest_rate,
@@ -130,7 +131,7 @@ func (s *service) createLoan(ctx context.Context, a *actor, in loanInput) (*obj,
 	return row, opaque(err)
 }
 
-func (s *service) decideLoan(ctx context.Context, userID, loanID string, approve bool, reason *string) (*messageData, error) {
+func (s *service) decideLoan(ctx context.Context, userID, loanID string, approve bool, reason *string, showCap bool) (*messageData, error) {
 	approver, err := s.employeeOf(ctx, userID)
 	if err != nil {
 		return nil, err
@@ -156,8 +157,8 @@ func (s *service) decideLoan(ctx context.Context, userID, loanID string, approve
 		if err != nil {
 			return nil, err
 		}
-		if msg := domain.ValidateLoanLimits(domain.JSNumber(textOrNil(installment)), base, config.LoanMaxInstallmentPct,
-			count, config.LoanMaxActivePerPerson); msg != "" {
+		if msg := domain.ValidateLoanLimitsFor(domain.JSNumber(textOrNil(installment)), base, config.LoanMaxInstallmentPct,
+			count, config.LoanMaxActivePerPerson, showCap); msg != "" {
 			return nil, httpx.BadRequest(msg)
 		}
 		month, year := domain.FirstInstallmentPeriod(now)
@@ -267,7 +268,12 @@ func (h *handler) decideLoan(w http.ResponseWriter, r *http.Request) error {
 	if err := issuesErr(f, ""); err != nil {
 		return err
 	}
-	out, err := h.svc.decideLoan(r.Context(), u.ID, r.PathValue("id"), approved != nil && *approved, reason)
+	// The cap reveals the base salary: only Penggajian sees it (EPIC-057).
+	showCap, err := h.auth.HasMenuPrefix(r.Context(), u, iam.HrisCompensation...)
+	if err != nil {
+		return err
+	}
+	out, err := h.svc.decideLoan(r.Context(), u.ID, r.PathValue("id"), approved != nil && *approved, reason, showCap)
 	if err != nil {
 		return err
 	}

@@ -36,10 +36,11 @@ type PayslipScope struct {
 }
 
 // ResolvePayslipScope: employee_id=me is personal for every role; a full
-// view needs a PayslipFullRoles role AND the Penggajian menu (payroll), so
-// an HR account without Penggajian is forced to its own slips like non-HR.
+// view needs a PayslipFullRoles role, and an HR role also needs the
+// Penggajian menu (payroll): an HR account without it is forced to its own
+// slips (EPIC-057). finance_staff keeps its role-based view.
 func ResolvePayslipScope(role string, payroll bool, actorEmployeeID *string, param *string) PayslipScope {
-	full := payroll && slices.Contains(PayslipFullRoles, role)
+	full := slices.Contains(PayslipFullRoles, role) && (payroll || !IsHR(role))
 	if (param != nil && *param == "me") || !full {
 		if actorEmployeeID == nil {
 			return PayslipScope{MeView: true, Skip: true}

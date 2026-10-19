@@ -12,3 +12,11 @@ func TestResolvePayslipScopeNeedsPayrollMenu(t *testing.T) {
 		t.Fatalf("hrd with Penggajian = %+v, want the requested employee", got)
 	}
 }
+
+// Non-HR full-view roles (finance_staff) keep their old behaviour.
+func TestResolvePayslipScopeKeepsFinanceStaff(t *testing.T) {
+	me, other := "emp-1", "emp-2"
+	if got := ResolvePayslipScope("finance_staff", false, &me, &other); got.MeView || got.EmployeeID != other {
+		t.Fatalf("finance_staff = %+v, want the requested employee", got)
+	}
+}

@@ -418,7 +418,9 @@ func (s *service) saveRubric(ctx context.Context, a *actor, in rubricInput) (*ru
 	if !pgUUIDRE.MatchString(in.EmployeeID) {
 		return nil, errBadUUID
 	}
-	if !domain.IsKPIManager(a.Role) {
+	// A KPI manager needs the Kinerja menu too; anyone else rates only
+	// their direct reports.
+	if !(domain.IsKPIManager(a.Role) && a.PerformanceHR) {
 		emp, err := s.brief(ctx, in.EmployeeID)
 		if err != nil {
 			return nil, err
@@ -654,9 +656,10 @@ func (h *handler) kpiRecommendation(w http.ResponseWriter, r *http.Request) erro
 
 /* ── department configuration ────────────────────────────────────────── */
 
-// requireKPIManager is requireKpiManager: the hris grant plus a KPI role.
+// requireKPIManager is requireKpiManager: the Kinerja menu (hris.performance;
+// EPIC-057 — HR without it never edits KPI) plus a KPI role.
 func (h *handler) requireKPIManager(r *http.Request) (string, error) {
-	u, err := h.auth.RequireMenuPrefix(r, iam.Hris...)
+	u, err := h.auth.RequireMenuPrefix(r, iam.HrisPerformance...)
 	if err != nil {
 		return "", err
 	}
