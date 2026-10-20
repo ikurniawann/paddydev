@@ -6,6 +6,7 @@ import (
 )
 
 func TestUserRoleChangeIsAudited(t *testing.T) {
+	requireHrisAccounts(t)
 	e := settingsUsers(t)
 	ctx := context.Background()
 	var holding string
@@ -29,7 +30,7 @@ func TestUserRoleChangeIsAudited(t *testing.T) {
 		t.Fatalf("role change = %d %s", code, raw)
 	}
 	var trail string
-	if err := e.tx.QueryRow(ctx, `SELECT string_agg(array_to_string(roles_before, '+') || '>' || array_to_string(roles_after, '+'), ',' ORDER BY created_at)
+	if err := e.tx.QueryRow(ctx, `SELECT coalesce(string_agg(array_to_string(roles_before, '+') || '>' || array_to_string(roles_after, '+'), ',' ORDER BY created_at), '')
 		FROM iam.permission_audit_logs WHERE source = 'user_role' AND target_user_id = $1`, userID).Scan(&trail); err != nil {
 		t.Fatal(err)
 	}

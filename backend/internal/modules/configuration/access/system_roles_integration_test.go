@@ -11,6 +11,7 @@ import (
 const errSystemRole = `{"success":false,"error":"Role sistem hanya bisa diubah oleh Super Admin"}`
 
 func TestSystemRolesOnlySuperAdmin(t *testing.T) {
+	requireHrisIAM(t)
 	admin := testutil.CreateStaff(t, testutil.StaffOptions{Menus: map[string][]string{"settings.roles": nil}})
 	super := testutil.CreateStaff(t, testutil.StaffOptions{Role: "super_admin"})
 	mux, text := setup(t)
@@ -35,6 +36,7 @@ func TestSystemRolesOnlySuperAdmin(t *testing.T) {
 // Saving admin_hris in Role Management re-runs the sync (ruling R10).
 // Role Management edits admin_hris only as super_admin (TestHrisRolesOnlySuperAdmin).
 func TestAdminHrisEditResyncsDerivedRoles(t *testing.T) {
+	requireHrisIAM(t)
 	admin := testutil.CreateStaff(t, testutil.StaffOptions{Role: "super_admin"})
 	mux, text := setup(t)
 	adminHris := text(`SELECT id::text FROM iam.roles WHERE code = 'admin_hris'`)
@@ -66,6 +68,7 @@ const (
 // HR roles (admin_hris and the derived hris_*) change in Role Management
 // only through super_admin; AdminHRIS uses Hak Akses HRIS (Q-RA-2/Q-RA-5).
 func TestHrisRolesOnlySuperAdmin(t *testing.T) {
+	requireHrisIAM(t)
 	admin := testutil.CreateStaff(t, testutil.StaffOptions{Menus: map[string][]string{"settings.roles": nil}})
 	super := testutil.CreateStaff(t, testutil.StaffOptions{Role: "super_admin"})
 	mux, text := setup(t)
@@ -90,6 +93,7 @@ func TestHrisRolesOnlySuperAdmin(t *testing.T) {
 // Adding "delete" on an HRIS menu through Role Management needs super_admin;
 // keeping an existing delete or delete outside HRIS does not.
 func TestHrisDeleteGrantOnlySuperAdmin(t *testing.T) {
+	requireHrisIAM(t)
 	admin := testutil.CreateStaff(t, testutil.StaffOptions{Menus: map[string][]string{"settings.roles": nil}})
 	super := testutil.CreateStaff(t, testutil.StaffOptions{Role: "super_admin"})
 	mux, text := setup(t)
@@ -119,6 +123,7 @@ func TestHrisDeleteGrantOnlySuperAdmin(t *testing.T) {
 // braced uuid forms cannot slip "delete" on an HRIS leaf past it; an
 // invalid id is a 400 (re-review CRITICAL, uuid bypass).
 func TestHrisDeleteGrantUUIDForms(t *testing.T) {
+	requireHrisIAM(t)
 	admin := testutil.CreateStaff(t, testutil.StaffOptions{Menus: map[string][]string{"settings.roles": nil}})
 	super := testutil.CreateStaff(t, testutil.StaffOptions{Role: "super_admin"})
 	mux, text := setup(t)
@@ -143,4 +148,18 @@ func TestHrisDeleteGrantUUIDForms(t *testing.T) {
 	if got := text(`SELECT menu_id::text || ' ' || granted_actions::text FROM iam.role_menu_permissions WHERE role_id = $1 AND is_active`, role); got != leaves+` ["read", "delete"]` {
 		t.Fatalf("super grant = %s", got)
 	}
+}
+
+// requireHrisIAM skips a test that needs the seeded HRIS roles and menus:
+// CI applies migrations without the seeders, so admin_hris and
+// super_admin hold no grants there and most hris.* menus are absent.
+func requireHrisIAM(t *testing.T) {
+	t.Helper()
+	testutil.RequireSeededIAM(t, testutil.IAMBaseline{
+		GrantedRoles: []string{"admin_hris", "super_admin"},
+		Roles:        []string{"hris_manager", "hris_non_payroll", "hris_non_rekrutmen_kpi"},
+		Menus: []string{"settings.roles", "hris.access", "hris.workforce.attendance", "hris.workforce.leaves",
+			"hris.kepegawaian.holidays", "hris.compensation", "hris.compensation.payroll", "hris.compensation.salary",
+			"hris.recruitment.psikotes"},
+	})
 }

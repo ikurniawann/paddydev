@@ -32,6 +32,7 @@ func hrisManager(t *testing.T) testutil.Staff {
 }
 
 func TestHrisAccessScope(t *testing.T) {
+	requireHrisIAM(t)
 	manager := hrisManager(t)
 	reader := testutil.CreateStaff(t, testutil.StaffOptions{Role: "hrd", Menus: map[string][]string{"hris.access": {"read"}}})
 	outsider := testutil.CreateStaff(t, testutil.StaffOptions{Menus: map[string][]string{"settings.menus": nil}})
@@ -81,6 +82,7 @@ func TestHrisAccessScope(t *testing.T) {
 }
 
 func TestHrisAccessMasksSurviveSync(t *testing.T) {
+	requireHrisIAM(t)
 	manager := hrisManager(t)
 	mux, text := setup(t)
 	grant := func(role, menu string) string {
@@ -153,6 +155,7 @@ func TestHrisAccessAccounts(t *testing.T) {
 // Ruling M5 (Q-RA-2): turning access on never grants "delete" by itself;
 // the delete reduction of the staff role is kept until an explicit toggle.
 func TestHrisAccessEnableKeepsDeleteReduction(t *testing.T) {
+	requireHrisIAM(t)
 	manager := hrisManager(t)
 	mux, text := setup(t)
 	grant := func(role, menu string) string {
@@ -244,6 +247,7 @@ func TestHrisAccessAdminHrisReenableRestores(t *testing.T) {
 
 // A derived role cannot be given a menu its source admin_hris lacks.
 func TestHrisAccessNeedsAdminHrisMenu(t *testing.T) {
+	requireHrisIAM(t)
 	manager := hrisManager(t)
 	mux, text := setup(t)
 	text(`UPDATE iam.role_menu_permissions p SET is_active = false FROM iam.roles r, iam.menus m

@@ -25,6 +25,7 @@ func setupAs(t *testing.T, opts testutil.StaffOptions) *env {
 }
 
 func TestHrisRoleInManajemenUser(t *testing.T) {
+	requireHrisAccounts(t)
 	admin := testutil.CreateStaff(t, testutil.StaffOptions{Role: "admin", Menus: map[string][]string{"settings.users": nil}})
 	e := setupAs(t, testutil.StaffOptions{Role: "super_admin"})
 	ctx := context.Background()
@@ -87,6 +88,7 @@ func TestHrisRoleInManajemenUser(t *testing.T) {
 // Ruling M3: a refused hris_role (400/403) leaves the employee and the
 // account exactly as they were, on create and on update.
 func TestHrisRoleRejectedWritesNothing(t *testing.T) {
+	requireHrisAccounts(t)
 	admin := testutil.CreateStaff(t, testutil.StaffOptions{Role: "admin", Menus: map[string][]string{"settings.users": nil}})
 	e := setupAs(t, testutil.StaffOptions{Role: "super_admin"})
 	adminEnv := &env{t: t, staff: admin, tx: e.tx, mux: e.mux}
@@ -151,4 +153,15 @@ func TestHrisRoleRejectedWritesNothing(t *testing.T) {
 	if got := state(); got != before {
 		t.Fatalf("after refused 403 update state = %s, want %s", got, before)
 	}
+}
+
+// requireHrisAccounts skips a test that needs the seeded app roles
+// (hrd, finance_staff, the hris_* roles) and super_admin's grants; CI
+// applies migrations without the seeders.
+func requireHrisAccounts(t *testing.T) {
+	t.Helper()
+	testutil.RequireSeededIAM(t, testutil.IAMBaseline{
+		GrantedRoles: []string{"super_admin"},
+		Roles:        []string{"hrd", "finance_staff", "hris_manager", "hris_non_payroll"},
+	})
 }

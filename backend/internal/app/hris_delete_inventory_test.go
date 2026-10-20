@@ -18,6 +18,7 @@ import (
 // admin check) pass for this staff, so only the leaf-delete guard can
 // reject. The logbook stays ESS (ruling R2).
 func TestEveryHrisDeleteNeedsLeafDelete(t *testing.T) {
+	testutil.RequireSeededIAM(t, testutil.IAMBaseline{MinHrisMenus: 30})
 	notDelete := []string{"read", "create", "update", "approve", "export", "import", "execute"}
 	deps := testutil.Deps(t, nil)
 	rows, err := deps.DB.Query(context.Background(),
