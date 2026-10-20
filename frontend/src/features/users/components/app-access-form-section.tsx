@@ -15,6 +15,7 @@ import {
 import type { UserEmployeeFormValues } from "../types";
 import { APPROVAL_LEVELS, APPROVAL_MODULES } from "@/lib/admin/user-management";
 import {
+  HRIS_ROLE_OPTIONS,
   ROLE_OPTIONS,
   emptyApprovalPermission,
   formatCurrency,
@@ -37,6 +38,8 @@ interface AppAccessFormSectionProps {
   businessTree: BusinessTree;
   isEdit: boolean;
   hasExistingAppAccount?: boolean;
+  /** Hanya super_admin yang boleh mengubah Role HRIS di sini (server menolak yang lain). */
+  canSetHrisRole?: boolean;
   onChange: (patch: Partial<UserEmployeeFormValues>) => void;
   onResetPassword?: () => void;
 }
@@ -60,6 +63,7 @@ export function AppAccessFormSection({
   businessTree,
   isEdit,
   hasExistingAppAccount = false,
+  canSetHrisRole = false,
   onChange,
   onResetPassword,
 }: AppAccessFormSectionProps) {
@@ -190,6 +194,24 @@ export function AppAccessFormSection({
                 className={formComboboxClassName}
               />
             </div>
+            {form.role === "hrd" ? (
+              <div>
+                <FormFieldLabel>Role HRIS</FormFieldLabel>
+                <Combobox
+                  options={HRIS_ROLE_OPTIONS}
+                  value={form.hris_role || "auto"}
+                  onChange={(value) => onChange({ hris_role: value === "auto" ? "" : value })}
+                  placeholder="Pilih role HRIS"
+                  searchPlaceholder="Cari role..."
+                  emptyMessage="Role tidak ditemukan"
+                  disabled={!canSetHrisRole}
+                  className={formComboboxClassName}
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  Hanya Super Admin yang bisa mengubah di sini; AdminHRIS memakai HRIS → Hak Akses HRIS.
+                </p>
+              </div>
+            ) : null}
             <div>
               <FormFieldLabel>Account status</FormFieldLabel>
               <Combobox
