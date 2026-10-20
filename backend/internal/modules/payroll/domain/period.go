@@ -200,6 +200,10 @@ func SplitOvertimeWith(requests []OvertimeRequest, attendance []AttendanceRow, h
 				hours = math.Min(req.Hours, actual)
 			}
 		}
+		// Tabel payslip Paddy: lembur dibayar minimal 1 jam (EPIC-059 R9).
+		if hours < 1 {
+			continue
+		}
 		if holidays[req.Date] || req.DayType == "rest_day" || restDay(req.Date) {
 			holiday += hours
 		} else {

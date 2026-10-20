@@ -73,3 +73,15 @@ func TestDivisorFollowsSchedule(t *testing.T) {
 		t.Fatalf("daily tanpa pembagi struktur = %v, want 0 (tidak berubah)", d)
 	}
 }
+
+func TestOvertimeUnderOneHourNotPaid(t *testing.T) {
+	att := []AttendanceRow{
+		{Date: "2026-09-07", Status: "present", HasClockOut: true, OvertimeHours: "0.50"},
+		{Date: "2026-09-08", Status: "present", HasClockOut: true, OvertimeHours: "2.00"},
+	}
+	req := []OvertimeRequest{{Date: "2026-09-07", Hours: 0.5}, {Date: "2026-09-08", Hours: 2}}
+	got := SplitOvertimeWith(req, att, nil, nil, true)
+	if got.Regular != 2 {
+		t.Fatalf("Regular = %v, want 2 (0,5 jam tidak dibayar)", got.Regular)
+	}
+}
