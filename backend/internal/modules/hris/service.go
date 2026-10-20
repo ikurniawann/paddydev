@@ -28,6 +28,7 @@ type Repository interface {
 	MasterRepo
 	FileRepo
 	PlacementRepo
+	TripRepo
 	// InTx runs fn against one transaction (a savepoint when already in one).
 	InTx(ctx context.Context, fn func(Repository) error) error
 	// querier is the pool or transaction ports run on.

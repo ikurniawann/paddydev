@@ -66,6 +66,9 @@ func TestClockInOutsideAreaNeedsNote(t *testing.T) {
 		d["branch_id"] != store || d["status"] != "present" {
 		t.Fatalf("clock-in = %s", in.raw)
 	}
+	if n := countFiles(t, dir); n != 1 {
+		t.Fatalf("selfie files after the resend = %d", n)
+	}
 
 	// Clock-out di dalam area: Valid, tanpa keterangan.
 	co := h.do(&staff, "POST", "/api/hris/attendance", map[string]any{"action": "clock-out", "attendance_id": d["id"],
@@ -134,6 +137,12 @@ func TestClockGeofenceUnchecked(t *testing.T) {
 	expect(t, byHR, 200, "")
 	if d := byHR.data(); d["clock_in_geofence"] != nil || d["clock_in_distance_m"] != nil {
 		t.Fatalf("HR on behalf = %s", byHR.raw)
+	}
+	byHROut := h.do(&hr, "POST", "/api/hris/attendance", map[string]any{"action": "clock-out", "photo": photo,
+		"attendance_id": byHR.data()["id"], "clock_out_location": farFromStore})
+	expect(t, byHROut, 200, "")
+	if d := byHROut.data(); d["clock_out_geofence"] != nil || d["clock_out_distance_m"] != nil {
+		t.Fatalf("HR clock-out on behalf = %s", byHROut.raw)
 	}
 }
 

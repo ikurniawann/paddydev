@@ -245,7 +245,7 @@ WHERE deleted_at IS NULL
     -- Epic 005-012 (ditambahkan 19 Jul 2026 — insiden retire menyapu menu baru;
     -- SETIAP migrasi menu baru WAJIB menambahkan code-nya ke daftar ini):
     'ess.home', 'ess.overtime', 'ess.loans', 'ess.payroll', 'ess.kpi',
-    'ess.announcements', 'ess.team-shifts',
+    'ess.announcements', 'ess.team-shifts', 'ess.business-trip',
     -- Spa / Paddy Experience (EPIC-052, 8 Okt 2026)
     -- Payroll multi-toko (15 Okt 2026): Penempatan Karyawan + Biaya Gaji per Toko
     'hris.master.placements', 'hris.compensation.store-costs',

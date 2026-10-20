@@ -1827,6 +1827,21 @@
   {
     "module": "hris",
     "method": "GET",
+    "path": "/api/hris/business-trips"
+  },
+  {
+    "module": "hris",
+    "method": "POST",
+    "path": "/api/hris/business-trips"
+  },
+  {
+    "module": "hris",
+    "method": "POST",
+    "path": "/api/hris/business-trips/{id}/decide"
+  },
+  {
+    "module": "hris",
+    "method": "GET",
     "path": "/api/hris/contracts"
   },
   {

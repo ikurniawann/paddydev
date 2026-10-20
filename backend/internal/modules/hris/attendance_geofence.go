@@ -43,16 +43,14 @@ func clockPoint(loc *Row) *domain.GeoPoint {
 	return &domain.GeoPoint{Lat: loc.Num("latitude"), Lng: loc.Num("longitude"), Accuracy: numPtr(loc, "accuracy")}
 }
 
-// geofenceFor judges one clock event of employeeID on date at branchID;
-// nil when the actor records for another employee. A non-HR employee is
-// always judged on the server's today, never on a date they sent (P5): the
-// date also decides the Perjalanan Dinas exemption.
+// geofenceFor judges one clock event of employeeID at branchID; nil when
+// the actor records for another employee. date decides the Perjalanan
+// Dinas exemption and is always server-side (P5): the new row's date on
+// clock-in (the server's today for a non-HR employee) and the stored row's
+// date on clock-out, so an overnight shift keeps its trip day.
 func (s *Service) geofenceFor(ctx context.Context, a *Actor, employeeID, date string, branchID *string, loc *Row) (*clockGeofence, error) {
 	if a.EmployeeID == nil || *a.EmployeeID != employeeID {
 		return nil, nil
-	}
-	if !a.IsHR {
-		date = domain.TodayWIB(s.now())
 	}
 	in := domain.GeofenceInput{Point: clockPoint(loc)}
 	name := ""
@@ -70,6 +68,11 @@ func (s *Service) geofenceFor(ctx context.Context, a *Actor, employeeID, date st
 			name = b.Str("name")
 		}
 	}
+	onTrip, err := s.repo.ApprovedTripOn(ctx, employeeID, date)
+	if err != nil {
+		return nil, err
+	}
+	in.OnBusinessTrip = onTrip
 	return &clockGeofence{GeofenceResult: domain.Geofence(in), BranchName: name}, nil
 }
 
