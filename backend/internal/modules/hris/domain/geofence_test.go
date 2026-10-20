@@ -107,3 +107,13 @@ func TestGeofenceNoteMissing(t *testing.T) {
 	eq(t, GeofenceNoteMissing(GeofenceUnchecked, nil), false)
 	eq(t, GeofenceNoteMissing(GeofenceDinas, nil), false)
 }
+
+func TestValidateBranchLocation(t *testing.T) {
+	eq(t, ValidateBranchLocation(nil, nil, nil), "")
+	eq(t, ValidateBranchLocation(f64p(-6.8889), f64p(107.596), intp(250)), "")
+	eq(t, ValidateBranchLocation(f64p(-6.8889), nil, nil), "Latitude dan longitude wajib diisi berdua atau dikosongkan berdua")
+	eq(t, ValidateBranchLocation(f64p(0), f64p(0), nil), "Koordinat tidak valid (latitude -90..90, longitude -180..180, bukan 0,0)")
+	eq(t, ValidateBranchLocation(f64p(-91), f64p(107.6), nil), "Koordinat tidak valid (latitude -90..90, longitude -180..180, bukan 0,0)")
+	eq(t, ValidateBranchLocation(f64p(-6.9), f64p(107.6), intp(10)), "Radius absensi 25–1000 meter")
+	eq(t, ValidateBranchLocation(nil, nil, intp(1001)), "Radius absensi 25–1000 meter")
+}

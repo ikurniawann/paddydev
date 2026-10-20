@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"nuhabit/backend/internal/modules/hris/domain"
+	"nuhabit/backend/internal/platform/audit"
 	"nuhabit/backend/internal/platform/auth"
 	"nuhabit/backend/internal/platform/httpx"
 	"nuhabit/backend/internal/platform/iam"
@@ -43,6 +44,9 @@ type PlacementRepo interface {
 	// BranchGeofence is the store's name, coordinates and radius override
 	// (EPIC-062); nil when the store does not exist.
 	BranchGeofence(ctx context.Context, id string) (*Row, error)
+	// SaveBranchLocation writes the store coordinates and radius override
+	// (EPIC-062 R9), returning the saved location; nil when not found.
+	SaveBranchLocation(ctx context.Context, id string, lat, lng *float64, radius *int) (*Row, error)
 	PlacementEmployeeExists(ctx context.Context, id string) (bool, error)
 }
 
@@ -143,7 +147,8 @@ func (s *store) ClearOtherPrimary(ctx context.Context, employeeID, exceptID, sta
 }
 
 func (s *store) ActiveBranches(ctx context.Context) ([]*Row, error) {
-	return queryRows(ctx, s.db, `SELECT b.id, b.code, b.name, b.company_id, c.name AS company_name, b.lat, b.lng
+	return queryRows(ctx, s.db, `SELECT b.id, b.code, b.name, b.company_id, c.name AS company_name, b.lat, b.lng,
+		b.geofence_radius_m
 		FROM configuration.branches b JOIN configuration.companies c ON c.id = b.company_id
 		WHERE b.is_active
 		ORDER BY c.name, b.name`)
@@ -158,6 +163,12 @@ func (s *store) BranchExists(ctx context.Context, id string) (bool, error) {
 func (s *store) BranchGeofence(ctx context.Context, id string) (*Row, error) {
 	row, err := queryRow(ctx, s.db, `SELECT name, lat, lng, geofence_radius_m FROM configuration.branches WHERE id::text = $1`, id)
 	return row, ignoreBadInput(err)
+}
+
+func (s *store) SaveBranchLocation(ctx context.Context, id string, lat, lng *float64, radius *int) (*Row, error) {
+	return queryRow(ctx, s.db, `UPDATE configuration.branches
+		SET lat = $2, lng = $3, geofence_radius_m = $4, updated_at = now()
+		WHERE id = $1 RETURNING id, code, name, lat, lng, geofence_radius_m`, id, lat, lng, radius)
 }
 
 func (s *store) PlacementEmployeeExists(ctx context.Context, id string) (bool, error) {
@@ -522,4 +533,57 @@ func (h handlers) listBranches(w http.ResponseWriter, r *http.Request, _ *auth.U
 		return err
 	}
 	return ok(w, dataOf(rows))
+}
+
+// SaveBranchLocation is the HR store location edit (EPIC-062 R9): HRIS
+// writes the three geofence columns of configuration.branches (lat/lng are
+// shared with the public site map) and records the change in the audit log.
+func (s *Service) SaveBranchLocation(ctx context.Context, u *auth.User, id string, lat, lng *float64, radius *int, meta audit.Entry) (*Row, error) {
+	if msg := domain.ValidateBranchLocation(lat, lng, radius); msg != "" {
+		return nil, httpx.BadRequest(msg)
+	}
+	var row *Row
+	err := s.repo.InTx(ctx, func(r Repository) error {
+		before, err := r.BranchGeofence(ctx, id)
+		if err != nil {
+			return err
+		}
+		if before == nil {
+			return httpx.NotFound("Toko tidak ditemukan")
+		}
+		if row, err = r.SaveBranchLocation(ctx, id, lat, lng, radius); err != nil {
+			return err
+		}
+		meta.ActorID, meta.ActorName = u.ID, ptr(u.FullName)
+		meta.Action, meta.Entity, meta.EntityID = "branch_location.update", "configuration.branches", ptr(id)
+		meta.EntityLabel = ptr(before.Str("name"))
+		meta.Before = map[string]any{"lat": before.Get("lat"), "lng": before.Get("lng"), "geofence_radius_m": before.Get("geofence_radius_m")}
+		meta.After = map[string]any{"lat": row.Get("lat"), "lng": row.Get("lng"), "geofence_radius_m": row.Get("geofence_radius_m")}
+		return audit.Write(ctx, r.querier(), meta)
+	})
+	return row, err
+}
+
+// PUT /api/hris/branches/{id}/location { lat, lng, geofence_radius_m }
+func (h handlers) putBranchLocation(w http.ResponseWriter, r *http.Request, u *auth.User) error {
+	id, err := requireUUID(r.PathValue("id"), "ID toko tidak valid")
+	if err != nil {
+		return err
+	}
+	const message = "Validation failed"
+	f, err := readForm(r, message)
+	if err != nil {
+		return err
+	}
+	lat := f.Num("lat", nullish, validate.NumOpts{})
+	lng := f.Num("lng", nullish, validate.NumOpts{})
+	radius := f.Int("geofence_radius_m", nullish, validate.NumOpts{})
+	if err := formErr(f, message); err != nil {
+		return err
+	}
+	row, err := h.svc.SaveBranchLocation(r.Context(), u, id, lat, lng, radius, auditMeta(r))
+	if err != nil {
+		return err
+	}
+	return ok(w, dataOf(row))
 }

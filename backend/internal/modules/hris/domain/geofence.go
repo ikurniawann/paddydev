@@ -110,3 +110,19 @@ func GeofenceNoteMissing(status string, note *string) bool {
 	}
 	return note == nil || len([]rune(JSTrim(*note))) < GeofenceNoteMinChars
 }
+
+// ValidateBranchLocation checks the HR store location form (EPIC-062 R9):
+// both coordinates or neither, a usable position, and a radius override of
+// 25–1000 m; "" when valid.
+func ValidateBranchLocation(lat, lng *float64, radius *int) string {
+	if (lat == nil) != (lng == nil) {
+		return "Latitude dan longitude wajib diisi berdua atau dikosongkan berdua"
+	}
+	if lat != nil && !usableCoord(*lat, *lng) {
+		return "Koordinat tidak valid (latitude -90..90, longitude -180..180, bukan 0,0)"
+	}
+	if radius != nil && (*radius < 25 || *radius > 1000) {
+		return "Radius absensi 25–1000 meter"
+	}
+	return ""
+}
