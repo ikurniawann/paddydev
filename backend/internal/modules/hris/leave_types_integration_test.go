@@ -3,6 +3,8 @@ package hris
 import (
 	"strings"
 	"testing"
+
+	"nuhabit/backend/internal/platform/testutil"
 )
 
 // EPIC-058: kode cuti baru ada di enum, dan notifikasi in-app memberi label
@@ -170,4 +172,40 @@ func TestLeaveQuotaEndpoint(t *testing.T) {
 	if staffQ.data()["leader_eligible"] != false || staffQ.data()["types"].([]any)[1].(map[string]any)["available"] != false {
 		t.Fatalf("staff quota = %s", staffQ.raw)
 	}
+}
+
+// Intern: kuota Izin Pribadi tetap 3 hari, tetapi tidak memotong THP
+// (keputusan user 20-10-2026). Kode "internship" dari rekrutmen ikut.
+func TestLeaveQuotaInternNoThpDeduction(t *testing.T) {
+	h := newHarness(t)
+	intern, _ := h.staff("pos", nil, true, emp{status: "intern"})
+	recruited, _ := h.staff("pos", nil, true, emp{status: "internship"})
+	worker, _ := h.staff("pos", nil, true, emp{status: "contract"})
+
+	deducts := func(s *testutil.Staff) bool {
+		t.Helper()
+		res := h.do(s, "GET", "/api/hris/leave-quota?month=2031-03", nil)
+		expect(t, res, 200, "")
+		for _, x := range res.data()["types"].([]any) {
+			ty := x.(map[string]any)
+			if ty["leave_type"] == "personal" {
+				return ty["deducts_thp"] == true
+			}
+		}
+		t.Fatalf("personal tidak ada di %s", res.raw)
+		return false
+	}
+	if deducts(&intern) || deducts(&recruited) {
+		t.Fatal("intern tidak boleh dipotong THP untuk Izin Pribadi")
+	}
+	if !deducts(&worker) {
+		t.Fatal("karyawan kontrak tetap dipotong THP untuk Izin Pribadi")
+	}
+
+	// Kuota intern tetap 3 hari per bulan.
+	for _, d := range []string{"2031-03-04", "2031-03-05", "2031-03-06"} {
+		expect(t, h.do(&intern, "POST", "/api/hris/leaves", leaveBody("personal", d, d)), 200, "")
+	}
+	expect(t, h.do(&intern, "POST", "/api/hris/leaves", leaveBody("personal", "2031-03-07", "2031-03-07")), 400,
+		"Kuota Izin Pribadi bulan 2031-03 sudah habis (3 dari 3 hari)")
 }

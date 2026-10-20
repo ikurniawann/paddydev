@@ -3,8 +3,19 @@ export interface LeaveQuota {
   employee_id: string;
   month: string;
   position_level: string;
+  /** Status kepegawaian karyawan (mis. "intern"). Tidak ada di respons lama. */
+  employment_status?: string;
   leader_eligible: boolean;
-  types: { leave_type: string; label: string; quota: number; used: number; remaining: number; available: boolean }[];
+  types: {
+    leave_type: string;
+    label: string;
+    quota: number;
+    used: number;
+    remaining: number;
+    available: boolean;
+    /** Memotong 1 hari THP untuk karyawan ini (false untuk intern). */
+    deducts_thp?: boolean;
+  }[];
 }
 
 export interface LeaveEmployeeLite {

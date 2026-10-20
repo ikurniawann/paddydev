@@ -46,6 +46,7 @@ type LeaveRepo interface {
 	// EmployeePositionLevel is the level of the employee's position ("" without
 	// one); found is false when the employee does not exist.
 	EmployeePositionLevel(ctx context.Context, employeeID string) (level string, found bool, err error)
+	EmployeeEmploymentStatus(ctx context.Context, employeeID string) (string, error)
 	// LockLeaveEmployee serialises leave requests of one employee (inside a tx).
 	LockLeaveEmployee(ctx context.Context, employeeID string) error
 	// OverlappingLeave is a pending/approved request covering any day of
@@ -543,6 +544,11 @@ func (s *Service) LeaveQuota(ctx context.Context, a *Actor, employeeID *string, 
 	if !found {
 		return nil, httpx.NotFound("Employee not found")
 	}
+	status, err := s.repo.EmployeeEmploymentStatus(ctx, *target)
+	if err != nil {
+		return nil, err
+	}
+	intern := domain.IsInternStatus(status)
 	use, err := s.repo.MonthlyLeaveUse(ctx, *target, from, to)
 	if err != nil {
 		return nil, err
@@ -552,10 +558,11 @@ func (s *Service) LeaveQuota(ctx context.Context, a *Actor, employeeID *string, 
 	for _, t := range domain.QuotaLeaveTypes() {
 		used := use[t.Code]
 		types = append(types, obj("leave_type", t.Code, "label", t.Label, "quota", t.MonthlyQuota,
-			"used", used, "remaining", max(0, float64(t.MonthlyQuota)-used), "available", !t.LeaderOnly || eligible))
+			"used", used, "remaining", max(0, float64(t.MonthlyQuota)-used), "available", !t.LeaderOnly || eligible,
+			"deducts_thp", t.DeductsThpDay && !intern))
 	}
 	return obj("employee_id", *target, "month", month, "position_level", level,
-		"leader_eligible", eligible, "types", types), nil
+		"employment_status", status, "leader_eligible", eligible, "types", types), nil
 }
 
 // UpdateLeaveBalance lets HRD set a balance; a new row starts at 12 days.

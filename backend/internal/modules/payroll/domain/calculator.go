@@ -385,9 +385,10 @@ func Calculate(in Input, c Config) Result {
 		late = Round(v)
 	}
 
-	// G6: potongan izin pribadi (PIP) dan izin sakit (PIS).
+	// G6: potongan izin pribadi (PIP) dan izin sakit (PIS). Intern (Magang)
+	// tidak dipotong PIP (keputusan user 20-10-2026); PIS tetap.
 	personal, sick := 0.0, 0.0
-	if c.PersonalLeaveDeduction && in.PersonalLeaveDays > 0 {
+	if c.PersonalLeaveDeduction && in.PersonalLeaveDays > 0 && !IsInternStatus(in.EmploymentStatus) {
 		personal = Round(perDay(thp, in.PersonalLeaveDays))
 	}
 	if c.SickLeaveDeduction && in.SickLeaveDays > 0 {
