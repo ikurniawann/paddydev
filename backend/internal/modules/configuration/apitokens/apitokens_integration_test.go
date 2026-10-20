@@ -163,3 +163,55 @@ func TestMigrationPending(t *testing.T) {
 		})
 	}
 }
+
+const systemTokenMsg = `{"success":false,"error":"Token API untuk akun Super Admin/Admin hanya bisa dibuat oleh Super Admin"}`
+
+// TestSystemAccountTokenNeedsSuperAdmin: a token runs as its account, so a
+// token for an account holding a system role (super_admin/admin, app or IAM
+// role) is minted by IAM super_admin only; a refusal writes nothing.
+func TestSystemAccountTokenNeedsSuperAdmin(t *testing.T) {
+	superTarget := testutil.CreateStaff(t, testutil.StaffOptions{Role: "super_admin"})
+	adminTarget := testutil.CreateStaff(t, testutil.StaffOptions{Role: "admin"})
+	iamSuper := testutil.CreateStaff(t, testutil.StaffOptions{Role: "hrd"})
+	plain := testutil.CreateStaff(t, testutil.StaffOptions{Role: "pos"})
+	hrd := testutil.CreateStaff(t, testutil.StaffOptions{Role: "hrd", Menus: map[string][]string{"settings.integrations": nil}})
+	mux, tx := setup(t)
+	ctx := context.Background()
+	if _, err := tx.Exec(ctx, `INSERT INTO iam.roles (code, name, is_system) VALUES ('super_admin', 'Super Admin', true) ON CONFLICT (code) DO NOTHING`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO iam.user_roles (user_id, role_id, is_primary) SELECT $1, id, true FROM iam.roles WHERE code = 'super_admin'`, iamSuper.UserID); err != nil {
+		t.Fatal(err)
+	}
+	post := func(as testutil.Staff, userID string) (int, string) {
+		code, raw, _ := call(t, mux, testutil.AsStaff(testutil.Request("POST", "/api/admin/api-tokens",
+			map[string]any{"name": "Agent", "scopes": []string{"*"}, "user_id": userID}), as))
+		return code, raw
+	}
+	for _, target := range []testutil.Staff{superTarget, adminTarget, iamSuper} {
+		if code, raw := post(hrd, target.UserID); code != 403 || raw != systemTokenMsg {
+			t.Errorf("hrd → token for %s (%s) = %d %s", target.Role, target.UserID, code, raw)
+		}
+	}
+	var n int
+	if err := tx.QueryRow(ctx, `SELECT count(*) FROM configuration.api_tokens WHERE user_id = ANY($1)`,
+		[]string{superTarget.UserID, adminTarget.UserID, iamSuper.UserID}).Scan(&n); err != nil || n != 0 {
+		t.Fatalf("refused tokens written: %d %v", n, err)
+	}
+	if code, raw := post(hrd, plain.UserID); code != 201 {
+		t.Fatalf("hrd → token for plain account = %d %s", code, raw)
+	}
+}
+
+// TestSuperAdminMintsSystemAccountToken: IAM super_admin may.
+func TestSuperAdminMintsSystemAccountToken(t *testing.T) {
+	testutil.RequireSeededIAM(t, testutil.IAMBaseline{GrantedRoles: []string{"super_admin"}, Menus: []string{"settings.integrations"}})
+	adminTarget := testutil.CreateStaff(t, testutil.StaffOptions{Role: "admin"})
+	caller := testutil.CreateStaff(t, testutil.StaffOptions{Role: "super_admin"})
+	mux, _ := setup(t)
+	code, raw, _ := call(t, mux, testutil.AsStaff(testutil.Request("POST", "/api/admin/api-tokens",
+		map[string]any{"name": "Agent", "scopes": []string{"*"}, "user_id": adminTarget.UserID}), caller))
+	if code != 201 {
+		t.Fatalf("super_admin → token for admin = %d %s", code, raw)
+	}
+}

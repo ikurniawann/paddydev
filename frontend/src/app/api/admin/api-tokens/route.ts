@@ -24,7 +24,7 @@ export const GET = apiHandler(async () => {
 export const POST = apiHandler(async (request: NextRequest) => {
   const admin = await requireHumanTokenAdmin();
   const body = ((await request.json()) ?? {}) as ApiTokenInput;
-  const data = await createApiToken(admin?.id ?? null, body).catch((error: unknown) => {
+  const data = await createApiToken(admin, body).catch((error: unknown) => {
     if (isMissingTable(error)) {
       throw new ApiError(
         503,
