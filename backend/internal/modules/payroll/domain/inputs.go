@@ -233,13 +233,20 @@ func BuildInputRange(emp Employee, salary Salary, rec WorkforceRecords, loans []
 	if hasSchedule && scheduled > 0 && paidDays > workingDays {
 		paidDays = workingDays
 	}
-	// Pembagi hari struktur; tanpa pembagi: hari kerja hasil hitung, kecuali
-	// upah harian (Odoo: struktur kosong = base_days 0, aturan per hari tidak
-	// berlaku — hari tidak hadir sudah tidak dibayar).
-	divisor := OrZero(salary.WorkingDaysDivisor)
+	// Pembagi (EPIC-059 K-12): hari kerja terjadwal periode untuk gaji bulanan;
+	// tanpa jadwal, pembagi struktur lalu hari kerja hasil hitung. Upah harian
+	// tidak berubah (struktur kosong = aturan per hari tidak berlaku).
+	isDaily := salary.PayBasis != nil && *salary.PayBasis == "daily"
+	divisor := 0.0
+	if !isDaily && hasSchedule && scheduled > 0 {
+		divisor = float64(scheduled)
+	}
+	if divisor <= 0 {
+		divisor = OrZero(salary.WorkingDaysDivisor)
+	}
 	if divisor <= 0 {
 		divisor = workingDays
-		if salary.PayBasis != nil && *salary.PayBasis == "daily" {
+		if isDaily {
 			divisor = 0
 		}
 	}

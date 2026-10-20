@@ -53,3 +53,23 @@ func TestBuildInputPaidDays(t *testing.T) {
 		t.Fatalf("PaidDays = %v, want 21", in.PaidDays)
 	}
 }
+
+// K-12: pembagi = hari kerja terjadwal periode; pembagi struktur hanya tanpa jadwal.
+func TestDivisorFollowsSchedule(t *testing.T) {
+	emp := Employee{ID: "e", JoinDate: "2020-01-01", EmploymentStatus: "permanent"}
+	sal := Salary{BaseSalary: "2200000.00", WorkingDaysDivisor: "26.00"}
+	withSchedule := BuildInputRange(emp, sal, WorkforceRecords{Schedule: weekdaySchedule()}, nil, nil, 9, 2026, "2026-09-01", "2026-09-30", false)
+	if withSchedule.DivisorDays != 22 {
+		t.Fatalf("pembagi dengan jadwal = %v, want 22 (hari kerja terjadwal)", withSchedule.DivisorDays)
+	}
+	noSchedule := BuildInputRange(emp, sal, WorkforceRecords{}, nil, nil, 9, 2026, "2026-09-01", "2026-09-30", false)
+	if noSchedule.DivisorDays != 26 {
+		t.Fatalf("pembagi tanpa jadwal = %v, want 26 (struktur)", noSchedule.DivisorDays)
+	}
+	daily := sal
+	daily.PayBasis = ptr("daily")
+	daily.WorkingDaysDivisor = nil
+	if d := BuildInputRange(emp, daily, WorkforceRecords{Schedule: weekdaySchedule()}, nil, nil, 9, 2026, "2026-09-01", "2026-09-30", false).DivisorDays; d != 0 {
+		t.Fatalf("daily tanpa pembagi struktur = %v, want 0 (tidak berubah)", d)
+	}
+}
