@@ -16,9 +16,10 @@ import type { UserEmployeeFormValues } from "../types";
 import { APPROVAL_LEVELS, APPROVAL_MODULES } from "@/lib/admin/user-management";
 import {
   HRIS_ROLE_OPTIONS,
-  ROLE_OPTIONS,
   emptyApprovalPermission,
   formatCurrency,
+  isSystemRole,
+  roleOptionsFor,
   levelLabel,
   moduleLabel,
   workflowLabel,
@@ -40,6 +41,8 @@ interface AppAccessFormSectionProps {
   hasExistingAppAccount?: boolean;
   /** Hanya super_admin yang boleh mengubah Role HRIS di sini (server menolak yang lain). */
   canSetHrisRole?: boolean;
+  /** Hanya super_admin yang boleh memberi/mengubah role Super Admin/Admin (server menolak yang lain). */
+  canAssignSystemRoles?: boolean;
   onChange: (patch: Partial<UserEmployeeFormValues>) => void;
   onResetPassword?: () => void;
 }
@@ -64,6 +67,7 @@ export function AppAccessFormSection({
   isEdit,
   hasExistingAppAccount = false,
   canSetHrisRole = false,
+  canAssignSystemRoles = false,
   onChange,
   onResetPassword,
 }: AppAccessFormSectionProps) {
@@ -111,6 +115,9 @@ export function AppAccessFormSection({
   });
 
   const branchStalls = form.branch_id ? findBranchStallsFromTree(businessTree, form.branch_id) : [];
+
+  // Akun ber-role sistem hanya diubah Super Admin: role dikunci, server menolak perubahan akun lainnya.
+  const roleLocked = !canAssignSystemRoles && isSystemRole(form.role);
 
   const requiresNewPassword = form.is_access_app && (!isEdit || !hasExistingAppAccount);
 
@@ -185,14 +192,20 @@ export function AppAccessFormSection({
             <div>
               <FormFieldLabel required>Role</FormFieldLabel>
               <Combobox
-                options={ROLE_OPTIONS}
+                options={roleOptionsFor(canAssignSystemRoles, form.role)}
                 value={form.role}
                 onChange={handleRoleChange}
                 placeholder="Select role"
                 searchPlaceholder="Search role..."
                 emptyMessage="No role found"
+                disabled={roleLocked}
                 className={formComboboxClassName}
               />
+              {roleLocked ? (
+                <p className="mt-1 text-xs text-gray-500">
+                  Role Super Admin/Admin hanya bisa diatur oleh Super Admin.
+                </p>
+              ) : null}
             </div>
             {form.role === "hrd" ? (
               <div>

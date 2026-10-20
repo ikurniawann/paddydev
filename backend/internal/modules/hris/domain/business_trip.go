@@ -32,7 +32,9 @@ func ValidateBusinessTripDates(start, end, today string) string {
 // TripActor is who decides.
 type TripActor struct {
 	EmployeeID *string
-	IsHR       bool
+	// IsHR: the actor holds the HRD powers for trips (super_admin/admin/hrd;
+	// not hiring_manager) — callers pass Actor.IsHRD.
+	IsHR bool
 }
 
 // TripRef is the trip being decided.

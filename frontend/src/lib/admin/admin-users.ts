@@ -2,6 +2,7 @@ import type { z } from "zod";
 import { ApiError } from "@/lib/api/auth";
 import { query } from "@/lib/db";
 import { createPgClient } from "@/lib/pg/create-client";
+import { syncIamPrimaryRole } from "@/lib/iam/sync-user-role";
 import { resetUserEmployeePassword } from "@/lib/users/user-service";
 import type { createAdminUserSchema, updateAdminUserSchema } from "@/lib/admin/user-management";
 
@@ -109,6 +110,8 @@ export async function createAdminUser(actorId: string, body: CreateInput) {
       await db.auth.admin.updateUserById(userId, { ban_duration: BAN_FOREVER });
     }
     await insertApprovalPermissions(db, userId, actorId, body.approval_permissions);
+    // Role IAM mengikuti role aplikasi (sama dengan Go createAdmin dan Manajemen User).
+    await syncIamPrimaryRole(userId, body.role, actorId);
     await audit(db, actorId, userId, "create_user", { email: body.email, role: body.role, status: body.status });
     return profile;
   } catch (error) {
@@ -122,6 +125,9 @@ export async function updateAdminUser(actorId: string, id: string, body: UpdateI
     throw ApiError.badRequest("Super admin tidak bisa menonaktifkan atau menurunkan role dirinya sendiri");
   }
   const db = createPgClient();
+  const [previous] = body.role
+    ? await query<{ role: string | null }>(`SELECT role FROM configuration.users WHERE id = $1::uuid`, [id])
+    : [];
 
   const authUpdates: Parameters<PgClient["auth"]["admin"]["updateUserById"]>[1] = {};
   if (body.email) authUpdates.email = body.email;
@@ -147,6 +153,11 @@ export async function updateAdminUser(actorId: string, id: string, body: UpdateI
     .select("id, full_name, email, role, brand_id, status, created_at, updated_at")
     .single();
   if (profileError) throw profileError;
+
+  // Ganti role memindahkan role IAM (penurunan benar-benar mencabut), hanya bila berubah — sama dengan Go updateAdmin.
+  if (body.role && previous?.role !== body.role) {
+    await syncIamPrimaryRole(id, body.role, actorId);
+  }
 
   if (body.approval_permissions) {
     const { error } = await db

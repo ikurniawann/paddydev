@@ -6,6 +6,7 @@ import { parseUserListQuery } from "@/lib/hris/users-list-query";
 import { rethrowUserServiceError } from "@/lib/hris/users-service-errors";
 import { createUserEmployee, listUserEmployees } from "@/lib/users/user-service";
 import { createUserEmployeeSchema } from "@/lib/users/schemas";
+import { requireSuperAdminForSystemAccount } from "@/lib/users/system-account-guard";
 
 export const GET = apiHandler(async (request: NextRequest) => {
   await requireIamMenuPrefix([...IAM.settingsUsers, ...IAM.hrisKaryawan]);
@@ -16,6 +17,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
 export const POST = apiHandler(async (request: NextRequest) => {
   const actor = await requireIamMenuPrefix(IAM.settingsUsers);
   const body = await validateBody(request, createUserEmployeeSchema);
+  await requireSuperAdminForSystemAccount(actor, { role: body.role });
   const data = await createUserEmployee(actor.id, body).catch(rethrowUserServiceError);
   return NextResponse.json({ data, message: "Employee created successfully" }, { status: 201 });
 }, "api/users");

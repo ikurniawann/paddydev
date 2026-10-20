@@ -2,6 +2,8 @@
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BusinessTripsTab } from "@/features/hris/business-trips";
+import { useAuth } from "@/hooks/use-auth";
+import { canManageTrips } from "@/lib/hris/business-trips";
 import { AttendanceMonitoringTab } from "./attendance-monitoring-tab";
 import { AttendanceRecapTab } from "./attendance-recap-tab";
 import { AttendancePeriodsTab } from "./attendance-periods-tab";
@@ -18,6 +20,10 @@ import { AttendancePeriodsTab } from "./attendance-periods-tab";
  * GPS — halaman ini murni monitoring & rekap utk HRD.
  */
 export function AttendancePage() {
+  // Kuasa HR Perjalanan Dinas hanya super_admin/admin/hrd (bukan hiring_manager);
+  // server tetap menolak aksi di luar itu.
+  const { user } = useAuth();
+  const showTrips = canManageTrips(user?.role);
   return (
     <div className="space-y-6">
       <div>
@@ -28,11 +34,11 @@ export function AttendancePage() {
       </div>
 
       <Tabs defaultValue="monitoring" className="w-full flex-col">
-        <TabsList className="grid h-9 w-full max-w-xl grid-cols-4">
+        <TabsList className={`grid h-9 w-full max-w-xl ${showTrips ? "grid-cols-4" : "grid-cols-3"}`}>
           <TabsTrigger value="monitoring">Monitoring</TabsTrigger>
           <TabsTrigger value="rekap">Rekap</TabsTrigger>
           <TabsTrigger value="periode">Periode Absensi</TabsTrigger>
-          <TabsTrigger value="dinas">Perjalanan Dinas</TabsTrigger>
+          {showTrips && <TabsTrigger value="dinas">Perjalanan Dinas</TabsTrigger>}
         </TabsList>
         <TabsContent value="monitoring" className="mt-4">
           <AttendanceMonitoringTab />
@@ -43,9 +49,11 @@ export function AttendancePage() {
         <TabsContent value="periode" className="mt-4">
           <AttendancePeriodsTab />
         </TabsContent>
-        <TabsContent value="dinas" className="mt-4">
-          <BusinessTripsTab />
-        </TabsContent>
+        {showTrips && (
+          <TabsContent value="dinas" className="mt-4">
+            <BusinessTripsTab />
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   );

@@ -37,6 +37,36 @@ var uuidPattern = regexp.MustCompile(`^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a
 // IsUUID reports whether s is a zod v4 UUID.
 func IsUUID(s string) bool { return uuidPattern.MatchString(s) }
 
+// CanonicalUUID parses an id the way a uuid column accepts it (any case,
+// with or without the four hyphens, optionally in braces) and returns its
+// canonical lower-case hyphenated form. Guards compare ids in that form, so
+// every request-sourced id is canonicalised once at input (EPIC-061).
+func CanonicalUUID(s string) (string, bool) {
+	if strings.HasPrefix(s, "{") || strings.HasSuffix(s, "}") {
+		if len(s) < 2 || s[0] != '{' || s[len(s)-1] != '}' {
+			return "", false
+		}
+		s = s[1 : len(s)-1]
+	}
+	if len(s) == 36 {
+		if s[8] != '-' || s[13] != '-' || s[18] != '-' || s[23] != '-' {
+			return "", false
+		}
+		s = s[:8] + s[9:13] + s[14:18] + s[19:23] + s[24:]
+	}
+	if len(s) != 32 {
+		return "", false
+	}
+	b := []byte(strings.ToLower(s))
+	for _, c := range b {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
+			return "", false
+		}
+	}
+	h := string(b)
+	return h[:8] + "-" + h[8:12] + "-" + h[12:16] + "-" + h[16:20] + "-" + h[20:], true
+}
+
 // datetimePattern is zod v4's z.string().datetime({ offset: true }).
 var datetimePattern = regexp.MustCompile(`^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$`)
 

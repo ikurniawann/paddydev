@@ -7,7 +7,7 @@ import {
 import { formatRupiah } from "@/lib/format";
 import { crudDetailPath, crudEditPath, crudInsertPath } from "@/lib/routes/crud-routes";
 import type { UserRole } from "@/types";
-import type { ApprovalPermission } from "@/lib/hris/users-form";
+import type { ApprovalPermission, UserEmployeeFormValues } from "@/lib/hris/users-form";
 
 const EMPLOYEES_BASE_PATH = "/dashboard/employees";
 
@@ -42,6 +42,40 @@ export const ROLE_OPTIONS = ADMIN_USER_ROLES.map((role) => ({
   value: role,
   label: ROLE_LABELS[role],
 }));
+
+/**
+ * Role sistem: hanya Super Admin yang bisa memberi/mencabutnya atau mengubah akun yang
+ * memegangnya (temuan lanjutan EPIC-061). UI menyembunyikannya; server tetap penentu.
+ */
+export const SYSTEM_ROLES: readonly string[] = ["super_admin", "admin"];
+
+export const isSystemRole = (role: string | null | undefined) => !!role && SYSTEM_ROLES.includes(role);
+
+export const SYSTEM_ACCOUNT_LOCKED_NOTICE =
+  "Akun ini memegang role Super Admin/Admin; hanya Super Admin yang bisa mengubahnya.";
+
+/**
+ * Karyawan yang akun loginnya ber-role sistem tidak bisa disimpan selain oleh Super Admin
+ * (server menolak 403 karena simpan form selalu menyentuh akun login). Role IAM-saja tidak
+ * terlihat di sini; untuk itu server tetap penentu.
+ */
+export const isLockedSystemAccount = (accountRole: string | null | undefined, canAssignSystemRoles: boolean) =>
+  !canAssignSystemRoles && isSystemRole(accountRole);
+
+/** Opsi role untuk form: tanpa role sistem bagi selain Super Admin, kecuali `current` (agar labelnya tetap tampil). */
+export function roleOptionsFor(canAssignSystemRoles: boolean, current?: string) {
+  if (canAssignSystemRoles) return ROLE_OPTIONS;
+  return ROLE_OPTIONS.filter((o) => !isSystemRole(o.value) || o.value === current);
+}
+
+/**
+ * Bagi selain Super Admin, role sistem bawaan form akun baru (emptyUserForm: "admin") dikosongkan
+ * agar role dipilih dari opsi yang boleh. Pakai hanya untuk form tanpa akun login.
+ */
+export function withAssignableRole<T extends Pick<UserEmployeeFormValues, "role">>(form: T, canAssignSystemRoles: boolean): T {
+  if (canAssignSystemRoles || !isSystemRole(form.role)) return form;
+  return { ...form, role: "" as UserRole };
+}
 
 export const STATUS_LABELS: Record<string, string> = {
   probation: "Probation",

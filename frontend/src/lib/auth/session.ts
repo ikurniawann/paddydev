@@ -51,6 +51,15 @@ export async function createSession(
   return { token, expiresAt };
 }
 
+/** Sesi dibuat oleh Login As (user agent "impersonated-by:<id> <ua>"). */
+export async function isImpersonationSession(token: string): Promise<boolean> {
+  const row = await queryOne<{ nested: boolean }>(
+    `SELECT EXISTS (SELECT 1 FROM auth.sessions WHERE token_hash = $1 AND user_agent LIKE 'impersonated-by:%') AS nested`,
+    [hashToken(token)]
+  );
+  return Boolean(row?.nested);
+}
+
 export async function destroySession(token: string | undefined | null) {
   if (!token) return;
   await query(`DELETE FROM auth.sessions WHERE token_hash = $1`, [hashToken(token)]);

@@ -61,7 +61,8 @@ func (s *service) listAdmins(ctx context.Context) ([]*kit.Row, error) {
 }
 
 // createAdmin is createAdminUser; the savepoint stands in for deleting the
-// auth user when a later step fails.
+// auth user when a later step fails. The role becomes the account's IAM role
+// and is recorded (syncIamRole), in the same transaction.
 func (s *service) createAdmin(ctx context.Context, actorID string, b *adminBody) (*kit.Row, error) {
 	var profile *kit.Row
 	err := database.WithTx(ctx, s.db, func(tx pgx.Tx) error {
@@ -85,6 +86,9 @@ func (s *service) createAdmin(ctx context.Context, actorID string, b *adminBody)
 		if err := insertApprovals(ctx, tx, userID, actorID, b.approvals); err != nil {
 			return err
 		}
+		if err := syncIamRole(ctx, tx, userID, *b.role, actorID); err != nil {
+			return err
+		}
 		audit(ctx, tx, actorID, userID, "create_user", kit.Obj("email", *b.email, "role", *b.role, "status", *b.status))
 		return nil
 	})
@@ -93,11 +97,20 @@ func (s *service) createAdmin(ctx context.Context, actorID string, b *adminBody)
 
 var errSelfDemotion = httpx.BadRequest("Super admin tidak bisa menonaktifkan atau menurunkan role dirinya sendiri")
 
-// updateAdmin is updateAdminUser.
-func (s *service) updateAdmin(ctx context.Context, actorID, id string, b *adminBody) (*kit.Row, error) {
+// updateAdmin is updateAdminUser. A role change moves the IAM role with it
+// and records it (syncIamRole, as Manajemen User does); the writes share
+// one transaction.
+func (s *service) updateAdmin(ctx context.Context, actorID, id string, b *adminBody, gate superAdminGate) (*kit.Row, error) {
 	inactive := b.status != nil && *b.status == "inactive"
 	if actorID == id && (inactive || (b.role != nil && *b.role != "super_admin")) {
 		return nil, errSelfDemotion
+	}
+	// Refused before anything is written.
+	if err := s.guardSystemRole(ctx, gate, b.role); err != nil {
+		return nil, err
+	}
+	if err := s.guardSystemAccount(ctx, gate, id); err != nil {
+		return nil, err
 	}
 	var upd AuthUpdate
 	if b.email != nil && *b.email != "" {
@@ -110,65 +123,83 @@ func (s *service) updateAdmin(ctx context.Context, actorID, id string, b *adminB
 	if b.status != nil {
 		upd.Ban = &inactive
 	}
-	if upd != (AuthUpdate{}) {
-		found, err := s.ports.Identity.UpdateUser(ctx, s.db, id, upd)
-		if err != nil {
-			return nil, httpx.BadRequest(authMessage(err))
-		}
-		if !found {
-			return nil, httpx.BadRequest("User not found")
-		}
-	}
 
-	sets := []set{{"updated_at", s.stamp()}}
-	if upd.Email != nil {
-		sets = append(sets, set{"email", *b.email})
-	}
-	if upd.FullName != nil {
-		sets = append(sets, set{"full_name", *b.fullName})
-	}
-	if b.role != nil {
-		sets = append(sets, set{"role", *b.role})
-	}
-	if b.has("brand_id") {
-		sets = append(sets, set{"brand_id", b.brand})
-	}
-	if b.status != nil {
-		sets = append(sets, set{"status", *b.status})
-	}
-	sql, args := updateSQL("configuration.users", sets, profileColumns+`, "updated_at"`)
-	profile, err := kit.QueryOne(ctx, s.db, sql, append(args, id)...)
+	var profile *kit.Row
+	err := database.WithTx(ctx, s.db, func(tx pgx.Tx) error {
+		if upd != (AuthUpdate{}) {
+			found, err := s.ports.Identity.UpdateUser(ctx, tx, id, upd)
+			if err != nil {
+				return httpx.BadRequest(authMessage(err))
+			}
+			if !found {
+				return httpx.BadRequest("User not found")
+			}
+		}
+		prevRole := profileColumn(ctx, tx, id, "role")
+
+		sets := []set{{"updated_at", s.stamp()}}
+		if upd.Email != nil {
+			sets = append(sets, set{"email", *b.email})
+		}
+		if upd.FullName != nil {
+			sets = append(sets, set{"full_name", *b.fullName})
+		}
+		if b.role != nil {
+			sets = append(sets, set{"role", *b.role})
+		}
+		if b.has("brand_id") {
+			sets = append(sets, set{"brand_id", b.brand})
+		}
+		if b.status != nil {
+			sets = append(sets, set{"status", *b.status})
+		}
+		sql, args := updateSQL("configuration.users", sets, profileColumns+`, "updated_at"`)
+		var err error
+		profile, err = kit.QueryOne(ctx, tx, sql, append(args, id)...)
+		if err != nil {
+			return err
+		}
+		if profile == nil {
+			return errors.New("PGRST116: No rows found")
+		}
+		if b.role != nil && (prevRole == nil || *prevRole != *b.role) {
+			if err := syncIamRole(ctx, tx, id, *b.role, actorID); err != nil {
+				return err
+			}
+		}
+
+		if b.approvals != nil {
+			if err := deactivateApprovals(ctx, tx, id, actorID, s.stamp()); err != nil {
+				return err
+			}
+			if err := insertApprovals(ctx, tx, id, actorID, b.approvals); err != nil {
+				return err
+			}
+		}
+		details := kit.Obj("fields", b.keys())
+		if b.role != nil {
+			details.Set("role", *b.role)
+		}
+		if b.status != nil {
+			details.Set("status", *b.status)
+		}
+		audit(ctx, tx, actorID, id, "update_user", details)
+		return nil
+	})
 	if err != nil {
 		return nil, err
 	}
-	if profile == nil {
-		return nil, errors.New("PGRST116: No rows found")
-	}
-
-	if b.approvals != nil {
-		if err := deactivateApprovals(ctx, s.db, id, actorID, s.stamp()); err != nil {
-			return nil, err
-		}
-		if err := insertApprovals(ctx, s.db, id, actorID, b.approvals); err != nil {
-			return nil, err
-		}
-	}
-	details := kit.Obj("fields", b.keys())
-	if b.role != nil {
-		details.Set("role", *b.role)
-	}
-	if b.status != nil {
-		details.Set("status", *b.status)
-	}
-	audit(ctx, s.db, actorID, id, "update_user", details)
 	return profile, nil
 }
 
 // resetAdminPassword is resetAdminUserPassword.
-func (s *service) resetAdminPassword(ctx context.Context, actorID, id string) (string, error) {
+func (s *service) resetAdminPassword(ctx context.Context, actorID, id string, gate superAdminGate) (string, error) {
 	email, err := s.ports.Identity.Email(ctx, s.db, id)
 	if err != nil || email == "" {
 		return "", httpx.NotFound("Email user tidak ditemukan")
+	}
+	if err := s.guardSystemAccount(ctx, gate, id); err != nil {
+		return "", err
 	}
 	res, err := s.resetPassword(ctx, id)
 	if err != nil {

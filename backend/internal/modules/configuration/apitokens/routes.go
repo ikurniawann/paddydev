@@ -18,6 +18,7 @@ import (
 	"nuhabit/backend/internal/platform/httpx"
 	"nuhabit/backend/internal/platform/iam"
 	"nuhabit/backend/internal/platform/module"
+	"nuhabit/backend/internal/platform/permaudit"
 	"nuhabit/backend/internal/platform/validate"
 )
 
@@ -40,20 +41,47 @@ func Routes(d module.Deps, db database.DB) []module.Route {
 	}
 }
 
+// errSystemAccountToken: a token runs as its account, so minting one for an
+// account holding a system role (super_admin/admin, app or IAM role) is for
+// IAM super_admin only (EPIC-061 Q-RA-5).
+var errSystemAccountToken = httpx.Forbidden("Token API untuk akun Super Admin/Admin hanya bisa dibuat oleh Super Admin")
+
 // requireHumanTokenAdmin rejects Bearer token sessions before the menu
-// check, then requires settings.integrations. It returns the session user.
-func (h handler) requireHumanTokenAdmin(r *http.Request) (*auth.SessionUser, error) {
+// check, then requires settings.integrations. It returns the session user
+// and the resolved caller.
+func (h handler) requireHumanTokenAdmin(r *http.Request) (*auth.SessionUser, *auth.User, error) {
 	su, err := h.auth.Session(r)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if su != nil && su.ViaAPIToken {
-		return nil, httpx.Forbidden("Kelola token hanya lewat login dashboard, bukan token")
+		return nil, nil, httpx.Forbidden("Kelola token hanya lewat login dashboard, bukan token")
 	}
-	if _, err := h.auth.RequireMenuPrefix(r, iam.SettingsIntegrations...); err != nil {
-		return nil, err
+	u, err := h.auth.RequireMenuPrefix(r, iam.SettingsIntegrations...)
+	if err != nil {
+		return nil, nil, err
 	}
-	return su, nil
+	return su, u, nil
+}
+
+// guardSystemAccount refuses a token for another account holding a system
+// role unless the caller holds IAM super_admin. A token for the caller's
+// own account grants nothing the caller lacks.
+func (h handler) guardSystemAccount(r *http.Request, caller *auth.User, userID string) error {
+	if caller != nil && caller.ID == userID {
+		return nil
+	}
+	held, err := permaudit.HoldsSystemRole(r.Context(), h.db, userID)
+	if err != nil || !held {
+		return err
+	}
+	if caller != nil {
+		ok, err := h.auth.HasRoleCode(r.Context(), caller, "super_admin")
+		if err != nil || ok {
+			return err
+		}
+	}
+	return errSystemAccountToken
 }
 
 type envelope struct {
@@ -63,7 +91,7 @@ type envelope struct {
 }
 
 func (h handler) list(w http.ResponseWriter, r *http.Request) error {
-	if _, err := h.requireHumanTokenAdmin(r); err != nil {
+	if _, _, err := h.requireHumanTokenAdmin(r); err != nil {
 		return err
 	}
 	rows, err := kit.Query(r.Context(), h.db, `SELECT t.id, t.name, t.token_prefix, t.scopes, t.user_id,
@@ -85,7 +113,7 @@ func (h handler) list(w http.ResponseWriter, r *http.Request) error {
 const jsDateLimit = 8.64e15
 
 func (h handler) create(w http.ResponseWriter, r *http.Request) error {
-	admin, err := h.requireHumanTokenAdmin(r)
+	admin, caller, err := h.requireHumanTokenAdmin(r)
 	if err != nil {
 		return err
 	}
@@ -118,7 +146,11 @@ func (h handler) create(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	// The token runs as this account; the default is the admin creating it.
-	userID := jsString(orFallback(body["user_id"], orFallback(adminID, "")))
+	// Canonicalised as a uuid before the guard and the insert (EPIC-061).
+	userID, ok := validate.CanonicalUUID(jsString(orFallback(body["user_id"], orFallback(adminID, ""))))
+	if !ok {
+		return httpx.BadRequest("user_id tidak valid")
+	}
 	var exists string
 	err = h.db.QueryRow(r.Context(), `SELECT id::text FROM configuration.users WHERE id = $1`, userID).Scan(&exists)
 	if database.IsNoRows(err) {
@@ -126,6 +158,9 @@ func (h handler) create(w http.ResponseWriter, r *http.Request) error {
 	}
 	if err != nil {
 		return tableMissing(err)
+	}
+	if err := h.guardSystemAccount(r, caller, userID); err != nil {
+		return err
 	}
 
 	var expiresAt *string
@@ -168,7 +203,7 @@ func tableMissing(err error) error {
 }
 
 func (h handler) revoke(w http.ResponseWriter, r *http.Request) error {
-	if _, err := h.requireHumanTokenAdmin(r); err != nil {
+	if _, _, err := h.requireHumanTokenAdmin(r); err != nil {
 		return err
 	}
 	row, err := kit.QueryOne(r.Context(), h.db, `UPDATE configuration.api_tokens

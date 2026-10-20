@@ -198,7 +198,13 @@ func (h handlers) impersonate(w http.ResponseWriter, r *http.Request) error {
 	if v, ok := r.Header["User-Agent"]; ok && len(v) > 0 {
 		ua = v[0]
 	}
-	target, session, err := h.svc.Impersonate(r.Context(), admin, *userID, ua)
+	tokenHash := ""
+	if token := auth.ReadSessionToken(r); token != "" {
+		tokenHash = auth.HashToken(token)
+	}
+	// Canonical form for the self check and the lookups (EPIC-061).
+	targetID, _ := validate.CanonicalUUID(*userID)
+	target, session, err := h.svc.Impersonate(r.Context(), admin, tokenHash, targetID, ua)
 	if err != nil {
 		return err
 	}

@@ -46,7 +46,7 @@ var (
 
 const tripOverlap = "Sudah ada Perjalanan Dinas menunggu/disetujui yang beririsan dengan tanggal ini"
 
-// ListTrips: scope=approvals → the direct reports' trips; HR → all (or one
+// ListTrips: scope=approvals → the direct reports' trips; HRD (IsHRD) → all (or one
 // employee, "me" = own); others → own.
 func (s *Service) ListTrips(ctx context.Context, a *Actor, scope, status, employeeID string) ([]*Row, error) {
 	f := tripFilter{Status: status}
@@ -60,12 +60,12 @@ func (s *Service) ListTrips(ctx context.Context, a *Actor, scope, status, employ
 			return []*Row{}, err
 		}
 		f.EmployeeIDs = ids
-	case a.IsHR && employeeID == "me":
+	case a.IsHRD && employeeID == "me":
 		if a.EmployeeID == nil {
 			return []*Row{}, nil
 		}
 		f.EmployeeIDs = []string{*a.EmployeeID}
-	case a.IsHR:
+	case a.IsHRD:
 		if employeeID != "" {
 			f.EmployeeIDs = []string{employeeID}
 		}
@@ -89,7 +89,7 @@ func (s *Service) CreateTrip(ctx context.Context, a *Actor, in tripInput, meta a
 		return nil, httpx.BadRequest("Akun ini tidak tertaut ke data karyawan")
 	}
 	self := a.EmployeeID != nil && *target == *a.EmployeeID
-	if !self && !a.IsHR {
+	if !self && !a.IsHRD {
 		return nil, httpx.Forbidden("Hanya HRD yang bisa mencatat Perjalanan Dinas karyawan lain")
 	}
 	if msg := domain.ValidateBusinessTripDates(in.StartDate, in.EndDate, domain.TodayWIB(s.now())); msg != "" {
@@ -162,7 +162,7 @@ func (s *Service) DecideTrip(ctx context.Context, a *Actor, id, action string, r
 	if emp := trip.Child("employee"); emp != nil {
 		reportingTo = emp.StrPtr("reporting_to")
 	}
-	allowed, reason := domain.CanDecideBusinessTrip(domain.TripActor{EmployeeID: a.EmployeeID, IsHR: a.IsHR},
+	allowed, reason := domain.CanDecideBusinessTrip(domain.TripActor{EmployeeID: a.EmployeeID, IsHR: a.IsHRD},
 		domain.TripRef{EmployeeID: trip.Str("employee_id"), ReportingTo: reportingTo, Status: status}, action)
 	if !allowed {
 		return nil, httpx.Forbidden(reason)

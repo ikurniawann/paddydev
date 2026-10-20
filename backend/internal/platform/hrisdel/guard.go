@@ -18,6 +18,7 @@ import (
 	"nuhabit/backend/internal/platform/auth"
 	"nuhabit/backend/internal/platform/database"
 	"nuhabit/backend/internal/platform/httpx"
+	"nuhabit/backend/internal/platform/validate"
 )
 
 // MinReason is the shortest accepted reason, in characters.
@@ -150,6 +151,11 @@ func (w *statusWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
 func snapshot(ctx context.Context, q database.Querier, table, id string) (json.RawMessage, error) {
 	if table == "" || id == "" {
 		return nil, nil
+	}
+	// A uuid in any accepted form is compared canonically, so the snapshot
+	// finds the row the delete will hit (EPIC-061).
+	if c, ok := validate.CanonicalUUID(id); ok {
+		id = c
 	}
 	var raw []byte
 	err := q.QueryRow(ctx, `SELECT to_jsonb(t) FROM `+table+` t WHERE t.id::text = $1`, id).Scan(&raw)

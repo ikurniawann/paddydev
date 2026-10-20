@@ -1,21 +1,26 @@
-import { ApiError, requireIamMenuPrefix } from "@/lib/api/auth";
+import { ApiError, requireIamMenuPrefix, type ApiUser } from "@/lib/api/auth";
 import { getSessionUserFromCookies } from "@/lib/auth/session";
 import { API_SCOPE_MODULES, isApiTokenSession, mintApiToken } from "@/lib/auth/api-token";
 import { query, queryOne } from "@/lib/db";
+import { canonicalUuid } from "@/lib/api/canonical-uuid";
 import { IAM } from "@/lib/iam/prefixes";
+import { requireIamSuperAdmin } from "@/lib/iam/system-role-guard";
+import { accountHoldsSystemRole, systemRoleCodes } from "@/lib/users/system-account-guard";
+
+/** Token berjalan sebagai akunnya: token untuk akun ber-role sistem hanya oleh Super Admin (Go apitokens). */
+export const SYSTEM_ACCOUNT_TOKEN_ERROR = "Token API untuk akun Super Admin/Admin hanya bisa dibuat oleh Super Admin";
 
 /**
  * EPIC-042: kelola Open API token hanya lewat sesi manusia (cookie) dengan menu
  * settings.integrations — token TIDAK bisa membuat/mencabut token (mencegah
- * agent memperbanyak aksesnya sendiri).
+ * agent memperbanyak aksesnya sendiri). Mengembalikan pemanggil.
  */
-export async function requireHumanTokenAdmin() {
+export async function requireHumanTokenAdmin(): Promise<ApiUser> {
   const sessionUser = await getSessionUserFromCookies();
   if (isApiTokenSession(sessionUser)) {
     throw ApiError.forbidden("Kelola token hanya lewat login dashboard, bukan token");
   }
-  await requireIamMenuPrefix(IAM.settingsIntegrations);
-  return sessionUser;
+  return requireIamMenuPrefix(IAM.settingsIntegrations);
 }
 
 /** '*' atau '<modul>:read|write' dengan modul dari API_SCOPE_MODULES. */
@@ -49,7 +54,8 @@ export interface ApiTokenInput {
 }
 
 /** Buat token; nilai token mentah hanya dikembalikan sekali (DB menyimpan hash). */
-export async function createApiToken(adminId: string | null, body: ApiTokenInput) {
+export async function createApiToken(admin: ApiUser | null, body: ApiTokenInput) {
+  const adminId = admin?.id ?? null;
   const name = String(body.name || "").trim();
   if (!name) throw ApiError.badRequest("Nama token wajib diisi");
   const scopes = Array.isArray(body.scopes) ? body.scopes.map(String) : [];
@@ -60,9 +66,16 @@ export async function createApiToken(adminId: string | null, body: ApiTokenInput
   }
 
   // Token berjalan sebagai akun ini — default: admin yang membuatnya.
-  const userId = String(body.user_id || adminId || "");
+  // Dikanonikkan sebagai uuid sebelum guard & insert (temuan re-review EPIC-061).
+  const userId = canonicalUuid(String(body.user_id || adminId || ""));
+  if (!userId) throw ApiError.badRequest("user_id tidak valid");
   const userRow = await queryOne<{ id: string }>(`SELECT id FROM configuration.users WHERE id = $1`, [userId]);
   if (!userRow) throw ApiError.badRequest("user_id tidak dikenal");
+  // Token untuk akun sendiri tidak menambah kuasa; akun lain ber-role sistem hanya oleh Super Admin.
+  if (userId !== adminId && (await accountHoldsSystemRole(userId, await systemRoleCodes()))) {
+    if (!admin) throw ApiError.forbidden(SYSTEM_ACCOUNT_TOKEN_ERROR);
+    await requireIamSuperAdmin(admin, SYSTEM_ACCOUNT_TOKEN_ERROR);
+  }
 
   const days = Number(body.expires_in_days);
   const expiresAt = days > 0 ? new Date(Date.now() + days * 86_400_000).toISOString() : null;

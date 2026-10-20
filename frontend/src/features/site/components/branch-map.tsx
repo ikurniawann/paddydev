@@ -3,6 +3,7 @@
 import Feature from "ol/Feature";
 import Map from "ol/Map";
 import View from "ol/View";
+import Attribution from "ol/control/Attribution";
 import Point from "ol/geom/Point";
 import TileLayer from "ol/layer/Tile";
 import VectorLayer from "ol/layer/Vector";
@@ -87,7 +88,8 @@ export function BranchMap({
     const map = new Map({
       target: container,
       layers: [new TileLayer({ source: new OSM() }), new VectorLayer({ source: pinSource }), new VectorLayer({ source: meSource })],
-      controls: [],
+      // Tanpa tombol zoom/rotate, tetapi atribusi OSM wajib tampil (lisensi ODbL / kebijakan tile OSM).
+      controls: [new Attribution({ collapsible: false })],
       view: new View({ center: fromLonLat([107.6, -6.9]), zoom: 11 }),
     });
     const extent = pinSource.getExtent();
