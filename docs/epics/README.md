@@ -64,7 +64,7 @@ deploying-dev · ready-for-qa · blocked · done).
 | [EPIC-059](./EPIC-059-payroll-acuan-mom.md) | Payroll Sesuai Acuan Payslip & MOM 19-10-2026 (`MODULE-PAYROLL`) | review | 2026-10-20 |
 | [EPIC-060](./EPIC-060-kasbon-acuan-mom.md) | Kasbon Sesuai Acuan MOM 19-10-2026 (`MODULE-PAYROLL`) | review | 2026-10-20 |
 | [EPIC-061](./EPIC-061-hris-role-hak-akses.md) | Role & Hak Akses HRIS — Hak Hapus, Akses per Akun, AdminHRIS (`MODULE-HRIS`) | review | 2026-10-20 |
-| [EPIC-062](./EPIC-062-absensi-geofence.md) | Paket Absensi — Geofence Cabang & Perjalanan Dinas (`MODULE-HRIS`) | on-progress | 2026-10-20 |
+| [EPIC-062](./EPIC-062-absensi-geofence.md) | Paket Absensi — Geofence Cabang & Perjalanan Dinas (`MODULE-HRIS`) | review | 2026-10-20 |
 
 Aturan:
 - Epic + registry ini adalah sumber kebenaran status pekerjaan (canonical).

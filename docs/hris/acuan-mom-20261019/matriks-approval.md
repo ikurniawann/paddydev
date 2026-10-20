@@ -11,6 +11,7 @@
 | Koreksi Overtime | AdminHRIS | — | Hanya lewat koreksi jam lembur di absensi |
 | Kasbon | Manager Departemen **dan** HR (akses Payroll) | Maks. 50% THP; tenor 1 dan 2 | Dua tahap (EPIC-060): Manager Departemen tersimpan (`manager_approver_id`) memutus tahap 1, lalu HR Penggajian (aksi `approve` menu Pinjaman **dan** akses Penggajian) memutus tahap 2. HR tetap boleh menolak kasbon yang masih menunggu manager |
 | Absen Manual / Koreksi Absen | HR | Termasuk request absen terlewat (internet mati) dengan keterangan karyawan | HR mengedit langsung; belum ada pengajuan dari karyawan |
+| Perjalanan Dinas | Atasan langsung (HRD cadangan & override) | Rentang ≤ 31 hari, diajukan sebelum berangkat | EPIC-062: satu tahap, `reporting_to` atau HRD; pemohon tidak boleh memutus miliknya sendiri; HRD bisa mencatat dinas karyawan (langsung disetujui) dan membatalkan; audit tiap keputusan |
 | Approval CEO dan GM | CEO, GM | Jenis pengajuan belum jelas (K-7) | Belum ada |
 
 **Sumber "atasan langsung"** di sistem adalah `hris.employees.reporting_to`. Kolom ini bisa diisi lewat import Excel (kolom "NIP Atasan" / `manager_nip`), form karyawan, atau promosi rekrutmen. Org chart di `/dashboard/hris/org-chart` dibangun dari kolom ini, tetapi hanya memuat 200 karyawan pertama.
