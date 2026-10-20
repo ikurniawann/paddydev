@@ -43,16 +43,106 @@ func TestKasbonBlockedForProbation(t *testing.T) {
 		"Karyawan berstatus Probation/Freelance/Magang tidak dapat mengajukan kasbon")
 }
 
-// Approving re-checks the kasbon cap against the current THP; an approver
-// without the Penggajian menu does not see the cap amount.
+// Approving (HR step) re-checks the kasbon cap against the current THP. The
+// kasbon HR step needs the Penggajian menu (R6), which also shows the cap amount.
 func TestKasbonApproveRechecksCap(t *testing.T) {
 	e := setup(t)
-	loansHR := hrStaff(e, map[string][]string{"hris.kepegawaian.loans": {"read", "create", "update", "approve"}})
-	e.employee("HR Pinjaman", loansHR.UserID, true)
+	e.employee("HR Penggajian", e.hr.UserID, true)
 	worker := kasbonWorker(e, "contract") // THP 5.000.000
 	loan := e.call(&e.staff, "POST", "/api/hris/loans", map[string]any{
 		"loan_type": "kasbon", "principal_amount": 2500000, "tenor_months": 2}, 200)["data"].(map[string]any)
-	e.exec(`UPDATE hris.employee_salary SET base_salary = 1000000 WHERE employee_id = $1`, worker)
-	wantErr(t, e.call(&loansHR, "POST", "/api/hris/loans/"+loan["id"].(string)+"/approve", map[string]any{"approved": true}, 400),
-		"Kasbon maksimal 50% THP")
+	e.exec(`UPDATE hris.employee_salary SET base_salary = 1000000 WHERE employee_id = $1`, worker) // THP 3.000.000
+	wantErr(t, e.call(&e.hr, "POST", "/api/hris/loans/"+loan["id"].(string)+"/approve", map[string]any{"approved": true}, 400),
+		"Kasbon maksimal 50% THP (maks Rp 1.500.000)")
+}
+
+// Rantai: pemohon → SPV → Manager. Approver tahap 1 = Manager (bukan SPV).
+func TestKasbonTwoStepApproval(t *testing.T) {
+	e := setup(t)
+	// Akun manager tanpa menu HRIS: hanya bisa memutus sebagai approver manager.
+	mgrStaff := hrStaff(e, map[string][]string{"go_test_none": nil})
+	mgr := e.employee("Manager Dept", mgrStaff.UserID, true)
+	spv := e.employee("Supervisor", "", true)
+	worker := kasbonWorker(e, "contract")
+	e.exec(`UPDATE hris.employees SET reporting_to = $2 WHERE id = $1`, worker, spv)
+	e.exec(`UPDATE hris.employees SET reporting_to = $2 WHERE id = $1`, spv, mgr)
+	e.setLevel(mgr, "Manager")
+	e.setLevel(spv, "Supervisor")
+
+	loan := e.call(&e.staff, "POST", "/api/hris/loans", map[string]any{"loan_type": "kasbon",
+		"principal_amount": 1000000, "tenor_months": 2}, 200)["data"].(map[string]any)
+	id := loan["id"].(string)
+	if loan["manager_approver_id"] != mgr {
+		t.Fatalf("manager_approver_id = %v, want %s", loan["manager_approver_id"], mgr)
+	}
+
+	// HR sebelum manager → ditolak.
+	wantErr(t, e.call(&e.hr, "POST", "/api/hris/loans/"+id+"/approve", map[string]any{"approved": true}, 400),
+		"Kasbon menunggu persetujuan Manager Departemen")
+	// Antrean manager memuat kasbon ini, tanpa angka gaji.
+	queue := e.call(&mgrStaff, "GET", "/api/hris/loans?scope=approvals", nil, 200)["data"].([]any)
+	if len(queue) != 1 || queue[0].(map[string]any)["id"] != id {
+		t.Fatalf("antrean manager = %v", queue)
+	}
+	// Manager menyetujui tahap 1.
+	step1 := e.call(&mgrStaff, "POST", "/api/hris/loans/"+id+"/approve", map[string]any{"approved": true}, 200)
+	if d := step1["data"].(map[string]any); d["status"] != "manager_approved" || d["manager_approved_by"] != mgr {
+		t.Fatalf("tahap 1: %v", d)
+	}
+	// Manager tidak bisa memutus tahap HR.
+	e.call(&mgrStaff, "POST", "/api/hris/loans/"+id+"/approve", map[string]any{"approved": true}, 403)
+	// HR Penggajian menyetujui tahap 2.
+	step2 := e.call(&e.hr, "POST", "/api/hris/loans/"+id+"/approve", map[string]any{"approved": true}, 200)
+	if step2["data"].(map[string]any)["status"] != "approved" {
+		t.Fatalf("tahap 2: %v", step2)
+	}
+}
+
+// Tanpa Manager di rantai (atau reporting_to diri sendiri): langsung tahap HR.
+func TestKasbonWithoutManagerGoesToHR(t *testing.T) {
+	e := setup(t)
+	worker := kasbonWorker(e, "contract")
+	e.exec(`UPDATE hris.employees SET reporting_to = id WHERE id = $1`, worker) // siklus diri sendiri
+	loan := e.call(&e.staff, "POST", "/api/hris/loans", map[string]any{"loan_type": "kasbon",
+		"principal_amount": 1000000, "tenor_months": 1}, 200)["data"].(map[string]any)
+	if loan["manager_approver_id"] != nil {
+		t.Fatalf("approver = %v, want nil", loan["manager_approver_id"])
+	}
+	e.call(&e.hr, "POST", "/api/hris/loans/"+loan["id"].(string)+"/approve", map[string]any{"approved": true}, 200)
+}
+
+// Tahap HR kasbon butuh menu Penggajian (MOM AP-05; R6).
+func TestKasbonHRStepNeedsPayrollMenu(t *testing.T) {
+	e := setup(t)
+	loansOnly := hrStaff(e, map[string][]string{"hris.kepegawaian.loans": {"read", "create", "update", "approve"}})
+	kasbonWorker(e, "contract")
+	loan := e.call(&e.staff, "POST", "/api/hris/loans", map[string]any{"loan_type": "kasbon",
+		"principal_amount": 1000000, "tenor_months": 1}, 200)["data"].(map[string]any)
+	wantErr(t, e.call(&loansOnly, "POST", "/api/hris/loans/"+loan["id"].(string)+"/approve", map[string]any{"approved": true}, 403),
+		"Persetujuan kasbon oleh HR butuh akses Penggajian")
+}
+
+// Manager rejection ends the kasbon; a manager_approved kasbon still counts as
+// an active loan, so the employee cannot file another one meanwhile.
+func TestKasbonManagerRejectAndActiveCount(t *testing.T) {
+	e := setup(t)
+	mgrStaff := hrStaff(e, map[string][]string{"go_test_none": nil})
+	mgr := e.employee("Manager Dept", mgrStaff.UserID, true)
+	worker := kasbonWorker(e, "contract")
+	e.exec(`UPDATE hris.employees SET reporting_to = $2 WHERE id = $1`, worker, mgr)
+	e.setLevel(mgr, "Manager")
+	file := func() string {
+		return e.call(&e.staff, "POST", "/api/hris/loans", map[string]any{"loan_type": "kasbon",
+			"principal_amount": 500000, "tenor_months": 1}, 200)["data"].(map[string]any)["id"].(string)
+	}
+	id := file()
+	rej := e.call(&mgrStaff, "POST", "/api/hris/loans/"+id+"/approve",
+		map[string]any{"approved": false, "rejection_reason": "Belum waktunya"}, 200)["data"].(map[string]any)
+	if rej["status"] != "rejected" || rej["rejection_reason"] != "Belum waktunya" {
+		t.Fatalf("reject: %v", rej)
+	}
+	id = file()
+	e.call(&mgrStaff, "POST", "/api/hris/loans/"+id+"/approve", map[string]any{"approved": true}, 200)
+	e.call(&e.staff, "POST", "/api/hris/loans", map[string]any{"loan_type": "kasbon",
+		"principal_amount": 500000, "tenor_months": 1}, 400)
 }

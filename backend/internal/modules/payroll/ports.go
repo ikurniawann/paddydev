@@ -60,7 +60,25 @@ type Employees interface {
 	// account (the user's company, else its branch's company); employees
 	// without one are absent.
 	Companies(ctx context.Context, q database.Querier, ids []string) (map[string]string, error)
+	// LoanApprover is the first active employee up the reporting_to chain
+	// (not the employee) with a Manager-or-above position level; nil without
+	// one. Cycles and self-references stop the walk (EPIC-060).
+	LoanApprover(ctx context.Context, q database.Querier, employeeID string) (*string, error)
 }
+
+// LoanApproverSQL walks reporting_to up to 10 levels; $1 = employee id.
+// Mirror: domain.managerLevels (the level list must match).
+const LoanApproverSQL = `WITH RECURSIVE chain AS (
+	SELECT e.reporting_to AS id, 1 AS depth, ARRAY[e.id] AS seen FROM hris.employees e WHERE e.id = $1::uuid
+	UNION ALL
+	SELECT e.reporting_to, c.depth + 1, c.seen || e.id FROM chain c JOIN hris.employees e ON e.id = c.id
+	WHERE c.depth < 10 AND e.reporting_to IS NOT NULL AND NOT e.reporting_to = ANY(c.seen || e.id))
+SELECT m.id::text FROM chain c
+JOIN hris.employees m ON m.id = c.id AND m.is_active
+JOIN hris.positions p ON p.id = m.job_title_id
+WHERE c.id <> $1::uuid
+  AND lower(trim(p.level)) IN ('manager', 'senior manager', 'general manager', 'director', 'c-level')
+ORDER BY c.depth LIMIT 1`
 
 // Member is an employee's id and name.
 type Member struct {

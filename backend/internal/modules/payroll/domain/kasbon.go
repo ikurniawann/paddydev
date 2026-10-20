@@ -13,7 +13,7 @@ var (
 	kasbonTenors          = []int{1, 2}
 	kasbonBlockedStatuses = []string{"probation", "freelance", "intern", "internship"}
 	// managerLevels: "Manager Departemen" and above approve kasbon step 1
-	// (Assistant Manager excluded).
+	// (Assistant Manager excluded). Mirror: payroll.LoanApproverSQL.
 	managerLevels = []string{"manager", "senior manager", "general manager", "director", "c-level"}
 )
 

@@ -87,6 +87,19 @@ func (e payrollEmployees) IDByUser(ctx context.Context, q database.Querier, user
 	return emp.ID, nil
 }
 
+// LoanApprover: see payroll.LoanApproverSQL.
+func (payrollEmployees) LoanApprover(ctx context.Context, q database.Querier, employeeID string) (*string, error) {
+	var id string
+	err := q.QueryRow(ctx, payroll.LoanApproverSQL, employeeID).Scan(&id)
+	if database.IsNoRows(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &id, nil
+}
+
 func (payrollEmployees) IDByEmail(ctx context.Context, q database.Querier, email string) (string, error) {
 	var id string
 	err := q.QueryRow(ctx, `SELECT id::text FROM hris.employees WHERE email = $1 LIMIT 1`, email).Scan(&id)

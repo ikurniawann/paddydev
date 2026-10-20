@@ -102,6 +102,18 @@ func (f *fakeEmployees) IDByUser(_ context.Context, _ database.Querier, userID s
 	return f.byUser[userID], nil
 }
 
+func (f *fakeEmployees) LoanApprover(ctx context.Context, q database.Querier, employeeID string) (*string, error) {
+	var id string
+	err := q.QueryRow(ctx, LoanApproverSQL, employeeID).Scan(&id)
+	if database.IsNoRows(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &id, nil
+}
+
 func (f *fakeEmployees) Briefs(_ context.Context, _ database.Querier, ids []string) (map[string]EmployeeBrief, error) {
 	out := map[string]EmployeeBrief{}
 	for _, id := range ids {
@@ -183,6 +195,15 @@ func (e *env) salary(employeeID, companyID string, base int) {
 	e.t.Helper()
 	e.exec(`INSERT INTO hris.employee_salary (employee_id, company_id, base_salary, ptkp_status, effective_date)
 		VALUES ($1, $2, $3, 'TK/0', '2026-01-01')`, employeeID, companyID, base)
+}
+
+// setLevel gives an employee a position with the given level. The fake
+// LoanApprover reads the chain from the test DB (same SQL as the adapter).
+func (e *env) setLevel(employeeID, level string) {
+	e.t.Helper()
+	var pos string
+	e.scalar(&pos, `INSERT INTO hris.positions (title, level) VALUES ('Posisi '||$1||' '||md5(random()::text), $1) RETURNING id::text`, level)
+	e.exec(`UPDATE hris.employees SET job_title_id = $2 WHERE id = $1`, employeeID, pos)
 }
 
 // newRun creates a draft run of companyID and returns its id.
