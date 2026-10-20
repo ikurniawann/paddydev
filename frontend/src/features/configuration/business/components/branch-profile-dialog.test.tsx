@@ -94,7 +94,8 @@ describe("BranchProfileDialog: pemilih titik", () => {
   it("menempel koordinat Google Maps di salah satu input mengisi keduanya", async () => {
     renderDialog();
     await screen.findByTestId("map");
-    fireEvent.paste(latInput(), { clipboardData: { getData: () => "-6.2, 106.8" } });
+    const notCancelled = fireEvent.paste(latInput(), { clipboardData: { getData: () => "-6.2, 106.8" } });
+    expect(notCancelled).toBe(false); // preventDefault: input angka tidak menerima teks itu
     expect(latInput().value).toBe("-6.2");
     expect(lngInput().value).toBe("106.8");
     fireEvent.paste(lngInput(), { clipboardData: { getData: () => "-6.888900, 107.596000" } });
@@ -105,7 +106,8 @@ describe("BranchProfileDialog: pemilih titik", () => {
   it("menempel teks bukan koordinat tidak mengubah apa pun", async () => {
     renderDialog();
     await screen.findByTestId("map");
-    fireEvent.paste(latInput(), { clipboardData: { getData: () => "-6.5" } });
+    expect(fireEvent.paste(latInput(), { clipboardData: { getData: () => "-6.5" } })).toBe(true);
+    expect(fireEvent.paste(latInput(), { clipboardData: { getData: () => "-6,9" } })).toBe(true);
     expect(latInput().value).toBe("-6.9");
     expect(lngInput().value).toBe("107.6");
   });

@@ -1,6 +1,5 @@
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { GEOFENCE_DEFAULT_RADIUS_M } from "@/lib/hris/geofence";
 import type { LatLngPoint } from "@/lib/maps/coords";
 
 // OpenLayers tidak berjalan di jsdom: peta diganti stub yang memperlihatkan props-nya.
@@ -36,11 +35,18 @@ describe("LocationPickerField", () => {
     expect(screen.getByTestId("map-value").textContent).toBe("none");
   });
 
-  it("memakai radius bawaan bila radiusM tidak diberikan", async () => {
+  it("meneruskan radiusM apa adanya (fallback bawaan ada di peta)", async () => {
     const { rerender } = render(<LocationPickerField lat="-6.9" lng="107.6" onPick={() => {}} />);
-    expect((await screen.findByTestId("map-radius")).textContent).toBe(String(GEOFENCE_DEFAULT_RADIUS_M));
+    expect((await screen.findByTestId("map-radius")).textContent).toBe("undefined");
     rerender(<LocationPickerField lat="-6.9" lng="107.6" radiusM={300} onPick={() => {}} />);
     expect(screen.getByTestId("map-radius").textContent).toBe("300");
+  });
+
+  it("menaruh catatan tambahan di baris bantuan yang sama", async () => {
+    render(<LocationPickerField lat="" lng="" onPick={() => {}} note="Catatan khusus." />);
+    await screen.findByTestId("map-value");
+    expect(screen.getAllByText(/Catatan khusus\./)).toHaveLength(1);
+    expect(screen.getByText(/Klik peta untuk menaruh titik toko\..*Catatan khusus\./)).toBeTruthy();
   });
 
   it("meneruskan klik peta ke onPick", async () => {

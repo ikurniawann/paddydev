@@ -180,10 +180,12 @@ function ProfileForm({ branchId, branchName, initial, onClose }: { branchId: str
         {/* Bukan LabeledField: <label> meneruskan klik di peta ke kontrol pertama di dalamnya. */}
         <div className="flex min-w-0 flex-col">
           <span className="mb-1.5 text-sm font-medium text-foreground">Titik di peta</span>
-          <LocationPickerField lat={form.lat} lng={form.lng} onPick={setPoint} />
-          <span className="mt-1 text-xs text-muted-foreground">
-            Dipakai peta situs dan geofence absensi. Lingkaran biru memakai radius bawaan; radius per toko diatur di HRIS.
-          </span>
+          <LocationPickerField
+            lat={form.lat}
+            lng={form.lng}
+            onPick={setPoint}
+            note="Dipakai peta situs dan geofence absensi; lingkaran biru memakai radius bawaan (radius per toko diatur di HRIS)."
+          />
         </div>
         <LabeledField label="Gambar hero">
           <ImageUrlField value={form.hero_image_url} onChange={(v) => set("hero_image_url", v)} />

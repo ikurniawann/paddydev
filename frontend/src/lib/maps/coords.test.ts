@@ -25,9 +25,18 @@ describe("coords", () => {
     expect(parseLatLng(" -6.8889 107.596 ")).toEqual({ lat: -6.8889, lng: 107.596 });
     expect(parseLatLng("-6.2, 106.8")).toEqual({ lat: -6.2, lng: 106.8 });
     expect(parseLatLng("-6.88891234, 107.5960004")).toEqual({ lat: -6.888912, lng: 107.596 });
+    expect(parseLatLng("-6.2,106.8")).toEqual({ lat: -6.2, lng: 106.8 });
+    expect(parseLatLng("-6.2 ,106.8")).toEqual({ lat: -6.2, lng: 106.8 });
     expect(parseLatLng("Jl. Sukajadi 131")).toBeNull();
     expect(parseLatLng("0, 0")).toBeNull();
     expect(parseLatLng("-95, 107")).toBeNull();
+  });
+  it("tidak memecah desimal koma Indonesia menjadi lat/lng", () => {
+    expect(parseLatLng("-6,9")).toBeNull();
+    expect(parseLatLng("-6,9 107,6")).toBeNull();
+    expect(parseLatLng("-6,5,107,6")).toBeNull();
+    expect(parseLatLng("-6,9, 107,6")).toBeNull();
+    expect(parseLatLng("-6.9,107")).toBeNull();
   });
   it("radius lingkaran jatuh ke bawaan bila kosong atau tidak valid", () => {
     expect(resolveRadiusM(250)).toBe(250);

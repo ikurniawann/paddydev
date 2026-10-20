@@ -3,6 +3,7 @@
 import Feature from "ol/Feature";
 import Map from "ol/Map";
 import View from "ol/View";
+import Attribution from "ol/control/Attribution";
 import Point from "ol/geom/Point";
 import { circular } from "ol/geom/Polygon";
 import TileLayer from "ol/layer/Tile";
@@ -33,8 +34,8 @@ const key = (p: LatLngPoint) => `${p.lat},${p.lng}`;
  * member app) untuk memilih satu titik: klik peta memindahkan pin. radiusM
  * menggambar area absensi (lingkaran geodesik; kosong = radius bawaan). Titik
  * dari luar (input diketik) membuat peta terbang ke titik itu; klik di peta
- * tidak. Tanpa kontrol bawaan (seperti BranchMap) supaya klik tidak pernah
- * memicu tombol zoom.
+ * tidak. Kontrol hanya atribusi OSM (wajib oleh lisensi); tanpa tombol
+ * zoom/rotasi supaya klik di peta tidak pernah memicu zoom.
  */
 export function LocationPickerMap({
   value,
@@ -64,7 +65,7 @@ export function LocationPickerMap({
     const map = new Map({
       target: container,
       layers: [new TileLayer({ source: new OSM() }), new VectorLayer({ source: mark })],
-      controls: [],
+      controls: [new Attribution({ collapsible: false })],
       view: new View({ center: fromLonLat(BANDUNG), zoom: 11 }),
     });
     map.on("click", (evt) => {
@@ -76,6 +77,7 @@ export function LocationPickerMap({
     mapRef.current = map;
     return () => {
       map.setTarget(undefined);
+      map.dispose();
       mapRef.current = null;
       markRef.current = null;
     };

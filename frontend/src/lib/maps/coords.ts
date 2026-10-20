@@ -23,11 +23,17 @@ export function coordsFromInputs(lat: string, lng: string): LatLngPoint | null {
   return isUsableCoord(point.lat, point.lng) ? point : null;
 }
 
-/** "-6.888900, 107.596000" (salin dari Google Maps) atau dipisah spasi; null bila bukan koordinat. */
+/**
+ * "-6.888900, 107.596000" (salin dari Google Maps) atau dipisah spasi; null bila bukan koordinat.
+ * Koma tanpa spasi hanya dipisah bila kedua angka berdesimal titik: "-6,9" (desimal koma
+ * Indonesia) bukan pasangan lat/lng.
+ */
 export function parseLatLng(text: string): LatLngPoint | null {
-  const m = text.trim().match(/^(-?\d+(?:\.\d+)?)\s*[,\s]\s*(-?\d+(?:\.\d+)?)$/);
+  const m = text.trim().match(/^(-?\d+(?:\.\d+)?)(\s*,\s*|\s+)(-?\d+(?:\.\d+)?)$/);
   if (!m) return null;
-  const point = { lat: roundCoord(Number(m[1])), lng: roundCoord(Number(m[2])) };
+  const [, a, sep, b] = m;
+  if (!/\s/.test(sep) && !(a.includes(".") && b.includes("."))) return null;
+  const point = { lat: roundCoord(Number(a)), lng: roundCoord(Number(b)) };
   return isUsableCoord(point.lat, point.lng) ? point : null;
 }
 

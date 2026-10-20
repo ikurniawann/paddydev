@@ -1,12 +1,14 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { coordsFromInputs, resolveRadiusM, type LatLngPoint } from "@/lib/maps/coords";
+import { coordsFromInputs, type LatLngPoint } from "@/lib/maps/coords";
+
+const DEFAULT_HEIGHT = 280;
 
 // OpenLayers butuh window: muat hanya di browser, di bundle terpisah.
 const LocationPickerMap = dynamic(() => import("./location-picker-map").then((m) => m.LocationPickerMap), {
   ssr: false,
-  loading: () => <div className="h-[280px] animate-pulse rounded-lg bg-gray-100" />,
+  loading: () => <div className="h-full animate-pulse rounded-lg bg-gray-100" />,
 });
 
 /**
@@ -19,19 +21,26 @@ export function LocationPickerField({
   lng,
   radiusM,
   onPick,
-  height,
+  height = DEFAULT_HEIGHT,
+  note,
 }: {
   lat: string;
   lng: string;
   radiusM?: number | null;
   onPick: (point: LatLngPoint) => void;
   height?: number;
+  /** Kalimat tambahan di baris bantuan yang sama. */
+  note?: string;
 }) {
   return (
     <div className="space-y-1">
-      <LocationPickerMap value={coordsFromInputs(lat, lng)} radiusM={resolveRadiusM(radiusM)} onPick={onPick} height={height} />
+      {/* Pembungkus bertinggi tetap: kerangka pemuatan mengisinya sebelum peta siap. */}
+      <div style={{ height }}>
+        <LocationPickerMap value={coordsFromInputs(lat, lng)} radiusM={radiusM} onPick={onPick} height={height} />
+      </div>
       <p className="text-xs text-gray-500">
         Klik peta untuk menaruh titik toko. Latitude/longitude tetap bisa diketik atau ditempel dari Google Maps.
+        {note ? ` ${note}` : ""}
       </p>
     </div>
   );
