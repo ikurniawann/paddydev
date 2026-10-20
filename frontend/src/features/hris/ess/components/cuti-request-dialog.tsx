@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { describeLeaveDays } from "@/lib/hris/holidays";
 import { todayWib } from "@/lib/dates";
-import { applySingleDay, leaveFormNote } from "@/lib/hris/leave-form";
+import { applySingleDay, effectiveLeaveType, leaveFormNote } from "@/lib/hris/leave-form";
 import { leaveTypeInfo, leaveTypeOptions } from "@/lib/hris/leave-types";
 import { useHolidayIndex } from "@/features/hris/attendance/queries";
 import { useLeaveQuota } from "@/features/hris/leaves/queries";
@@ -37,6 +37,13 @@ export function CutiRequestDialog({ open, onOpenChange, balance }: CutiRequestDi
   const submit = useSubmitMyLeave();
   const month = (form.start_date || todayWib()).slice(0, 7);
   const quota = useLeaveQuota(month, undefined, open).data ?? null;
+  const leaveOptions = leaveTypeOptions({ leaderEligible: quota?.leader_eligible ?? false });
+  // State tersimpan adalah satu-satunya sumber: bila jenisnya hilang dari opsi (mis. Izin Leader
+  // saat kuota belum/tak terbaca), reset ke "annual" supaya tampilan = yang dikirim.
+  const storedType = effectiveLeaveType(form.leave_type, leaveOptions);
+  if (open && storedType !== form.leave_type) {
+    setForm((f) => ({ ...f, leave_type: storedType }));
+  }
   const singleDay = Boolean(leaveTypeInfo(form.leave_type)?.singleDay);
   const quotaNote = leaveFormNote(form.leave_type, quota);
 
@@ -100,7 +107,7 @@ export function CutiRequestDialog({ open, onOpenChange, balance }: CutiRequestDi
           <div>
             <label className="mb-1 block text-xs font-medium text-gray-600">Jenis</label>
             <Combobox
-              options={leaveTypeOptions({ leaderEligible: quota?.leader_eligible ?? false })}
+              options={leaveOptions}
               value={form.leave_type}
               onChange={(value) =>
                 setForm((f) => {

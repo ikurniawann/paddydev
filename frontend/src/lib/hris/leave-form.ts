@@ -15,3 +15,8 @@ export function leaveFormNote(code: string, quota: LeaveQuota | null): string | 
 export function applySingleDay(code: string, start: string, end: string) {
   return leaveTypeInfo(code)?.singleDay ? { start, end: start } : { start, end };
 }
+
+/** Jenis yang tersimpan di form; jatuh ke "annual" bila sudah tidak ada di opsi (mis. Izin Leader). */
+export function effectiveLeaveType(code: string, options: { value: string }[]): string {
+  return options.some((o) => o.value === code) ? code : "annual";
+}

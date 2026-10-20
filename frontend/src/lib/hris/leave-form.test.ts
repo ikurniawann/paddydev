@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applySingleDay, leaveFormNote } from "./leave-form";
+import { applySingleDay, effectiveLeaveType, leaveFormNote } from "./leave-form";
 import type { LeaveQuota } from "@/features/hris/leaves/types";
 
 const quota: LeaveQuota = {
@@ -32,5 +32,18 @@ describe("applySingleDay", () => {
   it("jenis satu hari menyamakan tanggal selesai dengan tanggal mulai", () => {
     expect(applySingleDay("personal", "2031-03-04", "2031-03-06")).toEqual({ start: "2031-03-04", end: "2031-03-04" });
     expect(applySingleDay("annual", "2031-03-04", "2031-03-06")).toEqual({ start: "2031-03-04", end: "2031-03-06" });
+  });
+});
+
+describe("effectiveLeaveType", () => {
+  const withLeader = [{ value: "annual" }, { value: "personal" }, { value: "leader" }];
+  const withoutLeader = [{ value: "annual" }, { value: "personal" }];
+  it("tetap bila jenis ada di opsi", () => {
+    expect(effectiveLeaveType("leader", withLeader)).toBe("leader");
+    expect(effectiveLeaveType("personal", withoutLeader)).toBe("personal");
+  });
+  it("jatuh ke annual bila jenis tidak ada di opsi (Izin Leader hilang)", () => {
+    expect(effectiveLeaveType("leader", withoutLeader)).toBe("annual");
+    expect(effectiveLeaveType("menstrual", withLeader)).toBe("annual");
   });
 });

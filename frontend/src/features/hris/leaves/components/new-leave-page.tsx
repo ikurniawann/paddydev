@@ -20,7 +20,7 @@ import { ArrowLeftIcon, CheckCircle2, Loader2 } from "lucide-react";
 import { countLeaveDays, indexHolidays } from "@/lib/hris/holidays";
 import { todayWib } from "@/lib/dates";
 import { leaveTypeInfo, leaveTypeOptions } from "@/lib/hris/leave-types";
-import { applySingleDay, leaveFormNote } from "@/lib/hris/leave-form";
+import { applySingleDay, effectiveLeaveType, leaveFormNote } from "@/lib/hris/leave-form";
 import { useLeaveEmployees, useLeaveQuota } from "../queries";
 import { useCreateLeave } from "../mutations";
 import { LeaveAttachmentField } from "./leave-attachment-field";
@@ -59,10 +59,14 @@ export function NewLeavePage() {
   const quota =
     useLeaveQuota(month, formData.employee_id || undefined, Boolean(formData.employee_id)).data ?? null;
   const leaveOptions = leaveTypeOptions({ leaderEligible: quota?.leader_eligible ?? false });
-  // Jenis terpilih (mis. Izin Leader) hilang dari opsi bila karyawan diganti: jatuh ke "annual".
-  const leaveType = leaveOptions.some((o) => o.value === formData.leave_type) ? formData.leave_type : "annual";
-  const singleDay = Boolean(leaveTypeInfo(leaveType)?.singleDay);
-  const quotaNote = leaveFormNote(leaveType, quota);
+  // State tersimpan adalah satu-satunya sumber: bila jenisnya hilang dari opsi (karyawan diganti,
+  // kuota belum/tak terbaca), reset ke "annual" supaya tampilan = yang dikirim.
+  const storedType = effectiveLeaveType(formData.leave_type, leaveOptions);
+  if (storedType !== formData.leave_type) {
+    setFormData((f) => ({ ...f, leave_type: storedType }));
+  }
+  const singleDay = Boolean(leaveTypeInfo(formData.leave_type)?.singleDay);
+  const quotaNote = leaveFormNote(formData.leave_type, quota);
 
   const totalDays = previewBusinessDays(formData.start_date, formData.end_date);
 
@@ -95,7 +99,7 @@ export function NewLeavePage() {
     }
 
     try {
-      const result = await createMutation.mutateAsync({ ...formData, leave_type: leaveType });
+      const result = await createMutation.mutateAsync(formData);
       const employee = employees.find((e) => e.id === formData.employee_id);
       setSubmission({
         ...result.data,
@@ -173,7 +177,7 @@ export function NewLeavePage() {
             <div>
               <Label htmlFor="leave_type">Jenis Cuti *</Label>
               <Select
-                value={leaveType}
+                value={formData.leave_type}
                 onValueChange={(value) => {
                   const days = applySingleDay(value, formData.start_date, formData.end_date);
                   setFormData({ ...formData, leave_type: value, start_date: days.start, end_date: days.end });
@@ -201,7 +205,7 @@ export function NewLeavePage() {
                   type="date"
                   value={formData.start_date}
                   onChange={(e) => {
-                    const days = applySingleDay(leaveType, e.target.value, formData.end_date);
+                    const days = applySingleDay(formData.leave_type, e.target.value, formData.end_date);
                     setFormData({ ...formData, start_date: days.start, end_date: days.end });
                   }}
                   className="mt-1"
