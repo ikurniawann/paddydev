@@ -56,6 +56,35 @@ async function one(c, sql, params, what) {
   return row;
 }
 
+/**
+ * Rencana grant admin_hris. DB baru (admin_hris belum punya grant aktif): salin sumber apa adanya dan
+ * cabut grant lain. Bila admin_hris sudah punya grant, grant itu milik AdminHRIS (Hak Akses HRIS,
+ * EPIC-061) dan tidak pernah dikurangi: menu sumber yang belum pernah dimiliki ditambahkan, aksi sumber
+ * yang belum ada digabung ke grant aktif (kecuali "delete": hak hapus HRIS hanya lewat Hak Akses HRIS /
+ * Super Admin), dan menu yang sengaja dinonaktifkan (baris tidak aktif) tetap nonaktif.
+ * @param {{menu_id: string, granted_actions: string[], is_active: boolean}[]} existing semua baris admin_hris
+ * @param {{menu_id: string, granted_actions: string[]}[]} source grant HRD/Karyawan
+ */
+function planAdminHrisGrants(existing, source) {
+  if (!existing.some((e) => e.is_active)) {
+    return { upserts: source.map((s) => ({ menu_id: s.menu_id, granted_actions: s.granted_actions })), revokeOthers: true };
+  }
+  const byMenu = new Map(existing.map((e) => [e.menu_id, e]));
+  const upserts = [];
+  for (const s of source) {
+    const e = byMenu.get(s.menu_id);
+    if (!e) {
+      upserts.push({ menu_id: s.menu_id, granted_actions: s.granted_actions });
+      continue;
+    }
+    if (!e.is_active) continue;
+    const have = e.granted_actions || [];
+    const add = s.granted_actions.filter((a) => a !== "delete" && !have.includes(a));
+    if (add.length) upserts.push({ menu_id: s.menu_id, granted_actions: [...have, ...add] });
+  }
+  return { upserts, revokeOthers: false };
+}
+
 /** Role admin_hris dengan grant: subtree HRIS + Beranda dari HRD, subtree Area Karyawan dari employee. */
 async function ensureRole(c) {
   const roleId = (await c.query(`INSERT INTO iam.roles (code, name, description, is_system, is_active)
@@ -81,15 +110,21 @@ async function ensureRole(c) {
     if (g) g.granted_actions = ["read", "create", "update"];
     else grants.push({ menu_id: karyawan.id, granted_actions: ["read", "create", "update"] });
   }
-  for (const g of grants) {
+  const existing = (await c.query(`SELECT menu_id::text, granted_actions, is_active FROM iam.role_menu_permissions
+     WHERE role_id = $1`, [roleId])).rows;
+  const plan = planAdminHrisGrants(existing, grants);
+  for (const g of plan.upserts) {
     await c.query(`INSERT INTO iam.role_menu_permissions (role_id, menu_id, granted_actions, is_active)
        VALUES ($1, $2, $3::jsonb, true)
        ON CONFLICT (role_id, menu_id) DO UPDATE SET granted_actions = EXCLUDED.granted_actions, is_active = true,
          updated_at = NOW()`, [roleId, g.menu_id, JSON.stringify(g.granted_actions)]);
   }
-  const revoked = await c.query(`UPDATE iam.role_menu_permissions SET is_active = false, updated_at = NOW()
-     WHERE role_id = $1 AND is_active AND NOT (menu_id = ANY($2::uuid[]))`, [roleId, grants.map((g) => g.menu_id)]);
-  return { roleId, menus: grants.length, revoked: revoked.rowCount };
+  let revoked = 0;
+  if (plan.revokeOthers) {
+    revoked = (await c.query(`UPDATE iam.role_menu_permissions SET is_active = false, updated_at = NOW()
+       WHERE role_id = $1 AND is_active AND NOT (menu_id = ANY($2::uuid[]))`, [roleId, grants.map((g) => g.menu_id)])).rowCount;
+  }
+  return { roleId, menus: grants.length, added: plan.upserts.length, merged: !plan.revokeOthers, revoked };
 }
 
 async function nextNip(c, year) {
@@ -196,7 +231,9 @@ async function main() {
     for (const a of admins) out.push({ ...a, ...(await seedAccount(c, a, ref, passwordHash, today, force)) });
     await c.query("COMMIT");
     console.log(`${MARK} selesai.`);
-    console.log(`  role ${ROLE.code}: ${role.menus} menu (HRIS + Beranda dari HRD, Area Karyawan dari Karyawan)${role.revoked ? `, ${role.revoked} grant lain dicabut` : ""}`);
+    console.log(role.merged
+      ? `  role ${ROLE.code}: grant yang ada dipertahankan, ${role.added} menu/aksi HRD yang belum ada ditambahkan`
+      : `  role ${ROLE.code}: ${role.menus} menu (HRIS + Beranda dari HRD, Area Karyawan dari Karyawan)${role.revoked ? `, ${role.revoked} grant lain dicabut` : ""}`);
     console.log(`  lokasi: ${branch.name} (${branch.company}) · gudang ${wh.name}`);
     for (const a of out) console.log(`  ${a.email.padEnd(36)} ${a.name.padEnd(26)} karyawan ${a.nip} · role ${a.roleCode}`);
     console.log("  password: dari HRIS_ADMIN_PASSWORD (tidak dicetak)");
@@ -215,4 +252,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { parseAdmins };
+module.exports = { parseAdmins, planAdminHrisGrants, ensureRole };

@@ -24,17 +24,27 @@ ON CONFLICT (code) DO UPDATE SET
   is_active   = true,
   updated_at  = now();
 
--- hrd -> HRIS + Settings
+-- hrd -> HRIS + Settings. EPIC-061 (Q-RA-2/Q-RA-5): tanpa "delete" di menu daun HRIS yang hak hapusnya
+-- ditambahkan migrasi 20261022090000 dan tanpa Hak Akses HRIS (hris.access) — keduanya milik
+-- admin_hris / super_admin. Hari Libur, Pengumuman, Penempatan tetap seperti sebelumnya.
 INSERT INTO iam.role_menu_permissions (role_id, menu_id, granted_actions)
-SELECT r.id, m.id, COALESCE(m.permission_context->'actions', '["read"]'::jsonb)
+SELECT r.id, m.id, CASE WHEN m.code IN ('hris.kepegawaian.users', 'hris.kepegawaian.contracts', 'hris.kepegawaian.shifts',
+      'hris.kepegawaian.schedules', 'hris.master.departments', 'hris.master.positions', 'hris.master.employment-statuses',
+      'hris.workforce.attendance', 'hris.workforce.leaves', 'hris.compensation.payroll', 'hris.compensation.salary',
+      'hris.performance.kpi-scorecard', 'hris.recruitment.candidates', 'hris.recruitment.psikotes', 'hris.recruitment.job-portal')
+    THEN COALESCE(m.permission_context->'actions', '["read"]'::jsonb) - 'delete'
+    ELSE COALESCE(m.permission_context->'actions', '["read"]'::jsonb) END
 FROM iam.roles r CROSS JOIN iam.menus m
 WHERE r.code = 'hrd' AND m.deleted_at IS NULL AND m.is_active = true
   AND (m.code = 'dashboard' OR m.module IN ('hris', 'settings'))
+  AND m.code <> 'hris.access'
 ON CONFLICT (role_id, menu_id) DO UPDATE SET is_active = true, granted_actions = EXCLUDED.granted_actions, updated_at = now();
 
--- hiring_manager -> subset HRIS
+-- hiring_manager -> subset HRIS (EPIC-061: tanpa "delete" di menu daun Rekrutmen, sama dengan hrd)
 INSERT INTO iam.role_menu_permissions (role_id, menu_id, granted_actions)
-SELECT r.id, m.id, COALESCE(m.permission_context->'actions', '["read"]'::jsonb)
+SELECT r.id, m.id, CASE WHEN m.code IN ('hris.recruitment.candidates', 'hris.recruitment.psikotes', 'hris.recruitment.job-portal')
+    THEN COALESCE(m.permission_context->'actions', '["read"]'::jsonb) - 'delete'
+    ELSE COALESCE(m.permission_context->'actions', '["read"]'::jsonb) END
 FROM iam.roles r CROSS JOIN iam.menus m
 WHERE r.code = 'hiring_manager' AND m.deleted_at IS NULL AND m.is_active = true
   AND (
