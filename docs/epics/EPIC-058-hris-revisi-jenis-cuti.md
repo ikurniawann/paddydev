@@ -1,6 +1,6 @@
 # EPIC-058: Revisi Jenis Cuti HRIS
 
-status: backlog
+status: review
 environment: dev
 retries: 0
 
@@ -35,7 +35,7 @@ Lihat docs/superpowers/plans/2026-10-20-hris-revisi-jenis-cuti.md (Task 1–8):
 - Form dan endpoint kuota tidak menampilkan angka rupiah.
 
 ## Pertanyaan terbuka
-Dua belas pertanyaan di bagian akhir rencana (makna "dikombinasikan", definisi SPV ke atas & pengisian level jabatan, satuan & bulan kuota, tunjangan harian, Cuti Menikah/Duka, data `emergency` Odoo, override HR, dan seterusnya) wajib dijawab user sebelum status naik ke `on-progress`.
+Dijawab user 20-10-2026: "lakukan sesuai rekomen". Semua dari 12 pertanyaan memakai rekomendasi rencana (Ruling R1–R9). Rinciannya ada di Automation Log.
 
 ## Automation Log
 - 2026-10-20: rencana ditulis (`docs/superpowers/plans/2026-10-20-hris-revisi-jenis-cuti.md`). Temuan investigasi:
@@ -46,3 +46,41 @@ Dua belas pertanyaan di bagian akhir rencana (makna "dikombinasikan", definisi S
   - Level jabatan hasil import Odoo kemungkinan besar masih `Staff`.
   - DB test: 0 baris cuti. Live tidak disentuh; dari paket import diperkirakan ≈5 baris `emergency` (Cuti Menikah Odoo) dan 0 `unpaid`/`menstrual`.
   - Ruling R1–R9 tercatat di rencana, menunggu konfirmasi user.
+- 2026-10-20: **Keputusan user**: "lakukan sesuai rekomen". Q1–Q12 dijawab sesuai rekomendasi rencana:
+  - Kombinasi: jenis berbeda boleh berdampingan dengan kuota terpisah; satu pengajuan satu jenis; satu tanggal hanya untuk satu pengajuan aktif.
+  - SPV ke atas: level jabatan Supervisor/Assistant Manager/Manager/Senior Manager/General Manager/Director/C-Level. Coordinator dan Lead tidak termasuk. Level di live diisi HR lewat master Posisi.
+  - Kuota dalam hari. Izin Leader dan Izin Pribadi satu hari per pengajuan. Bulan kalender; pengajuan pending ikut menghabiskan kuota.
+  - Payroll tidak diubah: Izin Leader diperlakukan seperti Cuti Tahunan; Izin Pribadi memakai PIP; tunjangan harian tetap mengikuti hari hadir.
+  - Menikah dan Duka ditambahkan ke enum. Riwayat `emergency` dari Odoo dibiarkan. Pengajuan pending dengan jenis yang dihapus tetap bisa diproses.
+  - Tanpa override HR. Kuota 1/3 ditanam di katalog. Haid diajukan sebagai Sakit.
+- 2026-10-20: **Implementasi selesai** di branch `feat/epic058-revisi-jenis-cuti`, 15 commit `aa820b0..720f11b`, 45 file. Dikerjakan subagent per task, dengan review spec dan kualitas per task, lalu review akhir seluruh branch.
+  - Task 1 `aa820b0`: migrasi `20261020150000_leave_type_leader` (enum leader/marriage/bereavement) dan `20261020150100_leave_notify_labels` (label notifikasi in-app; `personal` sebelumnya tampil "Lainnya"). Sudah diterapkan di DB test.
+  - Task 2 `d1f0814`: katalog Go `hris/domain/leave_types.go` menggantikan 3 peta label.
+  - Task 3 `9b89ae8`: validasi `CreateLeave` mencakup jenis dihapus (400), Izin Leader hanya Supervisor ke atas, satu hari, kuota bulanan, dan tabrakan tanggal. Lock baris karyawan, cek kuota/tabrakan, dan insert berada dalam satu transaksi.
+  - Task 4 `2a8ca37`: `GET /api/hris/leave-quota`, untuk pemilik atau HR yang memegang menu `hris.workforce`. Isinya hari saja, tanpa angka gaji.
+  - Task 5 `4e6a3e7..fb6f9f9`: test payroll. Izin Leader dan Menikah tanpa potongan dari ujung ke ujung; PIP satu hari = THP/pembagi (literal 110.000).
+  - Task 6 `ab04943`: katalog TS `lib/hris/leave-types.ts` menggantikan 7 peta label. Fallback Next hanya menerima jenis yang bisa diajukan.
+  - Task 7 `ca671bc..69fa008`: form ESS dan HR. Opsi mengikuti kelayakan, tanggal selesai dikunci untuk jenis satu hari, sisa kuota tampil, filter HR menandai jenis lama dengan "(lama)". Satu bug review diperbaiki: jenis yang tampil sempat berbeda dengan jenis yang dikirim saat kelayakan hilang.
+  - Task 8 `81ae711..242d729`: skrip cek read-only `backend/database/sql/checks/2026-10-20_epic058_leave_types_readonly.sql`. `/api/hris/leave-quota` didaftarkan sebagai route Go-native di `backend-routes.test.ts`.
+  - Perbaikan dari review akhir `4e9e9b4..720f11b`: test render (RTL) untuk kedua form; inbox desktop menampilkan label jenis (sebelumnya kode mentah); skrip cek ditambah query pemilik/md5 fungsi notifikasi.
+- **Bukti:**
+  - Go full suite: 27 gagal, nama sama persis dengan baseline main (tidak ada kegagalan baru).
+  - Vitest: 5522+ lolos, 0 gagal (setelah test render: 454 lolos di hris/desktop). tsc dan eslint bersih.
+  - Skrip cek di DB test: 0 riwayat jenis dihapus, 0 tabrakan; level karyawan aktif: staff 21, tanpa jabatan 10, manager 3.
+  - Review akhir: tidak ada Critical. Temuan Important sudah diperbaiki.
+- **Belum dilakukan (sengaja):**
+  - Uji stack salinan DB live dan Playwright (Task 8 Step 3–4), karena membaca live butuh izin user.
+  - Deploy dan migrasi live.
+- **Prasyarat deploy (keputusan terpisah):**
+  - Backup.
+  - Jalankan skrip cek read-only di live dan simpan hasilnya.
+  - Jalankan migrasi `20261020150000` lalu `20261020150100`, baru kemudian ganti API dan web. Insert `leader` sebelum enum ada akan 500.
+  - Setelah migrasi, md5 `fn_notify_leave_changes` di live harus sama dengan DB test (`3711ed5f664b621621915a574a828c04`, nilai sesudah migrasi).
+  - HR mengisi `positions.level` jabatan SPV ke atas (kandidat dari Q4 skrip cek). Tanpa itu belum ada yang bisa mengajukan Izin Leader.
+- **Minor yang ditunda:**
+  - `fetchLeaveQuota` mengubah error (403/500) menjadi "tidak layak" tanpa pesan.
+  - Label cuti kini ada di 3 salinan (Go hris, TS, Go desktop) tanpa test paritas otomatis.
+  - Belum ada test konkurensi untuk slot kuota terakhir.
+  - Cek pemilik employee di endpoint kuota case-sensitive (UUID huruf besar ditolak, gagal-tertutup).
+  - Fallback Next tidak mengecek kuota/tabrakan (Go melayani `/api/hris`).
+  - Trailer commit 9b89ae8/2a8ca37/ab04943.. memakai nama model subagent.
