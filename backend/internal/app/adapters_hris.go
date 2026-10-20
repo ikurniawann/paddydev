@@ -85,9 +85,12 @@ func (hrisPayrollSQL) LatestKPISummary(ctx context.Context, q database.Querier, 
 	return k, err
 }
 
+// PendingLoanCount is HR's queue: kasbon the manager approved, plus pending
+// loans with no manager stage.
 func (hrisPayrollSQL) PendingLoanCount(ctx context.Context, q database.Querier) (int64, error) {
 	var n int64
-	err := q.QueryRow(ctx, `SELECT count(*) FROM hris.loans WHERE status = 'pending'`).Scan(&n)
+	err := q.QueryRow(ctx, `SELECT count(*) FROM hris.loans
+		WHERE status = 'manager_approved' OR (status = 'pending' AND manager_approver_id IS NULL)`).Scan(&n)
 	return n, err
 }
 
