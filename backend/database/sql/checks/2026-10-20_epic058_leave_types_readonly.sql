@@ -27,11 +27,25 @@ WHERE p.title ~* '(supervisor|spv|manager|head|chief|director|direktur|general m
 GROUP BY p.id ORDER BY p.title;
 
 -- 5. Tanggal yang sudah tumpang tindih (pending/approved): akan menolak pengajuan baru di tanggal itu.
-SELECT a.employee_id, a.id AS leave_a, b.id AS leave_b, a.start_date, a.end_date, b.start_date, b.end_date
+SELECT a.employee_id, a.id AS leave_a, b.id AS leave_b,
+       a.start_date AS a_start, a.end_date AS a_end, b.start_date AS b_start, b.end_date AS b_end
 FROM hris.leaves a JOIN hris.leaves b
   ON a.employee_id = b.employee_id AND a.id < b.id
  AND a.status IN ('pending', 'approved') AND b.status IN ('pending', 'approved')
  AND a.start_date <= b.end_date AND b.start_date <= a.end_date
+ORDER BY a.employee_id, a.start_date
 LIMIT 50;
+
+-- 6. Pemilik dan isi fn_notify_leave_changes (migrasi menggantinya dengan CREATE OR REPLACE).
+-- Pastikan: (a) `pemilik` = role yang akan menjalankan migrasi, bila tidak CREATE OR REPLACE gagal;
+-- (b) `md5_isi` sama dengan md5 di DB uji SEBELUM migrasi dijalankan di sana (jalankan query ini
+-- di DB uji dulu dan catat nilainya). Md5 isi hasil bootstrap tidak bisa dihitung dari SQL, jadi
+-- perbandingan dilakukan manual: bila beda, fungsi live sudah menyimpang dari bootstrap.
+SELECT p.oid::regprocedure AS fungsi,
+       md5(p.prosrc) AS md5_isi,
+       pg_get_userbyid(p.proowner) AS pemilik,
+       current_user AS role_sekarang
+FROM pg_proc p
+WHERE p.proname = 'fn_notify_leave_changes' AND p.pronamespace = 'public'::regnamespace;
 
 ROLLBACK;
