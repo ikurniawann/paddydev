@@ -30,6 +30,19 @@ func (s *Service) ResolveRoleIDs(ctx context.Context, userID, role string) ([]st
 	return []string{id}, nil
 }
 
+// HasRoleCode reports whether the user's resolved IAM roles include code
+// (EPIC-061: system roles change only through super_admin).
+func (s *Service) HasRoleCode(ctx context.Context, u *User, code string) (bool, error) {
+	roleIDs, err := s.ResolveRoleIDs(ctx, u.ID, u.Role)
+	if err != nil || len(roleIDs) == 0 {
+		return false, err
+	}
+	var ok bool
+	err = s.db.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM iam.roles WHERE id = ANY($1::uuid[]) AND code = $2 AND deleted_at IS NULL)`,
+		roleIDs, code).Scan(&ok)
+	return ok, err
+}
+
 // GrantedMenuCodes mirrors loadGrantedMenuCodesForUser.
 func (s *Service) GrantedMenuCodes(ctx context.Context, userID, role string) ([]string, error) {
 	roleIDs, err := s.ResolveRoleIDs(ctx, userID, role)

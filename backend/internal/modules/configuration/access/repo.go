@@ -7,6 +7,9 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"nuhabit/backend/internal/platform/database"
+	"nuhabit/backend/internal/platform/httpx"
+	"nuhabit/backend/internal/platform/iam"
+	"nuhabit/backend/internal/platform/permaudit"
 )
 
 // SQL ported from lib/iam/role-repository.ts and menu-repository.ts.
@@ -112,10 +115,45 @@ func deleteRole(ctx context.Context, q database.Querier, id string) (found, syst
 	return tag.RowsAffected() > 0, false, err
 }
 
+// errAdminHrisEmpty: admin_hris is the source of the HR roles; the sync
+// refuses an empty source (ruling R10).
+const errAdminHrisEmpty = "admin_hris harus punya minimal satu menu: role HR lain diturunkan darinya"
+
+// hrisRoleIDs are the ids of admin_hris and the roles derived from it.
+func hrisRoleIDs(ctx context.Context, q database.Querier) ([]string, error) {
+	rows, err := q.Query(ctx, `SELECT id::text FROM iam.roles WHERE code = ANY($1) AND deleted_at IS NULL ORDER BY code`, iam.HrisStaffRoleCodes)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, pgx.RowTo[string])
+}
+
 // replacePermissions is replaceIamRolePermissionsInDb: deactivate every
-// grant of the role, then upsert the checked ones, in one transaction.
+// grant of the role, then upsert the checked ones, in one transaction. For
+// admin_hris it re-runs the HR role sync; every grant change is recorded in
+// iam.permission_audit_logs (EPIC-061).
 func replacePermissions(ctx context.Context, db database.DB, roleID string, grants []grant, updatedBy string) error {
 	return database.WithTx(ctx, db, func(tx pgx.Tx) error {
+		var code string
+		if err := tx.QueryRow(ctx, `SELECT code FROM iam.roles WHERE id = $1`, roleID).Scan(&code); err != nil {
+			return err
+		}
+		source := code == "admin_hris"
+		watched := []string{roleID}
+		if source {
+			if len(grants) == 0 {
+				return httpx.BadRequest(errAdminHrisEmpty)
+			}
+			ids, err := hrisRoleIDs(ctx, tx)
+			if err != nil {
+				return err
+			}
+			watched = ids
+		}
+		before, err := permaudit.Snapshot(ctx, tx, watched)
+		if err != nil {
+			return err
+		}
 		if _, err := tx.Exec(ctx, `UPDATE iam.role_menu_permissions
        SET is_active = false, updated_at = now(), updated_by = $2
        WHERE role_id = $1`, roleID, updatedBy); err != nil {
@@ -134,7 +172,17 @@ func replacePermissions(ctx context.Context, db database.DB, roleID string, gran
 				return err
 			}
 		}
-		return nil
+		if source {
+			if _, err := tx.Exec(ctx, `SELECT iam.sync_hris_staff_roles()`); err != nil {
+				return err
+			}
+		}
+		after, err := permaudit.Snapshot(ctx, tx, watched)
+		if err != nil {
+			return err
+		}
+		_, err = permaudit.Record(ctx, tx, updatedBy, permaudit.SourceRolePermissions, before, after)
+		return err
 	})
 }
 

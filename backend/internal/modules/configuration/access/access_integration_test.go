@@ -119,8 +119,8 @@ func TestRolesCRUDAndPermissions(t *testing.T) {
 
 	systemCode := "go_sys_" + testutil.RandomHex(3)
 	system := text(`INSERT INTO iam.roles (code, name, is_system) VALUES ($1, 'Go System', true) RETURNING id::text`, systemCode)
-	expect(t, do(t, mux, &admin, "PUT", "/api/settings/iam/roles/"+system, map[string]any{"code": systemCode + "x"}), 400,
-		`{"success":false,"error":"System role code cannot be changed"}`)
+	expect(t, do(t, mux, &admin, "PUT", "/api/settings/iam/roles/"+system, map[string]any{"code": systemCode + "x"}), 403,
+		`{"success":false,"error":"Role sistem hanya bisa diubah oleh Super Admin"}`)
 	expect(t, do(t, mux, &admin, "DELETE", "/api/settings/iam/roles/"+system, nil), 400,
 		`{"success":false,"error":"System roles cannot be deleted"}`)
 

@@ -13,6 +13,7 @@ import (
 
 	"nuhabit/backend/internal/modules/configuration/kit"
 	"nuhabit/backend/internal/platform/database"
+	"nuhabit/backend/internal/platform/permaudit"
 )
 
 // SQL on the tables this area owns: configuration.users and its approval
@@ -251,29 +252,10 @@ func clearWarehouses(ctx context.Context, db database.DB, userID string, now tim
 }
 
 // syncIamRole is syncIamPrimaryRole: the role code becomes the user's only
-// IAM role (none when the code is unknown).
+// IAM role (none when the code is unknown); the change is recorded in
+// iam.permission_audit_logs (EPIC-061).
 func syncIamRole(ctx context.Context, q database.Querier, userID, roleCode, assignedBy string) error {
-	if userID == "" || roleCode == "" {
-		return nil
-	}
-	var roleID *string
-	err := q.QueryRow(ctx, `SELECT id::text FROM iam.roles WHERE code = $1 AND deleted_at IS NULL LIMIT 1`, roleCode).Scan(&roleID)
-	if err != nil && !database.IsNoRows(err) {
-		return err
-	}
-	if _, err := q.Exec(ctx, `DELETE FROM iam.user_roles WHERE user_id = $1`, userID); err != nil {
-		return err
-	}
-	if roleID == nil {
-		return nil
-	}
-	var by *string
-	if assignedBy != "" {
-		by = &assignedBy
-	}
-	_, err = q.Exec(ctx, `INSERT INTO iam.user_roles (user_id, role_id, is_primary, assigned_by) VALUES ($1, $2, true, $3)`,
-		userID, *roleID, by)
-	return err
+	return permaudit.SetUserRole(ctx, q, userID, roleCode, assignedBy)
 }
 
 // audit writes admin_user_audit_logs; the TS never reads the insert error.

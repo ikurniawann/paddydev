@@ -115,7 +115,8 @@ func (h handler) getRole(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (h handler) updateRole(w http.ResponseWriter, r *http.Request) error {
-	if _, err := h.auth.RequireMenuPrefix(r, iam.SettingsRoles...); err != nil {
+	user, err := h.auth.RequireMenuPrefix(r, iam.SettingsRoles...)
+	if err != nil {
 		return err
 	}
 	id := r.PathValue("id")
@@ -133,6 +134,11 @@ func (h handler) updateRole(w http.ResponseWriter, r *http.Request) error {
 	}
 	if existing == nil {
 		return errRoleNotFound
+	}
+	if existing.IsSystem {
+		if err := h.requireSuperAdmin(r, user); err != nil {
+			return err
+		}
 	}
 	// A system role keeps its code: the guards and the configuration.users
 	// role fallback resolve roles by code.
@@ -182,6 +188,21 @@ func (h handler) permissionsResponse(w http.ResponseWriter, r *http.Request, id 
 	return httpx.JSON(w, http.StatusOK, permissionsBody{id, mapRoleDetail(row, perms).Permissions})
 }
 
+// errSystemRoleSuperAdmin: system roles change only through super_admin
+// (EPIC-061, Q-RA-5).
+var errSystemRoleSuperAdmin = httpx.Forbidden("Role sistem hanya bisa diubah oleh Super Admin")
+
+func (h handler) requireSuperAdmin(r *http.Request, u *auth.User) error {
+	ok, err := h.auth.HasRoleCode(r.Context(), u, "super_admin")
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return errSystemRoleSuperAdmin
+	}
+	return nil
+}
+
 func (h handler) roleOr404(r *http.Request, id string) (roleRow, error) {
 	row, err := getRole(r.Context(), h.db, id)
 	if err != nil {
@@ -222,6 +243,11 @@ func (h handler) putPermissions(w http.ResponseWriter, r *http.Request) error {
 	row, err := h.roleOr404(r, id)
 	if err != nil {
 		return err
+	}
+	if row.IsSystem {
+		if err := h.requireSuperAdmin(r, user); err != nil {
+			return err
+		}
 	}
 	if err := replacePermissions(r.Context(), h.db, id, grants, user.ID); err != nil {
 		return err
