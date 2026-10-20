@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireIamMenuPrefix } from "@/lib/api/auth";
+import { requireCanonicalId } from "@/lib/api/canonical-uuid";
 import { apiHandler } from "@/lib/api/handler";
 import { IAM } from "@/lib/iam/prefixes";
 import { resetAdminUserPassword } from "@/lib/admin/admin-users";
@@ -8,7 +9,7 @@ import { requireSuperAdminForSystemAccount } from "@/lib/users/system-account-gu
 /** Reset ke password sementara; nilai sementara hanya ada di respons ini. */
 export const POST = apiHandler(
   async (_request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
-    const { id } = await params;
+    const id = requireCanonicalId((await params).id);
     const actor = await requireIamMenuPrefix(IAM.settingsUsers);
     await requireSuperAdminForSystemAccount(actor, { userId: id });
     const { tempPassword } = await resetAdminUserPassword(actor.id, id);

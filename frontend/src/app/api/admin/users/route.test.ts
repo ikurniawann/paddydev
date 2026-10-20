@@ -131,3 +131,44 @@ describe("POST /api/admin/users/[id]/reset-password", () => {
     expect(await res.json()).toEqual({ message: "Password sementara berhasil dibuat", tempPassword: "ArkivX!" });
   });
 });
+
+describe("id dikanonikkan sebagai UUID (temuan re-review EPIC-061)", () => {
+  const variants = [ID.toUpperCase(), ID.replaceAll("-", "")];
+  const heldParams = () =>
+    iamDbQueryOne.mock.calls.filter((c) => String(c[0]).includes("AS held")).map((c) => (c[1] as unknown[])[0]);
+
+  it.each(variants)("PATCH %s akun sistem → 403, guard memakai id kanonik", async (id) => {
+    iam.holdsSystem = true;
+    const { PATCH } = await import("./[id]/route");
+    await forbidden(await PATCH(req("PATCH", { role: "hrd" }), { params: Promise.resolve({ id }) }));
+    expect(heldParams()).toEqual([ID]);
+    expect(service.updateAdminUser).not.toHaveBeenCalled();
+  });
+
+  it.each(variants)("reset-password %s akun sistem → 403, guard memakai id kanonik", async (id) => {
+    iam.holdsSystem = true;
+    const { POST } = await import("./[id]/reset-password/route");
+    await forbidden(await POST(req("POST"), { params: Promise.resolve({ id }) }));
+    expect(heldParams()).toEqual([ID]);
+    expect(service.resetAdminUserPassword).not.toHaveBeenCalled();
+  });
+
+  it("akun biasa: service menerima id kanonik", async () => {
+    service.updateAdminUser.mockResolvedValue({ id: ID });
+    const { PATCH } = await import("./[id]/route");
+    const res = await PATCH(req("PATCH", { full_name: "Nama Lain" }), { params: Promise.resolve({ id: ID.toUpperCase() }) });
+    expect(res.status).toBe(200);
+    expect(service.updateAdminUser).toHaveBeenCalledWith("actor-1", ID, { full_name: "Nama Lain" });
+  });
+
+  it("id rusak → 400 sebelum guard", async () => {
+    const bad = { params: Promise.resolve({ id: "nope" }) };
+    const { PATCH } = await import("./[id]/route");
+    const { POST } = await import("./[id]/reset-password/route");
+    for (const res of [await PATCH(req("PATCH", { full_name: "Nama Lain" }), bad), await POST(req("POST"), bad)]) {
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({ success: false, error: "Invalid id" });
+    }
+    expect(iamDbQueryOne).not.toHaveBeenCalled();
+  });
+});

@@ -1,13 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { NextRequest } from "next/server";
 
+const ADMIN = "00000000-0000-4000-8000-0000000000ad";
 const requireIamMenuPrefix = vi.fn();
 vi.mock("@/lib/api/auth", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api/auth")>();
   return { ...actual, requireIamMenuPrefix: (...args: unknown[]) => requireIamMenuPrefix(...args) };
 });
 
-let sessionUser: { id: string; via?: string } | null = { id: "admin-1" };
+let sessionUser: { id: string; via?: string } | null = { id: ADMIN };
 vi.mock("@/lib/auth/session", () => ({ getSessionUserFromCookies: async () => sessionUser }));
 vi.mock("@/lib/auth/api-token", () => ({
   API_SCOPE_MODULES: ["pos", "crm"],
@@ -44,8 +45,8 @@ function post(body: unknown): NextRequest {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  sessionUser = { id: "admin-1" };
-  requireIamMenuPrefix.mockResolvedValue({ id: "admin-1", role: "hrd" });
+  sessionUser = { id: ADMIN };
+  requireIamMenuPrefix.mockResolvedValue({ id: ADMIN, role: "hrd" });
   iam.superAdmin = false;
   iam.holdsSystem = false;
   resolveRoleIds.mockResolvedValue(["role-1"]);
@@ -81,13 +82,13 @@ describe("/api/admin/api-tokens", () => {
   });
 
   it("201 dengan token mentah sekali, user default = admin", async () => {
-    queryOne.mockResolvedValue({ id: "admin-1" });
+    queryOne.mockResolvedValue({ id: ADMIN });
     query.mockResolvedValue([{ id: "t-1", name: "Agent" }]);
     const { POST } = await import("./route");
     const res = await POST(post({ name: " Agent ", scopes: ["pos:read", "*"], expires_in_days: 0 }));
     expect(res.status).toBe(201);
     expect(await res.json()).toEqual({ success: true, data: { id: "t-1", name: "Agent", token: "nh_secret" } });
-    expect(query.mock.calls[0][1]).toEqual(["Agent", "hash", "nh_sec", "admin-1", ["pos:read", "*"], "admin-1", null]);
+    expect(query.mock.calls[0][1]).toEqual(["Agent", "hash", "nh_sec", ADMIN, ["pos:read", "*"], ADMIN, null]);
   });
 
   it("token untuk akun ber-role sistem oleh non-super_admin → 403, tanpa insert", async () => {
@@ -115,5 +116,25 @@ describe("/api/admin/api-tokens", () => {
     const { POST } = await import("./route");
     expect((await POST(post({ name: "Agent", scopes: ["*"], user_id: TARGET }))).status).toBe(201);
     expect(resolveRoleIds).not.toHaveBeenCalled();
+  });
+
+  it("user_id huruf besar → dicek & disimpan dalam bentuk kanonik", async () => {
+    iam.holdsSystem = true;
+    queryOne.mockResolvedValue({ id: TARGET });
+    const { POST } = await import("./route");
+    const res = await POST(post({ name: "Agent", scopes: ["*"], user_id: TARGET.toUpperCase().replaceAll("-", "") }));
+    expect(res.status).toBe(403);
+    expect(queryOne.mock.calls[0][1]).toEqual([TARGET]);
+    const held = iamDbQueryOne.mock.calls.find((c) => String(c[0]).includes("AS held"));
+    expect((held?.[1] as unknown[])[0]).toBe(TARGET);
+    expect(query).not.toHaveBeenCalled();
+  });
+
+  it("user_id rusak → 400", async () => {
+    const { POST } = await import("./route");
+    const res = await POST(post({ name: "Agent", scopes: ["*"], user_id: "nope" }));
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe("user_id tidak valid");
+    expect(queryOne).not.toHaveBeenCalled();
   });
 });

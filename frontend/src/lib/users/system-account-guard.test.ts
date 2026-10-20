@@ -67,3 +67,16 @@ describe("requireSuperAdminForSystemAccount", () => {
     expect(requireIamSuperAdmin).not.toHaveBeenCalled();
   });
 });
+
+describe("id dibandingkan sebagai uuid (temuan re-review EPIC-061)", () => {
+  it("accountHoldsSystemRole dan employeeUserId meng-cast parameter ke uuid", async () => {
+    const { accountHoldsSystemRole, employeeUserId } = await import("./system-account-guard");
+    await accountHoldsSystemRole("ID", ["super_admin"]);
+    await employeeUserId("ID");
+    const sqls = iamDbQueryOne.mock.calls.map((c) => String(c[0]));
+    expect(sqls.every((sql) => !sql.includes("::text = $1"))).toBe(true);
+    expect(sqls[0]).toContain("id = $1::uuid");
+    expect(sqls[0]).toContain("ur.user_id = $1::uuid");
+    expect(sqls[1]).toContain("id = $1::uuid");
+  });
+});

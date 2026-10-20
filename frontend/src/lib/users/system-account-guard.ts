@@ -45,12 +45,15 @@ export async function systemRoleCodes(): Promise<string[]> {
   return [...new Set([...rows.map((r) => r.code), ...BASE_SYSTEM_ROLES])];
 }
 
-/** True bila akun memegang role sistem sebagai role aplikasi atau role IAM. */
+/**
+ * True bila akun memegang role sistem sebagai role aplikasi atau role IAM. Id dibandingkan sebagai
+ * uuid (bentuk apa pun yang diterima tulisan cocok; id rusak jadi galat, bukan "bukan akun sistem").
+ */
 export async function accountHoldsSystemRole(userId: string, codes: string[]): Promise<boolean> {
   const row = await iamDbQueryOne<{ held: boolean }>(
-    `SELECT EXISTS (SELECT 1 FROM configuration.users WHERE id::text = $1 AND role = ANY($2))
+    `SELECT EXISTS (SELECT 1 FROM configuration.users WHERE id = $1::uuid AND role = ANY($2))
       OR EXISTS (SELECT 1 FROM iam.user_roles ur JOIN iam.roles r ON r.id = ur.role_id
-        WHERE ur.user_id::text = $1 AND r.code = ANY($2)) AS held`,
+        WHERE ur.user_id = $1::uuid AND r.code = ANY($2)) AS held`,
     [userId, codes]
   );
   return Boolean(row?.held);
@@ -59,7 +62,7 @@ export async function accountHoldsSystemRole(userId: string, codes: string[]): P
 /** user_id akun login milik karyawan (null bila tidak ada). */
 export async function employeeUserId(employeeId: string): Promise<string | null> {
   const row = await iamDbQueryOne<{ user_id: string | null }>(
-    `SELECT user_id::text AS user_id FROM hris.employees WHERE id::text = $1`,
+    `SELECT user_id::text AS user_id FROM hris.employees WHERE id = $1::uuid`,
     [employeeId]
   );
   return row?.user_id ?? null;

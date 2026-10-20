@@ -299,3 +299,36 @@ describe("role sistem hanya Super Admin (temuan lanjutan EPIC-061)", () => {
     expect(service.resetUserEmployeePassword).not.toHaveBeenCalled();
   });
 });
+
+describe("id karyawan dikanonikkan sebagai UUID (temuan re-review EPIC-061)", () => {
+  const employeeParams = () =>
+    iamDbQueryOne.mock.calls.filter((c) => String(c[0]).includes("hris.employees")).map((c) => (c[1] as unknown[])[0]);
+
+  it("PUT id huruf besar: akun dicari & diubah dengan id kanonik", async () => {
+    iam.holdsSystem = true;
+    const { PUT } = await import("./[id]/route");
+    const res = await PUT(jsonReq({ account_status: "inactive" }), { params: Promise.resolve({ id: ID.toUpperCase() }) });
+    expect(res.status).toBe(403);
+    expect(employeeParams()).toEqual([ID]);
+  });
+
+  it("reset password id tanpa tanda hubung: dicari dengan id kanonik", async () => {
+    iam.holdsSystem = true;
+    const { POST } = await import("./[id]/reset-password/route");
+    const res = await POST(getReq(), { params: Promise.resolve({ id: ID.replaceAll("-", "") }) });
+    expect(res.status).toBe(403);
+    expect(employeeParams()).toEqual([ID]);
+  });
+
+  it("id rusak → 400 sebelum guard", async () => {
+    const bad = { params: Promise.resolve({ id: "nope" }) };
+    const { PUT } = await import("./[id]/route");
+    const { POST } = await import("./[id]/reset-password/route");
+    for (const res of [await PUT(jsonReq({ account_status: "inactive" }), bad), await POST(getReq(), bad)]) {
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({ success: false, error: "Invalid id" });
+    }
+    expect(service.updateUserEmployee).not.toHaveBeenCalled();
+    expect(service.resetUserEmployeePassword).not.toHaveBeenCalled();
+  });
+});

@@ -126,7 +126,7 @@ export async function updateAdminUser(actorId: string, id: string, body: UpdateI
   }
   const db = createPgClient();
   const [previous] = body.role
-    ? await query<{ role: string | null }>(`SELECT role FROM configuration.users WHERE id::text = $1`, [id])
+    ? await query<{ role: string | null }>(`SELECT role FROM configuration.users WHERE id = $1::uuid`, [id])
     : [];
 
   const authUpdates: Parameters<PgClient["auth"]["admin"]["updateUserById"]>[1] = {};

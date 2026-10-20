@@ -2,6 +2,7 @@ import { ApiError, requireIamMenuPrefix, type ApiUser } from "@/lib/api/auth";
 import { getSessionUserFromCookies } from "@/lib/auth/session";
 import { API_SCOPE_MODULES, isApiTokenSession, mintApiToken } from "@/lib/auth/api-token";
 import { query, queryOne } from "@/lib/db";
+import { canonicalUuid } from "@/lib/api/canonical-uuid";
 import { IAM } from "@/lib/iam/prefixes";
 import { requireIamSuperAdmin } from "@/lib/iam/system-role-guard";
 import { accountHoldsSystemRole, systemRoleCodes } from "@/lib/users/system-account-guard";
@@ -65,7 +66,9 @@ export async function createApiToken(admin: ApiUser | null, body: ApiTokenInput)
   }
 
   // Token berjalan sebagai akun ini — default: admin yang membuatnya.
-  const userId = String(body.user_id || adminId || "");
+  // Dikanonikkan sebagai uuid sebelum guard & insert (temuan re-review EPIC-061).
+  const userId = canonicalUuid(String(body.user_id || adminId || ""));
+  if (!userId) throw ApiError.badRequest("user_id tidak valid");
   const userRow = await queryOne<{ id: string }>(`SELECT id FROM configuration.users WHERE id = $1`, [userId]);
   if (!userRow) throw ApiError.badRequest("user_id tidak dikenal");
   // Token untuk akun sendiri tidak menambah kuasa; akun lain ber-role sistem hanya oleh Super Admin.
