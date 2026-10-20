@@ -1,6 +1,6 @@
 # Status Requirement HRIS — MOM 19-10-2026 (ES / AP / PY / KP / AB / LA)
 
-Dicek terhadap kode `main` (`4b7056e` + EPIC-058 `97e4c8f`) dan data live (hanya baca) pada 20-10-2026. Status:
+Dicek terhadap kode `main` (`4b7056e` + EPIC-058 `97e4c8f`) dan data live (hanya baca) pada 20-10-2026. Diperbarui 21-10-2026 untuk EPIC-059 (PY-01, PY-03, PY-04, ES-06: terkode di branch `feat/epic059-payroll-acuan`, menunggu review & rilis; setting dan data live belum diubah). Status:
 
 | Tanda | Arti |
 |---|---|
@@ -21,7 +21,7 @@ Kolom "Status MOM" menyalin status di dokumen MOM (Disepakati / Konfirmasi / Men
 | ES-03 | Kuota per jenis (bulan/tahun/kejadian), masa kerja (Cuti Tahunan setelah 12 bulan), syarat jabatan | Disepakati | 🟡 | Kuota bulanan Izin Pribadi/Leader dan syarat jabatan Izin Leader ada, tetapi **di-hard-code** di katalog Go+TS. Belum ada: kuota per tahun/per kejadian, cek masa kerja 12 bulan (Cuti Tahunan sekarang prorata tahun masuk, karyawan baru tetap bisa), maks. 3 hari/bulan Cuti Tahunan | Tabel konfigurasi kuota + cek masa kerja (lihat aturan-cuti di bawah) |
 | ES-04 | Kuota Izin Leader hangus bila tidak dipakai bulan itu | Disepakati | ✅ (EPIC-058) | Kuota dihitung per bulan kalender dari `hris.leaves`, tanpa carry-over | — |
 | ES-05 | Lampiran surat wajib untuk Sakit > batas hari | Konfirmasi K-3 (≥ 2 hari) | 🟡 | Upload lampiran ada (`/api/hris/leaves/attachment`, gambar ≤ 5 MB) tapi **selalu opsional** | Wajibkan lampiran untuk `sick` ≥ 2 hari (setelah K-3 dikonfirmasi) |
-| ES-06 | Potongan ke payroll: Sakit & Cuti Melahirkan potong transport+makan; Izin Pribadi potong 1 hari THP | Konfirmasi K-12 | 🟡 / ⚠️ | Sakit → PIS ✅ (setting `sick_leave_deduction` menyala di live). Izin Pribadi → PIP ✅ tapi **THP = seluruh slip** (termasuk lembur/bonus), bukan 4 komponen, dan pembaginya hari kerja terjadwal, bukan "total hari periode berjalan" ⚠️. **Cuti Melahirkan tidak memotong apa pun** ❌ | Basis PIP = 4 komponen; tambah `maternity` ke potongan transport+makan; pembagi menunggu K-12 |
+| ES-06 | Potongan ke payroll: Sakit & Cuti Melahirkan potong transport+makan; Izin Pribadi potong 1 hari THP | Konfirmasi K-12 | ✅ (EPIC-059, menunggu review & rilis) | Sakit dan Cuti Melahirkan → PIS (transport+makan; saklar `sick_leave_deduction`, label slip "Potongan Sakit & Cuti Melahirkan"). Izin Pribadi → PIP = 1 hari dari 4 komponen (Gaji Pokok, Transport, Makan, Jabatan) tanpa potongan ganda untuk komponen `per_day`; pembagi = hari kerja terjadwal periode (K-12 diputuskan); intern tidak dipotong. Teruji: `TestPayrollRunAcuanPayslip` | Berlaku penuh di live setelah struktur gaji dipindah ke `monthly_prorated` + `per_day` (skrip ops, menunggu persetujuan user) |
 | ES-07 | Antar jenis cuti dapat dikombinasikan | Disepakati | ✅ (EPIC-058) | Jenis berbeda boleh berdampingan; satu tanggal = satu pengajuan aktif | — |
 | ES-08 | Internship mengikuti skema bulanan | Disepakati | ✅ (PR #3, **belum merge**) | Intern: kuota Izin Pribadi 3/bulan, tanpa potongan THP (`IsInternStatus`: `intern`/`internship`) | Merge PR #3 sebelum deploy EPIC-058 |
 | ES-09 | Aturan Cuti Ibadah | Menunggu TnC | ⏳ | `pilgrimage` ada, tanpa batas hari/sekali seumur kerja, tidak memotong gaji | Tunggu TnC |
@@ -43,10 +43,10 @@ Kolom "Status MOM" menyalin status di dokumen MOM (Disepakati / Konfirmasi / Men
 
 | ID | Requirement | Status MOM | Kode | Bukti / perilaku sekarang | Langkah berikutnya |
 |---|---|---|---|---|---|
-| PY-01 | 4 komponen gaji: Gaji Pokok, Tunj. Makan, Tunj. Transport, Tunj. Jabatan | Disepakati | 🟡 / ⚠️ | Keempat komponen ada di struktur gaji (plus fixed/variable/housing/health). "1 hari THP" dihitung dari **seluruh slip**, bukan 4 komponen ⚠️ | Basis "1 hari THP" = 4 komponen (PIP & potongan telat tier) |
+| PY-01 | 4 komponen gaji: Gaji Pokok, Tunj. Makan, Tunj. Transport, Tunj. Jabatan | Disepakati | ✅ (EPIC-059, menunggu review & rilis) | Keempat komponen ada di struktur gaji (plus fixed/variable/housing/health). "1 hari THP" = 4 komponen untuk PIP dan potongan telat tier basis THP (upah harian: 1 hari upah + tunjangan); lembur, bonus, insentif, THR tidak ikut. Gaji Pokok/Jabatan mengikuti hari kerja aktif dibayar, Transport/Makan mengikuti hari hadir | — |
 | PY-02 | Cut off tanggal 20 (periode 21 → 20) | Disepakati | 🟡 | Mekanisme ada (`hris.attendance_settings.cutoff_day`), tetapi **live = 0 (bulan kalender)**. `payroll_settings.payroll_day` live = 25. Cicilan pinjaman masih per bulan kalender | Set `cutoff_day = 20` (keputusan data, bukan kode); cek ulang cicilan & THR terhadap periode |
-| PY-03 | Skema 5 hari & 6 hari kerja per periode | Konfirmasi K-10 | 🟡 | Hari kerja dari jadwal shift karyawan → absensi → fallback 20; pembagi per struktur gaji (live: 20/25/26 campur). Tidak ada skema 5/6 hari eksplisit (23/24) | Tunggu K-10/K-12; lalu field skema kerja per karyawan |
-| PY-04 | Prorate untuk karyawan keluar di tengah periode | Konfirmasi K-12 | 🟡 | Prorata hanya dari tanggal kontrak; payroll run hanya ambil `is_active`, jadi karyawan yang sudah dinonaktifkan **tidak dapat slip**; `end_date` karyawan tidak dibaca | Sertakan karyawan keluar dalam periode + prorata dari `end_date` |
+| PY-03 | Skema 5 hari & 6 hari kerja per periode | Konfirmasi K-10 | ✅ (EPIC-059, menunggu review & rilis) | Pembagi gaji bulanan = hari kerja terjadwal karyawan dalam periode dari jadwal shift (K-10/K-12 diputuskan: skema 5/6 hari mengikuti jadwal, bukan field baru). Tanpa jadwal: pembagi struktur gaji, lalu hari kerja hasil hitung. Upah harian tidak berubah | Pembagi struktur live (20/25/26 campur) hanya jadi cadangan; `cutoff_day = 20` (PY-02) tetap keputusan user |
+| PY-04 | Prorate untuk karyawan keluar di tengah periode | Konfirmasi K-12 | ✅ (EPIC-059, menunggu review & rilis) | Payroll run mengambil karyawan aktif dan nonaktif yang `end_date`-nya jatuh di dalam periode; tanggal setelah `end_date` di luar cakupan, dibayar prorata sampai `end_date` (mekanisme sama dengan kontrak parsial). **Catatan:** PPh21 Pasal 17 pada masa pajak terakhir karyawan yang keluar di tengah tahun masih follow-up (sekarang hanya Desember) | Follow-up PPh21 masa pajak terakhir |
 | PY-05 | Payroll mingguan untuk daily worker | Disepakati | ❌ | Run hanya bulanan; `pay_basis = daily` ada tanpa periode mingguan | Fitur run mingguan (live: 5 daily worker aktif) |
 
 ## Kasbon & Pinjaman
@@ -79,8 +79,8 @@ Kolom "Status MOM" menyalin status di dokumen MOM (Disepakati / Konfirmasi / Men
 
 | Status | Jumlah | ID |
 |---|---|---|
-| ✅ selesai (termasuk yang menunggu deploy/merge) | 9 | ES-01, ES-02, ES-04, ES-07, ES-08, AB-07 (mekanisme; aturan final menunggu TnC), AP-05, KP-01, KP-02 (EPIC-060, menunggu review & rilis) |
-| 🟡 sebagian | 13 | ES-03, ES-05, ES-06, AP-01, AP-02, AP-03, AP-04, PY-01, PY-02, PY-03, PY-04, AB-02, LA-01 |
+| ✅ selesai (termasuk yang menunggu deploy/merge) | 13 | ES-01, ES-02, ES-04, ES-06, ES-07, ES-08, AB-07 (mekanisme; aturan final menunggu TnC), AP-05, KP-01, KP-02 (EPIC-060, menunggu review & rilis), PY-01, PY-03, PY-04 (EPIC-059, menunggu review & rilis; PPh21 masa pajak terakhir follow-up) |
+| 🟡 sebagian | 9 | ES-03, ES-05, AP-01, AP-02, AP-03, AP-04, PY-02, AB-02, LA-01 |
 | ⚠️ berbeda | 2 | AB-04, AB-05 |
 | ❌ belum ada | 5 | AP-06, PY-05, AB-01, AB-03, AB-06 |
 | ⏳ hanya menunggu TnC | 2 | ES-09, KP-03 |
