@@ -14,7 +14,8 @@ import { KPI_MANAGE_ROLES } from "./roles";
 
 /** Grant menu HRIS + role pengelola KPI. */
 export async function requireKpiManager(): Promise<ApiUser> {
-  const user = await requireIamMenuPrefix(IAM.hris);
+  // Menu pengelola Kinerja, bukan Review/Tugas Departemen karyawan (EPIC-057).
+  const user = await requireIamMenuPrefix(IAM.hrisPerformanceAdmin);
   if (!(KPI_MANAGE_ROLES as readonly string[]).includes(user.role)) {
     throw ApiError.forbidden("Hanya pengelola KPI (HRD/admin) yang boleh mengubah konfigurasi");
   }

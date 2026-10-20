@@ -27,6 +27,8 @@ func TestDashboard(t *testing.T) {
 	item(a, "Kopi", 2, 20000)
 	item(b, "Kopi", 1, 10000)
 	item(a, "Teh", 1, 10000)
+	// Teh comes after Kopi, so the id-less group keeps Kopi's name.
+	h.exec(`UPDATE pos.pos_order_items SET created_at = created_at + interval '1 minute' WHERE order_id = $1 AND product_name = 'Teh'`, a)
 	item(v, "Roti", 9, 99999)
 	customer := h.customer()
 	h.exec(`INSERT INTO pos.pos_wallet_transactions (customer_id, type, amount, ark_coins, balance_before, balance_after, created_at)

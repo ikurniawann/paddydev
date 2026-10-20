@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"nuhabit/backend/internal/modules/payroll/domain"
+	"nuhabit/backend/internal/platform/auth"
 	"nuhabit/backend/internal/platform/database"
 	"nuhabit/backend/internal/platform/httpx"
 	"nuhabit/backend/internal/platform/iam"
@@ -96,7 +97,7 @@ func (s *service) createTarget(ctx context.Context, userID string, in targetInpu
 
 // GET /api/hris/kpi/targets
 func (h *handler) listTargets(w http.ResponseWriter, r *http.Request) error {
-	if _, err := h.auth.RequireMenuPrefix(r, iam.HrisPerformance...); err != nil {
+	if _, err := h.requirePerformanceHR(r); err != nil {
 		return err
 	}
 	rows, err := h.svc.listTargets(r.Context())
@@ -111,7 +112,7 @@ const periodInvalid = "Periode tidak valid"
 
 // POST /api/hris/kpi/targets
 func (h *handler) createTarget(w http.ResponseWriter, r *http.Request) error {
-	u, err := h.auth.RequireMenuPrefix(r, iam.HrisPerformance...)
+	u, err := h.requirePerformanceHR(r)
 	if err != nil {
 		return err
 	}
@@ -149,7 +150,7 @@ func (h *handler) createTarget(w http.ResponseWriter, r *http.Request) error {
 
 // DELETE /api/hris/kpi/targets?id=
 func (h *handler) deleteTarget(w http.ResponseWriter, r *http.Request) error {
-	if _, err := h.auth.RequireMenuPrefix(r, iam.HrisPerformance...); err != nil {
+	if _, err := h.requirePerformanceHR(r); err != nil {
 		return err
 	}
 	q := queryForm(r)
@@ -371,7 +372,7 @@ const actionRequired = "action (finalize|reopen) dan scorecard_id wajib"
 
 // PATCH /api/hris/kpi/scorecards { action, scorecard_id }
 func (h *handler) patchScorecard(w http.ResponseWriter, r *http.Request) error {
-	u, err := h.auth.RequireMenuPrefix(r, iam.HrisPerformance...)
+	u, err := h.requirePerformanceHR(r)
 	if err != nil {
 		return err
 	}
@@ -627,7 +628,7 @@ func (s *service) recommendations(ctx context.Context, ids []string) (*obj, erro
 
 // GET /api/hris/kpi/recommendation?employee_ids=a,b,c
 func (h *handler) kpiRecommendation(w http.ResponseWriter, r *http.Request) error {
-	if _, err := h.auth.RequireMenuPrefix(r, iam.HrisPerformance...); err != nil {
+	if _, err := h.requirePerformanceHR(r); err != nil {
 		return err
 	}
 	var ids []string
@@ -656,10 +657,28 @@ func (h *handler) kpiRecommendation(w http.ResponseWriter, r *http.Request) erro
 
 /* ── department configuration ────────────────────────────────────────── */
 
-// requireKPIManager is requireKpiManager: the Kinerja menu (hris.performance;
-// EPIC-057 — HR without it never edits KPI) plus a KPI role.
+// requirePerformanceHR guards KPI administration: the HR side of the Kinerja
+// menu (iam.HasPerformanceHRMenu). The Review and Tugas Departemen leaves
+// every employee holds match the hris.performance prefix but do not count.
+func (h *handler) requirePerformanceHR(r *http.Request) (*auth.User, error) {
+	u, err := h.auth.RequireUser(r)
+	if err != nil {
+		return nil, err
+	}
+	granted, err := h.auth.GrantedMenuCodes(r.Context(), u.ID, u.Role)
+	if err != nil {
+		return nil, err
+	}
+	if !iam.HasPerformanceHRMenu(granted) {
+		return nil, httpx.Forbidden("Insufficient permissions")
+	}
+	return u, nil
+}
+
+// requireKPIManager is requireKpiManager: the HR side of the Kinerja menu
+// (EPIC-057 — HR without it never edits KPI) plus a KPI role.
 func (h *handler) requireKPIManager(r *http.Request) (string, error) {
-	u, err := h.auth.RequireMenuPrefix(r, iam.HrisPerformance...)
+	u, err := h.requirePerformanceHR(r)
 	if err != nil {
 		return "", err
 	}

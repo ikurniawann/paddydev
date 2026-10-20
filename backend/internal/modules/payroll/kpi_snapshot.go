@@ -11,7 +11,6 @@ import (
 
 	"nuhabit/backend/internal/modules/payroll/domain"
 	"nuhabit/backend/internal/platform/database"
-	"nuhabit/backend/internal/platform/iam"
 	"nuhabit/backend/internal/platform/validate"
 )
 
@@ -95,7 +94,7 @@ type snapshotSummary struct {
 // POST /api/hris/kpi/snapshot { period_month?, period_year? }: defaults to
 // the current month.
 func (h *handler) kpiSnapshot(w http.ResponseWriter, r *http.Request) error {
-	if _, err := h.auth.RequireMenuPrefix(r, iam.HrisPerformance...); err != nil {
+	if _, err := h.requirePerformanceHR(r); err != nil {
 		return err
 	}
 	f := readOptionalJSON(r)
@@ -212,7 +211,10 @@ func (s *service) runKPISnapshot(ctx context.Context, year, month int) (*snapsho
 		SkippedFinal: len(finals), Collectors: col.counts()}
 	// One transaction: a partial failure rolls back cleanly.
 	err = database.WithTx(ctx, s.db, func(tx pgx.Tx) error {
-		var err error
+		snaps, cards, err := keepLiveEmployees(ctx, tx, snaps, cards)
+		if err != nil {
+			return err
+		}
 		if sum.SnapshotsUpserted, err = upsertSnapshots(ctx, tx, year, month, snaps); err != nil {
 			return err
 		}
@@ -220,6 +222,31 @@ func (s *service) runKPISnapshot(ctx context.Context, year, month int) (*snapsho
 		return err
 	})
 	return sum, err
+}
+
+// keepLiveEmployees locks the employees still present (FOR KEY SHARE, held
+// until the write commits) and drops the rows of one deleted while the
+// collectors ran, instead of failing the whole run on its foreign key.
+func keepLiveEmployees(ctx context.Context, tx pgx.Tx, snaps []snapshotRow, cards []scorecardRow) ([]snapshotRow, []scorecardRow, error) {
+	ids := make([]string, 0, len(cards))
+	for _, c := range cards {
+		ids = append(ids, c.employeeID)
+	}
+	rows, err := tx.Query(ctx, `SELECT id::text FROM hris.employees WHERE id = ANY($1::uuid[]) FOR KEY SHARE`, ids)
+	if err != nil {
+		return nil, nil, err
+	}
+	found, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	if err != nil {
+		return nil, nil, err
+	}
+	live := make(map[string]bool, len(found))
+	for _, id := range found {
+		live[id] = true
+	}
+	snaps = slices.DeleteFunc(snaps, func(r snapshotRow) bool { return !live[r.employeeID] })
+	cards = slices.DeleteFunc(cards, func(r scorecardRow) bool { return !live[r.employeeID] })
+	return snaps, cards, nil
 }
 
 type kpiConfig struct {

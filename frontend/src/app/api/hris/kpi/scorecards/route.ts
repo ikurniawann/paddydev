@@ -24,7 +24,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
 
 /** PATCH { action: finalize|reopen, scorecard_id } */
 export const PATCH = apiHandler(async (request: NextRequest) => {
-  const user = await requireIamMenuPrefix(IAM.hrisPerformance);
+  const user = await requireIamMenuPrefix(IAM.hrisPerformanceAdmin);
   const input = await readOptionalJson(request, scorecardActionSchema);
   return NextResponse.json(await setScorecardStatus(await createServerPgClient(), user.id, input));
 }, "hris/kpi/scorecards.PATCH");

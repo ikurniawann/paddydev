@@ -65,6 +65,8 @@ func eqJSON(t *testing.T, got, want map[string]any) {
 }
 
 func TestNotificationsSend(t *testing.T) {
+	// created before the harness tx so its cleanup runs after the rollback
+	noRecruitment := testutil.CreateStaff(t, testutil.StaffOptions{Role: "hrd", Menus: map[string][]string{"hris.employees": nil}})
 	h := newHarness(t)
 	sender := &fakeSender{waOK: true}
 	n := &notifier{svc: h.svc, users: testutil.Deps(t, nil).Auth, sender: sender}
@@ -80,6 +82,12 @@ func TestNotificationsSend(t *testing.T) {
 
 	expect(t, h.anon("POST", "/api/notifications/send", map[string]any{"candidate_id": cand}), 401, "Authentication required")
 	expect(t, h.as(h.other, "POST", "/api/notifications/send", map[string]any{"candidate_id": cand}), 403, "Insufficient permissions")
+	// EPIC-057: an HR account without the Rekrutmen menu (Non-Rekrutmen & KPI)
+	// may not message candidates even when it knows the id.
+	expect(t, h.as(noRecruitment, "POST", "/api/notifications/send", map[string]any{"candidate_id": cand}), 403, "Insufficient permissions")
+	if len(sender.sent) != 0 {
+		t.Fatalf("sent without the Rekrutmen menu: %v", sender.sent)
+	}
 	expect(t, h.as(h.hr, "POST", "/api/notifications/send", map[string]any{"candidate_id": "7f1c2d3e-4b5a-4c6d-8e9f-0a1b2c3d4e5f"}), 404, "Kandidat tidak ditemukan")
 	expect(t, h.as(h.hr, "POST", "/api/notifications/send", map[string]any{"candidate_id": cand, "channel": "sms"}), 400, "Validation failed")
 

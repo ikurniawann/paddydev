@@ -253,9 +253,10 @@ func (h *handler) createLoan(w http.ResponseWriter, r *http.Request) error {
 	return writeJSON(w, messageData{Data: row, Message: "Pengajuan pinjaman berhasil dibuat, menunggu approval"})
 }
 
-// POST /api/hris/loans/{id}/approve { approved, rejection_reason? }
+// POST /api/hris/loans/{id}/approve { approved, rejection_reason? }: the
+// "approve" action on Pinjaman, not just the menu (read-only holders list).
 func (h *handler) decideLoan(w http.ResponseWriter, r *http.Request) error {
-	u, err := h.auth.RequireMenuPrefix(r, iam.HrisLoans...)
+	u, err := h.auth.RequireMenuAction(r, "approve", iam.HrisLoans...)
 	if err != nil {
 		return err
 	}

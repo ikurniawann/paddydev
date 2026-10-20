@@ -285,3 +285,16 @@ func TestLogbookReportsMaster(t *testing.T) {
 	expect(t, h.do(&hr, "DELETE", "/api/master/employment-statuses/"+st.data()["id"].(string), nil), 200, "")
 	expect(t, h.do(&hr, "GET", "/api/master/positions", nil), 200, "")
 }
+
+// An HR account holding only the employee-level Kinerja leaves (Review,
+// Tugas Departemen; e.g. through an extra employee role) keeps its own
+// department's logbook only (EPIC-057).
+func TestLogbookESSKinerjaLeavesAreNotFullAccess(t *testing.T) {
+	h := newHarness(t)
+	dept := h.department("Logbook ESS")
+	hr, _ := h.staff("hrd", []string{"hris.kepegawaian", "hris.performance.review", "hris.performance.dept-tasks"}, true, emp{dept: &dept})
+	me := h.do(&hr, "GET", "/api/hris/logbook?resource=me", nil)
+	if me.data()["is_full_access"] != false || me.data()["can_review"] != false {
+		t.Fatalf("logbook me = %s", me.raw)
+	}
+}

@@ -55,12 +55,12 @@ func TestHrisStaffRolesDeriveFromAdminHris(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer tx.Rollback(ctx)
-	if _, err := tx.Exec(ctx, `SELECT iam.sync_hris_staff_roles()`); err != nil {
-		t.Fatal(err)
-	}
 	src := roleGrants(t, tx, "admin_hris")
 	if len(src) == 0 {
 		t.Skip("admin_hris has no grants in this database")
+	}
+	if _, err := tx.Exec(ctx, `SELECT iam.sync_hris_staff_roles()`); err != nil {
+		t.Fatal(err)
 	}
 	var menuActs = map[string][]string{}
 	rows, _ := tx.Query(ctx, `SELECT code, coalesce(permission_context->'actions', '[]'::jsonb) FROM iam.menus WHERE deleted_at IS NULL`)
@@ -122,5 +122,34 @@ func TestHrisStaffRolesDeriveFromAdminHris(t *testing.T) {
 	}
 	if roleGrants(t, tx, "hris_manager")["hris.kepegawaian.holidays"] != nil {
 		t.Error("sync kept a grant admin_hris dropped")
+	}
+}
+
+// With no active admin_hris grant the sync refuses instead of emptying the
+// three HR roles (EPIC-057).
+func TestHrisStaffRolesSyncRefusesEmptySource(t *testing.T) {
+	db := testutil.DB(t)
+	ctx := context.Background()
+	tx, err := db.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback(ctx)
+	before := roleGrants(t, tx, "hris_manager")
+	if _, err := tx.Exec(ctx, `UPDATE iam.role_menu_permissions SET is_active = false
+		WHERE role_id = (SELECT id FROM iam.roles WHERE code = 'admin_hris')`); err != nil {
+		t.Fatal(err)
+	}
+	sp, err := tx.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = sp.Exec(ctx, `SELECT iam.sync_hris_staff_roles()`)
+	if err == nil || !strings.Contains(err.Error(), "admin_hris tidak punya grant aktif") {
+		t.Fatalf("sync with empty admin_hris = %v, want refusal", err)
+	}
+	_ = sp.Rollback(ctx)
+	if after := roleGrants(t, tx, "hris_manager"); len(after) != len(before) {
+		t.Fatalf("hris_manager grants %d -> %d", len(before), len(after))
 	}
 }

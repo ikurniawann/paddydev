@@ -13,9 +13,9 @@ import (
 	"strings"
 	"time"
 
-	"nuhabit/backend/internal/platform/auth"
 	"nuhabit/backend/internal/platform/database"
 	"nuhabit/backend/internal/platform/httpx"
+	"nuhabit/backend/internal/platform/iam"
 	"nuhabit/backend/internal/platform/validate"
 	"nuhabit/backend/internal/platform/whatsapp"
 )
@@ -23,12 +23,9 @@ import (
 // POST /api/notifications/send: an HR action that sends a candidate a
 // WhatsApp (default) or an email and logs it in notifications_log.
 
-// notifyRoles may send candidate notifications.
+// notifyRoles may send candidate notifications; they also need the
+// Rekrutmen menu (EPIC-057: akun Non-Rekrutmen tidak boleh mengirim).
 var notifyRoles = []string{"super_admin", "admin", "hrd", "hiring_manager"}
-
-type userGuard interface {
-	RequireUser(r *http.Request) (*auth.User, error)
-}
 
 // Sender delivers candidate notifications.
 type Sender interface {
@@ -40,7 +37,7 @@ type Sender interface {
 
 type notifier struct {
 	svc    *Service
-	users  userGuard
+	users  Guard
 	sender Sender
 }
 
@@ -87,7 +84,7 @@ func (n *notifier) send(w http.ResponseWriter, r *http.Request) error {
 	if n.users == nil {
 		return httpx.Unauthorized("")
 	}
-	user, err := n.users.RequireUser(r)
+	user, err := n.users.RequireMenuPrefix(r, iam.HrisRecruitment...)
 	if err != nil {
 		return err
 	}

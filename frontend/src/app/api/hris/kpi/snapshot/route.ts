@@ -16,7 +16,7 @@ const snapshotSchema = z.object({
  * scorecard final tak ditimpa). Default bulan berjalan. EPIC-010 Fase B.
  */
 export const POST = apiHandler(async (request: NextRequest) => {
-  await requireIamMenuPrefix(IAM.hrisPerformance);
+  await requireIamMenuPrefix(IAM.hrisPerformanceAdmin);
   const body = await readOptionalJson(request, snapshotSchema, "Periode tidak valid");
   const now = new Date();
   const periodMonth = body.period_month ?? now.getMonth() + 1;

@@ -18,8 +18,7 @@ import (
 
 // portalRoutes lists the routes of this file and notify_send.go.
 func (h *handler) portalRoutes() []module.Route {
-	users, _ := h.guard.(userGuard)
-	n := &notifier{svc: h.svc, users: users, sender: defaultSender{wa: whatsapp.New(h.svc.log), getenv: os.Getenv}}
+	n := &notifier{svc: h.svc, users: h.guard, sender: defaultSender{wa: whatsapp.New(h.svc.log), getenv: os.Getenv}}
 	return []module.Route{
 		{Pattern: "GET /api/portal/options", Handler: httpx.Handle(h.portalOptions)},
 		{Pattern: "POST /api/notifications/send", Handler: httpx.Handle(n.send)},
