@@ -18,8 +18,10 @@ import {
 } from "@/components/ui/select";
 import { ArrowLeftIcon, CheckCircle2, Loader2 } from "lucide-react";
 import { countLeaveDays, indexHolidays } from "@/lib/hris/holidays";
-import { LEAVE_TYPE_LABELS } from "@/types/hris";
-import { useLeaveEmployees } from "../queries";
+import { todayWib } from "@/lib/dates";
+import { leaveTypeInfo, leaveTypeOptions } from "@/lib/hris/leave-types";
+import { applySingleDay, leaveFormNote } from "@/lib/hris/leave-form";
+import { useLeaveEmployees, useLeaveQuota } from "../queries";
 import { useCreateLeave } from "../mutations";
 import { LeaveAttachmentField } from "./leave-attachment-field";
 import { LeaveSuccessDialog, type LeaveSubmission } from "./leave-success-dialog";
@@ -53,6 +55,15 @@ export function NewLeavePage() {
     attachment_url: "",
   });
 
+  const month = (formData.start_date || todayWib()).slice(0, 7);
+  const quota =
+    useLeaveQuota(month, formData.employee_id || undefined, Boolean(formData.employee_id)).data ?? null;
+  const leaveOptions = leaveTypeOptions({ leaderEligible: quota?.leader_eligible ?? false });
+  // Jenis terpilih (mis. Izin Leader) hilang dari opsi bila karyawan diganti: jatuh ke "annual".
+  const leaveType = leaveOptions.some((o) => o.value === formData.leave_type) ? formData.leave_type : "annual";
+  const singleDay = Boolean(leaveTypeInfo(leaveType)?.singleDay);
+  const quotaNote = leaveFormNote(leaveType, quota);
+
   const totalDays = previewBusinessDays(formData.start_date, formData.end_date);
 
   const filteredEmployees = employees.filter((emp) =>
@@ -84,7 +95,7 @@ export function NewLeavePage() {
     }
 
     try {
-      const result = await createMutation.mutateAsync(formData);
+      const result = await createMutation.mutateAsync({ ...formData, leave_type: leaveType });
       const employee = employees.find((e) => e.id === formData.employee_id);
       setSubmission({
         ...result.data,
@@ -162,16 +173,19 @@ export function NewLeavePage() {
             <div>
               <Label htmlFor="leave_type">Jenis Cuti *</Label>
               <Select
-                value={formData.leave_type}
-                onValueChange={(value) => setFormData({ ...formData, leave_type: value })}
+                value={leaveType}
+                onValueChange={(value) => {
+                  const days = applySingleDay(value, formData.start_date, formData.end_date);
+                  setFormData({ ...formData, leave_type: value, start_date: days.start, end_date: days.end });
+                }}
               >
                 <SelectTrigger className="mt-1" id="leave_type">
                   <SelectValue placeholder="Pilih jenis cuti" />
                 </SelectTrigger>
                 <SelectContent>
-                  {Object.entries(LEAVE_TYPE_LABELS).map(([value, label]) => (
-                    <SelectItem key={value} value={value}>
-                      {label}
+                  {leaveOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -186,7 +200,10 @@ export function NewLeavePage() {
                   id="start_date"
                   type="date"
                   value={formData.start_date}
-                  onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
+                  onChange={(e) => {
+                    const days = applySingleDay(leaveType, e.target.value, formData.end_date);
+                    setFormData({ ...formData, start_date: days.start, end_date: days.end });
+                  }}
                   className="mt-1"
                 />
               </div>
@@ -196,6 +213,7 @@ export function NewLeavePage() {
                   id="end_date"
                   type="date"
                   value={formData.end_date}
+                  disabled={singleDay}
                   onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
                   className="mt-1"
                 />
@@ -212,6 +230,10 @@ export function NewLeavePage() {
                   </Badge>
                 </div>
               </div>
+            )}
+
+            {quotaNote && (
+              <p className="rounded-lg bg-sky-50 px-3 py-2 text-xs text-sky-700">{quotaNote}</p>
             )}
 
             {/* Reason */}

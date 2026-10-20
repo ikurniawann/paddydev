@@ -6,6 +6,7 @@ import type {
   CreateLeavePayload,
   UpdateLeavePayload,
   ApproveLeavePayload,
+  LeaveQuota,
 } from "./types";
 
 const BASE = "/api/hris/leaves";
@@ -44,3 +45,11 @@ export async function downloadLeavesCsv(params?: LeaveListParams) {
   }
   return res.blob();
 }
+
+export const fetchLeaveQuota = (month: string, employeeId?: string) => {
+  const qs = new URLSearchParams({ month });
+  if (employeeId) qs.set("employee_id", employeeId);
+  return apiGet<{ data: LeaveQuota }>(`/api/hris/leave-quota?${qs}`)
+    .then((res) => res.data)
+    .catch(() => null);
+};

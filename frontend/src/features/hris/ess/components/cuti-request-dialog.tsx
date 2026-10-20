@@ -14,23 +14,13 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { describeLeaveDays } from "@/lib/hris/holidays";
+import { todayWib } from "@/lib/dates";
+import { applySingleDay, leaveFormNote } from "@/lib/hris/leave-form";
+import { leaveTypeInfo, leaveTypeOptions } from "@/lib/hris/leave-types";
 import { useHolidayIndex } from "@/features/hris/attendance/queries";
+import { useLeaveQuota } from "@/features/hris/leaves/queries";
 import { useSubmitMyLeave } from "../mutations";
 import type { EssLeaveBalance, EssLeaveForm } from "../types";
-
-export const LEAVE_TYPE_OPTIONS = [
-  { value: "annual", label: "Cuti Tahunan" },
-  { value: "sick", label: "Sakit" },
-  { value: "emergency", label: "Izin Darurat" },
-  { value: "personal", label: "Izin Pribadi" },
-  { value: "unpaid", label: "Izin Tanpa Gaji" },
-  { value: "maternity", label: "Cuti Melahirkan" },
-  { value: "paternity", label: "Cuti Ayah" },
-  { value: "menstrual", label: "Cuti Haid" },
-  { value: "pilgrimage", label: "Ibadah" },
-  { value: "marriage", label: "Menikah" },
-  { value: "bereavement", label: "Duka" },
-];
 
 const EMPTY_LEAVE_FORM: EssLeaveForm = { leave_type: "annual", start_date: "", end_date: "", reason: "" };
 
@@ -45,6 +35,10 @@ export function CutiRequestDialog({ open, onOpenChange, balance }: CutiRequestDi
   const [form, setForm] = useState(EMPTY_LEAVE_FORM);
   const [attachment, setAttachment] = useState<{ name: string; dataUrl: string } | null>(null);
   const submit = useSubmitMyLeave();
+  const month = (form.start_date || todayWib()).slice(0, 7);
+  const quota = useLeaveQuota(month, undefined, open).data ?? null;
+  const singleDay = Boolean(leaveTypeInfo(form.leave_type)?.singleDay);
+  const quotaNote = leaveFormNote(form.leave_type, quota);
 
   /**
    * Pratinjau potongan jatah cuti (EPIC-036 Fase D). Angka yang mengikat tetap
@@ -106,9 +100,14 @@ export function CutiRequestDialog({ open, onOpenChange, balance }: CutiRequestDi
           <div>
             <label className="mb-1 block text-xs font-medium text-gray-600">Jenis</label>
             <Combobox
-              options={LEAVE_TYPE_OPTIONS}
+              options={leaveTypeOptions({ leaderEligible: quota?.leader_eligible ?? false })}
               value={form.leave_type}
-              onChange={(value) => setForm((f) => ({ ...f, leave_type: value }))}
+              onChange={(value) =>
+                setForm((f) => {
+                  const days = applySingleDay(value, f.start_date, f.end_date);
+                  return { ...f, leave_type: value, start_date: days.start, end_date: days.end };
+                })
+              }
               placeholder="Pilih jenis"
             />
           </div>
@@ -118,7 +117,12 @@ export function CutiRequestDialog({ open, onOpenChange, balance }: CutiRequestDi
               <Input
                 type="date"
                 value={form.start_date}
-                onChange={(e) => setForm((f) => ({ ...f, start_date: e.target.value }))}
+                onChange={(e) =>
+                  setForm((f) => {
+                    const days = applySingleDay(f.leave_type, e.target.value, f.end_date);
+                    return { ...f, start_date: days.start, end_date: days.end };
+                  })
+                }
               />
             </div>
             <div>
@@ -126,6 +130,7 @@ export function CutiRequestDialog({ open, onOpenChange, balance }: CutiRequestDi
               <Input
                 type="date"
                 value={form.end_date}
+                disabled={singleDay}
                 onChange={(e) => setForm((f) => ({ ...f, end_date: e.target.value }))}
               />
             </div>
@@ -175,6 +180,9 @@ export function CutiRequestDialog({ open, onOpenChange, balance }: CutiRequestDi
                 </>
               )}
             </div>
+          )}
+          {quotaNote && (
+            <p className="rounded-lg bg-sky-50 px-3 py-2 text-xs text-sky-700">{quotaNote}</p>
           )}
           {form.leave_type === "annual" && balance && (
             <p className="rounded-lg bg-sky-50 px-3 py-2 text-xs text-sky-700">
