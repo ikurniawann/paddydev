@@ -171,3 +171,33 @@ func TestSelfClockIgnoresBodyDate(t *testing.T) {
 		t.Fatalf("rows on the body date = %s", n)
 	}
 }
+
+func TestGeofenceInRosterAndList(t *testing.T) {
+	h, _ := newFileHarness(t)
+	hr, _ := h.staff("hrd", nil, true)
+	staff, own := h.staff("pos", nil, true, emp{name: "Crew Rekap Geo"})
+	store := h.branch("Toko Rekap Geo")
+	h.exec(`INSERT INTO hris.employee_placements (employee_id, branch_id, is_primary, start_date)
+		VALUES ($1, $2, true, '2026-01-01')`, own, store)
+	photo := dataURL("image/png", pngBytes(t))
+	expect(t, h.do(&staff, "POST", "/api/hris/attendance", clockInBody(photo, farFromStore, "Belanja perlengkapan")), 200, "")
+
+	roster := h.do(&hr, "GET", "/api/hris/attendance/daily-roster?date=2026-10-05", nil)
+	expect(t, roster, 200, "")
+	var att map[string]any
+	for _, e := range roster.data()["employees"].([]any) {
+		if row := e.(map[string]any); row["employee_id"] == own {
+			att, _ = row["attendance"].(map[string]any)
+		}
+	}
+	if att == nil || att["clock_in_geofence"] != "invalid" || att["clock_in_distance_m"] != 334.0 ||
+		att["clock_out_geofence"] != nil || att["notes"] != "Belanja perlengkapan" {
+		t.Fatalf("roster attendance = %v", att)
+	}
+
+	list := h.do(&hr, "GET", "/api/hris/attendance?employee_id="+own, nil)
+	expect(t, list, 200, "")
+	if row := list.list()[0].(map[string]any); row["clock_in_geofence"] != "invalid" || row["clock_in_distance_m"] != 334.0 {
+		t.Fatalf("list = %s", list.raw)
+	}
+}

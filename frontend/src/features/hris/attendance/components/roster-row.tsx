@@ -5,6 +5,7 @@ import { AlertTriangle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { formatTime } from "@/lib/format";
 import { LEAVE_TYPE_LABELS } from "@/types/hris";
+import { GeofenceBadge } from "./geofence-badge";
 import { SelfiePhotoDialog } from "./selfie-photo-dialog";
 import type { RosterEmployee, RosterStatus } from "../types";
 
@@ -77,6 +78,14 @@ export function RosterRow({ emp, isToday }: { emp: RosterEmployee; isToday: bool
               emptyFallback={null}
             />
           </div>
+          <div className="mt-1 flex flex-wrap justify-end gap-1">
+            <GeofenceBadge status={emp.attendance.clock_in_geofence} distanceM={emp.attendance.clock_in_distance_m} prefix="Masuk" />
+            <GeofenceBadge status={emp.attendance.clock_out_geofence} distanceM={emp.attendance.clock_out_distance_m} prefix="Pulang" />
+          </div>
+          {emp.attendance.notes &&
+            (emp.attendance.clock_in_geofence === "invalid" || emp.attendance.clock_out_geofence === "invalid") && (
+              <p className="mt-0.5 max-w-xs whitespace-pre-line text-right text-[11px] text-gray-500">“{emp.attendance.notes}”</p>
+            )}
         </div>
       ) : emp.leave ? (
         <p className="text-xs text-gray-500">
