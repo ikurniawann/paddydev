@@ -137,6 +137,18 @@ func TestInbox(t *testing.T) {
 	}
 }
 
+// EPIC-058: the inbox subtitle shows the catalog label, not the raw enum code.
+func TestLeaveTypeLabel(t *testing.T) {
+	for code, want := range map[string]string{
+		"leader": "Izin Leader", "personal": "Izin Pribadi", "annual": "Cuti Tahunan",
+		"menstrual": "Cuti Haid", "Cuti": "Cuti", "": "",
+	} {
+		if got := LeaveTypeLabel(code); got != want {
+			t.Errorf("LeaveTypeLabel(%q) = %q, want %q", code, got, want)
+		}
+	}
+}
+
 // Ported from search.test.ts.
 func TestSearch(t *testing.T) {
 	if NormalizeSearchQuery("  kopi   susu  ") != "kopi susu" || len(NormalizeSearchQuery(strings.Repeat("a", 200))) != 80 {

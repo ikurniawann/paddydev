@@ -112,6 +112,24 @@ func AllowedInboxSections(role string, granted []string) []string {
 
 var idMonths = [...]string{"Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"}
 
+// leaveTypeLabels mirrors the label column of the hris leave-type catalog
+// (modules/hris/domain/leave_types.go, frontend/src/lib/hris/leave-types.ts).
+// Modules never import each other, so desktop keeps its own copy: change them together.
+var leaveTypeLabels = map[string]string{
+	"annual": "Cuti Tahunan", "sick": "Sakit", "personal": "Izin Pribadi", "leader": "Izin Leader",
+	"maternity": "Cuti Melahirkan", "paternity": "Cuti Ayah", "pilgrimage": "Cuti Ibadah Haji/Umrah",
+	"marriage": "Cuti Menikah", "bereavement": "Cuti Duka",
+	"emergency": "Izin Darurat", "unpaid": "Izin Tanpa Gaji", "menstrual": "Cuti Haid",
+}
+
+// LeaveTypeLabel is leaveTypeLabel: the catalog label, or the raw code when unknown.
+func LeaveTypeLabel(code string) string {
+	if label, ok := leaveTypeLabels[code]; ok {
+		return label
+	}
+	return code
+}
+
 // DescribeLeaveRange is describeLeaveRange: "3 hari · 18 Sep–20 Sep"
 // (toLocaleDateString("id-ID", {day: "numeric", month: "short"})).
 func DescribeLeaveRange(start, end string, days float64) string {
