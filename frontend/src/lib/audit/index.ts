@@ -11,6 +11,31 @@
 
 import { getPool } from "@/lib/db";
 
+/** Entitas HRIS yang penghapusannya diaudit (EPIC-061; sama dengan Go hrisdel). */
+export type HrisDeleteEntity =
+  | "hris.employees"
+  | "hris.employee_documents"
+  | "hris.attendance"
+  | "hris.leaves"
+  | "hris.shifts"
+  | "hris.public_holidays"
+  | "hris.employment_contracts"
+  | "hris.contract_signed_document"
+  | "hris.announcements"
+  | "hris.departments"
+  | "hris.employment_statuses"
+  | "hris.positions"
+  | "hris.payroll_runs"
+  | "hris.employee_salary"
+  | "performance.kpi_targets"
+  | "performance.feedback_assignments"
+  | "performance.feedback_cycles"
+  | "performance.feedback_responses"
+  | "recruitment.candidates"
+  | "recruitment.candidate_cv"
+  | "recruitment.psikotes_questions"
+  | "recruitment.job_openings";
+
 export type AuditAction =
   | "stock.adjust"
   | "stock.opname_complete"
@@ -23,7 +48,9 @@ export type AuditAction =
   | "ap_payment.void"
   | "vendor_credit.approve"
   | "vendor_credit.apply"
-  | "purchase_return.revise";
+  | "purchase_return.revise"
+  | "attendance.delete"
+  | `${HrisDeleteEntity}.delete`;
 
 export type AuditEntity =
   | "inventory"
@@ -33,7 +60,8 @@ export type AuditEntity =
   | "grn"
   | "ap_payment"
   | "vendor_credit"
-  | "purchase_return";
+  | "purchase_return"
+  | HrisDeleteEntity;
 
 export interface AuditActor {
   id: string | null;

@@ -364,10 +364,9 @@ func dateText(r *Row, key string) string {
 	return ""
 }
 
-func (s *Service) DeleteLeave(ctx context.Context, a *Actor, id string) error {
-	if a.Role != "hrd" && a.Role != "super_admin" && a.Role != "admin" {
-		return httpx.Forbidden("Forbidden: Only HRD can delete leave requests")
-	}
+// DeleteLeave removes a leave request; the route guard requires "delete"
+// on Cuti & Izin, a reason, and writes the audit row (EPIC-061).
+func (s *Service) DeleteLeave(ctx context.Context, _ *Actor, id string) error {
 	return s.repo.DeleteLeave(ctx, id)
 }
 

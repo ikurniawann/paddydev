@@ -9,6 +9,7 @@ import (
 	"nuhabit/backend/internal/modules/configuration/accounts/domain"
 	"nuhabit/backend/internal/modules/configuration/kit"
 	"nuhabit/backend/internal/platform/httpx"
+	"nuhabit/backend/internal/platform/iam"
 	"nuhabit/backend/internal/platform/validate"
 )
 
@@ -126,7 +127,7 @@ var coreFields = []string{
 var employeeSchemaKeys = append(append([]string{}, coreFields...),
 	"is_access_app", "password", "role", "brand_id", "account_status", "approval_permissions",
 	"business_scope", "holding_id", "company_id", "branch_id", "warehouse_ids",
-	"default_warehouse_id", "can_switch_stall", "can_central_checkout")
+	"default_warehouse_id", "can_switch_stall", "can_central_checkout", "hris_role")
 
 // employeeBody is a parsed createUserEmployeeSchema or
 // updateUserEmployeeSchema body. Pointers are nil when absent or null; has
@@ -141,6 +142,9 @@ type employeeBody struct {
 	branchID, defaultWarehouseID        *string
 	warehouseIDs                        []string
 	canSwitchStall, canCentralCheckout  *bool
+	// hrisRole is the IAM role of an hrd account (EPIC-061, Q-RA-7);
+	// null puts the app role back.
+	hrisRole *string
 	// scheduleType is create-only: changes go through the HRIS
 	// schedule-type endpoint so its transition rules always run.
 	scheduleType *string
@@ -226,6 +230,7 @@ func parseEmployeeBody(f *validate.Form, create bool) *employeeBody {
 	}
 	b.password = f.Str("password", optional, validate.StrOpts{Min: 8})
 	b.role = f.Enum("role", optional, domain.AdminUserRoles)
+	b.hrisRole = f.Enum("hris_role", optionalNull, iam.HrisStaffRoleCodes)
 	f.UUID("brand_id", optionalNull)
 	b.accountStatus = f.Enum("account_status", optional, []string{"active", "inactive"})
 	if create {

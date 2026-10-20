@@ -1,6 +1,7 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { withDeleteReason } from "@/lib/hris/delete-reason";
 import { kpiQueryKeys } from "./query-keys";
 import {
   createDeptTask,
@@ -65,7 +66,8 @@ export function useCreateKpiTarget() {
 export function useDeleteKpiTarget() {
   const invalidate = useInvalidateKpi();
   return useMutation({
-    mutationFn: (id: string) => deleteKpiTarget(id),
+    mutationFn: withDeleteReason("Hapus target KPI", (id: string, reason) => deleteKpiTarget(id, reason)),
+    retry: false,
     onSuccess: invalidate,
   });
 }

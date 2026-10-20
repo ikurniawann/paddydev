@@ -5,6 +5,7 @@ import { IAM } from "@/lib/iam/prefixes";
 import { feedbackCycleUpdateSchema } from "@/lib/hris/feedback-schemas";
 import { deleteCycle, getCycle, updateCycle } from "@/lib/hris/feedback-repo";
 import { readJson } from "@/lib/hris/workforce-route";
+import { HRIS_LEAF, auditHrisDelete, requireHrisDelete } from "@/lib/hris/delete-guard";
 
 // Modul 360 feedback belum punya UI; semua handler khusus pengelola kinerja.
 
@@ -24,8 +25,11 @@ export const PUT = apiHandler(async (request: NextRequest, { params }: RouteCont
   return NextResponse.json({ data: await updateCycle(id, body) });
 }, "hris/feedback-cycles/[id] PUT");
 
-export const DELETE = apiHandler(async (_request: NextRequest, { params }: RouteContext) => {
+export const DELETE = apiHandler(async (request: NextRequest, { params }: RouteContext) => {
+  const { user, reason } = await requireHrisDelete(request, HRIS_LEAF.kpiScorecard);
   await requireIamMenuPrefix(IAM.hrisPerformanceAdmin);
-  await deleteCycle((await params).id);
+  const { id } = await params;
+  await deleteCycle(id);
+  await auditHrisDelete(request, user, "performance.feedback_cycles", id, reason);
   return NextResponse.json({ message: "Cycle deleted successfully" });
 }, "hris/feedback-cycles/[id] DELETE");

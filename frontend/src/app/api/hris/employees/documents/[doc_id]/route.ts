@@ -5,6 +5,7 @@ import { IAM } from "@/lib/iam/prefixes";
 import { employeeDocumentPatchSchema } from "@/lib/hris/employee-document-schema";
 import { deleteEmployeeDocument, updateEmployeeDocument } from "@/lib/hris/employees-records";
 import { readJson } from "@/lib/hris/workforce-route";
+import { HRIS_LEAF, auditHrisDelete, requireHrisDelete } from "@/lib/hris/delete-guard";
 
 /**
  * DELETE /api/hris/employees/documents/[doc_id] — hapus record dokumen.
@@ -19,9 +20,11 @@ interface RouteParams {
   params: Promise<{ doc_id: string }>;
 }
 
-export const DELETE = apiHandler(async (_request: NextRequest, { params }: RouteParams) => {
-  await requireIamMenuPrefix(IAM.hrisKepegawaian);
-  await deleteEmployeeDocument((await params).doc_id);
+export const DELETE = apiHandler(async (request: NextRequest, { params }: RouteParams) => {
+  const { user, reason } = await requireHrisDelete(request, HRIS_LEAF.karyawan);
+  const { doc_id } = await params;
+  await deleteEmployeeDocument(doc_id);
+  await auditHrisDelete(request, user, "hris.employee_documents", doc_id, reason);
   return NextResponse.json({ message: "Dokumen berhasil dihapus" });
 }, "hris/employees/documents DELETE");
 

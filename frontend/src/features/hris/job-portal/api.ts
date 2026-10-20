@@ -1,4 +1,5 @@
 import { apiGet, apiPost, apiPatch, apiDelete } from "@/lib/api-client";
+import { withReasonQuery } from "@/lib/hris/delete-reason";
 import type {
   JobDepartmentOption,
   JobOpening,
@@ -22,5 +23,5 @@ export const saveJobOpening = (payload: JobOpeningPayload, id?: string) =>
     ? apiPatch<{ data: JobOpening }>(`/api/hris/job-openings/${id}`, payload)
     : apiPost<{ data: JobOpening }>("/api/hris/job-openings", payload);
 
-export const deleteJobOpening = (id: string) =>
-  apiDelete(`/api/hris/job-openings/${id}`);
+export const deleteJobOpening = (id: string, reason: string) =>
+  apiDelete(withReasonQuery(`/api/hris/job-openings/${id}`, reason));

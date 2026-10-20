@@ -1,6 +1,7 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { withDeleteReason } from "@/lib/hris/delete-reason";
 import type { CandidateCreateInput } from "@/lib/recruitment/candidate-query";
 import { candidatesQueryKeys } from "./query-keys";
 import { createCandidate, deleteCandidate, updateCandidateStatus, addCandidateNote } from "./api";
@@ -17,7 +18,8 @@ export function useCreateCandidate() {
 export function useDeleteCandidate() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => deleteCandidate(id),
+    mutationFn: withDeleteReason("Hapus kandidat", (id: string, reason) => deleteCandidate(id, reason)),
+    retry: false,
     onSuccess: () => qc.invalidateQueries({ queryKey: candidatesQueryKeys.all }),
   });
 }

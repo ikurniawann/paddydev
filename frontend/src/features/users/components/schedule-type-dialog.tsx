@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Input } from "@/components/ui/input";
 import { SCHEDULE_TYPE_OPTIONS, scheduleTypeConfirmText, type ScheduleType } from "@/lib/hris/schedule-type";
 import { fetchScheduleType, saveScheduleType } from "../api";
+import { retryWithReason } from "@/lib/hris/delete-reason";
 
 interface Props {
   open: boolean;
@@ -45,7 +46,9 @@ export function ScheduleTypeDialog({ open, employeeId, employeeName, today, onOp
     if (!target || !changed) return;
     setSaving(true);
     try {
-      const res = await saveScheduleType(employeeId, { schedule_type: target, effective_from: from });
+      const res = await retryWithReason("Hapus jadwal per tanggal", (reason) =>
+        saveScheduleType(employeeId, { schedule_type: target, effective_from: from, ...(reason ? { reason } : {}) })
+      );
       res.data.warnings.forEach((w) => toast.warning(w));
       toast.success(res.message ?? "Tipe jadwal disimpan");
       onDone();

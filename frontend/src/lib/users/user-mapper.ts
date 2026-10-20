@@ -59,6 +59,7 @@ export type EmployeeUserRow = {
     can_switch_stall?: boolean | null;
     can_central_checkout?: boolean | null;
     default_warehouse_id?: string | null;
+    hris_role?: string | null;
     user_approval_permissions?: Array<{
       id: string;
       module: string;
@@ -137,6 +138,7 @@ export function mapEmployeeUserRow(row: EmployeeUserRow) {
           canSwitchStall: row.app_user.can_switch_stall === true,
           canCentralCheckout: row.app_user.can_central_checkout === true,
           defaultWarehouseId: row.app_user.default_warehouse_id ?? null,
+          hrisRole: row.app_user.hris_role ?? null,
           approvalPermissions: row.app_user.user_approval_permissions ?? [],
           warehouses: (row.app_user.user_warehouses ?? []).map((warehouse) => ({
             id: warehouse.warehouse_id,

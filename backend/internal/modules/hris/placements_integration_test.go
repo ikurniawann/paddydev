@@ -109,8 +109,8 @@ func TestPlacements(t *testing.T) {
 		t.Fatalf("attendance without store = %d", n)
 	}
 
-	expect(t, h.do(&hr, "DELETE", "/api/hris/employee-placements/"+kopoID, nil), 200, "")
-	expect(t, h.do(&hr, "DELETE", "/api/hris/employee-placements/"+kopoID, nil), 404, "Penempatan tidak ditemukan")
+	expect(t, h.do(&hr, "DELETE", "/api/hris/employee-placements/"+kopoID+"?reason=Penempatan%20berakhir", nil), 200, "")
+	expect(t, h.do(&hr, "DELETE", "/api/hris/employee-placements/"+kopoID+"?reason=Penempatan%20berakhir", nil), 404, "Penempatan tidak ditemukan")
 
 	branches := h.do(&staff, "GET", "/api/hris/branches", nil)
 	expect(t, branches, 200, "")

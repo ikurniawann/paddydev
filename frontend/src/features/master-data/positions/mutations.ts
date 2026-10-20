@@ -1,6 +1,7 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { withDeleteReason } from "@/lib/hris/delete-reason";
 import { positionsQueryKeys } from "./query-keys";
 import { createPosition, updatePosition, deletePosition } from "./api";
 import type { PositionPayload } from "./types";
@@ -30,7 +31,8 @@ export function useUpdatePosition() {
 export function useDeletePosition() {
   const invalidate = useInvalidatePositions();
   return useMutation({
-    mutationFn: (id: string) => deletePosition(id),
+    mutationFn: withDeleteReason("Hapus jabatan", (id: string, reason) => deletePosition(id, reason)),
+    retry: false,
     onSuccess: invalidate,
   });
 }

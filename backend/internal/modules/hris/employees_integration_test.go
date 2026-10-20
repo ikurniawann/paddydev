@@ -42,6 +42,7 @@ func TestLinkedEmployeeEmailNeedsSettingsUsers(t *testing.T) {
 func TestEmployeeDirectoryAndCRUD(t *testing.T) {
 	h := newHarness(t)
 	hr, _ := h.staff("hrd", []string{menuKepegawaian}, false)
+	h.grantDelete(hr, "hris.kepegawaian.users")
 	dept := h.department("Bar Test")
 	boss := h.employee(emp{name: "Bos Test", dept: &dept})
 
@@ -116,7 +117,7 @@ func TestEmployeeDirectoryAndCRUD(t *testing.T) {
 	bad := h.do(&hr, "PUT", "/api/hris/employees/"+id, map[string]any{"department_id": "nope"})
 	expect(t, bad, 400, "Data karyawan tidak valid")
 
-	del := h.do(&hr, "DELETE", "/api/hris/employees/"+id, nil)
+	del := h.do(&hr, "DELETE", "/api/hris/employees/"+id+"?reason=Karyawan%20uji%20dihapus", nil)
 	expect(t, del, 200, "")
 	if del.data()["is_active"] != false || !slices.Equal(keys(t, del.raw, "data"), []string{"id", "full_name", "nip", "is_active"}) {
 		t.Fatalf("deactivate = %s", del.raw)
@@ -127,6 +128,7 @@ func TestEmployeeDocumentsAndHistory(t *testing.T) {
 	h := newHarness(t)
 	hr, _ := h.staff("hrd", []string{menuKepegawaian}, false)
 	self, own := h.staff("pos", nil, true)
+	h.grantDelete(hr, "hris.kepegawaian.users")
 
 	expect(t, h.do(&hr, "GET", "/api/hris/employees/documents", nil), 400, "employee_id diperlukan")
 	doc := h.do(&hr, "POST", "/api/hris/employees/documents", map[string]any{
@@ -152,7 +154,7 @@ func TestEmployeeDocumentsAndHistory(t *testing.T) {
 		t.Fatalf("patch allowlist = %s", patched.raw)
 	}
 	expect(t, h.do(&self, "DELETE", "/api/hris/employees/documents/"+docID, nil), 403, "")
-	expect(t, h.do(&hr, "DELETE", "/api/hris/employees/documents/"+docID, nil), 200, "")
+	expect(t, h.do(&hr, "DELETE", "/api/hris/employees/documents/"+docID+"?reason=Dokumen%20salah%20unggah", nil), 200, "")
 
 	hist := h.do(&hr, "POST", "/api/hris/employment-history", map[string]any{
 		"employee_id": own, "change_type": "promotion", "effective_date": "2026-09-01", "new_salary": "6500000", "prev_salary": 0,
@@ -225,6 +227,7 @@ func TestEmployeeTabs(t *testing.T) {
 func TestEmployeeContracts(t *testing.T) {
 	h := newHarness(t)
 	hr, _ := h.staff("hrd", []string{menuKepegawaian, "hris.compensation"}, false)
+	h.grantDelete(hr, "hris.kepegawaian.contracts")
 	e := h.employee(emp{status: "contract"})
 	base := "/api/hris/employees/" + e + "/contracts"
 
@@ -259,5 +262,5 @@ func TestEmployeeContracts(t *testing.T) {
 		t.Fatalf("compensation = %s", end.raw)
 	}
 	expect(t, h.do(&hr, "PATCH", "/api/hris/contracts/"+id, map[string]any{"action": "hapus"}), 400, "Aksi tidak dikenal")
-	expect(t, h.do(&hr, "DELETE", "/api/hris/contracts/"+id, nil), 409, "Hanya draft kontrak yang bisa dihapus")
+	expect(t, h.do(&hr, "DELETE", "/api/hris/contracts/"+id+"?reason=Draft%20salah%20input", nil), 409, "Hanya draft kontrak yang bisa dihapus")
 }

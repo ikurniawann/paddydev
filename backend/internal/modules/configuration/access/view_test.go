@@ -46,11 +46,18 @@ func TestAvailableActions(t *testing.T) {
 
 func TestParsePermissions(t *testing.T) {
 	var body any
-	_ = json.Unmarshal([]byte(`{"permissions":[{"menuId":"a","grantedActions":["read","create"]},{"menuId":"b","isGranted":false},{"isGranted":true},{"menuId":"c","grantedActions":[]},{"menuId":"d"}]}`), &body)
+	const a, b, c, d = "0000000a-0000-4000-8000-00000000000a", "0000000b-0000-4000-8000-00000000000b",
+		"0000000c-0000-4000-8000-00000000000c", "0000000d-0000-4000-8000-00000000000d"
+	// Menu ids are canonicalised (lowercase, hyphenated) so the HRIS delete guard compares the stored id.
+	_ = json.Unmarshal([]byte(`{"permissions":[{"menuId":"0000000A-0000-4000-8000-00000000000A","grantedActions":["read","create"]},{"menuId":"`+b+`","isGranted":false},{"isGranted":true},{"menuId":"{0000000c00004000800000000000000c}","grantedActions":[]},{"menuId":"`+d+`"}]}`), &body)
 	f := validate.New(body, true)
 	got, _ := json.Marshal(parsePermissions(f))
-	if !f.Valid() || string(got) != `[{"MenuID":"a","Actions":["read","create"]},{"MenuID":"c","Actions":["read"]},{"MenuID":"d","Actions":["read"]}]` {
+	if !f.Valid() || string(got) != `[{"MenuID":"`+a+`","Actions":["read","create"]},{"MenuID":"`+c+`","Actions":["read"]},{"MenuID":"`+d+`","Actions":["read"]}]` {
 		t.Fatalf("grants = %s (%v)", got, f.Issues())
+	}
+	_ = json.Unmarshal([]byte(`{"permissions":[{"menuId":"a"}]}`), &body)
+	if f = validate.New(body, true); parsePermissions(f) != nil && f.Valid() {
+		t.Fatal("invalid menuId accepted")
 	}
 	f = validate.New(map[string]any{}, true)
 	if got := parsePermissions(f); !f.Valid() || len(got) != 0 {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { withDeleteReason } from "@/lib/hris/delete-reason";
 import { employmentStatusesQueryKeys } from "./query-keys";
 import {
   createEmploymentStatus,
@@ -34,7 +35,8 @@ export function useUpdateEmploymentStatus() {
 export function useDeleteEmploymentStatus() {
   const invalidate = useInvalidateEmploymentStatuses();
   return useMutation({
-    mutationFn: (id: string) => deleteEmploymentStatus(id),
+    mutationFn: withDeleteReason("Hapus status karyawan", (id: string, reason) => deleteEmploymentStatus(id, reason)),
+    retry: false,
     onSuccess: invalidate,
   });
 }

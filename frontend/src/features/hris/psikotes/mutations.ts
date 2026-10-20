@@ -1,6 +1,7 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { withDeleteReason } from "@/lib/hris/delete-reason";
 import { psikotesQueryKeys } from "./query-keys";
 import { updateInstrument, createQuestion, updateQuestion, deleteQuestion } from "./api";
 import type { InstrumentUpdatePayload, QuestionPayload } from "./types";
@@ -50,7 +51,10 @@ export function useUpdateQuestion() {
 export function useDeleteQuestion() {
   const invalidate = useInvalidateQuestions();
   return useMutation({
-    mutationFn: ({ id }: { id: string; instrumentId: string }) => deleteQuestion(id),
+    mutationFn: withDeleteReason<{ id: string; instrumentId: string }, unknown>("Hapus soal psikotes", ({ id }, reason) =>
+      deleteQuestion(id, reason)
+    ),
+    retry: false,
     onSuccess: (_data, vars) => invalidate(vars.instrumentId),
   });
 }

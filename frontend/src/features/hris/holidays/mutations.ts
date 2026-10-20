@@ -1,6 +1,7 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { withDeleteReason } from "@/lib/hris/delete-reason";
 import { deleteHoliday, importHolidays, saveHoliday } from "./api";
 import { holidayQueryKeys } from "./query-keys";
 import type { HolidayPayload } from "./types";
@@ -20,7 +21,7 @@ export function useSaveHoliday() {
 
 export function useDeleteHoliday() {
   const onSuccess = useInvalidateHolidays();
-  return useMutation({ mutationFn: deleteHoliday, onSuccess });
+  return useMutation({ mutationFn: withDeleteReason("Hapus hari libur", (id: string, reason) => deleteHoliday(id, reason)), retry: false, onSuccess });
 }
 
 export function useImportHolidays() {

@@ -14,6 +14,7 @@ import {
 import { FormSectionCard } from "@/components/layout/form-section-card";
 import { Button } from "@/components/ui/button";
 import { useIamAccess } from "@/components/iam/iam-access-provider";
+import { useAuth } from "@/hooks/use-auth";
 import { useBusinessTree } from "@/features/configuration/business";
 import type { BusinessTree } from "@/features/configuration/business/types";
 import { IAM } from "@/lib/iam/prefixes";
@@ -67,6 +68,8 @@ function UserEmployeeForm({
   // Akun login (akses aplikasi, role, scope, password) hanya untuk Manajemen User; tanpa itu
   // (mis. Admin HRIS lewat HRIS → Karyawan) form hanya mengubah data karyawan.
   const canManageAccounts = useIamAccess().hasPrefix(IAM.settingsUsers);
+  // Role HRIS (EPIC-061): server menolak key hris_role dari selain super_admin.
+  const canSetHrisRole = useAuth().user?.role === "super_admin";
   const { data: businessTree = EMPTY_TREE } = useBusinessTree(canManageAccounts);
   const { data: lookups } = useUserFormLookups();
   const createMutation = useCreateUser();
@@ -112,7 +115,7 @@ function UserEmployeeForm({
       }
     }
 
-    const payload = buildUserPayload(values, isEdit);
+    const payload = buildUserPayload(values, isEdit, { canSetHrisRole });
     if (releaseEmail) payload.release_email = true;
     // Tanpa Manajemen User: tidak ada field akun sama sekali saat edit (akun yang ada tidak disentuh).
     if (!canManageAccounts && isEdit) delete payload.is_access_app;
@@ -175,6 +178,7 @@ function UserEmployeeForm({
                 businessTree={businessTree}
                 isEdit={isEdit}
                 hasExistingAppAccount={hasExistingAppAccount}
+                canSetHrisRole={canSetHrisRole}
                 onChange={setField}
                 onResetPassword={
                   isEdit && hasExistingAppAccount ? () => setResetDialogOpen(true) : undefined

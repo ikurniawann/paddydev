@@ -129,16 +129,30 @@ export async function deleteIamRoleInDb(id: string): Promise<boolean> {
   return Boolean(deleted);
 }
 
+/** Query di dalam transaksi replaceIamRolePermissionsInDb. */
+export type RoleTxQuery = (sql: string, params: unknown[]) => Promise<{ rows: unknown[] }>;
+
 export async function replaceIamRolePermissionsInDb(
   roleId: string,
   permissions: Array<{ menuId: string; grantedActions: string[] }>,
-  updatedBy: string
+  updatedBy: string,
+  options: {
+    /** admin_hris: jalankan sync role HR turunan di transaksi yang sama (EPIC-061, R10). */
+    syncHrisStaffRoles?: boolean;
+    /** Cek di transaksi setelah baris role dikunci, terhadap kode dan grant role saat ini (Go replacePermissions). */
+    guard?: (query: RoleTxQuery, code: string) => Promise<void>;
+  } = {}
 ): Promise<void> {
   const pool = getIamPool();
   const client = await pool.connect();
 
   try {
     await client.query("BEGIN");
+
+    const locked = await client.query<{ code: string }>(`SELECT code FROM iam.roles WHERE id = $1 FOR UPDATE`, [roleId]);
+    const code = locked.rows[0]?.code;
+    if (code === undefined) throw new Error("Role not found");
+    if (options.guard) await options.guard((sql, params) => client.query(sql, params), code);
 
     await client.query(
       `UPDATE iam.role_menu_permissions
@@ -162,6 +176,10 @@ export async function replaceIamRolePermissionsInDb(
           updated_at = now()`,
         [roleId, permission.menuId, JSON.stringify(actions), updatedBy]
       );
+    }
+
+    if (options.syncHrisStaffRoles) {
+      await client.query("SELECT iam.sync_hris_staff_roles()");
     }
 
     await client.query("COMMIT");

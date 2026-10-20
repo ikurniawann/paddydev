@@ -6,6 +6,9 @@ package access
 
 import (
 	"net/http"
+	"slices"
+
+	"github.com/jackc/pgx/v5"
 
 	"nuhabit/backend/internal/modules/configuration/kit"
 	"nuhabit/backend/internal/platform/auth"
@@ -20,10 +23,10 @@ type handler struct {
 	auth *auth.Service
 }
 
-// Routes mounts the IAM settings routes.
+// Routes mounts the IAM settings routes and HRIS → Hak Akses HRIS.
 func Routes(d module.Deps, db database.DB) []module.Route {
 	h := handler{db: db, auth: d.Auth}
-	return []module.Route{
+	return append([]module.Route{
 		{Pattern: "GET /api/settings/iam/roles", Handler: httpx.Handle(h.listRoles)},
 		{Pattern: "POST /api/settings/iam/roles", Handler: httpx.Handle(h.createRole)},
 		{Pattern: "GET /api/settings/iam/roles/{id}", Handler: httpx.Handle(h.getRole)},
@@ -36,7 +39,7 @@ func Routes(d module.Deps, db database.DB) []module.Route {
 		{Pattern: "GET /api/settings/iam/menus/{id}", Handler: httpx.Handle(h.getMenu)},
 		{Pattern: "PUT /api/settings/iam/menus/{id}", Handler: httpx.Handle(h.updateMenu)},
 		{Pattern: "DELETE /api/settings/iam/menus/{id}", Handler: httpx.Handle(h.deleteMenu)},
-	}
+	}, h.hrisAccessRoutes()...)
 }
 
 var (
@@ -115,7 +118,8 @@ func (h handler) getRole(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (h handler) updateRole(w http.ResponseWriter, r *http.Request) error {
-	if _, err := h.auth.RequireMenuPrefix(r, iam.SettingsRoles...); err != nil {
+	user, err := h.auth.RequireMenuPrefix(r, iam.SettingsRoles...)
+	if err != nil {
 		return err
 	}
 	id := r.PathValue("id")
@@ -134,6 +138,17 @@ func (h handler) updateRole(w http.ResponseWriter, r *http.Request) error {
 	if existing == nil {
 		return errRoleNotFound
 	}
+	if existing.IsSystem {
+		if err := h.requireSuperAdmin(r, user); err != nil {
+			return err
+		}
+	}
+	newCode := lowerTrim(in.Code)
+	if isHrisRole(existing.Code) || (newCode != nil && isHrisRole(*newCode) && *newCode != existing.Code) {
+		if err := h.requireSuperAdminFor(r, user, errHrisRoleSuperAdmin); err != nil {
+			return err
+		}
+	}
 	// A system role keeps its code: the guards and the configuration.users
 	// role fallback resolve roles by code.
 	if existing.IsSystem && in.Code != nil && *in.Code != "" && *in.Code != existing.Code {
@@ -141,7 +156,7 @@ func (h handler) updateRole(w http.ResponseWriter, r *http.Request) error {
 	}
 	var code *string
 	if !existing.IsSystem {
-		code = lowerTrim(in.Code)
+		code = newCode
 	}
 	updated, err := updateRole(r.Context(), h.db, id, code, trimmed(in.Name), in)
 	if err != nil {
@@ -154,8 +169,16 @@ func (h handler) updateRole(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (h handler) deleteRole(w http.ResponseWriter, r *http.Request) error {
-	if _, err := h.auth.RequireMenuPrefix(r, iam.SettingsRoles...); err != nil {
+	user, err := h.auth.RequireMenuPrefix(r, iam.SettingsRoles...)
+	if err != nil {
 		return err
+	}
+	if existing, err := getRole(r.Context(), h.db, r.PathValue("id")); err != nil {
+		return err
+	} else if existing != nil && isHrisRole(existing.Code) {
+		if err := h.requireSuperAdminFor(r, user, errHrisRoleSuperAdmin); err != nil {
+			return err
+		}
 	}
 	found, system, err := deleteRole(r.Context(), h.db, r.PathValue("id"))
 	switch {
@@ -180,6 +203,36 @@ func (h handler) permissionsResponse(w http.ResponseWriter, r *http.Request, id 
 		return err
 	}
 	return httpx.JSON(w, http.StatusOK, permissionsBody{id, mapRoleDetail(row, perms).Permissions})
+}
+
+// errSystemRoleSuperAdmin: system roles change only through super_admin
+// (EPIC-061, Q-RA-5).
+var errSystemRoleSuperAdmin = httpx.Forbidden("Role sistem hanya bisa diubah oleh Super Admin")
+
+// HR roles (admin_hris and the hris_* roles derived from it) and "delete"
+// on HRIS menus change in Role Management only through super_admin;
+// AdminHRIS uses Hak Akses HRIS (EPIC-061, Q-RA-2/Q-RA-5).
+var (
+	errHrisRoleSuperAdmin   = httpx.Forbidden("Role HR hanya bisa diubah oleh Super Admin; AdminHRIS memakai halaman Hak Akses HRIS")
+	errHrisDeleteSuperAdmin = httpx.Forbidden("Hak hapus HRIS hanya bisa diberikan oleh Super Admin")
+)
+
+func isHrisRole(code string) bool { return slices.Contains(iam.HrisStaffRoleCodes, code) }
+
+func (h handler) requireSuperAdmin(r *http.Request, u *auth.User) error {
+	return h.requireSuperAdminFor(r, u, errSystemRoleSuperAdmin)
+}
+
+// requireSuperAdminFor returns denied unless u holds the IAM role super_admin.
+func (h handler) requireSuperAdminFor(r *http.Request, u *auth.User, denied error) error {
+	ok, err := h.auth.HasRoleCode(r.Context(), u, "super_admin")
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return denied
+	}
+	return nil
 }
 
 func (h handler) roleOr404(r *http.Request, id string) (roleRow, error) {
@@ -223,7 +276,24 @@ func (h handler) putPermissions(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	if err := replacePermissions(r.Context(), h.db, id, grants, user.ID); err != nil {
+	if row.IsSystem {
+		if err := h.requireSuperAdmin(r, user); err != nil {
+			return err
+		}
+	}
+	// HR roles and new "delete" on HRIS menus need super_admin; checked on
+	// the locked role row, so a concurrent save cannot change the outcome.
+	guard := func(tx pgx.Tx, code string) error {
+		if isHrisRole(code) {
+			return h.requireSuperAdminFor(r, user, errHrisRoleSuperAdmin)
+		}
+		added, err := addsHrisDelete(r.Context(), tx, id, grants)
+		if err != nil || !added {
+			return err
+		}
+		return h.requireSuperAdminFor(r, user, errHrisDeleteSuperAdmin)
+	}
+	if err := replacePermissions(r.Context(), h.db, id, grants, user.ID, guard); err != nil {
 		return err
 	}
 	return h.permissionsResponse(w, r, id, row)

@@ -345,6 +345,7 @@ func TestContractDocuments(t *testing.T) {
 	hr, _ := h.staff("hrd", []string{"hris.kepegawaian", "hris.compensation"}, true)
 	staff, _ := h.staff("pos", nil, true)
 	_, worker := h.staff("pos", nil, true, emp{name: "Budi Santoso"})
+	h.grantDelete(hr, "hris.kepegawaian.contracts")
 	number := "GO-" + testutil.RandomHex(3) + "/PKWT/VII/2026"
 	contract := h.scalar(`INSERT INTO hris.employment_contracts (employee_id, contract_number, contract_type, start_date, end_date,
 		position_title, department_name, work_location, base_salary, signed_at)
@@ -415,11 +416,11 @@ func TestContractDocuments(t *testing.T) {
 	if signed := h.scalar(`SELECT signed_at::text FROM hris.employment_contracts WHERE id = $1`, contract); signed != "2026-07-20" {
 		t.Fatalf("signed_at overwritten: %s", signed)
 	}
-	expect(t, h.do(&hr, "DELETE", base+"/signed-document", nil), 200, "")
+	expect(t, h.do(&hr, "DELETE", base+"/signed-document?reason=Scan%20salah%20unggah", nil), 200, "")
 	if _, err := os.Stat(filepath.Join(dir, "private", replaced)); !os.IsNotExist(err) {
 		t.Fatalf("deleted scan still on disk: %v", err)
 	}
-	expect(t, h.do(&hr, "DELETE", base+"/signed-document", nil), 409, "Kontrak ini belum punya dokumen bertanda tangan")
-	expect(t, h.do(&hr, "DELETE", "/api/hris/contracts/11111111-1111-4111-8111-111111111111/signed-document", nil), 404, "Kontrak tidak ditemukan")
+	expect(t, h.do(&hr, "DELETE", base+"/signed-document?reason=Scan%20salah%20unggah", nil), 409, "Kontrak ini belum punya dokumen bertanda tangan")
+	expect(t, h.do(&hr, "DELETE", "/api/hris/contracts/11111111-1111-4111-8111-111111111111/signed-document?reason=Scan%20salah%20unggah", nil), 404, "Kontrak tidak ditemukan")
 	expect(t, h.do(&staff, "DELETE", base+"/signed-document", nil), 403, "")
 }

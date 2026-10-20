@@ -111,7 +111,7 @@ func parsePermissions(f *validate.Form) []grant {
 	f.List("permissions", validate.Rule{HasDefault: true}, math.MaxInt, func(items *validate.Form, i int, v any) {
 		item := items.Item(i, v)
 		rows = append(rows, row{
-			menuID:    item.Str("menuId", optional, validate.StrOpts{}),
+			menuID:    item.Str("menuId", optional, validate.StrOpts{Check: menuIDCheck}),
 			isGranted: item.Bool("isGranted", optional),
 			actions:   item.Strings("grantedActions", optional, math.MaxInt, validate.StrOpts{}),
 		})
@@ -127,9 +127,42 @@ func parsePermissions(f *validate.Form) []grant {
 			// turns an empty list into ["read"] too.
 			actions = []string{"read"}
 		}
-		out = append(out, grant{MenuID: *r.menuID, Actions: actions})
+		id, _ := canonicalUUID(*r.menuID)
+		out = append(out, grant{MenuID: id, Actions: actions})
 	}
 	return out
+}
+
+// canonicalUUID returns s as a lowercase hyphenated uuid. It accepts the
+// hyphenated or 32-hex form, optionally in braces, in any case; anything
+// else is not a uuid. The HRIS delete guard compares ids, so every menu id
+// is stored and checked in this one form (EPIC-061 re-review).
+func canonicalUUID(s string) (string, bool) {
+	if len(s) >= 2 && s[0] == '{' && s[len(s)-1] == '}' {
+		s = s[1 : len(s)-1]
+	}
+	if len(s) == 36 {
+		if s[8] != '-' || s[13] != '-' || s[18] != '-' || s[23] != '-' {
+			return "", false
+		}
+		s = s[:8] + s[9:13] + s[14:18] + s[19:23] + s[24:]
+	}
+	if len(s) != 32 {
+		return "", false
+	}
+	s = strings.ToLower(s)
+	for _, c := range s {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
+			return "", false
+		}
+	}
+	return s[:8] + "-" + s[8:12] + "-" + s[12:16] + "-" + s[16:20] + "-" + s[20:], true
+}
+
+// menuIDCheck: a permission row's menuId is empty (row skipped) or a uuid.
+func menuIDCheck(s string) (string, string, bool) {
+	_, ok := canonicalUUID(s)
+	return "invalid_format", "Invalid UUID", s == "" || ok
 }
 
 // lowerTrim is `value?.trim()?.toLowerCase()`.

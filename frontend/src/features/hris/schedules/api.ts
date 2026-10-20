@@ -12,7 +12,7 @@ async function postImport(form: FormData): Promise<Response> {
   return fetch("/api/hris/schedules/import", { method: "POST", body: form });
 }
 
-function formOf(input: Range & { file: File; step: string; fingerprint?: string; ack_warnings?: boolean }): FormData {
+function formOf(input: Range & { file: File; step: string; fingerprint?: string; ack_warnings?: boolean; reason?: string }): FormData {
   const form = new FormData();
   form.append("file", input.file);
   form.append("branch_id", input.branch_id);
@@ -21,11 +21,12 @@ function formOf(input: Range & { file: File; step: string; fingerprint?: string;
   form.append("step", input.step);
   if (input.fingerprint) form.append("fingerprint", input.fingerprint);
   if (input.ack_warnings) form.append("ack_warnings", "true");
+  if (input.reason) form.append("reason", input.reason);
   return form;
 }
 
 export async function importScheduleFile(
-  input: Range & { file: File; step: "preview" | "commit"; fingerprint?: string; ack_warnings?: boolean }
+  input: Range & { file: File; step: "preview" | "commit"; fingerprint?: string; ack_warnings?: boolean; reason?: string }
 ): Promise<{ data: SchedulePreview; message?: string }> {
   const res = await postImport(formOf(input));
   const json = await res.json().catch(() => ({}));

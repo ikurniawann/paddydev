@@ -54,6 +54,10 @@ export interface UserEmployeeFormValues {
   is_access_app: boolean;
   password: string;
   role: UserRole;
+  /** Role IAM HRIS (EPIC-061); "" = ikuti peran aplikasi. */
+  hris_role: string;
+  /** Nilai hris_role saat dimuat: dikirim hanya bila berubah. */
+  hris_role_loaded: string;
   business_scope: "" | "holding" | "company" | "branch";
   holding_id: string;
   company_id: string;
@@ -100,6 +104,8 @@ export const emptyUserForm: UserEmployeeFormValues = {
   is_access_app: false,
   password: "",
   role: "admin",
+  hris_role: "",
+  hris_role_loaded: "",
   business_scope: "",
   holding_id: "",
   company_id: "",
@@ -150,6 +156,8 @@ export function userFormFromItem(detail: UserEmployeeItem): UserEmployeeFormValu
     is_access_app: detail.isAccessApp,
     password: "",
     role: account?.role ?? "admin",
+    hris_role: account?.hrisRole ?? "",
+    hris_role_loaded: account?.hrisRole ?? "",
     business_scope: account?.businessScope ?? "",
     holding_id: account?.holdingId ?? "",
     company_id: account?.companyId ?? "",
@@ -222,6 +230,8 @@ const APP_ACCESS_FIELDS = new Set<keyof UserEmployeeFormValues>([
   "is_access_app",
   "password",
   "role",
+  "hris_role",
+  "hris_role_loaded",
   "business_scope",
   "holding_id",
   "company_id",
@@ -234,10 +244,14 @@ const APP_ACCESS_FIELDS = new Set<keyof UserEmployeeFormValues>([
   "approval_permissions",
 ]);
 
-/** Payload POST/PUT /api/users: string kosong → null; data akun hanya bila akses aktif. */
+/**
+ * Payload POST/PUT /api/users: string kosong → null; data akun hanya bila akses aktif.
+ * `canSetHrisRole` (default true) = pemanggil super_admin; false menghilangkan key hris_role.
+ */
 export function buildUserPayload(
   form: UserEmployeeFormValues,
-  isEdit: boolean
+  isEdit: boolean,
+  opts: { canSetHrisRole?: boolean } = {}
 ): Record<string, unknown> {
   const payload: Record<string, unknown> = {};
 
@@ -268,6 +282,13 @@ export function buildUserPayload(
       form.branch_id || null
     ),
   });
+
+  // Role HRIS hanya untuk peran hrd dan hanya bila diubah: simpan ulang tidak menimpa role IAM.
+  // Server menolak (403) body yang memuat key hris_role dari non-super_admin, jadi key
+  // dihilangkan sama sekali kecuali pemanggil boleh mengaturnya.
+  if (opts.canSetHrisRole !== false && form.role === "hrd" && form.hris_role !== form.hris_role_loaded) {
+    payload.hris_role = form.hris_role || null;
+  }
 
   // edit: password kosong = tidak diganti
   if (form.password || !isEdit) payload.password = form.password;

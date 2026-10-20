@@ -5,6 +5,7 @@
  * queryOne/query tiruan (@/lib/db).
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { ApiError } from "@/lib/api/auth";
 
 const requireIamMenuPrefix = vi.fn();
 const requireIamGuard = vi.fn();
@@ -71,6 +72,7 @@ vi.mock("@/lib/pg/create-client", () => ({
   createServerPgClient: async () => fakeDb,
 }));
 
+const REASON = "?reason=Data%20ganda%20sistem";
 const ID = "00000000-0000-0000-0000-000000000001";
 const OTHER = "00000000-0000-0000-0000-000000000002";
 const HR_USER = { id: "u-hr", full_name: "HRD", role: "hrd", brand_id: null };
@@ -135,10 +137,14 @@ describe("payroll", () => {
 
   it("DELETE run paid ditolak; run tak ada → 404", async () => {
     const { DELETE } = await import("@/app/api/hris/payroll/[id]/route");
-    await expectError(await DELETE(req("DELETE"), params({ id: "x" })), 404, "Payroll run tidak ditemukan");
+    await expectError(
+      await DELETE(req("DELETE", undefined, REASON), params({ id: "x" })),
+      404,
+      "Payroll run tidak ditemukan"
+    );
     tables.payroll_runs = { id: "run-1", status: "paid" };
     await expectError(
-      await DELETE(req("DELETE"), params({ id: "run-1" })),
+      await DELETE(req("DELETE", undefined, REASON), params({ id: "run-1" })),
       400,
       "Payroll yang sudah dibayar tidak bisa dihapus"
     );
@@ -237,10 +243,25 @@ describe("cuti", () => {
     await expectError(await GET(req("GET"), params({ id: ID })), 403, "Insufficient permissions");
   });
 
-  it("hapus hanya HRD/admin", async () => {
+  it("hapus butuh aksi delete di menu Cuti & Izin dan alasan", async () => {
     const { DELETE } = await import("@/app/api/hris/leaves/[id]/route");
-    const res = await DELETE(req("DELETE"), params({ id: ID }));
-    await expectError(res, 403, "Forbidden: Only HRD can delete leave requests");
+    requireIamMenuPrefix.mockRejectedValue(ApiError.forbidden("Insufficient permissions"));
+    await expectError(
+      await DELETE(req("DELETE", undefined, REASON), params({ id: ID })),
+      403,
+      "Insufficient permissions"
+    );
+    expect(writes).toEqual([]);
+    requireIamMenuPrefix.mockResolvedValue(HR_USER);
+    await expectError(
+      await DELETE(req("DELETE"), params({ id: ID })),
+      400,
+      "Alasan hapus wajib diisi (minimal 5 karakter)"
+    );
+    expect(writes).toEqual([]);
+    const ok = await DELETE(req("DELETE", undefined, REASON), params({ id: ID }));
+    expect(ok.status).toBe(200);
+    expect(writes).toEqual([{ table: "leaves", op: "delete", payload: undefined }]);
   });
 
   it("lampiran: employee_id HR wajib UUID (tidak bisa keluar folder)", async () => {

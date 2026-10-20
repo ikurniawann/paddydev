@@ -264,7 +264,8 @@ func TestCVUploadAndRemove(t *testing.T) {
 		t.Fatalf("uploaded bytes: %v", err)
 	}
 
-	c = h.as(h.hr, "DELETE", "/api/candidates/"+id+"/cv-upload", nil)
+	testutil.GrantMenu(t, h.hr.RoleID, "hris.recruitment.candidates", []string{"read", "delete"})
+	c = h.as(h.hr, "DELETE", "/api/candidates/"+id+"/cv-upload?reason=CV%20salah%20unggah", nil)
 	if c.status != 200 || c.raw != `{"message":"CV berhasil dihapus"}` || h.scalar(`SELECT cv_url FROM recruitment.candidates WHERE id = $1`, id) != "<nil>" {
 		t.Fatal(c.raw)
 	}
@@ -408,9 +409,10 @@ func TestDeleteCandidatePurgesPsikotesFiles(t *testing.T) {
 	h.writePrivate("psikotes/"+session+"/t/a.png", pngBytes)
 	h.writePrivate("psikotes/other/keep.png", pngBytes)
 
+	testutil.GrantMenu(t, h.hr.RoleID, "hris.recruitment.candidates", []string{"read", "delete"})
 	expect(t, h.as(h.none, "DELETE", "/api/candidates/"+id, nil), 403, "")
-	expect(t, h.as(h.hr, "DELETE", "/api/candidates/x", nil), 400, "ID kandidat tidak valid")
-	c := h.as(h.hr, "DELETE", "/api/candidates/"+id, nil)
+	expect(t, h.as(h.hr, "DELETE", "/api/candidates/x?reason=Kandidat%20uji%20dihapus", nil), 400, "ID kandidat tidak valid")
+	c := h.as(h.hr, "DELETE", "/api/candidates/"+id+"?reason=Kandidat%20uji%20dihapus", nil)
 	if c.status != 200 || c.raw != `{"message":"Kandidat dihapus"}` {
 		t.Fatal(c.raw)
 	}
@@ -420,7 +422,7 @@ func TestDeleteCandidatePurgesPsikotesFiles(t *testing.T) {
 	if h.scalar(`SELECT count(*)::text FROM recruitment.psikotes_sessions WHERE id = $1`, session) != "0" {
 		t.Fatal("cascade")
 	}
-	expect(t, h.as(h.hr, "DELETE", "/api/candidates/"+id, nil), 404, "Kandidat tidak ditemukan")
+	expect(t, h.as(h.hr, "DELETE", "/api/candidates/"+id+"?reason=Kandidat%20uji%20dihapus", nil), 404, "Kandidat tidak ditemukan")
 }
 
 func (h *fileHarness) interviewSession(status, config string) (id, token string) {

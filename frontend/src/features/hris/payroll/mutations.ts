@@ -1,6 +1,7 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { withDeleteReason } from "@/lib/hris/delete-reason";
 import { payrollQueryKeys } from "./query-keys";
 import {
   createPayrollRun,
@@ -27,7 +28,11 @@ export function useSavePayrollInput(runId: string) {
 export function useDeletePayrollInput(runId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ employeeId, code }: { employeeId: string; code: string }) => deletePayrollInput(runId, employeeId, code),
+    mutationFn: withDeleteReason(
+      "Hapus komponen manual",
+      ({ employeeId, code }: { employeeId: string; code: string }, reason) => deletePayrollInput(runId, employeeId, code, reason)
+    ),
+    retry: false,
     onSuccess: () => qc.invalidateQueries({ queryKey: payrollQueryKeys.inputs(runId) }),
   });
 }
@@ -70,7 +75,8 @@ export function useUpdatePayrollStatus() {
 export function useDeletePayrollRun() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (runId: string) => deletePayrollRun(runId),
+    mutationFn: withDeleteReason("Hapus payroll run", (runId: string, reason) => deletePayrollRun(runId, reason)),
+    retry: false,
     onSuccess: () => qc.invalidateQueries({ queryKey: payrollQueryKeys.all }),
   });
 }

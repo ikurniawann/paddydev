@@ -1,4 +1,5 @@
 import { apiGet, apiPost, apiPut, apiDelete } from "@/lib/api-client";
+import { withReasonQuery } from "@/lib/hris/delete-reason";
 import type {
   PayrollRun,
   CreatePayrollPayload,
@@ -28,8 +29,8 @@ export const calculatePayroll = (runId: string, includeThr: boolean) =>
 export const updatePayrollStatus = (runId: string, status: string) =>
   apiPut<{ data: PayrollRun }>(`/api/hris/payroll/${runId}`, { status });
 
-export const deletePayrollRun = (runId: string) =>
-  apiDelete(`/api/hris/payroll/${runId}`);
+export const deletePayrollRun = (runId: string, reason: string) =>
+  apiDelete(withReasonQuery(`/api/hris/payroll/${runId}`, reason));
 
 export const notifyPayslip = (payrollDetailId: string) =>
   apiPost<{ message?: string; data?: { wa_link?: string | null } }>("/api/hris/payslips/notify", {
@@ -79,9 +80,12 @@ export const savePayrollInput = (
   payload: { employee_id: string; code: string; amount: number; note?: string | null }
 ) => apiPut<{ data: PayrollInput | null }>(`/api/hris/payroll/${runId}/inputs`, payload);
 
-export const deletePayrollInput = (runId: string, employeeId: string, code: string) =>
+export const deletePayrollInput = (runId: string, employeeId: string, code: string, reason: string) =>
   apiDelete(
-    `/api/hris/payroll/${runId}/inputs?employee_id=${encodeURIComponent(employeeId)}&code=${encodeURIComponent(code)}`
+    withReasonQuery(
+      `/api/hris/payroll/${runId}/inputs?employee_id=${encodeURIComponent(employeeId)}&code=${encodeURIComponent(code)}`,
+      reason
+    )
   );
 
 export const importPayrollInputs = (runId: string, csv: string) =>

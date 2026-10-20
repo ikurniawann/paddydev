@@ -10,6 +10,7 @@ import {
   saveSignedDocument,
 } from "@/lib/hris/contracts-repo";
 import { requireUuid } from "@/lib/hris/workforce-route";
+import { HRIS_LEAF, auditHrisDelete, requireHrisDelete } from "@/lib/hris/delete-guard";
 
 /**
  * Dokumen kontrak bertanda tangan (scan PDF/JPG/PNG/WebP, maks 10 MB),
@@ -65,9 +66,11 @@ export const GET = apiHandler(async (_req: NextRequest, { params }: RouteParams)
   });
 }, "hris/contracts/signed-document GET");
 
-export const DELETE = apiHandler(async (_req: NextRequest, { params }: RouteParams) => {
+export const DELETE = apiHandler(async (request: NextRequest, { params }: RouteParams) => {
+  const { user, reason } = await requireHrisDelete(request, HRIS_LEAF.kontrak);
   const contract = await guardAndLoad(params);
   if (!contract) throw ApiError.notFound("Kontrak tidak ditemukan");
   await removeSignedDocument(contract);
+  await auditHrisDelete(request, user, "hris.contract_signed_document", (await params).id, reason);
   return NextResponse.json({ message: "Dokumen bertanda tangan dihapus" });
 }, "hris/contracts/signed-document DELETE");

@@ -36,6 +36,7 @@ func TestAttendancePeriodClosing(t *testing.T) {
 	admin, _ := h.staff("super_admin", nil, true)
 	recruiter, _ := h.staff("hiring_manager", nil, true)
 	crew, crewID := h.staff("pos", nil, true, emp{name: "Crew Periode"})
+	h.grantDelete(hr, "hris.workforce.attendance")
 	shift := h.scalar(`INSERT INTO hris.shifts (name, start_time, end_time, late_tolerance_minutes)
 		VALUES ('Pagi Periode', '08:00', '17:00', 10) RETURNING id::text`)
 	for dow := 1; dow <= 7; dow++ {

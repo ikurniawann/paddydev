@@ -1,6 +1,7 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { withDeleteReason } from "@/lib/hris/delete-reason";
 import { leavesQueryKeys } from "./query-keys";
 import { createLeave, updateLeave, deleteLeave, approveLeave } from "./api";
 import type {
@@ -34,7 +35,8 @@ export function useUpdateLeave() {
 export function useDeleteLeave() {
   const invalidate = useInvalidateLeaves();
   return useMutation({
-    mutationFn: (id: string) => deleteLeave(id),
+    mutationFn: withDeleteReason("Hapus pengajuan cuti/izin", (id: string, reason) => deleteLeave(id, reason)),
+    retry: false,
     onSuccess: invalidate,
   });
 }

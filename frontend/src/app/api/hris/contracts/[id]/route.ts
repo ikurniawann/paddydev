@@ -9,6 +9,7 @@ import {
   runContractAction,
 } from "@/lib/hris/contracts-lifecycle";
 import { readJson, requireUuid } from "@/lib/hris/workforce-route";
+import { HRIS_LEAF, auditHrisDelete, requireHrisDelete } from "@/lib/hris/delete-guard";
 
 /**
  * PATCH  /api/hris/contracts/[id] — aksi siklus hidup kontrak (lihat
@@ -31,9 +32,10 @@ export const PATCH = apiHandler(async (req: NextRequest, { params }: RouteParams
   return NextResponse.json(result, { status: body.action === "renew" ? 201 : 200 });
 }, "hris/contracts PATCH");
 
-export const DELETE = apiHandler(async (_req: NextRequest, { params }: RouteParams) => {
-  await requireIamMenuPrefix(IAM.hrisKepegawaian);
+export const DELETE = apiHandler(async (request: NextRequest, { params }: RouteParams) => {
+  const { user, reason } = await requireHrisDelete(request, HRIS_LEAF.kontrak);
   const id = requireUuid((await params).id, "ID kontrak tidak valid");
   await deleteDraftContract(id);
+  await auditHrisDelete(request, user, "hris.employment_contracts", id, reason);
   return NextResponse.json({ message: "Draft kontrak dihapus" });
 }, "hris/contracts DELETE");

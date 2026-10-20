@@ -6,6 +6,7 @@ import (
 
 	"nuhabit/backend/internal/modules/hris/domain"
 	"nuhabit/backend/internal/platform/auth"
+	"nuhabit/backend/internal/platform/hrisdel"
 	"nuhabit/backend/internal/platform/httpx"
 	"nuhabit/backend/internal/platform/validate"
 )
@@ -47,6 +48,12 @@ func (h handlers) withMenu(prefixes []string, fn func(w http.ResponseWriter, r *
 		}
 		return fn(w, r, u)
 	})
+}
+
+// withDelete is hrisdel.Guard on this module's database (EPIC-061): the
+// "delete" action on the route's leaf menu, a reason, an audit row.
+func (h handlers) withDelete(spec hrisdel.Spec, next http.Handler) http.Handler {
+	return hrisdel.Guard(h.auth, h.svc.repo.querier(), spec, next)
 }
 
 // withActor is requireWorkforceActor: a session (401 "Unauthorized").

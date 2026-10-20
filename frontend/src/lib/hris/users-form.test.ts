@@ -128,6 +128,20 @@ describe("buildUserPayload", () => {
     const payload = buildUserPayload(withAccess({ role: "super_admin" }), false);
     expect(payload.business_scope).toBeNull();
   });
+
+  it("role HRIS dikirim hanya bila berubah dan peran aplikasi hrd", () => {
+    const loaded = withAccess({ role: "hrd", hris_role: "hris_non_payroll", hris_role_loaded: "hris_non_payroll" });
+    expect(buildUserPayload(loaded, true)).not.toHaveProperty("hris_role");
+    expect(buildUserPayload({ ...loaded, hris_role: "hris_manager" }, true)).toHaveProperty("hris_role", "hris_manager");
+    expect(buildUserPayload({ ...loaded, hris_role: "" }, true)).toHaveProperty("hris_role", null);
+    expect(buildUserPayload({ ...loaded, role: "admin", hris_role: "hris_manager" }, true)).not.toHaveProperty("hris_role");
+  });
+
+  it("role HRIS tidak pernah dikirim oleh yang bukan super_admin (server menolak key-nya)", () => {
+    const changed = withAccess({ role: "hrd", hris_role: "hris_manager", hris_role_loaded: "hris_non_payroll" });
+    expect(buildUserPayload(changed, true, { canSetHrisRole: false })).not.toHaveProperty("hris_role");
+    expect(buildUserPayload(changed, true, { canSetHrisRole: true })).toHaveProperty("hris_role", "hris_manager");
+  });
 });
 
 describe("userFormFromItem", () => {
@@ -173,6 +187,7 @@ describe("userFormFromItem", () => {
         role: "hrd",
         status: "active",
         brand_id: null,
+        hris_role: "hris_manager",
         business_scope: "branch",
         holding_id: HOLDING,
         company_id: COMPANY,
@@ -212,6 +227,8 @@ describe("userFormFromItem", () => {
       gender: "male",
       ktp: "",
       role: "hrd",
+      hris_role: "hris_manager",
+      hris_role_loaded: "hris_manager",
       business_scope: "branch",
       default_warehouse_id: STALL,
       warehouse_ids: [STALL],

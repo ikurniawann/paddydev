@@ -104,3 +104,12 @@ export function levelLabel(value: string) {
 export function formatCurrency(value: number | null) {
   return value == null ? "Tanpa limit" : formatRupiah(value);
 }
+
+/** Role IAM HRIS untuk akun peran hrd (EPIC-061). "auto" = ikuti peran aplikasi. */
+export const HRIS_ROLE_OPTIONS = [
+  { value: "auto", label: "Ikuti peran aplikasi (hrd)" },
+  { value: "admin_hris", label: "Admin HRIS" },
+  { value: "hris_manager", label: "HR Manager" },
+  { value: "hris_non_payroll", label: "HR Staff (Non-Payroll)" },
+  { value: "hris_non_rekrutmen_kpi", label: "HR Staff (Non-Rekrutmen & KPI)" },
+];

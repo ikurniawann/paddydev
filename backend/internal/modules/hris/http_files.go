@@ -36,7 +36,7 @@ func (h handlers) fileRoutes() []module.Route {
 		r("GET /api/hris/contracts/{id}/document", h.withMenu(kepegawaian, h.contractDocument)),
 		r("GET /api/hris/contracts/{id}/signed-document", h.withMenu(kepegawaian, h.signedDocument)),
 		r("POST /api/hris/contracts/{id}/signed-document", h.withMenu(kepegawaian, h.uploadSignedDocument)),
-		r("DELETE /api/hris/contracts/{id}/signed-document", h.withMenu(kepegawaian, h.deleteSignedDocument)),
+		r("DELETE /api/hris/contracts/{id}/signed-document", h.withDelete(delSignedDoc, h.withMenu(kepegawaian, h.deleteSignedDocument))),
 	}
 }
 

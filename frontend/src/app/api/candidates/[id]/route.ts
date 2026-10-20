@@ -6,6 +6,7 @@ import { query } from "@/lib/db";
 import { deletePrivateFolder } from "@/lib/storage-private";
 import { candidateUpdateSchema, isUuid } from "@/lib/recruitment/candidate-query";
 import { getCandidate, parseBody, requireCandidate, updateCandidate } from "@/lib/recruitment/candidates-repo";
+import { HRIS_LEAF, auditHrisDelete, requireHrisDelete } from "@/lib/hris/delete-guard";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -33,8 +34,8 @@ export const PUT = apiHandler(async (request: NextRequest, { params }: RoutePara
 // DELETE /api/candidates/[id]
 // Destruktif & ireversibel (termasuk purge bukti psikotes di storage), jadi
 // penghapus dicatat di log server karena candidate_activities ikut ter-CASCADE.
-export const DELETE = apiHandler(async (_request: NextRequest, { params }: RouteParams) => {
-  const user = await requireIamMenuPrefix(IAM.hrisRecruitment);
+export const DELETE = apiHandler(async (request: NextRequest, { params }: RouteParams) => {
+  const { user, reason } = await requireHrisDelete(request, HRIS_LEAF.kandidat);
   const { id } = await params;
   await requireCandidate(id);
 
@@ -54,6 +55,6 @@ export const DELETE = apiHandler(async (_request: NextRequest, { params }: Route
   for (const session of sessions) {
     await deletePrivateFolder(`psikotes/${session.id}`);
   }
-
+  await auditHrisDelete(request, user, "recruitment.candidates", id, reason);
   return NextResponse.json({ message: "Kandidat dihapus" });
 }, "api/candidates/[id]");

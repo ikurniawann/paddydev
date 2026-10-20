@@ -71,6 +71,7 @@ type appAccountView struct {
 	DefaultWarehouseID  *string         `json:"defaultWarehouseId"`
 	ApprovalPermissions json.RawMessage `json:"approvalPermissions"`
 	Warehouses          []warehouseView `json:"warehouses"`
+	HrisRole            *string         `json:"hrisRole"`
 }
 
 type warehouseView struct {
@@ -128,7 +129,7 @@ func mapEmployee(e Employee, app *appUser) (employeeView, error) {
 		HoldingName: app.HoldingName, CompanyName: app.CompanyName, BranchName: app.BranchName,
 		LastSignInAt: httpx.NewJSTime(app.LastSignInAt), CanSwitchStall: app.CanSwitchStall,
 		CanCentralCheckout: app.CanCentralCheckout, DefaultWarehouseID: app.DefaultWarehouseID,
-		ApprovalPermissions: perms, Warehouses: warehouses,
+		ApprovalPermissions: perms, Warehouses: warehouses, HrisRole: app.HrisRole,
 	}
 	return v, nil
 }

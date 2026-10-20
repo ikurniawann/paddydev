@@ -18,6 +18,8 @@ vi.mock("@/lib/api/auth", async (importOriginal) => {
   return {
     ...actual,
     requireIamMenuPrefix: (...args: unknown[]) => requireIamMenuPrefix(...args),
+    // Aksi delete menu daun ikut grant palsu yang sama.
+    requireIamAction: (prefixes: unknown) => requireIamMenuPrefix(prefixes),
     requireIamGuard: (...args: unknown[]) => requireIamGuard(...args),
   };
 });
@@ -156,7 +158,7 @@ describe("PATCH/DELETE /api/hris/contracts/[id]", () => {
   it("hapus kontrak non-draft → 409", async () => {
     queryOne.mockResolvedValueOnce(null);
     const { DELETE } = await route();
-    const res = await DELETE(req("http://x", "DELETE"), params({ id: CONTRACT_ID }));
+    const res = await DELETE(req("http://x?reason=Draft%20salah%20buat", "DELETE"), params({ id: CONTRACT_ID }));
     expect(res.status).toBe(409);
     expect((await json(res)).error).toBe("Hanya draft kontrak yang bisa dihapus");
   });

@@ -12,6 +12,7 @@ import {
   updateResponse,
 } from "@/lib/hris/feedback-repo";
 import { readJson } from "@/lib/hris/workforce-route";
+import { HRIS_LEAF, auditHrisDelete, requireHrisDelete } from "@/lib/hris/delete-guard";
 
 /**
  * GET/PUT/DELETE satu jawaban feedback. POST/PATCH memutuskan penugasan
@@ -38,9 +39,12 @@ export const PUT = apiHandler(async (request: NextRequest, { params }: RoutePara
   return NextResponse.json({ data: await updateResponse(id, body) });
 }, "hris/feedback-responses/[id] PUT");
 
-export const DELETE = apiHandler(async (_request: NextRequest, { params }: RouteParams) => {
+export const DELETE = apiHandler(async (request: NextRequest, { params }: RouteParams) => {
+  const { user, reason } = await requireHrisDelete(request, HRIS_LEAF.kpiScorecard);
   await requireIamMenuPrefix(IAM.hrisPerformanceAdmin);
-  await deleteResponse((await params).id);
+  const { id } = await params;
+  await deleteResponse(id);
+  await auditHrisDelete(request, user, "performance.feedback_responses", id, reason);
   return NextResponse.json({ success: true });
 }, "hris/feedback-responses/[id] DELETE");
 

@@ -5,6 +5,7 @@ import { EMPLOYEE_RECORD_MANAGERS, requireEmployeeAccess } from "@/lib/hris/empl
 import { employeeUpdateSchema } from "@/lib/hris/employee-update-schema";
 import { deactivateEmployee, getEmployee, updateEmployee } from "@/lib/hris/employees-repo";
 import { readJson } from "@/lib/hris/workforce-route";
+import { HRIS_LEAF, auditHrisDelete, requireHrisDelete } from "@/lib/hris/delete-guard";
 
 /**
  * GET    /api/hris/employees/[id] — detail; pengelola atau karyawan itu sendiri (ESS).
@@ -30,9 +31,10 @@ export const PUT = apiHandler(async (request: NextRequest, { params }: RoutePara
   return NextResponse.json({ data, message: "Data karyawan berhasil diupdate" });
 }, "hris/employees/[id] PUT");
 
-export const DELETE = apiHandler(async (_request: NextRequest, { params }: RouteParams) => {
-  await requireIamMenuPrefix(EMPLOYEE_RECORD_MANAGERS);
+export const DELETE = apiHandler(async (request: NextRequest, { params }: RouteParams) => {
+  const { user, reason } = await requireHrisDelete(request, HRIS_LEAF.karyawan);
   const { id } = await params;
   const data = await deactivateEmployee(id);
+  await auditHrisDelete(request, user, "hris.employees", id, reason);
   return NextResponse.json({ data, message: "Karyawan berhasil dihapus (non-aktif)" });
 }, "hris/employees/[id] DELETE");

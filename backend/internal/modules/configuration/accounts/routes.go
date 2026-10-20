@@ -102,6 +102,30 @@ func (h handlers) writeGuard(r *http.Request, action string) (actor string, acco
 	return "", false, httpx.Forbidden("Insufficient permissions")
 }
 
+// errHrisRoleSuperAdmin: in Manajemen User only super_admin sets the HRIS
+// role; AdminHRIS uses HRIS → Hak Akses HRIS (EPIC-061, ruling R9).
+var errHrisRoleSuperAdmin = httpx.Forbidden("Role HRIS hanya bisa diatur Super Admin di sini; AdminHRIS memakai halaman Hak Akses HRIS")
+
+// requireHrisRoleSetter refuses hris_role from anyone but super_admin,
+// before anything is validated or written.
+func (h handlers) requireHrisRoleSetter(r *http.Request, b *employeeBody) error {
+	if !b.has("hris_role") {
+		return nil
+	}
+	u, err := h.d.Auth.RequireUser(r)
+	if err != nil {
+		return err
+	}
+	ok, err := h.d.Auth.HasRoleCode(r.Context(), u, "super_admin")
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return errHrisRoleSuperAdmin
+	}
+	return nil
+}
+
 /* ── /api/users ──────────────────────────────────────────────────────── */
 
 func (h handlers) listUsers(w http.ResponseWriter, r *http.Request) error {
@@ -132,6 +156,9 @@ func (h handlers) createUser(w http.ResponseWriter, r *http.Request) error {
 	// Permission before validation: account fields are refused, not validated.
 	if !accounts && b.touchesAccount(true) {
 		return errAccountNeedsSettings
+	}
+	if err := h.requireHrisRoleSetter(r, b); err != nil {
+		return err
 	}
 	if err := f.Err("Validation failed"); err != nil {
 		return err
@@ -197,6 +224,9 @@ func (h handlers) updateUser(w http.ResponseWriter, r *http.Request) error {
 	// Permission before validation: account fields are refused, not validated.
 	if !accounts && b.touchesAccount(false) {
 		return errAccountNeedsSettings
+	}
+	if err := h.requireHrisRoleSetter(r, b); err != nil {
+		return err
 	}
 	if err := f.Err("Validation failed"); err != nil {
 		return err

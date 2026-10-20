@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Input } from "@/components/ui/input";
 import { downloadScheduleErrors, importScheduleFile } from "../api";
 import type { ScheduleIssue, SchedulePreview } from "../types";
+import { retryWithReason } from "@/lib/hris/delete-reason";
 
 interface Props {
   open: boolean;
@@ -74,7 +75,9 @@ export function ScheduleUploadDialog({ open, onOpenChange, range, branchName, on
     if (!file || !preview) return;
     setBusy(true);
     try {
-      const res = await importScheduleFile({ ...range, file, step: "commit", fingerprint: preview.fingerprint, ack_warnings: ack });
+      const res = await retryWithReason("Timpa jadwal yang sudah ada", (reason) =>
+        importScheduleFile({ ...range, file, step: "commit", fingerprint: preview.fingerprint, ack_warnings: ack, ...(reason ? { reason } : {}) })
+      );
       toast.success(res.message ?? "Jadwal disimpan");
       setConfirmOpen(false);
       onSaved();
