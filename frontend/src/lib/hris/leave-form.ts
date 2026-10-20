@@ -7,7 +7,12 @@ export function leaveFormNote(code: string, quota: LeaveQuota | null): string | 
   if (!info?.monthlyQuota || !quota) return null;
   const q = quota.types.find((t) => t.leave_type === code);
   if (!q) return null;
-  const effect = info.deductsThpDay ? "Memotong 1 hari THP per hari izin." : "Tidak memotong gaji.";
+  const deducts = q.deducts_thp ?? info.deductsThpDay;
+  const effect = deducts
+    ? "Memotong 1 hari THP per hari izin."
+    : info.deductsThpDay
+      ? "Tidak memotong THP (status Magang)."
+      : "Tidak memotong gaji.";
   return `Sisa kuota ${info.label} bulan ${quota.month}: ${q.remaining} dari ${q.quota} hari. ${effect} Diajukan per satu hari.`;
 }
 
