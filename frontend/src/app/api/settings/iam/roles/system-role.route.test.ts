@@ -6,6 +6,8 @@ import type { NextRequest } from "next/server";
 const h = vi.hoisted(() => ({
   role: { id: "r1", code: "go_sys", is_system: true } as Record<string, unknown>,
   superAdmin: false,
+  addsDelete: false,
+  remove: vi.fn(async () => true),
   replace: vi.fn(async () => {}),
   update: vi.fn(async () => true),
 }));
@@ -15,13 +17,15 @@ vi.mock("@/lib/api/auth", async (orig) => ({
   requireIamMenuPrefix: vi.fn(async () => ({ id: "u1", full_name: "Admin", role: "admin", brand_id: null })),
 }));
 vi.mock("@/lib/iam/get-user-menus", () => ({ resolveRoleIds: vi.fn(async () => ["role-of-caller"]) }));
-vi.mock("@/lib/iam/pg-client", () => ({ iamDbQueryOne: vi.fn(async () => ({ ok: h.superAdmin })) }));
+vi.mock("@/lib/iam/pg-client", () => ({
+  iamDbQueryOne: vi.fn(async (sql: string) => (sql.includes("granted_actions ? 'delete'") ? { added: h.addsDelete } : { ok: h.superAdmin })),
+}));
 vi.mock("@/lib/iam/role-repository", () => ({
   getIamRoleFromDb: vi.fn(async () => h.role),
   listRolePermissionsMatrixFromDb: vi.fn(async () => []),
   updateIamRoleInDb: h.update,
   replaceIamRolePermissionsInDb: h.replace,
-  deleteIamRoleInDb: vi.fn(),
+  deleteIamRoleInDb: h.remove,
 }));
 
 const ID = "00000000-0000-4000-8000-000000000001";
@@ -35,6 +39,8 @@ const grants = { permissions: [{ menuId: MENU, isGranted: true, grantedActions: 
 beforeEach(() => {
   h.role = { id: ID, code: "go_sys", name: "Go", description: null, is_system: true, is_active: true, created_at: "x", updated_at: null, version: 1 };
   h.superAdmin = false;
+  h.addsDelete = false;
+  h.remove.mockClear();
   h.replace.mockClear();
   h.update.mockClear();
 });
@@ -95,5 +101,75 @@ describe("PUT /api/settings/iam/roles/[id]/permissions", () => {
     const { PUT } = await import("./[id]/permissions/route");
     expect((await PUT(put(grants), ctx)).status).toBe(200);
     expect(h.replace).toHaveBeenCalledWith(ID, [{ menuId: MENU, grantedActions: ["read"] }], "u1", { syncHrisStaffRoles: true });
+  });
+});
+
+// Role HR (admin_hris + hris_*) dan hak hapus HRIS hanya lewat Super Admin di Role Management (sama dengan Go).
+const HR_ERR = "Role HR hanya bisa diubah oleh Super Admin; AdminHRIS memakai halaman Hak Akses HRIS";
+const DELETE_ERR = "Hak hapus HRIS hanya bisa diberikan oleh Super Admin";
+const del = () => new Request("http://x/api", { method: "DELETE" }) as unknown as NextRequest;
+
+describe("Role HR di Role Management", () => {
+  for (const code of ["admin_hris", "hris_manager", "hris_non_payroll", "hris_non_rekrutmen_kpi"]) {
+    it(`${code}: ubah, grant, dan hapus oleh bukan super_admin → 403`, async () => {
+      h.role = { ...h.role, code, is_system: false };
+      const roleRoute = await import("./[id]/route");
+      const permRoute = await import("./[id]/permissions/route");
+      for (const res of [
+        await roleRoute.PUT(put({ name: "Ubah" }), ctx),
+        await permRoute.PUT(put(grants), ctx),
+        await roleRoute.DELETE(del(), ctx),
+      ]) {
+        expect(res.status).toBe(403);
+        expect((await res.json()).error).toBe(HR_ERR);
+      }
+      expect(h.update).not.toHaveBeenCalled();
+      expect(h.replace).not.toHaveBeenCalled();
+      expect(h.remove).not.toHaveBeenCalled();
+    });
+  }
+
+  it("super_admin boleh mengubah role HR", async () => {
+    h.role = { ...h.role, code: "hris_manager", is_system: false };
+    h.superAdmin = true;
+    const { PUT, DELETE } = await import("./[id]/route");
+    expect((await PUT(put({ name: "HR Manager" }), ctx)).status).toBe(200);
+    expect((await DELETE(del(), ctx)).status).toBe(200);
+  });
+
+  it("mengganti kode role lain menjadi kode role HR → 403", async () => {
+    h.role = { ...h.role, code: "kasir", is_system: false };
+    const { PUT } = await import("./[id]/route");
+    const res = await PUT(put({ code: "HRIS_Manager " }), ctx);
+    expect(res.status).toBe(403);
+    expect((await res.json()).error).toBe(HR_ERR);
+    expect(h.update).not.toHaveBeenCalled();
+  });
+});
+
+describe("Hak hapus HRIS di Role Management", () => {
+  it("menambah delete pada menu HRIS oleh bukan super_admin → 403 tanpa menulis", async () => {
+    h.role = { ...h.role, code: "kasir", is_system: false };
+    h.addsDelete = true;
+    const { PUT } = await import("./[id]/permissions/route");
+    const res = await PUT(put({ permissions: [{ menuId: MENU, isGranted: true, grantedActions: ["read", "delete"] }] }), ctx);
+    expect(res.status).toBe(403);
+    expect((await res.json()).error).toBe(DELETE_ERR);
+    expect(h.replace).not.toHaveBeenCalled();
+  });
+
+  it("delete yang sudah ada (bukan penambahan) tetap boleh", async () => {
+    h.role = { ...h.role, code: "kasir", is_system: false };
+    const { PUT } = await import("./[id]/permissions/route");
+    expect((await PUT(put({ permissions: [{ menuId: MENU, isGranted: true, grantedActions: ["read", "delete"] }] }), ctx)).status).toBe(200);
+    expect(h.replace).toHaveBeenCalled();
+  });
+
+  it("super_admin boleh menambah delete HRIS", async () => {
+    h.role = { ...h.role, code: "kasir", is_system: false };
+    h.addsDelete = true;
+    h.superAdmin = true;
+    const { PUT } = await import("./[id]/permissions/route");
+    expect((await PUT(put({ permissions: [{ menuId: MENU, isGranted: true, grantedActions: ["read", "delete"] }] }), ctx)).status).toBe(200);
   });
 });

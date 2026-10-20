@@ -3,6 +3,7 @@ package access
 import (
 	"context"
 	"encoding/json"
+	"slices"
 
 	"github.com/jackc/pgx/v5"
 
@@ -126,6 +127,26 @@ func hrisRoleIDs(ctx context.Context, q database.Querier) ([]string, error) {
 		return nil, err
 	}
 	return pgx.CollectRows(rows, pgx.RowTo[string])
+}
+
+// addsHrisDelete reports whether grants add "delete" on an HRIS menu the
+// role does not already hold it on (an active grant with "delete").
+func addsHrisDelete(ctx context.Context, q database.Querier, roleID string, grants []grant) (bool, error) {
+	var ids []string
+	for _, g := range grants {
+		if slices.Contains(g.Actions, "delete") {
+			ids = append(ids, g.MenuID)
+		}
+	}
+	if len(ids) == 0 {
+		return false, nil
+	}
+	var added bool
+	err := q.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM iam.menus m
+		WHERE m.id::text = ANY($2::text[]) AND m.code LIKE 'hris.%'
+		  AND NOT EXISTS (SELECT 1 FROM iam.role_menu_permissions p
+		    WHERE p.role_id = $1 AND p.menu_id = m.id AND p.is_active AND p.granted_actions ? 'delete'))`, roleID, ids).Scan(&added)
+	return added, err
 }
 
 // replacePermissions is replaceIamRolePermissionsInDb: deactivate every
