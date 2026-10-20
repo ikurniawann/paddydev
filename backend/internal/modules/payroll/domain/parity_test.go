@@ -189,6 +189,31 @@ func TestLeaveDeductions(t *testing.T) {
 	eq(t, "net", r.NetSalary, r.GrossSalary-r.TotalDeductions)
 }
 
+// EPIC-058: Izin Leader tidak memotong apa pun; Izin Pribadi satu hari
+// memotong THP / pembagi × 1 (rule PIP EPIC-055, aktif lewat setting).
+func TestLeaderAndPersonalLeavePayroll(t *testing.T) {
+	emp := Employee{ID: "e", JoinDate: "2025-01-01", EmploymentStatus: "permanent"}
+	sal := Salary{BaseSalary: "2600000.00", WorkingDaysDivisor: "26.00"}
+	rec := WorkforceRecords{Leaves: []Leave{
+		{ptr("2026-09-08"), ptr("2026-09-08"), "leader"},
+		{ptr("2026-09-09"), ptr("2026-09-09"), "personal"},
+		{ptr("2026-09-10"), ptr("2026-09-10"), "marriage"},
+	}}
+	in := BuildInput(emp, sal, rec, nil, nil, 9, 2026, false)
+	if in.PersonalLeaveDays != 1 || in.UnpaidLeaveDays != 0 || in.SickLeaveDays != 0 {
+		t.Fatalf("leave days personal=%v unpaid=%v sick=%v", in.PersonalLeaveDays, in.UnpaidLeaveDays, in.SickLeaveDays)
+	}
+
+	c := DefaultConfig()
+	c.PersonalLeaveDeduction = true
+	r := Calculate(parityInput(func(in *Input) {
+		in.BaseSalary, in.DivisorDays, in.PersonalLeaveDays = 2_600_000, 26, 1
+	}), c)
+	eq(t, "PIP satu hari", r.PersonalLeaveDeduction, Round(r.GrossSalary/26))
+	none := Calculate(parityInput(func(in *Input) { in.BaseSalary, in.DivisorDays = 2_600_000, 26 }), c)
+	eq(t, "leader tanpa potongan", none.PersonalLeaveDeduction+none.UnpaidLeaveDeduction+none.SickLeaveDeduction, 0)
+}
+
 func TestManualInputs(t *testing.T) {
 	c := DefaultConfig()
 	r := Calculate(parityInput(func(in *Input) {
