@@ -64,8 +64,14 @@
 - **R2 — Logbook tidak diubah.** `DELETE /api/hris/logbook` adalah ESS: karyawan menghapus draft logbook-nya sendiri. Spec mencatat guard-nya "menu + kepemilikan". Kalau dijaga `delete`, semua karyawan kehilangan fitur itu.
 - **R3 — Grant `delete`.** Aksi `delete` diberikan ke `admin_hris` dan `super_admin` (grant aktif yang sudah ada). `hris_manager` mendapatnya lewat sync.
   - Role IAM `hrd` tidak ditambah. Grant `delete` yang sudah dimilikinya (Hari Libur, Pengumuman, Penempatan) tidak dicabut.
-  - Akun berperan aplikasi `hrd` **tanpa** role IAM HRIS kehilangan hak hapus absensi dan cuti, yang dulu datang dari cek peran. Ini sesuai Q-RA-2.
-  - **Cek live sebelum rollout:** `SELECT u.email FROM configuration.users u WHERE u.role = 'hrd' AND NOT EXISTS (SELECT 1 FROM iam.user_roles ur WHERE ur.user_id = u.id)`.
+  - Pemegang role IAM `hrd` atau `hiring_manager` (termasuk akun berperan aplikasi `hrd` tanpa role IAM HRIS, yang jatuh ke role IAM `hrd`) kehilangan hak hapus di **semua** menu daun HRIS kecuali Hari Libur, Pengumuman, dan Penempatan: nonaktifkan karyawan, dokumen, kontrak, shift, master data (departemen, jabatan, status karyawan), absensi, cuti, penggajian, salary, rekrutmen, KPI, impor jadwal yang menimpa jadwal, dan impor Excel karyawan yang mengubah tipe jadwal. Ini sesuai Q-RA-2. *(Dikoreksi di final review: sebelumnya hanya disebut absensi dan cuti.)*
+  - **Cek live sebelum rollout (read-only):**
+    - (a) Akun berperan aplikasi `hrd` tanpa role HR/super_admin/admin:
+      `SELECT u.id, u.full_name, u.email FROM configuration.users u WHERE u.role = 'hrd' AND NOT EXISTS (SELECT 1 FROM iam.user_roles ur JOIN iam.roles r ON r.id = ur.role_id WHERE ur.user_id = u.id AND r.deleted_at IS NULL AND r.code IN ('admin_hris', 'hris_manager', 'hris_non_payroll', 'hris_non_rekrutmen_kpi', 'super_admin', 'admin')) ORDER BY u.full_name;`
+    - (b) Pemegang role IAM `hiring_manager`:
+      `SELECT u.id, u.full_name, u.email, u.role FROM iam.user_roles ur JOIN iam.roles r ON r.id = ur.role_id JOIN configuration.users u ON u.id = ur.user_id WHERE r.code = 'hiring_manager' ORDER BY u.full_name;`
+    - *(Dikoreksi di final review: query lama `NOT EXISTS (... iam.user_roles ...)` tanpa filter kode role melewatkan akun `hrd` yang memegang role IAM `hrd` sendiri.)*
+  - Urutan live: jalankan migrasi, lalu `SELECT iam.sync_hris_staff_roles();` hanya setelah `admin_hris` punya grant aktif.
 - **R4 — Jalur timpa jadwal.** Guard hanya berlaku bila ada data yang benar-benar hilang:
   - **Impor jadwal:** butuh `delete` + alasan hanya bila mengganti ≥ 1 hari jadwal yang sudah ada dengan shift berbeda. Pratinjau mengembalikan `replaced_days`.
   - **Ubah tipe jadwal & jadwal tetap:** butuh `delete` + alasan hanya bila menghapus ≥ 1 hari jadwal per tanggal. Mengakhiri pola mingguan (Non-Shift → Shift) bukan "hapus".
