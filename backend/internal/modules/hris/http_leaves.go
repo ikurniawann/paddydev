@@ -7,6 +7,7 @@ import (
 
 	"nuhabit/backend/internal/modules/hris/domain"
 	"nuhabit/backend/internal/platform/auth"
+	"nuhabit/backend/internal/platform/iam"
 	"nuhabit/backend/internal/platform/validate"
 )
 
@@ -175,6 +176,25 @@ func (h handlers) getLeaveBalance(w http.ResponseWriter, r *http.Request, a *Act
 		return err
 	}
 	row, err := h.svc.LeaveBalance(r.Context(), a, r.PathValue("employee_id"), year)
+	if err != nil {
+		return err
+	}
+	return ok(w, dataOf(row))
+}
+
+func (h handlers) getLeaveQuota(w http.ResponseWriter, r *http.Request, a *Actor) error {
+	f := queryForm(r)
+	employeeID := f.Str("employee_id", optional, uuidOf)
+	month := strOr(f.Str("month", optional, validate.StrOpts{}))
+	if err := formErr(f, ""); err != nil {
+		return err
+	}
+	granted, err := h.auth.GrantedMenuCodes(r.Context(), a.UserID, a.Role)
+	if err != nil {
+		return err
+	}
+	a.WorkforceMenu = iam.HasAnyMenuPrefix(granted, iam.HrisWorkforce)
+	row, err := h.svc.LeaveQuota(r.Context(), a, employeeID, month)
 	if err != nil {
 		return err
 	}

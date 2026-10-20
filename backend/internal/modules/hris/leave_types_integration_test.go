@@ -136,3 +136,38 @@ func TestLeaveOverlapRefused(t *testing.T) {
 	expect(t, h.do(&hr, "PUT", "/api/hris/leaves/"+id, map[string]any{"status": "cancelled"}), 200, "")
 	expect(t, h.do(&staff, "POST", "/api/hris/leaves", leaveBody("personal", "2031-03-05", "2031-03-05")), 200, "")
 }
+
+func TestLeaveQuotaEndpoint(t *testing.T) {
+	h := newHarness(t)
+	hr, _ := h.staff("hrd", []string{menuWorkforce}, true)
+	hrNoMenu, _ := h.staff("hrd", nil, true)
+	spv, spvID := h.staff("pos", nil, true)
+	stranger, _ := h.staff("pos", nil, true)
+	h.leaderPosition(spvID, "Supervisor")
+	expect(t, h.do(&spv, "POST", "/api/hris/leaves", leaveBody("personal", "2031-03-04", "2031-03-04")), 200, "")
+
+	own := h.do(&spv, "GET", "/api/hris/leave-quota?month=2031-03", nil)
+	expect(t, own, 200, "")
+	d := own.data()
+	if d["leader_eligible"] != true || d["month"] != "2031-03" {
+		t.Fatalf("quota = %s", own.raw)
+	}
+	types := d["types"].([]any)
+	personal := types[0].(map[string]any)
+	if personal["leave_type"] != "personal" || personal["used"] != 1.0 || personal["remaining"] != 2.0 {
+		t.Fatalf("personal = %v", personal)
+	}
+	if strings.Contains(own.raw, "Rp") || strings.Contains(own.raw, "salary") {
+		t.Fatalf("kuota tidak boleh memuat angka gaji: %s", own.raw)
+	}
+
+	expect(t, h.do(&hr, "GET", "/api/hris/leave-quota?month=2031-03&employee_id="+spvID, nil), 200, "")
+	expect(t, h.do(&hrNoMenu, "GET", "/api/hris/leave-quota?month=2031-03&employee_id="+spvID, nil), 403, "Insufficient permissions")
+	expect(t, h.do(&stranger, "GET", "/api/hris/leave-quota?month=2031-03&employee_id="+spvID, nil), 403, "Insufficient permissions")
+	expect(t, h.do(&spv, "GET", "/api/hris/leave-quota?month=2031-3", nil), 400, "Format bulan harus YYYY-MM")
+	staffQ := h.do(&stranger, "GET", "/api/hris/leave-quota?month=2031-03", nil)
+	expect(t, staffQ, 200, "")
+	if staffQ.data()["leader_eligible"] != false || staffQ.data()["types"].([]any)[1].(map[string]any)["available"] != false {
+		t.Fatalf("staff quota = %s", staffQ.raw)
+	}
+}

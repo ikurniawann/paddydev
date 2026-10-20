@@ -69,6 +69,7 @@ func (h handlers) routes() []module.Route {
 		r("DELETE /api/hris/leaves/{id}", h.withActor(h.deleteLeave)),
 		r("GET /api/hris/leave-balances/{employee_id}", h.withActor(h.getLeaveBalance)),
 		r("PUT /api/hris/leave-balances/{employee_id}", h.withActor(h.putLeaveBalance)),
+		r("GET /api/hris/leave-quota", h.withActor(h.getLeaveQuota)),
 
 		// shifts and overtime
 		r("GET /api/hris/shifts", h.withActor(h.listShifts)),

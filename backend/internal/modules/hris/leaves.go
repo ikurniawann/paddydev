@@ -514,6 +514,50 @@ func (s *Service) LeaveBalance(ctx context.Context, a *Actor, employeeID string,
 	return s.repo.InsertLeaveBalance(ctx, f)
 }
 
+// LeaveQuota is the monthly quota of Izin Pribadi / Izin Leader (EPIC-058):
+// the employee themself, or an HR account holding the Cuti menu. It carries
+// days only, never salary amounts.
+func (s *Service) LeaveQuota(ctx context.Context, a *Actor, employeeID *string, month string) (*Row, error) {
+	target := a.EmployeeID
+	if employeeID != nil && *employeeID != "" {
+		target = employeeID
+	}
+	if target == nil {
+		return nil, httpx.Forbidden("Akun ini tidak terhubung ke data karyawan")
+	}
+	own := a.EmployeeID != nil && *target == *a.EmployeeID
+	if !own && !(a.IsHR && a.WorkforceMenu) {
+		return nil, httpx.Forbidden("Insufficient permissions")
+	}
+	if month == "" {
+		month = domain.NowWIB(s.now()).Format("2006-01")
+	}
+	from, to, ok := domain.MonthBounds(month)
+	if !ok {
+		return nil, httpx.BadRequest("Format bulan harus YYYY-MM")
+	}
+	level, found, err := s.repo.EmployeePositionLevel(ctx, *target)
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		return nil, httpx.NotFound("Employee not found")
+	}
+	use, err := s.repo.MonthlyLeaveUse(ctx, *target, from, to)
+	if err != nil {
+		return nil, err
+	}
+	eligible := domain.IsLeaderLevel(level)
+	types := []any{}
+	for _, t := range domain.QuotaLeaveTypes() {
+		used := use[t.Code]
+		types = append(types, obj("leave_type", t.Code, "label", t.Label, "quota", t.MonthlyQuota,
+			"used", used, "remaining", max(0, float64(t.MonthlyQuota)-used), "available", !t.LeaderOnly || eligible))
+	}
+	return obj("employee_id", *target, "month", month, "position_level", level,
+		"leader_eligible", eligible, "types", types), nil
+}
+
 // UpdateLeaveBalance lets HRD set a balance; a new row starts at 12 days.
 func (s *Service) UpdateLeaveBalance(ctx context.Context, a *Actor, employeeID string, year int, in fields) (*Row, error) {
 	if a.Role != "hrd" {
