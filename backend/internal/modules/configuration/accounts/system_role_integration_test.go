@@ -252,3 +252,28 @@ func TestSuperAdminSetsSystemRoles(t *testing.T) {
 		t.Fatalf("reset = %d %s", code, raw)
 	}
 }
+
+// TestAdminUserCreateSyncsIam: POST /api/admin/users gives the new account
+// its IAM role and records it, in the creating transaction.
+func TestAdminUserCreateSyncsIam(t *testing.T) {
+	hrd := testutil.CreateStaff(t, testutil.StaffOptions{Role: "hrd", Menus: map[string][]string{"settings.users": nil}})
+	e := setupStaff(t, hrd)
+	if _, err := e.tx.Exec(context.Background(), `INSERT INTO iam.roles (code, name) VALUES ('finance_staff', 'Finance Staff') ON CONFLICT (code) DO NOTHING`); err != nil {
+		t.Fatal(err)
+	}
+	email := uniqueEmail()
+	if code, _, raw := e.do("POST", "/api/admin/users", map[string]any{
+		"email": email, "password": "rahasia123", "full_name": "Staf Baru", "role": "finance_staff"}); code != 201 {
+		t.Fatalf("create = %d %s", code, raw)
+	}
+	if got := e.scalar(`SELECT coalesce(string_agg(r.code, ','), '') FROM iam.user_roles ur JOIN iam.roles r ON r.id = ur.role_id
+		JOIN configuration.users u ON u.id = ur.user_id
+		WHERE u.email = $1 AND ur.is_primary AND ur.assigned_by = $2`, email, hrd.UserID); got != "finance_staff" {
+		t.Fatalf("iam roles = %v, want finance_staff", got)
+	}
+	if got := e.scalar(`SELECT coalesce(string_agg(array_to_string(roles_before, '+') || '>' || array_to_string(roles_after, '+'), ','), '')
+		FROM iam.permission_audit_logs l JOIN configuration.users u ON u.id = l.target_user_id
+		WHERE l.source = 'user_role' AND u.email = $1 AND l.actor_id = $2`, email, hrd.UserID); got != ">finance_staff" {
+		t.Fatalf("user role trail = %v", got)
+	}
+}

@@ -61,7 +61,8 @@ func (s *service) listAdmins(ctx context.Context) ([]*kit.Row, error) {
 }
 
 // createAdmin is createAdminUser; the savepoint stands in for deleting the
-// auth user when a later step fails.
+// auth user when a later step fails. The role becomes the account's IAM role
+// and is recorded (syncIamRole), in the same transaction.
 func (s *service) createAdmin(ctx context.Context, actorID string, b *adminBody) (*kit.Row, error) {
 	var profile *kit.Row
 	err := database.WithTx(ctx, s.db, func(tx pgx.Tx) error {
@@ -83,6 +84,9 @@ func (s *service) createAdmin(ctx context.Context, actorID string, b *adminBody)
 			})
 		}
 		if err := insertApprovals(ctx, tx, userID, actorID, b.approvals); err != nil {
+			return err
+		}
+		if err := syncIamRole(ctx, tx, userID, *b.role, actorID); err != nil {
 			return err
 		}
 		audit(ctx, tx, actorID, userID, "create_user", kit.Obj("email", *b.email, "role", *b.role, "status", *b.status))
