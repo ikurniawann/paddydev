@@ -33,6 +33,7 @@ Lihat docs/superpowers/plans/2026-10-20-hris-revisi-jenis-cuti.md (Task 1–8):
 - Jenis berbeda boleh berdampingan; satu tanggal tidak boleh tercakup dua pengajuan aktif.
 - Riwayat jenis yang dihapus tetap tampil dan bisa difilter; pengajuan lama yang pending tetap bisa diproses; ekspor CSV memakai label lama.
 - Form dan endpoint kuota tidak menampilkan angka rupiah.
+- Intern (status `intern`/`internship`): Izin Pribadi tetap kuota 3 hari per bulan tetapi tidak memotong THP (PIP dikecualikan); tunjangan per hari tetap mengikuti kehadiran. Form menulis "Tidak memotong THP (status Magang)".
 
 ## Pertanyaan terbuka
 Dijawab user 20-10-2026: "lakukan sesuai rekomen". Semua dari 12 pertanyaan memakai rekomendasi rencana (Ruling R1–R9). Rinciannya ada di Automation Log.
@@ -94,3 +95,9 @@ Dijawab user 20-10-2026: "lakukan sesuai rekomen". Semua dari 12 pertanyaan mema
   - Live (read-only): 8 karyawan aktif berstatus `intern`; setting PIP menyala; intern belum punya riwayat cuti.
   - Status Magang punya dua kode: `intern` (master live) dan `internship` (promosi rekrutmen). Keduanya dikecualikan.
   - Rencana amandemen: `docs/superpowers/plans/2026-10-20-intern-izin-pribadi-tanpa-pip.md` (4 task). **Deploy EPIC-058 menunggu amandemen ini selesai.**
+- 2026-10-20: **Amandemen intern selesai** di branch `fix/epic058-intern-tanpa-pip` (eksekusi Native, keputusan user).
+  - Task 1 `064ea14`: `payroll/domain.IsInternStatus` (`intern`/`internship`, case-insensitive). PIP dilewati untuk intern; PIS, potongan unpaid/telat, dan tunjangan per hari tidak berubah.
+  - Task 2 `d37774f`: katalog Go `DeductsThpDay` (personal). `GET /api/hris/leave-quota` kini mengirim `types[].deducts_thp` (false untuk intern) dan `employment_status`.
+  - Task 3 `d750aee`: catatan form ESS/HR untuk intern berbunyi "Tidak memotong THP (status Magang)"; respons lama tetap memakai fallback katalog.
+  - **Bukti:** test baru gagal dulu lalu lulus: `TestIsInternStatus` (payroll & hris), `TestInternPersonalLeaveSkipsPIP` (intern PIP 126.154 → 0; net hanya beda PIP; tunjangan makan per hari sama), `TestPersonalLeaveDeductsThpInCatalog`, `TestLeaveQuotaInternNoThpDeduction` (intern & internship tanpa potongan, kontrak tetap; kuota intern ke-4 ditolak 400), dan 2 test `leaveFormNote`. Go full suite: 27 gagal, nama sama persis dengan baseline main. Vitest 5529 lolos; tsc dan eslint bersih.
+  - Deploy EPIC-058 menyertakan amandemen ini (tanpa migrasi tambahan).
