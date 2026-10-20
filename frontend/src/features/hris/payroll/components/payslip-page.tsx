@@ -208,7 +208,7 @@ export function PayslipPage() {
                 <DeductionRow label="Potongan Izin Pribadi" amount={Number(detail.personal_leave_deduction)} share={bagian(Number(detail.personal_leave_deduction))} />
               )}
               {Number(detail.sick_leave_deduction ?? 0) > 0 && (
-                <DeductionRow label="Potongan Izin Sakit" amount={Number(detail.sick_leave_deduction)} share={bagian(Number(detail.sick_leave_deduction))} />
+                <DeductionRow label="Potongan Sakit & Cuti Melahirkan" amount={Number(detail.sick_leave_deduction)} share={bagian(Number(detail.sick_leave_deduction))} />
               )}
               {(detail.loan_details?.length ?? 0) > 0
                 ? detail.loan_details?.map((loan) => (

@@ -122,7 +122,7 @@ export function PayslipDetailDialog({
                 <AmountRow label="Cuti Tanpa Bayaran" amount={selected.unpaid_leave_deduction} share={bagian(selected.unpaid_leave_deduction)} negative />
                 <AmountRow label="Potongan Keterlambatan" amount={selected.late_deduction} share={bagian(selected.late_deduction)} negative />
                 <AmountRow label="Potongan Izin Pribadi" amount={Number(selected.personal_leave_deduction ?? 0)} share={bagian(Number(selected.personal_leave_deduction ?? 0))} negative />
-                <AmountRow label="Potongan Izin Sakit" amount={Number(selected.sick_leave_deduction ?? 0)} share={bagian(Number(selected.sick_leave_deduction ?? 0))} negative />
+                <AmountRow label="Potongan Sakit & Cuti Melahirkan" amount={Number(selected.sick_leave_deduction ?? 0)} share={bagian(Number(selected.sick_leave_deduction ?? 0))} negative />
                 {(selected.loan_details?.length ?? 0) > 0 ? (
                   selected.loan_details?.map((loan) => (
                     <AmountRow

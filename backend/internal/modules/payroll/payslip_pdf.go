@@ -328,7 +328,7 @@ func buildPayslipPDF(p *payslipDoc) ([]byte, error) {
 		{"BPJS TK (JHT)", "bpjs_tk_jht_deduction"}, {"BPJS TK (JP)", "bpjs_tk_jp_deduction"},
 		{"BPJS Kesehatan", "bpjs_kes_deduction"}, {"Tapera", "tapera_deduction"}, {"PPh 21", "pph21_deduction"},
 		{"Cuti Tanpa Bayaran", "unpaid_leave_deduction"}, {"Potongan Keterlambatan", "late_deduction"},
-		{"Potongan Izin Pribadi", "personal_leave_deduction"}, {"Potongan Izin Sakit", "sick_leave_deduction"},
+		{"Potongan Izin Pribadi", "personal_leave_deduction"}, {"Potongan Sakit & Cuti Melahirkan", "sick_leave_deduction"},
 	} {
 		if a[e.key] != 0 {
 			deduct(e.label, a[e.key])

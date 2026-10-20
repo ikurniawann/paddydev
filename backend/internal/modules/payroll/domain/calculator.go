@@ -280,6 +280,12 @@ func JabatanExpense(annualGross float64, c Config) float64 {
 	return math.Min(annualGross*c.JabatanPercentage, c.JabatanMaxPerYear)
 }
 
+// ThpDayBasis is "THP" for a one-day deduction (EPIC-059 R5): the monthly
+// base salary + transport + meal + position allowance of the structure.
+func ThpDayBasis(in Input) float64 {
+	return in.BaseSalary + in.TransportAllowance + in.MealAllowance + in.PositionAllowance
+}
+
 // Calculate is calculatePayroll.
 func Calculate(in Input, c Config) Result {
 	overtimeRate := c.OvertimeMultiplier
@@ -311,7 +317,12 @@ func Calculate(in Input, c Config) Result {
 		base = Round(fullBase * in.AttendanceDays)
 		dayWage = fullBase
 	case "monthly_prorated":
-		base = Round(perDay(fullBase, in.AttendanceDays))
+		// Hari kerja aktif yang dibayar (EPIC-059): hadir + cuti dibayar.
+		paid := in.PaidDays
+		if paid == 0 {
+			paid = in.AttendanceDays
+		}
+		base = Round(perDay(fullBase, paid))
 		dayWage = perDay(fullBase, 1)
 	default:
 		base = Round(fullBase * factor)
@@ -352,7 +363,16 @@ func Calculate(in Input, c Config) Result {
 	transport := allowance(in.TransportAllowance, in.TransportPerDay)
 	meal := allowance(in.MealAllowance, in.MealPerDay)
 	housing := Round(in.HousingAllowance * factor)
-	position := allowance(in.PositionAllowance, in.PositionPerDay)
+	// Jabatan per hari mengikuti hari dibayar (EPIC-059); transport & makan
+	// mengikuti hari efektif (AllowanceDays).
+	positionDays := in.PaidDays
+	if positionDays == 0 {
+		positionDays = in.AllowanceDays
+	}
+	position := Round(in.PositionAllowance * factor)
+	if in.PositionPerDay {
+		position = Round(perDay(in.PositionAllowance, positionDays))
+	}
 	health := 0.0
 	if in.HealthEligible { // G7
 		health = Round(in.HealthAllowance * factor)
@@ -365,7 +385,6 @@ func Calculate(in Input, c Config) Result {
 	otherDeduction := Round(manualSum(in.ManualInputs, ManualDeductionCodes))
 
 	gross := base + fixed + variable + transport + meal + housing + position + health + overtimePay + thr + bonus + otherEarning
-	thp := gross + nontax
 
 	b := CalculateBPJS(base+fixed, in.BpjsTkEnrolled, in.BpjsKesEnrolled, in.TaperaEnrolled, c)
 	// daily / monthly_prorated pay only the days attended: an unpaid leave day
@@ -380,7 +399,7 @@ func Calculate(in Input, c Config) Result {
 	if c.LateMode == "tier" {
 		days, basis := LateTierDays(countLateDays(in.LateDayMinutes, c.LateMinMinutes), c.LateTiers)
 		if basis == "thp" {
-			late = Round(perDay(thp, days))
+			late = Round(perDay(ThpDayBasis(in), days))
 		} else {
 			late = Round(dayWage * days)
 		}
@@ -389,14 +408,27 @@ func Calculate(in Input, c Config) Result {
 		late = Round(v)
 	}
 
-	// G6: potongan izin pribadi (PIP) dan izin sakit (PIS). Intern (Magang)
-	// tidak dipotong PIP (keputusan user 20-10-2026); PIS tetap.
+	// G6: PIP dan PIS (EPIC-059 R6/R7). Komponen per_day sudah tidak dibayar
+	// pada hari tidak hadir, jadi yang dipotong hanya bagian yang tetap dibayar:
+	// PIP = pokok (bukan upah harian) + jabatan + transport/makan flat;
+	// PIS (sakit + melahirkan) = transport/makan flat. Intern tidak dipotong PIP.
+	flatTransport, flatMeal := in.TransportAllowance, in.MealAllowance
+	if in.TransportPerDay {
+		flatTransport = 0
+	}
+	if in.MealPerDay {
+		flatMeal = 0
+	}
 	personal, sick := 0.0, 0.0
 	if c.PersonalLeaveDeduction && in.PersonalLeaveDays > 0 && !IsInternStatus(in.EmploymentStatus) {
-		personal = Round(perDay(thp, in.PersonalLeaveDays))
+		pipBasis := in.PositionAllowance + flatTransport + flatMeal
+		if in.PayBasis != "daily" {
+			pipBasis += fullBase
+		}
+		personal = Round(perDay(pipBasis, in.PersonalLeaveDays))
 	}
-	if c.SickLeaveDeduction && in.SickLeaveDays > 0 {
-		sick = Round(perDay(in.TransportAllowance+in.MealAllowance, in.SickLeaveDays))
+	if sickDays := in.SickLeaveDays + in.MaternityLeaveDays; c.SickLeaveDeduction && sickDays > 0 {
+		sick = Round(perDay(flatTransport+flatMeal, sickDays))
 	}
 
 	method := c.Pph21Method
