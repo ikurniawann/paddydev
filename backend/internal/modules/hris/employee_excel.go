@@ -13,6 +13,7 @@ import (
 	"nuhabit/backend/internal/platform/auth"
 	"nuhabit/backend/internal/platform/database"
 	"nuhabit/backend/internal/platform/httpx"
+	"nuhabit/backend/internal/platform/permaudit"
 	"nuhabit/backend/internal/platform/xlsx"
 )
 
@@ -323,6 +324,9 @@ type employeeImportInput struct {
 	Step          string // preview | commit | error_file
 	ReleaseEmails bool
 	Guard         clearGuard
+	// SuperAdmin reports whether the caller holds the IAM role super_admin;
+	// asked only when a released email would reactivate a system account.
+	SuperAdmin func(context.Context) (bool, error)
 }
 
 type employeeImportChange struct {
@@ -555,7 +559,7 @@ func (s *Service) ImportEmployees(ctx context.Context, actor *auth.User, in empl
 			}
 		}
 		for _, p := range plans {
-			if err := s.applyImportRow(ctx, r, actor, p.row, p.id, p.before, p.branch, today, in.Guard); err != nil {
+			if err := s.applyImportRow(ctx, r, actor, p.row, p.id, p.before, p.branch, today, in.Guard, in.SuperAdmin); err != nil {
 				return err
 			}
 		}
@@ -568,7 +572,7 @@ func (s *Service) ImportEmployees(ctx context.Context, actor *auth.User, in empl
 
 // applyImportRow writes one validated row inside the import transaction.
 func (s *Service) applyImportRow(ctx context.Context, r Repository, actor *auth.User, row domain.EmployeeImportRow,
-	id string, before map[string]any, branch, today string, g clearGuard) error {
+	id string, before map[string]any, branch, today string, g clearGuard, superAdmin func(context.Context) (bool, error)) error {
 	q := r.querier()
 	set := map[string]any{}
 	for k, v := range row.Set {
@@ -582,6 +586,11 @@ func (s *Service) applyImportRow(ctx context.Context, r Repository, actor *auth.
 		if err := q.QueryRow(ctx, `SELECT nip, full_name, user_id::text FROM hris.employees WHERE id = $1 FOR UPDATE`,
 			row.ReleaseEmailFrom).Scan(&oldNIP, &oldName, &movedUser); err != nil {
 			return err
+		}
+		if movedUser != nil {
+			if err := guardSystemReactivation(ctx, q, *movedUser, row.Line, superAdmin); err != nil {
+				return err
+			}
 		}
 		archive := archiveEmail(oldNIP)
 		if _, err := q.Exec(ctx, `UPDATE hris.employees SET email = $2, user_id = NULL, is_access_app = false, updated_at = now() WHERE id = $1`,
@@ -676,6 +685,25 @@ func (s *Service) applyImportRow(ctx context.Context, r Repository, actor *auth.
 	return writeEmployeeAudit(ctx, q, actor, "employee.import", id, row.Name, before, after)
 }
 
+// guardSystemReactivation: releasing an email re-links and unbans the
+// resigned employee's login; a login holding a system role (super_admin/
+// admin, app or IAM role) is reactivated by IAM super_admin only (EPIC-061
+// Q-RA-5). The row fails, so the whole import is rolled back.
+func guardSystemReactivation(ctx context.Context, q database.Querier, userID string, line int,
+	superAdmin func(context.Context) (bool, error)) error {
+	held, err := permaudit.HoldsSystemRole(ctx, q, userID)
+	if err != nil || !held {
+		return err
+	}
+	if superAdmin != nil {
+		ok, err := superAdmin(ctx)
+		if err != nil || ok {
+			return err
+		}
+	}
+	return httpx.Forbidden(fmt.Sprintf("Baris %d: Akun Super Admin/Admin hanya bisa diaktifkan kembali oleh Super Admin", line))
+}
+
 // nextEmployeeNIP is the first free EMP-<year>-<seq> (same scheme as /api/users).
 func nextEmployeeNIP(ctx context.Context, q database.Querier, year string) (string, error) {
 	var n int
@@ -725,7 +753,8 @@ func (h handlers) importEmployees(w http.ResponseWriter, r *http.Request, u *aut
 		return err
 	}
 	in := employeeImportInput{Data: data, FileName: header.Filename, Mode: r.FormValue("mode"), Step: r.FormValue("step"),
-		ReleaseEmails: r.FormValue("release_emails") == "true", Guard: g}
+		ReleaseEmails: r.FormValue("release_emails") == "true", Guard: g,
+		SuperAdmin: func(ctx context.Context) (bool, error) { return h.auth.HasRoleCode(ctx, u, "super_admin") }}
 	out, errFile, err := h.svc.ImportEmployees(r.Context(), u, in)
 	if err != nil {
 		return err
