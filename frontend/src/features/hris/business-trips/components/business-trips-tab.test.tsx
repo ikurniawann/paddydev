@@ -8,6 +8,9 @@ const create = vi.fn();
 const rows: BusinessTrip[] = [];
 
 vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
+vi.mock("@/features/hris/ess/queries", () => ({
+  useEssMe: () => ({ data: { employee: { id: "me1" } } }),
+}));
 vi.mock("../queries", () => ({ useBusinessTrips: () => ({ data: rows }) }));
 vi.mock("../mutations", () => ({
   useDecideBusinessTrip: () => ({ mutate: decide, isPending: false, variables: undefined }),
@@ -63,6 +66,14 @@ describe("BusinessTripsTab", () => {
     expect(screen.getAllByRole("button", { name: "Setujui" })).toHaveLength(1);
     expect(screen.getAllByRole("button", { name: "Tolak" })).toHaveLength(1);
     expect(screen.getAllByRole("button", { name: "Batalkan" })).toHaveLength(2);
+  });
+
+  it("menyembunyikan Setujui/Tolak pada pengajuan HRD sendiri tetapi menyisakan Batalkan", () => {
+    rows.push(trip({ id: "own", employee_id: "me1", status: "pending" }));
+    render(<BusinessTripsTab />);
+    expect(screen.queryByRole("button", { name: "Setujui" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Tolak" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Batalkan" })).toBeTruthy();
   });
 
   it("membatalkan yang sudah disetujui: konfirmasi menyebut absensi tidak dikembalikan otomatis", () => {

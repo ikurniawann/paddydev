@@ -30,7 +30,9 @@ export function useTripDecision(): {
   dialog: ReactNode;
 } {
   const decide = useDecideBusinessTrip();
+  // `pending` keeps the last action while the dialog closes, so title/body don't flip mid-animation.
   const [pending, setPending] = useState<PendingAction | null>(null);
+  const [open, setOpen] = useState(false);
   const [reason, setReason] = useState("");
   const busyId = decide.isPending ? decide.variables?.id : null;
 
@@ -51,6 +53,7 @@ export function useTripDecision(): {
     }
     setReason("");
     setPending({ trip, action });
+    setOpen(true);
   }
 
   function confirm() {
@@ -61,17 +64,15 @@ export function useTripDecision(): {
       toast.error("Alasan penolakan wajib diisi");
       return;
     }
-    setPending(null);
+    setOpen(false);
     run(trip, action, action === "reject" ? rejectionReason : undefined);
   }
 
   const rejecting = pending?.action === "reject";
   const dialog = (
     <ConfirmDialog
-      open={pending !== null}
-      onOpenChange={(open) => {
-        if (!open) setPending(null);
-      }}
+      open={open}
+      onOpenChange={setOpen}
       title={rejecting ? "Tolak Perjalanan Dinas?" : "Batalkan Perjalanan Dinas?"}
       description={rejecting ? undefined : CANCEL_DESCRIPTION[pending?.trip.status === "approved" ? "approved" : "pending"]}
       confirmLabel={rejecting ? "Tolak pengajuan" : "Batalkan pengajuan"}

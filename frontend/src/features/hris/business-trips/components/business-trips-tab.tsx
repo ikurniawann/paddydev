@@ -7,6 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TRIP_STATUS_META, tripRangeLabel, type TripStatus } from "@/lib/hris/business-trips";
 import { useActiveEmployees } from "@/features/hris/attendance/queries";
+import { useEssMe } from "@/features/hris/ess/queries";
 import { useBusinessTrips } from "../queries";
 import { useTripDecision } from "../use-trip-decision";
 import { TripRequestDialog } from "./trip-request-dialog";
@@ -28,6 +29,7 @@ export function BusinessTripsTab() {
     () => (employees ?? []).map((e) => ({ value: e.id, label: e.nip ? `${e.full_name} (${e.nip})` : e.full_name })),
     [employees]
   );
+  const myEmployeeId = useEssMe().data?.employee?.id;
   const { request, busyId, dialog: decisionDialog } = useTripDecision();
 
   const rows = trips.data ?? [];
@@ -88,7 +90,7 @@ export function BusinessTripsTab() {
                         {trip.rejection_reason && <p className="text-xs text-red-600">{trip.rejection_reason}</p>}
                       </td>
                       <td className="p-3 text-right whitespace-nowrap">
-                        {trip.status === "pending" && (
+                        {trip.status === "pending" && trip.employee_id !== myEmployeeId && (
                           <>
                             <Button size="sm" disabled={busyId === trip.id} onClick={() => request(trip, "approve")}>
                               Setujui

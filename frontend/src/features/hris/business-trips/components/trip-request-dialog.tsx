@@ -30,6 +30,14 @@ export function TripRequestDialog({
   const set = <K extends keyof TripForm>(k: K, v: TripForm[K]) => setForm((f) => ({ ...f, [k]: v }));
   const days = tripDays(form.start_date, form.end_date);
 
+  function handleOpenChange(next: boolean) {
+    if (!next) {
+      setForm(EMPTY_TRIP_FORM);
+      setEmployeeId("");
+    }
+    onOpenChange(next);
+  }
+
   function submit() {
     if (employees && !employeeId) {
       toast.error("Pilih karyawan");
@@ -45,9 +53,7 @@ export function TripRequestDialog({
       {
         onSuccess: (json) => {
           toast.success(json.message || "Perjalanan Dinas tersimpan");
-          setForm(EMPTY_TRIP_FORM);
-          setEmployeeId("");
-          onOpenChange(false);
+          handleOpenChange(false);
         },
         onError: (e) => toast.error(e.message || "Gagal menyimpan Perjalanan Dinas"),
       }
@@ -55,7 +61,7 @@ export function TripRequestDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{employees ? "Catat Perjalanan Dinas" : "Ajukan Perjalanan Dinas"}</DialogTitle>
@@ -93,7 +99,7 @@ export function TripRequestDialog({
           </label>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" onClick={() => handleOpenChange(false)}>
             Batal
           </Button>
           <Button disabled={create.isPending} onClick={submit}>

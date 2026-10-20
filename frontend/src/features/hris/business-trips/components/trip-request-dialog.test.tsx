@@ -74,6 +74,14 @@ describe("TripRequestDialog", () => {
     expect(onOpenChange).not.toHaveBeenCalled();
   });
 
+  it("mengosongkan isian saat dialog ditutup", () => {
+    const { rerender } = render(<TripRequestDialog open onOpenChange={() => {}} />);
+    fill();
+    fireEvent.click(screen.getByRole("button", { name: "Batal" }));
+    rerender(<TripRequestDialog open onOpenChange={() => {}} />);
+    expect((screen.getByLabelText("Tujuan") as HTMLInputElement).value).toBe("");
+  });
+
   it("mode HRD: wajib pilih karyawan lalu mengirim employee_id", () => {
     render(<TripRequestDialog open onOpenChange={() => {}} employees={[{ value: "e1", label: "Budi (N01)" }]} />);
     fill();
