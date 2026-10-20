@@ -153,7 +153,8 @@ func (posOpsSales) PaidOrderTotals(ctx context.Context, q database.Querier, star
 
 func (posOpsSales) DashboardItems(ctx context.Context, q database.Querier, start, end time.Time) ([]domain.DashboardItem, error) {
 	rows, err := q.Query(ctx, `SELECT COALESCE(order_id::text, ''), product_id::text, product_name, quantity::text, total_amount::text
-		FROM pos.pos_order_items WHERE created_at >= $1 AND created_at <= $2`, start, end)
+		FROM pos.pos_order_items WHERE created_at >= $1 AND created_at <= $2
+		ORDER BY created_at, id`, start, end) // stable: an id-less group is named by its first item
 	if err != nil {
 		return nil, err
 	}
