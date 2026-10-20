@@ -22,6 +22,21 @@ describe("leaveFormNote", () => {
     expect(note).toContain("Sisa kuota Izin Leader bulan 2031-03: 0 dari 1 hari");
     expect(note).toContain("Tidak memotong gaji");
   });
+  it("intern: Izin Pribadi tidak memotong THP (deducts_thp=false), kuota tetap", () => {
+    const intern: LeaveQuota = {
+      ...quota,
+      employment_status: "intern",
+      types: [{ ...quota.types[0], deducts_thp: false }, quota.types[1]],
+    };
+    const note = leaveFormNote("personal", intern)!;
+    expect(note).toContain("Sisa kuota Izin Pribadi bulan 2031-03: 2 dari 3 hari");
+    expect(note).toContain("Tidak memotong THP");
+    expect(note).not.toContain("Memotong 1 hari THP");
+  });
+  it("non-intern dengan deducts_thp=true tetap memotong 1 hari THP", () => {
+    const worker: LeaveQuota = { ...quota, types: [{ ...quota.types[0], deducts_thp: true }, quota.types[1]] };
+    expect(leaveFormNote("personal", worker)).toContain("Memotong 1 hari THP");
+  });
   it("jenis tanpa kuota: tidak ada catatan", () => {
     expect(leaveFormNote("annual", quota)).toBeNull();
     expect(leaveFormNote("personal", null)).toBeNull();

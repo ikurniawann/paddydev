@@ -243,6 +243,18 @@ func (s *store) EmployeePositionLevel(ctx context.Context, employeeID string) (s
 	return *level, true, nil
 }
 
+// EmployeeEmploymentStatus is hris.employees.employment_status ("" when null).
+func (s *store) EmployeeEmploymentStatus(ctx context.Context, employeeID string) (string, error) {
+	var status *string
+	if err := s.db.QueryRow(ctx, `SELECT employment_status FROM hris.employees WHERE id = $1`, employeeID).Scan(&status); err != nil {
+		return "", err
+	}
+	if status == nil {
+		return "", nil
+	}
+	return *status, nil
+}
+
 // LockLeaveEmployee serialises leave requests of one employee so the quota
 // and overlap checks cannot both pass for two concurrent requests.
 func (s *store) LockLeaveEmployee(ctx context.Context, employeeID string) error {

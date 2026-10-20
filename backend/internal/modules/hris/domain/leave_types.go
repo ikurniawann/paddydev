@@ -17,13 +17,15 @@ type LeaveType struct {
 	MonthlyQuota int  // >0: hari per bulan kalender (pending + approved)
 	SingleDay    bool // diajukan per satu hari
 	LeaderOnly   bool // hanya jabatan Supervisor ke atas
+	// DeductsThpDay: memotong 1 hari THP per hari izin (PIP payroll), kecuali intern.
+	DeductsThpDay bool
 }
 
 // leaveTypes is the catalog, in form order. Mirror: frontend/src/lib/hris/leave-types.ts.
 var leaveTypes = []LeaveType{
 	{Code: "annual", Label: "Cuti Tahunan", Short: "Tahunan", Export: "Cuti Tahunan", Selectable: true},
 	{Code: "sick", Label: "Sakit", Short: "Sakit", Export: "Cuti Sakit", Selectable: true},
-	{Code: "personal", Label: "Izin Pribadi", Short: "Izin Pribadi", Export: "Izin Pribadi", Selectable: true, MonthlyQuota: 3, SingleDay: true},
+	{Code: "personal", Label: "Izin Pribadi", Short: "Izin Pribadi", Export: "Izin Pribadi", Selectable: true, MonthlyQuota: 3, SingleDay: true, DeductsThpDay: true},
 	{Code: "leader", Label: "Izin Leader", Short: "Izin Leader", Export: "Izin Leader", Selectable: true, MonthlyQuota: 1, SingleDay: true, LeaderOnly: true},
 	{Code: "maternity", Label: "Cuti Melahirkan", Short: "Melahirkan", Export: "Cuti Melahirkan", Selectable: true},
 	{Code: "paternity", Label: "Cuti Ayah", Short: "Ayah", Export: "Cuti Ayah", Selectable: true},
