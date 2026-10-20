@@ -53,7 +53,7 @@ func TestHrisDeletesNeedLeafDeleteAndReason(t *testing.T) {
 		expect(t, h.do(&sibling, http.MethodDelete, rt.path+"?reason=Data%20uji%20hapus", nil), http.StatusForbidden, "Insufficient permissions")
 		expect(t, h.do(&own, http.MethodDelete, rt.path, nil), http.StatusBadRequest, rt.reasonMsg)
 		expect(t, h.do(&own, http.MethodDelete, rt.path+"?reason=abcd", nil), http.StatusBadRequest, rt.reasonMsg)
-		if c := h.do(&own, http.MethodDelete, rt.path+"?reason=Data%20uji%20hapus", nil); c.status == http.StatusForbidden || c.body["error"] == rt.reasonMsg {
+		if c := h.do(&own, http.MethodDelete, rt.path+"?reason=Data%20uji%20hapus", nil); c.status == http.StatusForbidden || c.status == http.StatusInternalServerError || c.body["error"] == rt.reasonMsg {
 			t.Errorf("%s with leaf delete + reason = %d %s", rt.path, c.status, c.raw)
 		}
 	}

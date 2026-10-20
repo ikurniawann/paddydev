@@ -42,9 +42,9 @@ func (f *fileHandler) db() database.DB { return f.svc.db }
 func (f *fileHandler) routes() []module.Route {
 	rec := iam.HrisRecruitment
 	return []module.Route{
-		{Pattern: "DELETE /api/candidates/{id}", Handler: f.staff(rec, f.deleteCandidate)},
+		{Pattern: "DELETE /api/candidates/{id}", Handler: f.del(delCandidate, f.staff(rec, f.deleteCandidate))},
 		{Pattern: "POST /api/candidates/{id}/cv-upload", Handler: f.staff(rec, f.uploadCV)},
-		{Pattern: "DELETE /api/candidates/{id}/cv-upload", Handler: f.staff(rec, f.removeCV)},
+		{Pattern: "DELETE /api/candidates/{id}/cv-upload", Handler: f.del(delCV, f.staff(rec, f.removeCV))},
 		{Pattern: "GET /api/candidates/{id}/report", Handler: f.staff(rec, f.pipelineReport)},
 		{Pattern: "POST /api/candidates/cv-extract", Handler: f.staff(rec, f.cvExtract)},
 		{Pattern: "GET /api/candidates/{id}/ai-analysis", Handler: f.staff(rec, f.getAnalysis)},

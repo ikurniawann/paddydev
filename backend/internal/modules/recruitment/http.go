@@ -14,6 +14,7 @@ import (
 // Guard is the slice of platform/auth the handlers use.
 type Guard interface {
 	RequireMenuPrefix(r *http.Request, prefixes ...string) (*auth.User, error)
+	RequireMenuAction(r *http.Request, action string, prefixes ...string) (*auth.User, error)
 }
 
 type handler struct {
@@ -49,7 +50,7 @@ func (h *handler) Routes() []module.Route {
 		{Pattern: "GET /api/psikotes/instruments/{id}/questions", Handler: h.staff(rec, h.listQuestions)},
 		{Pattern: "POST /api/psikotes/instruments/{id}/questions", Handler: h.staff(rec, h.createQuestion)},
 		{Pattern: "PUT /api/psikotes/questions/{id}", Handler: h.staff(rec, h.updateQuestion)},
-		{Pattern: "DELETE /api/psikotes/questions/{id}", Handler: h.staff(rec, h.deleteQuestion)},
+		{Pattern: "DELETE /api/psikotes/questions/{id}", Handler: h.del(delQuestion, h.staff(rec, h.deleteQuestion))},
 		{Pattern: "GET /api/psikotes/session-tests/{id}/answers", Handler: h.staff(rec, h.answerDetail)},
 		{Pattern: "PUT /api/psikotes/session-tests/{id}/review", Handler: h.staff(rec, h.reviewTest)},
 		{Pattern: "GET /api/psikotes/sessions/{id}/proctor-events", Handler: h.staff(rec, h.proctorEvents("psikotes"))},
@@ -86,7 +87,7 @@ func (h *handler) Routes() []module.Route {
 		{Pattern: "GET /api/hris/job-openings", Handler: h.staff(rec, h.listJobOpenings)},
 		{Pattern: "POST /api/hris/job-openings", Handler: h.staff(rec, h.createJobOpening)},
 		{Pattern: "PATCH /api/hris/job-openings/{id}", Handler: h.staff(rec, h.updateJobOpening)},
-		{Pattern: "DELETE /api/hris/job-openings/{id}", Handler: h.staff(rec, h.deleteJobOpening)},
+		{Pattern: "DELETE /api/hris/job-openings/{id}", Handler: h.del(delJobOpening, h.staff(rec, h.deleteJobOpening))},
 		{Pattern: "POST /api/hris/promote", Handler: h.staff(rec, h.promote)},
 		{Pattern: "GET /api/job-openings/public", Handler: http.HandlerFunc(h.publicJobOpenings)},
 		{Pattern: "GET /api/positions", Handler: h.staff(iam.Hris, h.listPositions)},

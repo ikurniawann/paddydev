@@ -635,10 +635,11 @@ func TestPsikotesBank(t *testing.T) {
 	if c.status != 200 || c.data()["is_active"] != false {
 		t.Fatal(c.raw)
 	}
-	if c = h.as(h.hr, "DELETE", "/api/psikotes/questions/"+qid, nil); c.raw != `{"data":{"id":"`+qid+`"},"message":"Soal dihapus"}` {
+	testutil.GrantMenu(t, h.hr.RoleID, "hris.recruitment.psikotes", []string{"read", "delete"})
+	if c = h.as(h.hr, "DELETE", "/api/psikotes/questions/"+qid+"?reason=Soal%20dobel", nil); c.raw != `{"data":{"id":"`+qid+`"},"message":"Soal dihapus"}` {
 		t.Fatal(c.raw)
 	}
-	expect(t, h.as(h.hr, "DELETE", "/api/psikotes/questions/"+qid, nil), 404, "Soal tidak ditemukan")
+	expect(t, h.as(h.hr, "DELETE", "/api/psikotes/questions/"+qid+"?reason=Soal%20dobel", nil), 404, "Soal tidak ditemukan")
 	expect(t, h.as(h.hr, "PUT", "/api/psikotes/questions/zzz", nil), 400, "ID soal tidak valid")
 }
 
@@ -679,7 +680,8 @@ func TestJobOpeningsAndPositions(t *testing.T) {
 		t.Fatal(c.raw)
 	}
 	expect(t, h.as(h.hr, "PATCH", "/api/hris/job-openings/11111111-1111-4111-8111-111111111111", map[string]any{"title": "x"}), 500, "Terjadi kesalahan server")
-	if c = h.as(h.hr, "DELETE", "/api/hris/job-openings/"+id, nil); c.raw != `{"message":"Lowongan berhasil dihapus"}` {
+	testutil.GrantMenu(t, h.hr.RoleID, "hris.recruitment.job-portal", []string{"read", "delete"})
+	if c = h.as(h.hr, "DELETE", "/api/hris/job-openings/"+id+"?reason=Lowongan%20ditutup", nil); c.raw != `{"message":"Lowongan berhasil dihapus"}` {
 		t.Fatal(c.raw)
 	}
 

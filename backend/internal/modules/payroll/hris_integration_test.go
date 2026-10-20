@@ -38,8 +38,8 @@ func TestKPITargetsAndScorecards(t *testing.T) {
 		first["department"] != nil {
 		t.Fatalf("list %v", first)
 	}
-	wantErr(t, e.call(&e.hr, "DELETE", "/api/hris/kpi/targets", nil, 400), "id wajib")
-	if e.call(&e.hr, "DELETE", "/api/hris/kpi/targets?id="+created["data"].(map[string]any)["id"].(string), nil, 200)["message"] != "Target dihapus" {
+	wantErr(t, e.call(&e.hr, "DELETE", "/api/hris/kpi/targets?reason=Target%20uji%20dihapus", nil, 400), "id wajib")
+	if e.call(&e.hr, "DELETE", "/api/hris/kpi/targets?reason=Target%20uji%20dihapus&id="+created["data"].(map[string]any)["id"].(string), nil, 200)["message"] != "Target dihapus" {
 		t.Fatal("delete")
 	}
 
@@ -411,13 +411,13 @@ func TestFeedback360(t *testing.T) {
 	if sub["submitted_at"] != "2026-10-04T10:00:00.000Z" {
 		t.Fatalf("submitted_at %v", sub)
 	}
-	if e.call(&e.hr, "DELETE", "/api/hris/feedback-responses/"+resp["id"].(string), nil, 200)["success"] != true {
+	if e.call(&e.hr, "DELETE", "/api/hris/feedback-responses/"+resp["id"].(string)+"?reason=Feedback%20uji%20dihapus", nil, 200)["success"] != true {
 		t.Fatal("delete response")
 	}
-	if e.call(&e.hr, "DELETE", "/api/hris/feedback-assignments/"+selfID, nil, 200)["message"] != "Assignment deleted successfully" {
+	if e.call(&e.hr, "DELETE", "/api/hris/feedback-assignments/"+selfID+"?reason=Feedback%20uji%20dihapus", nil, 200)["message"] != "Assignment deleted successfully" {
 		t.Fatal("delete assignment")
 	}
-	if e.call(&e.hr, "DELETE", "/api/hris/feedback-cycles/"+cycleID, nil, 200)["message"] != "Cycle deleted successfully" {
+	if e.call(&e.hr, "DELETE", "/api/hris/feedback-cycles/"+cycleID+"?reason=Feedback%20uji%20dihapus", nil, 200)["message"] != "Cycle deleted successfully" {
 		t.Fatal("delete cycle")
 	}
 }

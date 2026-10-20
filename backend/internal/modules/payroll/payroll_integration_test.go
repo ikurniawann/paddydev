@@ -246,6 +246,9 @@ func setup(t *testing.T, periods ...AttendancePeriods) *env {
 	hr := testutil.CreateStaff(t, testutil.StaffOptions{Role: "hrd", Menus: map[string][]string{
 		"hris.compensation": nil, "hris.performance": nil, "hris.performance.kpi-config": nil,
 		"hris.kepegawaian.loans": {"read", "create", "update", "approve"},
+		// EPIC-061: deletes need "delete" on the leaf.
+		"hris.compensation.payroll": {"read", "delete"}, "hris.compensation.salary": {"read", "delete"},
+		"hris.performance.kpi-scorecard": {"read", "create", "update", "approve", "delete"},
 	}})
 	staff := testutil.CreateStaff(t, testutil.StaffOptions{Role: "pos", Menus: map[string][]string{"hris.workforce": nil}})
 	ctx := context.Background()
@@ -533,7 +536,7 @@ func TestRunLifecycle(t *testing.T) {
 		shares.Companies[0].TotalTaperaEmployer != 30000 || shares.Companies[0].TotalTaperaEmployee != 25000 {
 		t.Fatalf("employee shares %v %v event %+v", tkEmployee, kesEmployee, shares)
 	}
-	wantErr(t, e.call(&e.hr, "DELETE", "/api/hris/payroll/"+runID, nil, 400), "Payroll yang sudah dibayar tidak bisa dihapus")
+	wantErr(t, e.call(&e.hr, "DELETE", "/api/hris/payroll/"+runID+"?reason=Run%20uji%20dihapus", nil, 400), "Payroll yang sudah dibayar tidak bisa dihapus")
 
 	// Payslips: the employee sees paid slips only; HR may notify.
 	slips := e.call(&e.hr, "GET", "/api/hris/payslips?employee_id="+worker, nil, 200)["data"].([]any)
@@ -578,9 +581,9 @@ func TestRunDeleteAndPaidMismatch(t *testing.T) {
 	if status != "completed" {
 		t.Fatal("paid must roll back")
 	}
-	wantErr(t, e.call(&e.hr, "DELETE", "/api/hris/payroll/nope", nil, 404), "Payroll run tidak ditemukan")
+	wantErr(t, e.call(&e.hr, "DELETE", "/api/hris/payroll/nope?reason=Run%20uji%20dihapus", nil, 404), "Payroll run tidak ditemukan")
 	e.exec(`UPDATE hris.payroll_runs SET status = 'draft' WHERE id = $1`, runID)
-	if e.call(&e.hr, "DELETE", "/api/hris/payroll/"+runID, nil, 200)["message"] != "Payroll run berhasil dihapus" {
+	if e.call(&e.hr, "DELETE", "/api/hris/payroll/"+runID+"?reason=Run%20uji%20dihapus", nil, 200)["message"] != "Payroll run berhasil dihapus" {
 		t.Fatal("delete")
 	}
 	var n int
@@ -665,7 +668,7 @@ func TestEmployeeSalary(t *testing.T) {
 	}
 	wantErr(t, e.call(&e.hr, "PUT", "/api/hris/employee-salary/"+second["id"].(string), map[string]any{"base_salary": -1}, 400), "Data salary tidak valid")
 	wantErr(t, e.call(&e.hr, "PUT", "/api/hris/employee-salary/00000000-0000-0000-0000-000000000000", map[string]any{}, 500), "Terjadi kesalahan server")
-	if e.call(&e.hr, "DELETE", "/api/hris/employee-salary/"+second["id"].(string), nil, 200)["message"] != "Data salary berhasil dihapus" {
+	if e.call(&e.hr, "DELETE", "/api/hris/employee-salary/"+second["id"].(string)+"?reason=Salary%20uji%20dihapus", nil, 200)["message"] != "Data salary berhasil dihapus" {
 		t.Fatal("delete")
 	}
 }
