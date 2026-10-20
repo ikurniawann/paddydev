@@ -16,8 +16,9 @@ type actor struct {
 	UserID     string
 	Role       string
 	EmployeeID *string
-	// PerformanceHR: an HR role holding the Kinerja menu (hris.performance)
-	// sees and manages every employee's KPI, reviews and department tasks.
+	// PerformanceHR: an HR role holding the Kinerja menu (hris.performance,
+	// beyond the employee-level Review and Tugas Departemen) sees and manages
+	// every employee's KPI, reviews and department tasks.
 	PerformanceHR bool
 	// Payroll: the account holds the Penggajian menu (hris.compensation).
 	Payroll bool
@@ -48,7 +49,7 @@ func (h *handler) requireActor(r *http.Request) (*actor, error) {
 	if err != nil {
 		return nil, err
 	}
-	a.PerformanceHR = domain.IsHR(a.Role) && iam.HasAnyMenuPrefix(granted, iam.HrisPerformance)
+	a.PerformanceHR = domain.IsHR(a.Role) && iam.HasPerformanceHRMenu(granted)
 	a.Payroll = iam.HasAnyMenuPrefix(granted, iam.HrisCompensation)
 	return a, nil
 }

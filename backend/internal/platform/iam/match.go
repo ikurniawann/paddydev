@@ -40,3 +40,19 @@ func HasGrantedAction(granted map[string][]string, prefixes []string, action str
 	}
 	return false
 }
+
+// essPerformanceMenus are the Kinerja leaves every employee holds (ESS:
+// own review, department tasks).
+var essPerformanceMenus = []string{"hris.performance.review", "hris.performance.dept-tasks"}
+
+// HasPerformanceHRMenu: a Kinerja menu beyond the employee-level leaves —
+// the HR side of hris.performance (EPIC-057: an HR account that also holds
+// an employee role is not Kinerja HR through Review or Tugas Departemen).
+func HasPerformanceHRMenu(granted []string) bool {
+	for _, code := range granted {
+		if HasAnyMenuPrefix([]string{code}, HrisPerformance) && !HasAnyMenuPrefix([]string{code}, essPerformanceMenus) {
+			return true
+		}
+	}
+	return false
+}

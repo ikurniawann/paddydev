@@ -13,7 +13,8 @@ export interface ContractListItem {
   days_left: number | null;
   position_title: string | null;
   department_name: string | null;
-  base_salary: string | null;
+  /** Tidak dikirim API untuk akun tanpa akses Penggajian (EPIC-057). */
+  base_salary?: string | null;
   sequence: number;
 }
 

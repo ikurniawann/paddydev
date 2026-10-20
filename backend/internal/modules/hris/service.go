@@ -59,7 +59,8 @@ type Actor struct {
 	EmployeeID   *string
 	DepartmentID *string
 	IsHR         bool
-	// PerformanceMenu: the account holds the Kinerja menu (set by withLogbook).
+	// PerformanceMenu: the account holds the HR side of the Kinerja menu, not
+	// only the employee-level Review/Tugas Departemen (set by withLogbook).
 	PerformanceMenu bool
 }
 

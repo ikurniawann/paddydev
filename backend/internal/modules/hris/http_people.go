@@ -292,9 +292,11 @@ func (h handlers) withLogbook(fn func(w http.ResponseWriter, r *http.Request, a 
 		if err != nil {
 			return err
 		}
-		if a.PerformanceMenu, err = h.auth.HasMenuPrefix(r.Context(), u, iam.HrisPerformance...); err != nil {
+		granted, err := h.auth.GrantedMenuCodes(r.Context(), u.ID, u.Role)
+		if err != nil {
 			return err
 		}
+		a.PerformanceMenu = iam.HasPerformanceHRMenu(granted)
 		return fn(w, r, a, u)
 	})
 }

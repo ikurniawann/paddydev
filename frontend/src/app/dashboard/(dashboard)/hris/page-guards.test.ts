@@ -32,9 +32,12 @@ describe("page guards", () => {
     expect(requireIamPage).toHaveBeenCalledWith(["hris.recruitment", "hris.insights.analytics"], "/dashboard/me");
   });
 
-  it("konfigurasi KPI butuh menu Kinerja", async () => {
+  it("konfigurasi KPI butuh menu pengelola Kinerja, bukan Review/Tugas Departemen karyawan", async () => {
     const { default: Page } = await import("./kpi-config/page");
     await Page();
-    expect(requireIamPage).toHaveBeenCalledWith(["hris.performance"], "/dashboard/me");
+    expect(requireIamPage).toHaveBeenCalledWith(
+      ["hris.performance.kpi-scorecard", "hris.performance.kpi-config"],
+      "/dashboard/me"
+    );
   });
 });

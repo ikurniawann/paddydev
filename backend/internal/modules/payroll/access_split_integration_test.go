@@ -101,6 +101,17 @@ func TestHRWithoutKinerjaMenuIsNotPerformanceHR(t *testing.T) {
 	}
 }
 
+// The employee-level Kinerja leaves (Review, Tugas Departemen) do not make
+// an HR account Kinerja HR.
+func TestESSKinerjaLeavesAreNotPerformanceHR(t *testing.T) {
+	e := setup(t)
+	essHR := hrStaff(e, map[string][]string{"hris.kepegawaian": nil,
+		"hris.performance.review": nil, "hris.performance.dept-tasks": nil})
+	if got := e.call(&essHR, "GET", "/api/hris/performance/cycles", nil, 200)["data"].(map[string]any); got["is_hr"] != false {
+		t.Fatalf("HR with only ESS Kinerja leaves is_hr = %v, want false", got["is_hr"])
+	}
+}
+
 // Konfigurasi KPI dan rubric termasuk menu Kinerja: HR tanpa menu itu ditolak.
 func TestKPIConfigAndRubricNeedKinerjaMenu(t *testing.T) {
 	e := setup(t)
