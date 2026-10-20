@@ -12,6 +12,7 @@ import {
   fetchMyOvertime,
   fetchMyPayslips,
   fetchMyTeam,
+  fetchTeamLoanApprovals,
   fetchTodayAttendance,
 } from "./api";
 
@@ -30,6 +31,9 @@ export const useMyOvertime = () =>
   useQuery({ queryKey: essQueryKeys.overtime(), queryFn: fetchMyOvertime });
 
 export const useMyLoans = () => useQuery({ queryKey: essQueryKeys.loans(), queryFn: fetchMyLoans });
+
+export const useTeamLoanApprovals = () =>
+  useQuery({ queryKey: [...essQueryKeys.loans(), "approvals"], queryFn: fetchTeamLoanApprovals });
 
 export const useMyPayslips = () =>
   useQuery({ queryKey: essQueryKeys.payslips(), queryFn: fetchMyPayslips });

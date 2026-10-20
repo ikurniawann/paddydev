@@ -16,8 +16,9 @@ import {
 } from "@/components/ui/dialog";
 import { formatRupiah } from "@/lib/format";
 import { installmentPreview, loanPaidPercent } from "@/lib/hris/ess-view";
-import { useEssMe, useMyLoans } from "../queries";
-import { useSubmitLoan } from "../mutations";
+import { LOAN_TYPE_OPTIONS, kasbonTenorOptions, loanTypeLabel } from "@/lib/hris/loans-view";
+import { useEssMe, useMyLoans, useTeamLoanApprovals } from "../queries";
+import { useDecideTeamLoan, useSubmitLoan } from "../mutations";
 import { EssLoading, EssNotLinked } from "./ess-states";
 
 /**
@@ -26,27 +27,18 @@ import { EssLoading, EssNotLinked } from "./ess-states";
  * Server memaksa employee_id = diri sendiri, bunga 0, status pending.
  */
 
-const LOAN_TYPE_OPTIONS = [
-  { value: "kasbon", label: "Kasbon (Salary Advance)" },
-  { value: "loan", label: "Pinjaman" },
-  { value: "emergency", label: "Pinjaman Darurat" },
-];
-
 const STATUS_BADGES: Record<string, { label: string; className: string }> = {
   pending: { label: "Menunggu", className: "bg-amber-100 text-amber-700" },
+  manager_approved: { label: "Disetujui Manager", className: "bg-indigo-100 text-indigo-700" },
   approved: { label: "Berjalan", className: "bg-green-100 text-green-700" },
   rejected: { label: "Ditolak", className: "bg-red-100 text-red-700" },
   paid_off: { label: "Lunas", className: "bg-sky-100 text-sky-700" },
 };
 
-function loanTypeLabel(value: string): string {
-  return LOAN_TYPE_OPTIONS.find((o) => o.value === value)?.label ?? value;
-}
-
 const EMPTY_FORM = {
   loan_type: "kasbon",
   principal_amount: "",
-  tenor_months: "3",
+  tenor_months: "2",
   purpose: "",
 };
 
@@ -54,6 +46,8 @@ export function EssPinjamanPage() {
   const { data: me, isLoading } = useEssMe();
   const loans = useMyLoans().data ?? [];
   const submitMutation = useSubmitLoan();
+  const teamLoans = useTeamLoanApprovals().data ?? [];
+  const decideTeamLoan = useDecideTeamLoan();
   const [dialog, setDialog] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const previewInstallment = installmentPreview(form.principal_amount, form.tenor_months);
@@ -61,6 +55,10 @@ export function EssPinjamanPage() {
   function handleSubmit() {
     if (!Number(form.principal_amount) || !Number(form.tenor_months)) {
       toast.error("Jumlah pinjaman dan tenor wajib diisi");
+      return;
+    }
+    if (form.loan_type === "kasbon" && !["1", "2"].includes(form.tenor_months)) {
+      toast.error("Tenor kasbon hanya 1 atau 2 bulan");
       return;
     }
     submitMutation.mutate(
@@ -77,6 +75,16 @@ export function EssPinjamanPage() {
           setForm(EMPTY_FORM);
         },
         onError: (error) => toast.error(error.message || "Gagal mengajukan pinjaman"),
+      }
+    );
+  }
+
+  function handleDecideTeam(id: string, approved: boolean) {
+    decideTeamLoan.mutate(
+      { id, approved },
+      {
+        onSuccess: (res) => toast.success(res.message || (approved ? "Kasbon disetujui" : "Kasbon ditolak")),
+        onError: (error) => toast.error(error.message || "Gagal memproses kasbon"),
       }
     );
   }
@@ -155,6 +163,45 @@ export function EssPinjamanPage() {
         )}
       </div>
 
+      {teamLoans.length > 0 && (
+        <div className="rounded-xl border border-gray-200/70 bg-white p-5 shadow-sm">
+          <h3 className="text-sm font-semibold text-gray-800">Persetujuan Kasbon Tim</h3>
+          <ul className="mt-3 divide-y divide-gray-100">
+            {teamLoans.map((loan) => (
+              <li key={loan.id} className="flex items-start justify-between gap-3 py-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-gray-900">
+                    {loan.employee?.full_name ?? "—"}
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    {loanTypeLabel(loan.loan_type)} · {formatRupiah(loan.principal_amount)} ·{" "}
+                    {loan.tenor_months} bln
+                    {loan.purpose ? ` · ${loan.purpose}` : ""}
+                  </p>
+                </div>
+                <div className="flex shrink-0 gap-2">
+                  <Button
+                    size="sm"
+                    disabled={decideTeamLoan.isPending}
+                    onClick={() => handleDecideTeam(loan.id, true)}
+                  >
+                    Setujui
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={decideTeamLoan.isPending}
+                    onClick={() => handleDecideTeam(loan.id, false)}
+                  >
+                    Tolak
+                  </Button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <Dialog open={dialog} onOpenChange={setDialog}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -166,7 +213,14 @@ export function EssPinjamanPage() {
               <Combobox
                 options={LOAN_TYPE_OPTIONS}
                 value={form.loan_type}
-                onChange={(value) => setForm((f) => ({ ...f, loan_type: value }))}
+                onChange={(value) =>
+                  setForm((f) => ({
+                    ...f,
+                    loan_type: value,
+                    tenor_months:
+                      value === "kasbon" && !["1", "2"].includes(f.tenor_months) ? "2" : f.tenor_months,
+                  }))
+                }
                 placeholder="Pilih jenis"
               />
             </div>
@@ -182,13 +236,22 @@ export function EssPinjamanPage() {
               </div>
               <div>
                 <label className="mb-1 block text-xs font-medium text-gray-600">Tenor (bulan)</label>
-                <Input
-                  type="number"
-                  min="1"
-                  max="60"
-                  value={form.tenor_months}
-                  onChange={(e) => setForm((f) => ({ ...f, tenor_months: e.target.value }))}
-                />
+                {form.loan_type === "kasbon" ? (
+                  <Combobox
+                    options={kasbonTenorOptions}
+                    value={form.tenor_months}
+                    onChange={(value) => setForm((f) => ({ ...f, tenor_months: value }))}
+                    placeholder="Pilih tenor"
+                  />
+                ) : (
+                  <Input
+                    type="number"
+                    min="1"
+                    max="60"
+                    value={form.tenor_months}
+                    onChange={(e) => setForm((f) => ({ ...f, tenor_months: e.target.value }))}
+                  />
+                )}
               </div>
             </div>
             <div>

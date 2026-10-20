@@ -5,6 +5,7 @@ import { attendanceQueryKeys } from "@/features/hris/attendance/query-keys";
 import { essQueryKeys } from "./query-keys";
 import {
   decideOvertime,
+  decideTeamLoan,
   markAnnouncementRead,
   submitClock,
   submitLoan,
@@ -71,6 +72,16 @@ export function useSubmitLoan() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (payload: EssLoanPayload) => submitLoan(payload),
+    retry: false,
+    onSuccess: () => qc.invalidateQueries({ queryKey: essQueryKeys.loans() }),
+  });
+}
+
+/** Manager Departemen memutuskan kasbon anggota tim (tahap 1). */
+export function useDecideTeamLoan() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, approved }: { id: string; approved: boolean }) => decideTeamLoan(id, approved),
     retry: false,
     onSuccess: () => qc.invalidateQueries({ queryKey: essQueryKeys.loans() }),
   });

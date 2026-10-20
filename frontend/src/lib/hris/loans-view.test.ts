@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   EMPTY_LOAN_FORM,
+  LOAN_STATUS_LABELS,
+  LOAN_TYPE_OPTIONS,
   employeeComboOptions,
   loanPaidPercent,
   loanPayload,
   loanSummary,
+  kasbonTenorOptions,
   loanTypeLabel,
   previewInstallment,
   validateLoanForm,
@@ -72,7 +75,7 @@ describe("validateLoanForm & loanPayload", () => {
       loan_type: "kasbon",
       principal_amount: 100,
       interest_rate: 0,
-      tenor_months: 3,
+      tenor_months: 2,
       purpose: undefined,
     });
   });
@@ -90,9 +93,37 @@ describe("ringkasan & progres", () => {
     ).toEqual({ pendingCount: 1, activeTotal: 1250 });
   });
 
+  it("pending HR: manager_approved dan pending tanpa manager; pending dengan manager belum", () => {
+    expect(
+      loanSummary([
+        { status: "manager_approved", remaining_balance: 0, manager_approver_id: "m1" },
+        { status: "pending", remaining_balance: 0, manager_approver_id: null },
+        { status: "pending", remaining_balance: 0 },
+        { status: "pending", remaining_balance: 0, manager_approver_id: "m1" },
+      ])
+    ).toEqual({ pendingCount: 3, activeTotal: 0 });
+  });
+
   it("persentase terbayar dibulatkan dan aman saat total 0", () => {
     expect(loanPaidPercent({ paid_amount: "1", remaining_balance: "2" })).toBe(33);
     expect(loanPaidPercent({ paid_amount: 0, remaining_balance: 0 })).toBe(0);
     expect(loanPaidPercent({ paid_amount: 100, remaining_balance: 0 })).toBe(100);
+  });
+});
+
+describe("kasbon EPIC-060", () => {
+  it("Pinjaman Darurat tidak bisa diajukan tapi labelnya tetap untuk riwayat", () => {
+    expect(LOAN_TYPE_OPTIONS.map((o) => o.value)).toEqual(["kasbon", "loan"]);
+    expect(loanTypeLabel("emergency")).toBe("Pinjaman Darurat");
+  });
+  it("tenor kasbon 1 atau 2, default 2", () => {
+    expect(kasbonTenorOptions.map((o) => o.value)).toEqual(["1", "2"]);
+    expect(EMPTY_LOAN_FORM.tenor_months).toBe("2");
+    expect(
+      validateLoanForm({ ...EMPTY_LOAN_FORM, employee_id: "e", principal_amount: "100000", tenor_months: "3" })
+    ).toBe("Tenor kasbon hanya 1 atau 2 bulan");
+  });
+  it("status antara manager", () => {
+    expect(LOAN_STATUS_LABELS.manager_approved).toBe("Disetujui Manager");
   });
 });
