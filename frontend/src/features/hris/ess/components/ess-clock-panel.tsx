@@ -9,7 +9,7 @@ import { CameraCapture } from "@/components/hris/CameraCapture";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { formatTime } from "@/lib/format";
 import { GeofenceBadge } from "@/features/hris/attendance/components/geofence-badge";
-import { GEOFENCE_DEFAULT_RADIUS_M, geofenceLabel, type GeofenceNoteInfo } from "@/lib/hris/geofence";
+import { geofenceLabel, type GeofenceNoteInfo } from "@/lib/hris/geofence";
 import { preferredClockStore } from "@/lib/hris/placements";
 import { useClockPlacements } from "@/features/hris/placements/queries";
 import { useTodayAttendance } from "../queries";
@@ -175,7 +175,7 @@ export function EssClockPanel() {
           <Clock className="mr-2 h-4 w-4" /> Clock Out
         </Button>
         <p className="flex items-center gap-1 text-xs text-gray-500">
-          <MapPin className="h-3.5 w-3.5" /> Foto selfie wajib; aktifkan GPS agar lokasi bisa dicek (radius toko {GEOFENCE_DEFAULT_RADIUS_M} m)
+          <MapPin className="h-3.5 w-3.5" /> Foto selfie wajib; aktifkan GPS agar lokasi dicek terhadap area toko
         </p>
       </div>
 
