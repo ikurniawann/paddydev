@@ -1,6 +1,6 @@
 # EPIC-062: Paket Absensi — Geofence Cabang & Perjalanan Dinas
 
-status: backlog
+status: on-progress
 environment: dev
 retries: 0
 
@@ -74,3 +74,4 @@ Rekomendasi di bawah dipakai sebagai ruling rencana (R1–R11). **User perlu men
 
   Rencana ditulis di `docs/superpowers/plans/2026-10-20-absensi-geofence.md` (10 task, ruling R1–R11). Pertanyaan terbuka P-1 s.d. P-7 menunggu konfirmasi user. `status-requirement.md` AB-01/02/03 kini menunjuk epic ini.
 - 2026-10-20: Permintaan tambahan user: pilih titik toko lewat peta (bukan hanya ketik lat/lng) dengan komponen OpenLayers + OSM yang sudah ada. Dicatat di Goal, Acceptance Criteria, Catatan, dan Task 7 (form profil cabang) + Task 8 (Lokasi Toko HRIS).
+- 2026-10-20: **Keputusan user**: "lanjutkan sampai semua epic completed", yaitu ikuti rekomendasi P-1 s.d. P-7: radius global 100 m + override per toko 25–1000 m; toleransi akurasi min(akurasi, 100 m); di luar area boleh absen dengan keterangan wajib (Invalid, tanpa blokir); Perjalanan Dinas diputus atasan langsung dengan HRD sebagai cadangan; clock-out dinilai dengan aturan sama; tanpa mode offline; koordinat 52 cabang live diisi HR setelah rilis (agent tidak mengubah data live). Eksekusi dimulai (subagent-driven).
