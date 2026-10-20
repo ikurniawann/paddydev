@@ -251,7 +251,8 @@ func (s *service) decideLoanHR(ctx context.Context, userID, loanID string, appro
 	}
 	employeeID, loanType, installment, principal, tenor := l.EmployeeID, l.LoanType, l.Installment, l.Principal, l.Tenor
 	waitingManager := l.LoanType == "kasbon" && l.ManagerApprover != nil && l.Status == "pending"
-	if waitingManager {
+	// HR may still reject a kasbon that waits for its manager; only approve is blocked.
+	if waitingManager && approve {
 		return nil, httpx.BadRequest("Kasbon menunggu persetujuan Manager Departemen")
 	}
 	if l.Status != "pending" && l.Status != "manager_approved" {

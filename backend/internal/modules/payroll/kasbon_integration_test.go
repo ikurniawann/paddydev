@@ -146,3 +146,42 @@ func TestKasbonManagerRejectAndActiveCount(t *testing.T) {
 	e.call(&e.staff, "POST", "/api/hris/loans", map[string]any{"loan_type": "kasbon",
 		"principal_amount": 500000, "tenor_months": 1}, 400)
 }
+
+// HR boleh MENOLAK kasbon yang masih menunggu manager (mis. manager sudah tidak
+// aktif / tidak merespons) — hanya approve yang diblok sampai tahap 1 selesai.
+func TestKasbonHRCanRejectWhileWaitingManager(t *testing.T) {
+	e := setup(t)
+	mgrStaff := hrStaff(e, map[string][]string{"go_test_none": nil})
+	mgr := e.employee("Manager Dept", mgrStaff.UserID, true)
+	worker := kasbonWorker(e, "contract")
+	e.exec(`UPDATE hris.employees SET reporting_to = $2 WHERE id = $1`, worker, mgr)
+	e.setLevel(mgr, "Manager")
+	loan := e.call(&e.staff, "POST", "/api/hris/loans", map[string]any{"loan_type": "kasbon",
+		"principal_amount": 500000, "tenor_months": 1}, 200)["data"].(map[string]any)
+	id := loan["id"].(string)
+	wantErr(t, e.call(&e.hr, "POST", "/api/hris/loans/"+id+"/approve", map[string]any{"approved": true}, 400),
+		"Kasbon menunggu persetujuan Manager Departemen")
+	rej := e.call(&e.hr, "POST", "/api/hris/loans/"+id+"/approve",
+		map[string]any{"approved": false, "rejection_reason": "Manager tidak merespons"}, 200)["data"].(map[string]any)
+	if rej["status"] != "rejected" || rej["rejection_reason"] != "Manager tidak merespons" {
+		t.Fatalf("HR reject saat menunggu manager: %v", rej)
+	}
+}
+
+// THP kasbon menjumlah SEMUA struktur gaji aktif (dua entitas pembayar), dan
+// pesan plafon 50% mengikuti THP total.
+func TestKasbonTHPSumsAllActiveSalaryRows(t *testing.T) {
+	e := setup(t)
+	kasbonWorker(e, "contract") // baris 1: THP 5.000.000 di e.co
+	worker := e.emps.order[len(e.emps.order)-1]
+	co2, _ := e.entity("PT Kedua")
+	e.exec(`INSERT INTO hris.employee_salary (employee_id, company_id, base_salary, transport_allowance, meal_allowance,
+		position_allowance, ptkp_status, effective_date) VALUES ($1, $2, 2000000, 500000, 500000, 0, 'TK/0', '2026-01-01')`,
+		worker, co2) // baris 2: THP 3.000.000 → total 8.000.000, plafon 4.000.000
+	post := func(amount int, status int) map[string]any {
+		return e.call(&e.staff, "POST", "/api/hris/loans", map[string]any{"loan_type": "kasbon",
+			"principal_amount": amount, "tenor_months": 2}, status)
+	}
+	wantErr(t, post(4100000, 400), "Kasbon maksimal 50% THP (maks Rp 4.000.000)")
+	post(4000000, 200)
+}
