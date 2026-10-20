@@ -112,6 +112,36 @@ func TestESSKinerjaLeavesAreNotPerformanceHR(t *testing.T) {
 	}
 }
 
+// KPI administration (targets, scorecard status, snapshot, recommendation,
+// configuration) needs the HR side of Kinerja: the employee-level Review and
+// Tugas Departemen leaves every employee holds do not open it.
+func TestKPIAdminNeedsPerformanceHRMenu(t *testing.T) {
+	e := setup(t)
+	ess := map[string][]string{"hris.performance.review": nil, "hris.performance.dept-tasks": nil}
+	worker := testutil.CreateStaff(t, testutil.StaffOptions{Role: "employee", Menus: ess})
+	e.t.Cleanup(func() { _ = e.tx.Rollback(context.Background()) })
+	essHR := hrStaff(e, ess)
+	for _, s := range []*testutil.Staff{&worker, &essHR} {
+		for _, c := range []struct {
+			method, path string
+			body         any
+		}{
+			{"GET", "/api/hris/kpi/targets", nil},
+			{"POST", "/api/hris/kpi/targets", map[string]any{"indicator_id": "x", "target": 1}},
+			{"DELETE", "/api/hris/kpi/targets?id=x", nil},
+			{"PATCH", "/api/hris/kpi/scorecards", map[string]any{"action": "reopen", "scorecard_id": "x"}},
+			{"GET", "/api/hris/kpi/recommendation?employee_ids=x", nil},
+			{"POST", "/api/hris/kpi/snapshot", map[string]any{}},
+			{"GET", "/api/hris/kpi-config", nil},
+			{"PUT", "/api/hris/kpi-config", map[string]any{}},
+		} {
+			wantErr(t, e.call(s, c.method, c.path, c.body, 403), "Insufficient permissions")
+		}
+	}
+	// HR with Kinerja keeps the administration.
+	e.call(&e.hr, "GET", "/api/hris/kpi/targets", nil, 200)
+}
+
 // Konfigurasi KPI dan rubric termasuk menu Kinerja: HR tanpa menu itu ditolak.
 func TestKPIConfigAndRubricNeedKinerjaMenu(t *testing.T) {
 	e := setup(t)

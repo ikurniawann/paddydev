@@ -9,7 +9,7 @@ vi.mock("next/navigation", () => ({ notFound: vi.fn() }));
 vi.mock("@/features/hris/candidates", () => ({ CandidateDetailPage: () => null }));
 vi.mock("@/features/hris/live-monitoring", () => ({ LiveMonitorDetailPage: () => null }));
 vi.mock("@/features/hris/dashboard", () => ({ RecruitmentDashboardPage: () => null }));
-vi.mock("@/features/hris/kpi", () => ({ KpiConfigPage: () => null }));
+vi.mock("@/features/hris/kpi", () => ({ KpiConfigPage: () => null, KpiScorecardPage: () => null }));
 
 beforeEach(() => requireIamPage.mockReset());
 
@@ -34,6 +34,15 @@ describe("page guards", () => {
 
   it("konfigurasi KPI butuh menu pengelola Kinerja, bukan Review/Tugas Departemen karyawan", async () => {
     const { default: Page } = await import("./kpi-config/page");
+    await Page();
+    expect(requireIamPage).toHaveBeenCalledWith(
+      ["hris.performance.kpi-scorecard", "hris.performance.kpi-config"],
+      "/dashboard/me"
+    );
+  });
+
+  it("KPI scorecard butuh menu pengelola Kinerja", async () => {
+    const { default: Page } = await import("./kpi-scorecard/page");
     await Page();
     expect(requireIamPage).toHaveBeenCalledWith(
       ["hris.performance.kpi-scorecard", "hris.performance.kpi-config"],
