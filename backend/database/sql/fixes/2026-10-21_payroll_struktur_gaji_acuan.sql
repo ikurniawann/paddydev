@@ -10,9 +10,12 @@
 -- =============================================================================
 BEGIN;
 CREATE TEMP VIEW struktur_usulan AS
-SELECT s.id, e.full_name, s.pay_basis, s.transport_mode, s.meal_mode, s.position_mode,
+SELECT s.id, e.full_name, s.pay_basis, s.transport_mode, s.meal_mode, s.position_mode, s.working_days_divisor,
   (SELECT count(*) FROM hris.attendance a
-    WHERE a.employee_id = e.id AND a.date >= (current_date - 30) AND a.status <> 'absent') AS absensi_30_hari
+    WHERE a.employee_id = e.id AND a.date >= (current_date - 30) AND a.status <> 'absent') AS absensi_30_hari,
+  EXISTS (SELECT 1 FROM hris.employee_shifts sh
+    WHERE sh.employee_id = e.id AND sh.effective_from <= current_date
+      AND (sh.effective_to IS NULL OR sh.effective_to >= current_date)) AS punya_jadwal
 FROM hris.employee_salary s
 JOIN hris.employees e ON e.id = s.employee_id AND e.is_active
 WHERE s.is_active AND coalesce(s.pay_basis, 'monthly') IN ('monthly', 'monthly_prorated')
@@ -26,9 +29,16 @@ WHERE s.is_active AND coalesce(s.pay_basis, 'monthly') IN ('monthly', 'monthly_p
 \endif
 
 \echo 'Struktur yang akan diubah:'
-SELECT count(*) AS struktur, count(*) FILTER (WHERE absensi_30_hari = 0) AS tanpa_absensi_30_hari FROM struktur_usulan;
+SELECT count(*) AS struktur, count(*) FILTER (WHERE absensi_30_hari = 0) AS tanpa_absensi_30_hari,
+  count(*) FILTER (WHERE NOT punya_jadwal) AS tanpa_jadwal FROM struktur_usulan;
+\echo 'Daftar struktur yang akan diubah (nilai sekarang → monthly_prorated / per_day / per_day / per_day):'
+SELECT full_name, pay_basis, transport_mode, meal_mode, position_mode, absensi_30_hari, punya_jadwal
+FROM struktur_usulan ORDER BY full_name;
 \echo 'PERINGATAN — karyawan tanpa absensi 30 hari terakhir (gaji pokok prorated akan 0 tanpa absensi/cuti):'
 SELECT full_name, pay_basis, absensi_30_hari FROM struktur_usulan WHERE absensi_30_hari = 0 ORDER BY full_name;
+\echo 'PERINGATAN — karyawan TANPA jadwal (tidak ada baris hris.employee_shifts yang berlaku hari ini):'
+\echo '  pembagi = pembagi struktur (bila kosong: hari hadir), bukan hari terjadwal; atur jadwal sebelum menerapkan.'
+SELECT full_name, pay_basis, working_days_divisor FROM struktur_usulan WHERE NOT punya_jadwal ORDER BY full_name;
 
 \if :{?preview}
 \else
