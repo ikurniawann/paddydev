@@ -31,9 +31,13 @@ Dicek terhadap kode (branch `docs/epic061-role-hak-akses`, di atas EPIC-057/059/
 - **Sync role turunan menimpa pembatasan.** `iam.sync_hris_staff_roles()` menyalin grant `admin_hris` ditambah **semua** aksi yang tersedia di tiap menu. Akibatnya, `delete` yang dicabut dari role turunan kembali lagi saat sync berikutnya.
 - **Tidak ada audit perubahan hak akses.** `replacePermissions` (`configuration/access/repo.go`) menonaktifkan lalu meng-upsert ulang grant tanpa riwayat before/after. Penugasan role ke user juga tidak tercatat.
 
+## Keputusan user 20-10-2026
+
+User menjawab "lanjut" untuk "perbaiki B1, lalu lanjut Role & Hak Akses sesuai rekomendasi Q-RA-1..8". Karena itu semua rekomendasi pada tabel di bawah **berlaku sebagai keputusan**, termasuk K-8 (Q-RA-1).
+
 ## Pertanyaan & rekomendasi (K-8 dan turunannya)
 
-| No | Pertanyaan | Rekomendasi |
+| No | Pertanyaan | Rekomendasi (= keputusan) |
 |---|---|---|
 | Q-RA-1 (K-8) | Data apa yang tercakup "hak hapus"? | Semua endpoint DELETE HRIS di tabel atas, ditambah impor jadwal mode timpa. Tiap endpoint dijaga aksi `delete` pada **menu daunnya** (bukan prefiks `hris.kepegawaian`). Payroll & rekrutmen ikut. |
 | Q-RA-2 | Akun/role mana yang mendapat hak hapus? | `hris_manager` (Manager HR) dan super_admin. `hris_non_payroll` dan `hris_non_rekrutmen_kpi` tanpa hapus; mereka tetap bisa membuat & mengubah. |

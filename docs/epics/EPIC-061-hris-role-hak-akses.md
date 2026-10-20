@@ -14,7 +14,7 @@ Menyelesaikan RA-01..03 MOM 19-10-2026:
 Analisis & rekomendasi: `docs/hris/acuan-mom-20261019/role-hak-akses.md`.
 
 ## Tasks
-Rencana menyusul setelah keputusan user atas Q-RA-1..8 (K-8).
+Lihat `docs/superpowers/plans/2026-10-20-hris-role-hak-akses.md`.
 
 ## Acceptance Criteria
 - Semua endpoint hapus/timpa HRIS butuh aksi `delete` pada menu daunnya, wajib alasan, dan tercatat di audit log.
@@ -24,3 +24,4 @@ Rencana menyusul setelah keputusan user atas Q-RA-1..8 (K-8).
 
 ## Automation Log
 - 2026-10-20: analisis RA-01..03 (hanya membaca kode). RA-01 ❌, RA-02 🟡 (menu per akun selesai di EPIC-057), RA-03 ❌. Menunggu keputusan user atas Q-RA-1..8.
+- 2026-10-20: **Keputusan user**: "lanjut", yaitu ikuti semua rekomendasi Q-RA-1..8 (termasuk K-8). Hak hapus untuk `hris_manager` dan super_admin; hapus wajib alasan dan audit; AdminHRIS lewat halaman "Hak Akses HRIS" terbatas; masker per role bertahan dari sync; Manajemen User bisa memilih role `hris_*`; audit perubahan hak akses.
