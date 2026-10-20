@@ -13,16 +13,12 @@ import {
   WalletIcon,
 } from "@heroicons/react/24/outline";
 import { requestStatusBadge } from "@/lib/hris/ess-view";
+import { leaveTypeLabel } from "@/lib/hris/leave-types";
 import type { EssBeranda, EssRecentRequest } from "../types";
 
 /** Kartu & daftar kecil di Beranda Karyawan. */
 
 const DAY_LABELS = ["", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min"];
-const LEAVE_TYPE_LABELS: Record<string, string> = {
-  annual: "Cuti Tahunan", sick: "Sakit", maternity: "Melahirkan",
-  paternity: "Cuti Ayah", unpaid: "Tanpa Gaji", emergency: "Darurat", personal: "Izin Pribadi",
-  pilgrimage: "Ibadah", menstrual: "Haid", marriage: "Menikah", bereavement: "Duka",
-};
 const KIND_META: Record<EssRecentRequest["kind"], { label: string; cls: string }> = {
   cuti: { label: "Cuti", cls: "bg-indigo-100 text-indigo-700" },
   lembur: { label: "Lembur", cls: "bg-sky-100 text-sky-700" },
@@ -157,7 +153,7 @@ export function RecentRequestsCard({ requests }: { requests: EssRecentRequest[] 
                   <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold ${kind.cls}`}>{kind.label}</span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-medium capitalize text-gray-800">
-                      {LEAVE_TYPE_LABELS[r.label] ?? r.label}
+                      {leaveTypeLabel(r.label)}
                     </span>
                     <span className="block truncate text-[11px] text-gray-400">{r.detail}</span>
                   </span>

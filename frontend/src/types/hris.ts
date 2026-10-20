@@ -1,3 +1,5 @@
+import type { LeaveTypeCode as LeaveType } from '@/lib/hris/leave-types';
+
 // ============================================================
 // HRIS Module - TypeScript Types
 // Fase 0: Foundation
@@ -376,18 +378,7 @@ export interface AttendanceWithEmployee extends Attendance {
 }
 
 // Leave Types
-export type LeaveType =
-  | 'annual'
-  | 'sick'
-  | 'maternity'
-  | 'paternity'
-  | 'unpaid'
-  | 'emergency'
-  | 'pilgrimage'
-  | 'menstrual'
-  | 'marriage'
-  | 'bereavement'
-  | 'personal';
+export type { LeaveType };
 
 export type LeaveStatus = 'pending' | 'approved' | 'rejected' | 'cancelled';
 
@@ -540,19 +531,7 @@ export const ATTENDANCE_STATUS_COLORS: Record<AttendanceStatus, string> = {
   remote: 'bg-purple-100 text-purple-800',
 };
 
-export const LEAVE_TYPE_LABELS: Record<LeaveType, string> = {
-  annual: 'Cuti Tahunan',
-  sick: 'Sakit',
-  maternity: 'Melahirkan',
-  paternity: 'Cuti Ayah',
-  unpaid: 'Cuti Tanpa Upah',
-  emergency: 'Cuti Darurat',
-  pilgrimage: 'Cuti Haji/Umrah',
-  menstrual: 'Cuti Haid',
-  marriage: 'Cuti Pernikahan',
-  bereavement: 'Cuti Duka Cita',
-  personal: 'Izin Pribadi',
-};
+export { LEAVE_TYPE_LABELS } from '@/lib/hris/leave-types';
 
 export const LEAVE_STATUS_LABELS: Record<LeaveStatus, string> = {
   pending: 'Menunggu Persetujuan',

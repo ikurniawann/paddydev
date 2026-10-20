@@ -1,6 +1,7 @@
 import { getPool, queryOne } from "@/lib/db";
 import { loadGatewayConfig, sendGatewayText } from "@/lib/whatsapp/gateway";
 import { normalizeWaPhone } from "@/lib/pos/receipt-wa";
+import { leaveTypeLabel } from "./leave-types";
 
 /**
  * Notifikasi WA pengajuan izin/cuti (permintaan owner 2026-08-30):
@@ -16,23 +17,7 @@ import { normalizeWaPhone } from "@/lib/pos/receipt-wa";
 
 const LEAVE_NOTIF_TYPE = "cuti";
 
-export const LEAVE_TYPE_LABELS: Record<string, string> = {
-  annual: "Cuti Tahunan",
-  sick: "Sakit",
-  maternity: "Cuti Melahirkan",
-  paternity: "Cuti Ayah",
-  unpaid: "Izin Tanpa Gaji",
-  emergency: "Izin Darurat",
-  personal: "Izin Pribadi",
-  pilgrimage: "Cuti Ibadah",
-  menstrual: "Cuti Haid",
-  marriage: "Cuti Menikah",
-  bereavement: "Cuti Duka",
-};
-
-export function leaveTypeLabel(type: string): string {
-  return LEAVE_TYPE_LABELS[type] ?? type;
-}
+export { LEAVE_TYPE_LABELS, leaveTypeLabel } from "./leave-types";
 
 const tanggalId = (iso: string): string => {
   const d = new Date(`${iso}T00:00:00+07:00`);
