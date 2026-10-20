@@ -14,6 +14,24 @@ export function buildListUrl(base: string, params?: Record<string, QueryValue>) 
   return query ? `${base}?${query}` : base;
 }
 
+/**
+ * Error respons non-2xx. Membawa status, body mentah, dan `details` (bila ada)
+ * supaya pemanggil bisa bereaksi pada kode error terstruktur (mis. geofence).
+ */
+export class ApiError extends Error {
+  readonly status: number;
+  readonly body: unknown;
+  readonly details: unknown;
+  constructor(message: string, status: number, body: unknown) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.body = body;
+    this.details =
+      body && typeof body === "object" && "details" in body ? (body as { details?: unknown }).details : undefined;
+  }
+}
+
 async function parseJson<T>(res: Response): Promise<T> {
   const json = await res.json().catch(() => ({}));
   if (!res.ok) {
@@ -27,7 +45,7 @@ async function parseJson<T>(res: Response): Promise<T> {
         : raw != null && typeof raw === "object" && "message" in raw
           ? String((raw as { message?: unknown }).message || `Request failed (${res.status})`)
           : `Request failed (${res.status})`;
-    throw new Error(message);
+    throw new ApiError(message, res.status, json);
   }
   return json as T;
 }

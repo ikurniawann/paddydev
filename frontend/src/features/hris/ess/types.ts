@@ -1,3 +1,4 @@
+import type { GeofenceStatus } from "@/lib/hris/geofence";
 import type { PayslipAmounts, SlipAllocation } from "@/features/hris/payroll/types";
 
 export interface EssTodayShift {
@@ -36,6 +37,10 @@ export interface EssTodayAttendance {
   late_minutes: number;
   /** Toko tempat clock-in (payroll multi-toko), null bila tidak tercatat */
   branch?: { id: string; code: string; name: string } | null;
+  clock_in_geofence?: GeofenceStatus | null;
+  clock_in_distance_m?: number | null;
+  clock_out_geofence?: GeofenceStatus | null;
+  clock_out_distance_m?: number | null;
 }
 
 export interface EssClockLocation {
@@ -52,6 +57,20 @@ export interface EssClockPayload {
   branch_id?: string;
   clock_in_location?: EssClockLocation;
   clock_out_location?: EssClockLocation;
+  /** Keterangan; wajib (≥ 5 karakter) bila server menilai di luar area */
+  notes?: string;
+}
+
+export interface EssClockResponse {
+  message?: string;
+  data?: {
+    is_late?: boolean;
+    late_minutes?: number;
+    clock_in_geofence?: GeofenceStatus | null;
+    clock_in_distance_m?: number | null;
+    clock_out_geofence?: GeofenceStatus | null;
+    clock_out_distance_m?: number | null;
+  };
 }
 
 export interface EssLeaveRow {

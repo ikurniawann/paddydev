@@ -27,3 +27,35 @@ export function geofenceLabel(
   if ((status === "valid" || status === "invalid") && distanceM != null) return `${label} · ${distanceM} m`;
   return label;
 }
+
+/** Radius bawaan (MOM AB-01); dipakai hanya bila server tidak mengirim `radius_m`. */
+export const GEOFENCE_DEFAULT_RADIUS_M = 100;
+
+/** Panjang minimal keterangan absen di luar area (MOM AB-03), dihitung per karakter (code point). */
+export const GEOFENCE_NOTE_MIN = 5;
+
+export interface GeofenceNoteInfo {
+  message: string;
+  distanceM: number | null;
+  radiusM: number;
+  branchName: string | null;
+}
+
+/**
+ * Respons 422 `geofence_note_required` dari POST /api/hris/attendance: absen
+ * di luar area belum tercatat dan perlu dikirim ulang dengan keterangan.
+ * null untuk respons lain.
+ */
+export function geofenceNoteRequired(status: number, body: unknown): GeofenceNoteInfo | null {
+  if (status !== 422 || !body || typeof body !== "object") return null;
+  const { error, details } = body as { error?: unknown; details?: unknown };
+  if (!details || typeof details !== "object") return null;
+  const d = details as { code?: unknown; distance_m?: unknown; radius_m?: unknown; branch_name?: unknown };
+  if (d.code !== "geofence_note_required") return null;
+  return {
+    message: typeof error === "string" ? error : "Anda di luar area toko. Isi keterangan untuk tetap absen.",
+    distanceM: typeof d.distance_m === "number" ? d.distance_m : null,
+    radiusM: typeof d.radius_m === "number" ? d.radius_m : GEOFENCE_DEFAULT_RADIUS_M,
+    branchName: typeof d.branch_name === "string" ? d.branch_name : null,
+  };
+}
