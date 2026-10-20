@@ -3,6 +3,7 @@
 import Feature from "ol/Feature";
 import Map from "ol/Map";
 import View from "ol/View";
+import Attribution from "ol/control/Attribution";
 import Circle from "ol/geom/Circle";
 import LineString from "ol/geom/LineString";
 import Point from "ol/geom/Point";
@@ -117,7 +118,9 @@ export function GeoMap({
         new VectorLayer({ source }),
         new VectorLayer({ source: mine }),
       ],
-      controls: [],
+      // Tanpa tombol zoom/rotate, tetapi atribusi OSM wajib tampil (lisensi ODbL / kebijakan tile OSM).
+      // Ditaruh di kiri atas agar tidak tertutup tombol lokasi dan pesan di bagian bawah peta.
+      controls: [new Attribution({ collapsible: false, className: "ol-attribution !top-2 !left-2 !right-auto !bottom-auto" })],
       interactions: interactive ? undefined : [],
       view: new View({ center: fromLonLat([106.82, -6.2]), zoom: 12 }),
     });
