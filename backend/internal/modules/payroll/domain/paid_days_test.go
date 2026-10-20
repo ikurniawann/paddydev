@@ -196,8 +196,9 @@ func TestActiveEmployeeEndDateNotClipped(t *testing.T) {
 	eq(t, "pokok monthly penuh", Calculate(in, DefaultConfig()).BaseSalary, 2_200_000)
 }
 
-// Tanpa jadwal: hari dibayar tidak melebihi hari kerja periode, dan pokok
-// monthly_prorated / jabatan per_day tidak melebihi 100% (× faktor cakupan).
+// Tanpa jadwal (B1): hari dibayar TIDAK dibatasi di input; pokok monthly_prorated
+// dan jabatan per_day tetap tidak melebihi 100% (× faktor cakupan) berkat clamp
+// di Calculate, dan tepat 100% (tidak kurang bayar).
 // Sep 2026 = 22 hari kerja Senin–Jumat.
 func TestPaidDaysCappedWithoutSchedule(t *testing.T) {
 	emp := Employee{ID: "e", JoinDate: "2020-01-01", EmploymentStatus: "permanent"}
@@ -221,30 +222,50 @@ func TestPaidDaysCappedWithoutSchedule(t *testing.T) {
 	// (a) pembagi struktur kosong: pembagi = 20 hari hadir, hari dibayar 22.
 	in := BuildInputRange(emp, sal, twentyPlusSick, nil, nil, 9, 2026, "2026-09-01", "2026-09-30", false)
 	r := Calculate(in, DefaultConfig())
-	if r.BaseSalary > 2_000_000 || r.PositionAllowance > 400_000 {
-		t.Fatalf("(a) tanpa pembagi: pokok = %v (≤ 2.000.000), jabatan = %v (≤ 400.000)", r.BaseSalary, r.PositionAllowance)
-	}
+	eq(t, "(a) pokok tanpa pembagi (clamp 100%)", r.BaseSalary, 2_000_000)
+	eq(t, "(a) jabatan tanpa pembagi (clamp 100%)", r.PositionAllowance, 400_000)
 	// (b) pembagi struktur 20 pada bulan 22 hari kerja.
 	sal20 := sal
 	sal20.WorkingDaysDivisor = "20"
 	in = BuildInputRange(emp, sal20, twentyPlusSick, nil, nil, 9, 2026, "2026-09-01", "2026-09-30", false)
 	r = Calculate(in, DefaultConfig())
-	if r.BaseSalary > 2_000_000 || r.PositionAllowance > 400_000 {
-		t.Fatalf("(b) pembagi 20: pokok = %v (≤ 2.000.000), jabatan = %v (≤ 400.000)", r.BaseSalary, r.PositionAllowance)
-	}
+	eq(t, "(b) pokok pembagi 20 (clamp 100%)", r.BaseSalary, 2_000_000)
+	eq(t, "(b) jabatan pembagi 20 (clamp 100%)", r.PositionAllowance, 400_000)
 	// Hadir penuh dengan pembagi 20: tepat 100%.
 	in = BuildInputRange(emp, sal20, WorkforceRecords{Attendance: weekdays()}, nil, nil, 9, 2026, "2026-09-01", "2026-09-30", false)
 	r = Calculate(in, DefaultConfig())
 	eq(t, "pokok hadir penuh pembagi 20", r.BaseSalary, 2_000_000)
 	eq(t, "jabatan hadir penuh pembagi 20", r.PositionAllowance, 400_000)
 
-	// Hadir 22 hari kerja + 2 Sabtu: hari dibayar dibatasi 22 hari kerja periode.
+	// Hadir 22 hari kerja + 2 Sabtu (24 hari dibayar, pembagi 20): uang tetap
+	// tepat 100% lewat clamp Calculate, bukan lewat batas hari dibayar.
 	extra := append(weekdays(), AttendanceRow{Date: "2026-09-05", Status: "present", HasClockOut: true},
 		AttendanceRow{Date: "2026-09-12", Status: "present", HasClockOut: true})
 	in = BuildInputRange(emp, sal20, WorkforceRecords{Attendance: extra}, nil, nil, 9, 2026, "2026-09-01", "2026-09-30", false)
-	if in.PaidDays != 22 {
-		t.Fatalf("PaidDays = %v, want 22 (hari kerja periode)", in.PaidDays)
+	r = Calculate(in, DefaultConfig())
+	eq(t, "pokok 24 hari dibayar pembagi 20 (clamp 100%)", r.BaseSalary, 2_000_000)
+	eq(t, "jabatan 24 hari dibayar pembagi 20 (clamp 100%)", r.PositionAllowance, 400_000)
+}
+
+// B1 (EPIC-059): pekerja 6 hari tanpa jadwal (pembagi struktur 26) tidak boleh
+// kurang bayar. Sep 2026 punya 26 hari Senin–Sabtu; semuanya hadir → 100% penuh.
+func TestSixDayWorkerWithoutScheduleNotCapped(t *testing.T) {
+	emp := Employee{ID: "e", JoinDate: "2020-01-01", EmploymentStatus: "permanent"}
+	var att []AttendanceRow
+	for _, d := range EachDate("2026-09-01", "2026-09-30") {
+		if ISODayOfWeek(d) <= 6 {
+			att = append(att, AttendanceRow{Date: d, Status: "present", HasClockOut: true})
+		}
 	}
+	if len(att) != 26 {
+		t.Fatalf("fixture: %d hari Senin–Sabtu, want 26", len(att))
+	}
+	sal := Salary{BaseSalary: "2600000.00", WorkingDaysDivisor: "26.00", PayBasis: ptr("monthly_prorated"),
+		PositionAllowance: "260000.00", PositionMode: ptr("per_day")}
+	in := BuildInputRange(emp, sal, WorkforceRecords{Attendance: att}, nil, nil, 9, 2026, "2026-09-01", "2026-09-30", false)
+	r := Calculate(in, DefaultConfig())
+	eq(t, "pokok pekerja 6 hari", r.BaseSalary, 2_600_000)
+	eq(t, "jabatan pekerja 6 hari", r.PositionAllowance, 260_000)
 }
 
 // Tanggal yang punya absensi efektif sudah dibayar sebagai hari kerja: Izin Pribadi,

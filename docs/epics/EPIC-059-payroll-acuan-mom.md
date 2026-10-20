@@ -19,13 +19,14 @@ Lihat `docs/superpowers/plans/2026-10-20-payroll-acuan-mom.md`.
 - Sakit dan Cuti Melahirkan memotong transport & makan per hari: lewat hari hadir bila mode `per_day`, lewat baris potongan bila `flat`.
 - Lembur di bawah 1 jam ditolak saat pengajuan dan tidak dibayar.
 - Subsidi BPJS Kesehatan dapat diatur global: nominal (Rp100.000) dan syarat masa kerja > 1 tahun pada tanggal cutoff.
-- Karyawan yang `end_date`-nya jatuh di dalam periode tetap ikut payroll run, dibayar prorata sampai `end_date`.
+- Karyawan yang `end_date`-nya jatuh di dalam periode tetap ikut payroll run; hanya karyawan **nonaktif** (leaver) yang dibayar prorata sampai `end_date`, karyawan aktif dengan `end_date` di periode dibayar penuh.
 - Tidak ada perubahan setting atau data live tanpa persetujuan user. Skrip ops perpindahan `pay_basis` dan mode tunjangan tersedia dengan mode pratinjau.
 
 ## Automation Log
 - 2026-10-20: epic dibuat. Keputusan user: "Ikuti semua rekomendasi di pertanyaan-rekomendasi.md (K-12, K-10, Q-PY-1..4, K-6/Q-KP-1..2, Q-APV-1..3, K-13, K-3, K-14, K-9, Q-AB-1). K-7 tetap menunggu Paddy." Prasyarat: PR ikurniawann/paddydev#3 (intern tanpa PIP) di-merge dulu.
 - 2026-10-20: implementasi selesai (Task 1-7) dan diverifikasi (Task 8); status `review`. Branch `feat/epic059-payroll-acuan` (bertumpuk di atas EPIC-060/PR #4 dan merge `main` berisi PR #3, jadi PR #4 di-merge dulu).
-- 2026-10-20: gelombang fix review akhir (TDD, `go test ./internal/modules/payroll/... ./internal/app` hijau): (1) Critical — karyawan keluar lewat alur Resign (jadwal `effective_to` = `end_date`) tidak lagi dibayar sebulan penuh: ukuran periode penuh (pembagi & penyebut faktor) menganggap baris jadwal yang berakhir tepat pada `end_date` tetap berlaku sampai akhir periode, cakupan tetap berhenti di `end_date` (`TestLeaverResignFlowScheduleTruncated`); (2) tanpa jadwal, `PaidDays` dibatasi hari kerja dalam cakupan dan `Calculate` menjepit pokok `monthly_prorated` <= pokok x faktor serta jabatan `per_day` <= jabatan x faktor (`TestPaidDaysCappedWithoutSchedule`); (3) clip `end_date` hanya untuk karyawan **nonaktif**, `Employee.IsActive` diisi dari `EmployeeBrief` (`TestActiveEmployeeEndDateNotClipped`, `TestPayrollRunEndDateClipsLeaversOnly`); (4) Izin Pribadi/Sakit/Melahirkan pada tanggal yang punya absensi efektif tidak dipotong PIP/PIS (`TestLeaveOnAttendedDateNotDeducted`); (5) pratinjau skrip Task 7 menampilkan daftar tiap struktur dan karyawan tanpa jadwal, diuji di DB test saja (pratinjau + terapkan di dalam `BEGIN...ROLLBACK`, `UPDATE 24`, md5 `hris.employee_salary` sebelum/sesudah sama). Laporan: `.superpowers/sdd/2026-10-20-payroll-acuan-mom/final-fix-report.md`.
+- 2026-10-20: gelombang fix review akhir (TDD, `go test ./internal/modules/payroll/... ./internal/app` hijau): (1) Critical — karyawan keluar lewat alur Resign (jadwal `effective_to` = `end_date`) tidak lagi dibayar sebulan penuh: ukuran periode penuh (pembagi & penyebut faktor) menganggap baris jadwal yang berakhir tepat pada `end_date` tetap berlaku sampai akhir periode, cakupan tetap berhenti di `end_date` (`TestLeaverResignFlowScheduleTruncated`); (2) `Calculate` menjepit pokok `monthly_prorated` <= pokok x faktor serta jabatan `per_day` <= jabatan x faktor (`TestPaidDaysCappedWithoutSchedule`; batas hari dibayar tanpa jadwal di input kemudian dihapus, lihat B1 di bawah); (3) clip `end_date` hanya untuk karyawan **nonaktif**, `Employee.IsActive` diisi dari `EmployeeBrief` (`TestActiveEmployeeEndDateNotClipped`, `TestPayrollRunEndDateClipsLeaversOnly`); (4) Izin Pribadi/Sakit/Melahirkan pada tanggal yang punya absensi efektif tidak dipotong PIP/PIS (`TestLeaveOnAttendedDateNotDeducted`); (5) pratinjau skrip Task 7 menampilkan daftar tiap struktur dan karyawan tanpa jadwal, diuji di DB test saja (pratinjau + terapkan di dalam `BEGIN...ROLLBACK`, `UPDATE 24`, md5 `hris.employee_salary` sebelum/sesudah sama). Laporan: `.superpowers/sdd/2026-10-20-payroll-acuan-mom/final-fix-report.md`.
+- 2026-10-20: B1 diperbaiki (keputusan user 20-10-2026: hapus batas hari dibayar tanpa jadwal; clamp <=100% di Calculate). Sebelumnya `PaidDays` tanpa jadwal dibatasi hari kerja Senin-Jumat sehingga pekerja 6 hari (pembagi struktur 26/25) kurang bayar ~15% pada pokok `monthly_prorated` dan jabatan `per_day`. Test: `TestSixDayWorkerWithoutScheduleNotCapped` (26 hari Senin-Sabtu: pokok 2.600.000, jabatan 260.000; RED 2.200.000/220.000 sebelum fix); `TestPaidDaysCappedWithoutSchedule` kini menegaskan uang tepat 100% lewat clamp Calculate. Laporan: `.superpowers/sdd/2026-10-20-payroll-acuan-mom/b1-fix-report.md`.
 
 ### Commit
 | Task | Commit | Isi |
@@ -50,7 +51,7 @@ Lihat `docs/superpowers/plans/2026-10-20-payroll-acuan-mom.md`.
 - R8 potongan telat tier basis `thp` memakai THP 4 komponen.
 - R9 lembur < 1 jam ditolak saat pengajuan dan tidak dibayar di payroll.
 - R10 subsidi BPJS Kes global: bila `bpjs_kes_subsidy_amount` > 0 menggantikan `health_allowance` struktur, syarat masa kerja > 1 tahun pada akhir periode; bila 0 perilaku lama.
-- R11 karyawan keluar: run mengambil aktif + nonaktif yang `end_date`-nya di dalam periode, prorata sampai `end_date`. PPh21 Pasal 17 masa pajak terakhir tidak termasuk (follow-up).
+- R11 karyawan keluar: run mengambil aktif + nonaktif yang `end_date`-nya di dalam periode; hanya yang **nonaktif** (leaver) diprorata sampai `end_date`, yang aktif dibayar penuh. PPh21 Pasal 17 masa pajak terakhir tidak termasuk (follow-up).
 - R12 data live tidak disentuh; perpindahan struktur gaji dan `cutoff_day = 20` hanya setelah persetujuan user.
 
 Ruling pengendali selama eksekusi:
@@ -73,7 +74,7 @@ Ruling pengendali selama eksekusi:
 - Lembur < 1 jam yang sudah approved di periode yang masih terbuka **tidak akan dibayar lagi** setelah rilis.
 - Pembagi per hari untuk karyawan bulanan berjadwal berubah dari pembagi struktur (mis. 26/25) menjadi jumlah hari kerja terjadwal periode.
 - Potongan telat tier basis THP untuk 18 struktur `daily` live berubah (upah harian + tunjangan, sebelumnya basis keliru ~96 ribu per hari terlalu kecil).
-- Karyawan yang `end_date`-nya jatuh di dalam periode kini ikut payroll run dan dibayar prorata.
+- Karyawan yang `end_date`-nya jatuh di dalam periode kini ikut payroll run; yang nonaktif (leaver) dibayar prorata sampai `end_date`, yang aktif dibayar penuh.
 
 ### Minor yang ditunda (tidak memblokir)
 - `ClampedLeaveDays`/`LeaveRange` tidak lagi punya pemanggil produksi (hanya test).
