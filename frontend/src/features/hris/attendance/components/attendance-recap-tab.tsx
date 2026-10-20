@@ -18,6 +18,7 @@ import { Clock, Download, Lock, Pencil, Plus, Trash2 } from "lucide-react";
 import { useStoreBranches } from "@/features/hris/placements/queries";
 import { formatDate, formatTime } from "@/lib/format";
 import { todayWib } from "@/lib/hris/attendance-period";
+import { GeofenceBadge } from "./geofence-badge";
 import { SelfiePhotoDialog } from "./selfie-photo-dialog";
 import { AttendancePeriodBanner } from "./attendance-period-banner";
 import { AttendanceAdjustDialog, STATUS_OPTIONS } from "./attendance-adjust-dialog";
@@ -342,6 +343,7 @@ export function AttendanceRecapTab() {
                     <th className="p-3">Pulang</th>
                     <th className="p-3">Jam Kerja</th>
                     <th className="p-3">Status</th>
+                    <th className="p-3">Lokasi</th>
                     <th className="p-3">Selfie</th>
                     {canManage && <th className="p-3 text-right">Aksi</th>}
                   </tr>
@@ -398,6 +400,18 @@ export function AttendanceRecapTab() {
                             </Badge>
                           )}
                           <AdjustmentBadge row={row} />
+                        </div>
+                      </td>
+                      <td className="p-3">
+                        <div className="flex flex-col items-start gap-1">
+                          <GeofenceBadge status={row.clock_in_geofence} distanceM={row.clock_in_distance_m} prefix="Masuk" />
+                          <GeofenceBadge status={row.clock_out_geofence} distanceM={row.clock_out_distance_m} prefix="Pulang" />
+                          {!row.clock_in_geofence && !row.clock_out_geofence && (
+                            <span className="text-xs text-gray-400">—</span>
+                          )}
+                          {row.notes && (row.clock_in_geofence === "invalid" || row.clock_out_geofence === "invalid") && (
+                            <p className="max-w-[16rem] whitespace-pre-line text-xs text-gray-500">“{row.notes}”</p>
+                          )}
                         </div>
                       </td>
                       <td className="p-3">

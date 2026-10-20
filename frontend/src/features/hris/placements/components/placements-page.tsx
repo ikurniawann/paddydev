@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Building2, Loader2, Search, Store, Users } from "lucide-react";
+import { Building2, Loader2, MapPin, Search, Store, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -15,6 +15,7 @@ import { todayWib } from "@/lib/dates";
 import { placementStatus } from "@/lib/hris/placements";
 import { usePlacementOverview, useStoreBranches } from "../queries";
 import type { PlacementOverviewRow } from "../types";
+import { BranchLocationDialog } from "./branch-location-dialog";
 import { BulkPlacementDialog } from "./bulk-placement-dialog";
 import { EmployeePlacementsTab, PLACEMENT_MANAGERS } from "./employee-placements-tab";
 import { PlacementBadges } from "./placement-badges";
@@ -34,11 +35,13 @@ export function PlacementsPage() {
   const [includeEnded, setIncludeEnded] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkOpen, setBulkOpen] = useState(false);
+  const [locationOpen, setLocationOpen] = useState(false);
   const [managing, setManaging] = useState<PlacementOverviewRow | null>(null);
   const branches = useStoreBranches();
   const overview = usePlacementOverview({ include_ended: includeEnded });
   const today = todayWib();
   const all = overview.data ?? [];
+  const missingCoords = (branches.data ?? []).filter((b) => b.lat === null || b.lng === null).length;
 
   const running = (row: PlacementOverviewRow) => row.placements.filter((p) => placementStatus(p, today) !== "berakhir");
   const stats = (() => {
@@ -79,10 +82,18 @@ export function PlacementsPage() {
         title="Penempatan Karyawan"
         description="Toko tempat setiap karyawan bekerja. Dipakai untuk pilihan toko saat clock-in dan pembagian biaya gaji per toko."
         actions={
-          canManage && selected.size > 0 ? (
-            <Button onClick={() => setBulkOpen(true)}>
-              <Store className="mr-1.5 h-4 w-4" /> Tempatkan {selected.size} karyawan…
-            </Button>
+          canManage ? (
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" onClick={() => setLocationOpen(true)}>
+                <MapPin className="mr-1.5 h-4 w-4" /> Lokasi Toko
+                {missingCoords > 0 ? ` (${missingCoords} belum diisi)` : ""}
+              </Button>
+              {selected.size > 0 && (
+                <Button onClick={() => setBulkOpen(true)}>
+                  <Store className="mr-1.5 h-4 w-4" /> Tempatkan {selected.size} karyawan…
+                </Button>
+              )}
+            </div>
           ) : null
         }
       />
@@ -242,6 +253,9 @@ export function PlacementsPage() {
           setSelected(new Set());
         }}
       />
+      {canManage && (
+        <BranchLocationDialog open={locationOpen} onOpenChange={setLocationOpen} branches={branches.data ?? []} />
+      )}
       <Dialog open={managing !== null} onOpenChange={(open) => !open && setManaging(null)}>
         <DialogContent className="sm:max-w-3xl">
           <DialogHeader>

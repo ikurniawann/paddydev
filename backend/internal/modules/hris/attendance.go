@@ -128,7 +128,10 @@ func buildRoster(rows []*Row, date, today string, isPublicHoliday bool, now time
 			attendance = obj("id", row.Get("attendance_id"), "clock_in", row.Get("clock_in"), "clock_out", row.Get("clock_out"),
 				"work_hours", hours, "is_late", row.Bool("is_late"), "late_minutes", int64(row.Num("late_minutes")),
 				"clock_in_photo_url", row.Get("clock_in_photo_url"), "clock_out_photo_url", row.Get("clock_out_photo_url"),
-				"shift_id", row.Get("attendance_shift_id"))
+				"shift_id", row.Get("attendance_shift_id"),
+				"clock_in_geofence", row.Get("clock_in_geofence"), "clock_in_distance_m", row.Get("clock_in_distance_m"),
+				"clock_out_geofence", row.Get("clock_out_geofence"), "clock_out_distance_m", row.Get("clock_out_distance_m"),
+				"notes", row.Get("attendance_notes"))
 		}
 		if row.Get("leave_id") != nil {
 			leave = obj("id", row.Get("leave_id"), "leave_type", row.Get("leave_type"))

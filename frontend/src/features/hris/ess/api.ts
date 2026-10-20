@@ -1,10 +1,12 @@
-import { apiGet, apiPost } from "@/lib/api-client";
+import { ApiError, apiGet, apiPost } from "@/lib/api-client";
 import { todayWib } from "@/lib/dates";
+import { geofenceNoteRequired, type GeofenceNoteInfo } from "@/lib/hris/geofence";
 import type {
   EssAnnouncementDetail,
   EssAnnouncementItem,
   EssBeranda,
   EssClockPayload,
+  EssClockResponse,
   EssLeaveForm,
   EssLeaveRow,
   EssLoanPayload,
@@ -38,8 +40,27 @@ export const fetchTodayAttendance = () =>
     []
   ).then((rows) => rows[0] ?? null);
 
-export const submitClock = (payload: EssClockPayload) =>
-  apiPost<{ data?: { is_late?: boolean; late_minutes?: number } }>("/api/hris/attendance", payload);
+/** Absen di luar area tanpa keterangan: popup lalu kirim ulang payload yang sama + notes. */
+export class ClockGeofenceError extends Error {
+  readonly info: GeofenceNoteInfo;
+  constructor(info: GeofenceNoteInfo) {
+    super(info.message);
+    this.name = "ClockGeofenceError";
+    this.info = info;
+  }
+}
+
+export async function submitClock(payload: EssClockPayload): Promise<EssClockResponse> {
+  try {
+    return await apiPost<EssClockResponse>("/api/hris/attendance", payload);
+  } catch (error) {
+    if (error instanceof ApiError) {
+      const info = geofenceNoteRequired(error.status, error.body);
+      if (info) throw new ClockGeofenceError(info);
+    }
+    throw error;
+  }
+}
 
 export const fetchMyLeaves = () => softGet<EssLeaveRow[]>("/api/hris/leaves?limit=20", []);
 

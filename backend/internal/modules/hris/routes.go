@@ -39,6 +39,7 @@ func (h handlers) routes() []module.Route {
 		r("DELETE /api/hris/employee-placements/{id}", h.withDelete(delPlacement, h.withMenu(placementManagers, h.deletePlacement))),
 		r("GET /api/hris/me/placements", h.withActor(h.myPlacements)),
 		r("GET /api/hris/branches", h.withUser(h.listBranches)),
+		r("PUT /api/hris/branches/{id}/location", h.withMenu(placementManagers, h.putBranchLocation)),
 
 		// attendance (clock-in/out, export and photos: fileRoutes)
 		r("GET /api/hris/attendance", h.withActor(h.listAttendance)),
@@ -83,6 +84,10 @@ func (h handlers) routes() []module.Route {
 		r("GET /api/hris/overtime", h.withActor(h.listOvertime)),
 		r("POST /api/hris/overtime", h.withActor(h.createOvertime)),
 		r("POST /api/hris/overtime/decide", h.withActor(h.decideOvertime)),
+		// business trips (Perjalanan Dinas, EPIC-062)
+		r("GET /api/hris/business-trips", h.withActor(h.listTrips)),
+		r("POST /api/hris/business-trips", h.withActor(h.createTrip)),
+		r("POST /api/hris/business-trips/{id}/decide", h.withActor(h.decideTrip)),
 
 		// holidays
 		r("GET /api/hris/holidays", h.withUser(h.listHolidays)),

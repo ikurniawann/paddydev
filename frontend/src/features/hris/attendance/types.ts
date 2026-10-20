@@ -1,3 +1,5 @@
+import type { GeofenceStatus } from "@/lib/hris/geofence";
+
 export interface AttendanceExportParams {
   employee_id?: string;
   status?: string;
@@ -35,6 +37,13 @@ export interface RosterAttendance {
   clock_in_photo_url: string | null;
   clock_out_photo_url: string | null;
   shift_id: string | null;
+  /** Geofence clock-in/out (EPIC-062); null = tidak dinilai */
+  clock_in_geofence: GeofenceStatus | null;
+  clock_in_distance_m: number | null;
+  clock_out_geofence: GeofenceStatus | null;
+  clock_out_distance_m: number | null;
+  /** Keterangan karyawan (wajib bila di luar area) */
+  notes: string | null;
 }
 
 export interface RosterEmployee {
@@ -107,6 +116,10 @@ export interface AttendanceListRow {
   adjusted_at?: string | null;
   adjusted_by_name?: string | null;
   adjustment_count?: number;
+  clock_in_geofence?: GeofenceStatus | null;
+  clock_in_distance_m?: number | null;
+  clock_out_geofence?: GeofenceStatus | null;
+  clock_out_distance_m?: number | null;
   branch: { id: string; code: string; name: string } | null;
   shift: { id: string; name: string } | null;
   employee: {

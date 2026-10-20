@@ -8,11 +8,15 @@ import { Badge } from "@/components/ui/badge";
 import { CameraCapture } from "@/components/hris/CameraCapture";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { formatTime } from "@/lib/format";
+import { GeofenceBadge } from "@/features/hris/attendance/components/geofence-badge";
+import { geofenceLabel, type GeofenceNoteInfo } from "@/lib/hris/geofence";
 import { preferredClockStore } from "@/lib/hris/placements";
 import { useClockPlacements } from "@/features/hris/placements/queries";
 import { useTodayAttendance } from "../queries";
+import { ClockGeofenceError } from "../api";
 import { useSubmitClock } from "../mutations";
 import type { EssClockLocation, EssClockPayload } from "../types";
+import { GeofenceNoteDialog } from "./geofence-note-dialog";
 
 /**
  * Panel clock-in/out ESS: selfie kamera WAJIB + lokasi GPS.
@@ -21,6 +25,8 @@ import type { EssClockLocation, EssClockPayload } from "../types";
  * lebih dari satu → wajib pilih (bawaan: toko terdekat dari GPS bila koordinat
  * toko diisi, selain itu penempatan utama). Toko menentukan pembagian biaya
  * gaji per toko.
+ * Di luar area: server menjawab 422, popup meminta keterangan, payload
+ * (termasuk selfie) dikirim ulang.
  * State absensi hari ini dipulihkan dari server (tahan refresh). Setelah
  * berhasil, mutasi menyegarkan beranda dan kalender absensi.
  */
@@ -49,6 +55,7 @@ export function EssClockPanel() {
   const clock = useSubmitClock();
   const [locating, setLocating] = useState(false);
   const [cameraFor, setCameraFor] = useState<ClockAction | null>(null);
+  const [noteFor, setNoteFor] = useState<{ payload: EssClockPayload; info: GeofenceNoteInfo } | null>(null);
   const submitting = locating || clock.isPending;
   const clockedIn = Boolean(today?.clock_in);
   const storesQuery = useClockPlacements(undefined, !clockedIn);
@@ -91,14 +98,29 @@ export function EssClockPanel() {
       if (location) payload.clock_out_location = location;
     }
 
+    send(payload);
+  }
+
+  function send(payload: EssClockPayload) {
     clock.mutate(payload, {
       onSuccess: (json) => {
-        const late = json.data?.is_late ? ` — terlambat ${json.data.late_minutes} menit` : "";
-        toast.success(action === "clock-in" ? "✅ Clock-in berhasil" : "✅ Clock-out berhasil", {
-          description: `${formatTime(new Date())}${late}${location ? " · 📍 lokasi tercatat" : ""}`,
+        const data = json.data;
+        const late = data?.is_late ? ` — terlambat ${data.late_minutes} menit` : "";
+        const geo =
+          payload.action === "clock-in"
+            ? geofenceLabel(data?.clock_in_geofence, data?.clock_in_distance_m)
+            : geofenceLabel(data?.clock_out_geofence, data?.clock_out_distance_m);
+        toast.success(payload.action === "clock-in" ? "✅ Clock-in berhasil" : "✅ Clock-out berhasil", {
+          description: `${formatTime(new Date())}${late}${geo ? ` · 📍 ${geo}` : ""}`,
         });
       },
-      onError: (error) => toast.error("Gagal", { description: error.message || "Coba lagi" }),
+      onError: (error) => {
+        if (error instanceof ClockGeofenceError) {
+          setNoteFor({ payload, info: error.info });
+          return;
+        }
+        toast.error("Gagal", { description: error.message || "Coba lagi" });
+      },
     });
   }
 
@@ -153,7 +175,7 @@ export function EssClockPanel() {
           <Clock className="mr-2 h-4 w-4" /> Clock Out
         </Button>
         <p className="flex items-center gap-1 text-xs text-gray-500">
-          <MapPin className="h-3.5 w-3.5" /> Foto selfie & lokasi GPS wajib disertakan
+          <MapPin className="h-3.5 w-3.5" /> Foto selfie dan GPS wajib; lokasi dicek terhadap area toko
         </p>
       </div>
 
@@ -175,6 +197,8 @@ export function EssClockPanel() {
           ) : (
             <Badge className="bg-green-100 text-green-700 hover:bg-green-100">Tepat waktu</Badge>
           )}
+          <GeofenceBadge status={today.clock_in_geofence} distanceM={today.clock_in_distance_m} prefix="Masuk" />
+          <GeofenceBadge status={today.clock_out_geofence} distanceM={today.clock_out_distance_m} prefix="Pulang" />
           {clockedOut && (
             <Badge variant="outline" className="text-green-700">
               Absensi hari ini selesai
@@ -188,6 +212,16 @@ export function EssClockPanel() {
         title={cameraFor === "clock-out" ? "Selfie Clock-Out" : "Selfie Clock-In"}
         onConfirm={(photo) => cameraFor && submit(cameraFor, photo)}
         onCancel={() => setCameraFor(null)}
+      />
+      <GeofenceNoteDialog
+        info={noteFor?.info ?? null}
+        pending={clock.isPending}
+        onCancel={() => setNoteFor(null)}
+        onSubmit={(note) => {
+          const pending = noteFor;
+          setNoteFor(null);
+          if (pending) send({ ...pending.payload, notes: note });
+        }}
       />
     </div>
   );

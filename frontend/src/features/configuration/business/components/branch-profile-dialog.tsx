@@ -3,11 +3,13 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { LocationPickerField } from "@/components/maps/location-picker-field";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogFooter, DialogPanel, DialogPanelBody, DialogPanelDescription, DialogPanelForm, DialogPanelHeader, DialogPanelTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { ImageUrlField, ItemListField, LabeledField, LinesField, LongText } from "@/features/site/admin/fields";
+import { parseLatLng, type LatLngPoint } from "@/lib/maps/coords";
 import { fetchBranchProfile, saveBranchProfile, type BranchProfile } from "../api";
 
 type Accordions = BranchProfile["accordions"];
@@ -111,6 +113,14 @@ function ProfileForm({ branchId, branchName, initial, onClose }: { branchId: str
   const queryClient = useQueryClient();
   const [form, setForm] = useState<Form>(() => toForm(initial));
   const set = <K extends keyof Form>(key: K, value: Form[K]) => setForm((f) => ({ ...f, [key]: value }));
+  const setPoint = (p: LatLngPoint) => setForm((f) => ({ ...f, lat: String(p.lat), lng: String(p.lng) }));
+  // "-6.2, 106.8" yang disalin dari Google Maps: isi lat dan lng sekaligus (input angka menolak teks itu).
+  const pasteCoords = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    const p = parseLatLng(e.clipboardData.getData("text"));
+    if (!p) return;
+    e.preventDefault();
+    setPoint(p);
+  };
 
   const save = useMutation({
     mutationFn: (f: Form) => saveBranchProfile(branchId, toBody(f)),
@@ -152,10 +162,10 @@ function ProfileForm({ branchId, branchName, initial, onClose }: { branchId: str
             <Input value={form.postcode} onChange={(e) => set("postcode", e.target.value)} />
           </LabeledField>
           <LabeledField label="Latitude">
-            <Input type="number" step="any" min={-90} max={90} value={form.lat} onChange={(e) => set("lat", e.target.value)} />
+            <Input type="number" step="any" min={-90} max={90} value={form.lat} onChange={(e) => set("lat", e.target.value)} onPaste={pasteCoords} />
           </LabeledField>
           <LabeledField label="Longitude">
-            <Input type="number" step="any" min={-180} max={180} value={form.lng} onChange={(e) => set("lng", e.target.value)} />
+            <Input type="number" step="any" min={-180} max={180} value={form.lng} onChange={(e) => set("lng", e.target.value)} onPaste={pasteCoords} />
           </LabeledField>
           <LabeledField label="Telepon">
             <Input value={form.phone} onChange={(e) => set("phone", e.target.value)} />
@@ -166,6 +176,16 @@ function ProfileForm({ branchId, branchName, initial, onClose }: { branchId: str
           <LabeledField label="Instagram">
             <Input value={form.instagram} onChange={(e) => set("instagram", e.target.value)} placeholder="@nuhabit.bandung" />
           </LabeledField>
+        </div>
+        {/* Bukan LabeledField: <label> meneruskan klik di peta ke kontrol pertama di dalamnya. */}
+        <div className="flex min-w-0 flex-col">
+          <span className="mb-1.5 text-sm font-medium text-foreground">Titik di peta</span>
+          <LocationPickerField
+            lat={form.lat}
+            lng={form.lng}
+            onPick={setPoint}
+            note="Dipakai peta situs dan geofence absensi; lingkaran biru memakai radius bawaan (radius per toko diatur di HRIS)."
+          />
         </div>
         <LabeledField label="Gambar hero">
           <ImageUrlField value={form.hero_image_url} onChange={(v) => set("hero_image_url", v)} />
