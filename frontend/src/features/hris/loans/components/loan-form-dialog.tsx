@@ -11,6 +11,7 @@ import { formatRupiah } from "@/lib/format";
 import {
   EMPTY_LOAN_FORM,
   LOAN_TYPE_OPTIONS,
+  kasbonTenorOptions,
   loanPayload,
   previewInstallment,
   validateLoanForm,
@@ -74,7 +75,13 @@ function LoanFormBody({ onClose }: { onClose: () => void }) {
           <Combobox
             options={LOAN_TYPE_OPTIONS}
             value={form.loan_type}
-            onChange={(value) => setForm((f) => ({ ...f, loan_type: value }))}
+            onChange={(value) =>
+              setForm((f) => ({
+                ...f,
+                loan_type: value,
+                tenor_months: value === "kasbon" && !["1", "2"].includes(f.tenor_months) ? "2" : f.tenor_months,
+              }))
+            }
             placeholder="Pilih jenis"
           />
         </div>
@@ -90,13 +97,22 @@ function LoanFormBody({ onClose }: { onClose: () => void }) {
           </div>
           <div>
             <label className="mb-1 block text-xs font-medium text-gray-600">Tenor (bulan)</label>
-            <Input
-              type="number"
-              min="1"
-              max="60"
-              value={form.tenor_months}
-              onChange={(e) => setForm((f) => ({ ...f, tenor_months: e.target.value }))}
-            />
+            {form.loan_type === "kasbon" ? (
+              <Combobox
+                options={kasbonTenorOptions}
+                value={form.tenor_months}
+                onChange={(value) => setForm((f) => ({ ...f, tenor_months: value }))}
+                placeholder="Pilih tenor"
+              />
+            ) : (
+              <Input
+                type="number"
+                min="1"
+                max="60"
+                value={form.tenor_months}
+                onChange={(e) => setForm((f) => ({ ...f, tenor_months: e.target.value }))}
+              />
+            )}
           </div>
         </div>
         <div>

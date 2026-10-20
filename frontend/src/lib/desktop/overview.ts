@@ -424,6 +424,7 @@ async function fetchTeamToday(): Promise<TeamToday> {
 
 async function fetchPendingDecisions(): Promise<PendingDecisions> {
   // Definisi 'pending' identik dengan nav-badges (lib/hris/nav-badges.ts);
+  // pinjaman = menunggu HR (manager_approved, atau pending tanpa manager — EPIC-060);
   // PO memakai status 'draft' sesuai enum purchase_orders (draft → approved).
   const row = await queryOne<{
     cuti: number;
@@ -435,7 +436,7 @@ async function fetchPendingDecisions(): Promise<PendingDecisions> {
     `SELECT
        (SELECT count(*) FROM hris.leaves WHERE status = 'pending')::int AS cuti,
        (SELECT count(*) FROM hris.overtime_requests WHERE status = 'pending')::int AS lembur,
-       (SELECT count(*) FROM hris.loans WHERE status = 'pending')::int AS pinjaman,
+       (SELECT count(*) FROM hris.loans WHERE status = 'manager_approved' OR (status = 'pending' AND manager_approver_id IS NULL))::int AS pinjaman,
        (SELECT count(*) FROM purchase_orders WHERE status = 'draft')::int AS po_draft,
        (SELECT count(*) FROM recruitment.candidates WHERE status = 'applied')::int AS kandidat`
   );

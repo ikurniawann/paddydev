@@ -22,6 +22,7 @@ import { LoansTable } from "./loans-table";
 const STATUS_FILTER_OPTIONS = [
   { value: "all", label: "Semua Status" },
   { value: "pending", label: "Menunggu" },
+  { value: "manager_approved", label: "Disetujui Manager" },
   { value: "approved", label: "Berjalan" },
   { value: "paid_off", label: "Lunas" },
   { value: "rejected", label: "Ditolak" },

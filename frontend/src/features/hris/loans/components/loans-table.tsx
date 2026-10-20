@@ -1,11 +1,12 @@
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatRupiah } from "@/lib/format";
-import { loanPaidPercent, loanTypeLabel } from "@/lib/hris/loans-view";
+import { isAwaitingHr, loanPaidPercent, loanTypeLabel } from "@/lib/hris/loans-view";
 import type { LoanRow } from "../types";
 
 const STATUS_BADGES: Record<string, { label: string; className: string }> = {
   pending: { label: "Menunggu", className: "bg-amber-100 text-amber-700" },
+  manager_approved: { label: "Disetujui Manager", className: "bg-indigo-100 text-indigo-700" },
   approved: { label: "Berjalan", className: "bg-green-100 text-green-700" },
   rejected: { label: "Ditolak", className: "bg-red-100 text-red-700" },
   paid_off: { label: "Lunas", className: "bg-sky-100 text-sky-700" },
@@ -112,7 +113,7 @@ function LoanTableRow({ row, deciding, onDecide }: LoanTableRowProps) {
         <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${badge.className}`}>{badge.label}</span>
       </td>
       <td className="px-4 py-3 text-right">
-        {row.status === "pending" && (
+        {isAwaitingHr(row) ? (
           <div className="flex justify-end gap-2">
             <Button size="sm" disabled={deciding} onClick={() => onDecide(row.id, true)}>
               Setujui
@@ -121,7 +122,9 @@ function LoanTableRow({ row, deciding, onDecide }: LoanTableRowProps) {
               Tolak
             </Button>
           </div>
-        )}
+        ) : row.status === "pending" ? (
+          <span className="text-xs text-gray-400">Menunggu Manager</span>
+        ) : null}
       </td>
     </tr>
   );

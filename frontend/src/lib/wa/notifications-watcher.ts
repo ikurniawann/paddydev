@@ -270,7 +270,8 @@ async function maybeSendApprovalMenginap(config: WaNotifConfig): Promise<void> {
        (SELECT count(*) FROM hris.overtime_requests
          WHERE status = 'pending' AND created_at < now() - interval '2 days')::int AS lembur,
        (SELECT count(*) FROM hris.loans
-         WHERE status = 'pending' AND created_at < now() - interval '2 days')::int AS pinjaman,
+         WHERE (status = 'manager_approved' OR (status = 'pending' AND manager_approver_id IS NULL))
+           AND created_at < now() - interval '2 days')::int AS pinjaman,
        (SELECT count(*) FROM purchase_orders
          WHERE status = 'draft' AND created_at < now() - interval '2 days')::int AS po_draft`
   );

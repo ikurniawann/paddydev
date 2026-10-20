@@ -96,6 +96,7 @@ export type EssOvertimeDecision = "approve" | "reject" | "cancel";
 
 export interface EssLoanRow {
   id: string;
+  employee?: { full_name: string } | null;
   loan_type: string;
   principal_amount: string | number;
   monthly_installment: string | number;

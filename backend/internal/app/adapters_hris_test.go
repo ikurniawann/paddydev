@@ -168,3 +168,44 @@ func TestLatestPaidPayslipSumsEntityRuns(t *testing.T) {
 		t.Fatalf("run name = %v, want the latest paid run of the period", p.RunName)
 	}
 }
+
+// PendingLoanCount is HR's queue: manager-approved kasbon and pending loans
+// with no manager stage. A pending kasbon waiting for its manager is excluded.
+func TestPendingLoanCountFollowsHrStage(t *testing.T) {
+	tx := testutil.Tx(t)
+	ctx := context.Background()
+	payroll := hrisPayrollSQL{}
+	before, err := payroll.PendingLoanCount(ctx, tx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var emp, mgr string
+	if err := tx.QueryRow(ctx, `INSERT INTO hris.employees (full_name, nip, email, phone, join_date)
+		VALUES ('Count Loan', 'T-'||md5(random()::text), 'cl@hris.test', '', '2026-01-01') RETURNING id::text`).Scan(&emp); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.QueryRow(ctx, `INSERT INTO hris.employees (full_name, nip, email, phone, join_date)
+		VALUES ('Count Mgr', 'T-'||md5(random()::text), 'cm@hris.test', '', '2026-01-01') RETURNING id::text`).Scan(&mgr); err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range []struct{ status, manager string }{
+		{"manager_approved", mgr},
+		{"pending", ""},
+		{"pending", mgr},
+		{"pending", mgr},
+		{"approved", mgr},
+	} {
+		if _, err := tx.Exec(ctx, `INSERT INTO hris.loans (employee_id, loan_type, principal_amount, tenor_months,
+			monthly_installment, remaining_balance, status, manager_approver_id)
+			VALUES ($1, 'kasbon', 100000, 2, 50000, 100000, $2, NULLIF($3, '')::uuid)`, emp, r.status, r.manager); err != nil {
+			t.Fatal(err)
+		}
+	}
+	after, err := payroll.PendingLoanCount(ctx, tx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after-before != 2 {
+		t.Fatalf("pending delta = %d, want 2", after-before)
+	}
+}

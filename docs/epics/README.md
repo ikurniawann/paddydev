@@ -61,6 +61,8 @@ deploying-dev · ready-for-qa · blocked · done).
 | [EPIC-056](./EPIC-056-hris-golive-karyawan-jadwal.md) | HRIS Go-Live — Data Karyawan & Jadwal Shift (`MODULE-HRIS`) | ready-for-qa | 2026-10-19 |
 | [EPIC-057](./EPIC-057-hris-akses-per-akun.md) | Hak Akses HRIS per Akun Email — Manager / Non-Payroll / Non-Rekrutmen & KPI (`MODULE-HRIS`) | ready-for-qa | 2026-10-20 |
 | [EPIC-058](./EPIC-058-hris-revisi-jenis-cuti.md) | Revisi Jenis Cuti — Hapus Haid/Darurat/Tanpa Gaji, Tambah Izin Leader & Izin Pribadi Berkuota (`MODULE-HRIS`) | review | 2026-10-20 |
+| [EPIC-059](./EPIC-059-payroll-acuan-mom.md) | Payroll Sesuai Acuan Payslip & MOM 19-10-2026 (`MODULE-PAYROLL`) | backlog | 2026-10-20 |
+| [EPIC-060](./EPIC-060-kasbon-acuan-mom.md) | Kasbon Sesuai Acuan MOM 19-10-2026 (`MODULE-PAYROLL`) | backlog | 2026-10-20 |
 
 Aturan:
 - Epic + registry ini adalah sumber kebenaran status pekerjaan (canonical).

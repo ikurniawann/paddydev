@@ -73,6 +73,12 @@ export const decideOvertime = (
 
 export const fetchMyLoans = () => softGet<EssLoanRow[]>("/api/hris/loans?employee_id=me", []);
 
+export const fetchTeamLoanApprovals = () =>
+  softGet<EssLoanRow[]>("/api/hris/loans?scope=approvals", []);
+
+export const decideTeamLoan = (id: string, approved: boolean) =>
+  apiPost<{ message?: string }>(`/api/hris/loans/${id}/approve`, { approved });
+
 export const submitLoan = (payload: EssLoanPayload) =>
   apiPost<{ data: unknown }>("/api/hris/loans", payload);
 

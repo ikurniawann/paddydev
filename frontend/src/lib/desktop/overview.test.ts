@@ -48,6 +48,15 @@ describe("buildDesktopOverview", () => {
     expect(overview.pulsaBisnis?.tujuhHari).toHaveLength(7);
   });
 
+  it("menghitung pinjaman menunggu HR (manager_approved atau pending tanpa manager)", async () => {
+    queryMock.mockResolvedValue([]);
+    queryOneMock.mockResolvedValue({ aktif: 1, hadir: 1, terlambat: 0, cuti: 0 });
+    await buildDesktopOverview();
+    const sqls = queryOneMock.mock.calls.map((c) => String(c[0])).filter((q) => q.includes("hris.loans"));
+    expect(sqls).toHaveLength(1);
+    expect(sqls[0]).toContain("status = 'manager_approved' OR (status = 'pending' AND manager_approver_id IS NULL)");
+  });
+
   it("satu seksi gagal tidak menjatuhkan yang lain", async () => {
     queryMock.mockRejectedValue(new Error("tabel pos mati"));
     queryOneMock.mockResolvedValue({ aktif: 10, hadir: 4, terlambat: 0, cuti: 0 });

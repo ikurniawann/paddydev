@@ -15,6 +15,7 @@ export interface LoanRow {
   status: string;
   purpose: string | null;
   rejection_reason: string | null;
+  manager_approver_id?: string | null;
   created_at: string;
   employee?: {
     id: string;

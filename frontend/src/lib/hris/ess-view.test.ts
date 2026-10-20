@@ -50,6 +50,13 @@ describe("requestStatusBadge", () => {
     expect(requestStatusBadge("rejected").label).toBe("Ditolak");
   });
 
+  it("labels a kasbon already approved by its manager", () => {
+    expect(requestStatusBadge("manager_approved")).toEqual({
+      label: "Disetujui Manager",
+      cls: "bg-indigo-100 text-indigo-700",
+    });
+  });
+
   it("passes unknown statuses through", () => {
     expect(requestStatusBadge("draft")).toEqual({ label: "draft", cls: "bg-gray-100 text-gray-600" });
   });

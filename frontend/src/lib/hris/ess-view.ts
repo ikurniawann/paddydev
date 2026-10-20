@@ -46,6 +46,9 @@ export function requestStatusBadge(status: string): StatusBadge {
   if (["pending", "menunggu"].includes(s)) {
     return { label: "Menunggu", cls: "bg-amber-100 text-amber-700" };
   }
+  if (s === "manager_approved") {
+    return { label: "Disetujui Manager", cls: "bg-indigo-100 text-indigo-700" };
+  }
   if (["approved", "disetujui", "paid", "confirmed"].includes(s)) {
     return { label: s === "paid" ? "Dibayar" : "Disetujui", cls: "bg-green-100 text-green-700" };
   }

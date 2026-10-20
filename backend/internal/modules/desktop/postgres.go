@@ -173,7 +173,7 @@ func (p *Postgres) PendingDecisions(ctx context.Context) (*PendingDecisions, err
 	err := p.db.QueryRow(ctx, `SELECT
        (SELECT count(*) FROM hris.leaves WHERE status = 'pending')::int AS cuti,
        (SELECT count(*) FROM hris.overtime_requests WHERE status = 'pending')::int AS lembur,
-       (SELECT count(*) FROM hris.loans WHERE status = 'pending')::int AS pinjaman,
+       (SELECT count(*) FROM hris.loans WHERE status = 'manager_approved' OR (status = 'pending' AND manager_approver_id IS NULL))::int AS pinjaman,
        (SELECT count(*) FROM purchase_orders WHERE status = 'draft')::int AS po_draft,
        (SELECT count(*) FROM recruitment.candidates WHERE status = 'applied')::int AS kandidat`).
 		Scan(&d.Cuti, &d.Lembur, &d.Pinjaman, &d.PoDraft, &d.KandidatBaru)
