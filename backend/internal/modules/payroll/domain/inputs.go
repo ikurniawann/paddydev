@@ -9,7 +9,8 @@ const fallbackWorkingDays = 20
 type Employee struct {
 	ID               string
 	EmploymentStatus string
-	JoinDate         string // YYYY-MM-DD
+	JoinDate         string  // YYYY-MM-DD
+	EndDate          *string // YYYY-MM-DD; resign/akhir kerja (EPIC-059 PY-04)
 }
 
 // Salary is the active employee_salary row. Amounts are numeric text.
@@ -110,6 +111,20 @@ func BuildInputRange(emp Employee, salary Salary, rec WorkforceRecords, loans []
 		}
 	}
 	merged := MergeRanges(coverages)
+	// PY-04: tanggal setelah end_date karyawan berada di luar cakupan.
+	if ed := DateText(emp.EndDate); ed != nil && *ed < end && *ed >= start {
+		if len(merged) == 0 {
+			merged = []DateRange{{Start: start, End: *ed}}
+		} else {
+			var clipped []DateRange
+			for _, r := range merged {
+				if r.Start <= *ed {
+					clipped = append(clipped, DateRange{Start: r.Start, End: min(r.End, *ed)})
+				}
+			}
+			merged = clipped
+		}
+	}
 	hasContract := len(merged) > 0
 	partial := hasContract && !(len(merged) == 1 && merged[0].Start == start && merged[0].End == end)
 

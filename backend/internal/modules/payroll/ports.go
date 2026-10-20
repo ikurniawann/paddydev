@@ -32,6 +32,8 @@ type EmployeeBrief struct {
 	Position      *string
 	HasPosition   bool
 	ReportingTo   *string
+	// EndDate is employees.end_date (YYYY-MM-DD), set by PayrollEmployees.
+	EndDate *string
 }
 
 // Employees reads hris.employees.
@@ -47,6 +49,9 @@ type Employees interface {
 	Briefs(ctx context.Context, q database.Querier, ids []string) (map[string]EmployeeBrief, error)
 	// Active lists is_active employees in the table's natural order.
 	Active(ctx context.Context, q database.Querier) ([]EmployeeBrief, error)
+	// PayrollEmployees lists the employees a payroll run covers: active ones
+	// plus inactive ones whose end_date falls within [start, end] (PY-04).
+	PayrollEmployees(ctx context.Context, q database.Querier, start, end string) ([]EmployeeBrief, error)
 	// DirectReports are the active employees whose reporting_to is managerID.
 	DirectReports(ctx context.Context, q database.Querier, managerID string) ([]string, error)
 	// KPIRole is the role code a scorecard uses: the linked account's

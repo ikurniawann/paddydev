@@ -120,3 +120,22 @@ func TestHealthSubsidyOverridesStructure(t *testing.T) {
 		t.Fatalf("tanpa setting: allowance=%v, want 50.000", old.HealthAllowance)
 	}
 }
+
+// Resign 9 Sep (Rabu) dalam periode 1–30 Sep: hari terjadwal 1–9 Sep = 7 dari 22.
+func TestLeaverProratedToEndDate(t *testing.T) {
+	emp := Employee{ID: "e", JoinDate: "2020-01-01", EmploymentStatus: "resigned", EndDate: ptr("2026-09-09")}
+	sal := Salary{BaseSalary: "2200000.00"}
+	att := []AttendanceRow{
+		{Date: "2026-09-01", Status: "present", HasClockOut: true},
+		{Date: "2026-09-15", Status: "present", HasClockOut: true}, // setelah end_date: diabaikan
+	}
+	in := BuildInputRange(emp, sal, WorkforceRecords{Schedule: weekdaySchedule(), Attendance: att}, nil, nil, 9, 2026, "2026-09-01", "2026-09-30", false)
+	if in.ProrateFactor == nil || Round(*in.ProrateFactor*1000) != Round(7.0/22*1000) {
+		t.Fatalf("factor = %v, want 7/22", in.ProrateFactor)
+	}
+	if in.AttendanceDays != 1 {
+		t.Fatalf("AttendanceDays = %v, want 1 (absen setelah end_date diabaikan)", in.AttendanceDays)
+	}
+	r := Calculate(in, DefaultConfig())
+	eq(t, "pokok monthly × 7/22", r.BaseSalary, 700_000)
+}
