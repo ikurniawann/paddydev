@@ -55,7 +55,7 @@ Kolom "Status MOM" menyalin status di dokumen MOM (Disepakati / Konfirmasi / Men
 |---|---|---|---|---|---|
 | KP-01 | Hapus fitur Pinjaman Darurat | Disepakati | ✅ | Pengajuan baru `emergency` ditolak 400 di API dan tidak ada di form ESS/HR; riwayat tetap terbaca dengan label lama (EPIC-060). Live: 1 pengajuan darurat **pending** | HR memutus manual 1 pengajuan pending sebelum rilis (Q-KP-1) |
 | KP-02 | Kasbon maks. 50% THP, tenor 1 atau 2 | Konfirmasi K-6 | ✅ | Kasbon: pokok ≤ 50% THP (Gaji Pokok + Transport + Makan + Jabatan dari struktur gaji aktif), tenor 1 atau 2 (default 2, 50/50), status Probation/Freelance/Intern/Magang diblokir, maksimal kasbon aktif ditegakkan saat pengajuan & approve (EPIC-060). Jenis `loan` tetap aturan lama (menunggu TnC, KP-03). Live: 1 kasbon lama tenor 3 tidak diubah | Menunggu review & rilis |
-| KP-03 | Aturan Pinjaman | Menunggu TnC | ⏳ | Jenis sekarang: `kasbon`, `loan`, `emergency`; bunga flat (hanya HR) | Tunggu TnC |
+| KP-03 | Aturan Pinjaman | Menunggu TnC | ⏳ | Jenis sekarang: `kasbon`, `loan` (`emergency` hanya riwayat); bunga flat (hanya HR) | Tunggu TnC |
 
 ## Absensi & Timesheet
 

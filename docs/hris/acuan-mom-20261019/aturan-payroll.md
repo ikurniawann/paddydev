@@ -55,7 +55,7 @@ Catatan acuan: rumus "Total Potongan" di tabel Paddy tertulis "Pinjaman Karyawan
 | `personal_leave_deduction` | on | on |
 | `sick_leave_deduction` | on | on |
 | `pph21_method` | ter | ter |
-| `loan_max_installment_percent` | 30 | diganti aturan plafon 50% THP |
+| `loan_max_installment_percent` | 30 | hanya berlaku untuk jenis `loan`; kasbon memakai plafon 50% THP |
 | `overtime_multiplier` / `_holiday` / `_hourly_divisor` | 1,5 / 2 / 173 | 1,5 / 2 / 173 ✅ |
 | Struktur gaji aktif `pay_basis` (karyawan aktif) | 240 `monthly`, 32 `monthly_prorated`, 18 `daily` | `monthly_prorated` untuk karyawan bulanan |
 | Struktur gaji pembagi `working_days_divisor` | 26 (135), 25 (103), kosong (36), 20 (16) | hari kerja terjadwal periode (K-10/K-12) |

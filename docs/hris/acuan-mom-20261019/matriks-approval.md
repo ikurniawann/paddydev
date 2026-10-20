@@ -9,13 +9,13 @@
 | Time-off (cuti/izin) | Atasan langsung | SPV mengajukan ke atasannya masing-masing | Satu tahap: HR **atau** `reporting_to`; atasan tidak punya antrean di ESS |
 | Overtime | Atasan langsung | Wajib diajukan sebelum lembur; jenis Weekday / Weekend | Satu tahap: HR atau `reporting_to`; tanggal lampau diterima; jenis hanya regular/rest_day oleh HR |
 | Koreksi Overtime | AdminHRIS | — | Hanya lewat koreksi jam lembur di absensi |
-| Kasbon | Manager Departemen **dan** HR (akses Payroll) | Maks. 50% THP; tenor 1 dan 2 | Satu tahap: pemegang aksi `approve` menu Pinjaman |
+| Kasbon | Manager Departemen **dan** HR (akses Payroll) | Maks. 50% THP; tenor 1 dan 2 | Dua tahap (EPIC-060): Manager Departemen tersimpan (`manager_approver_id`) memutus tahap 1, lalu HR Penggajian (aksi `approve` menu Pinjaman **dan** akses Penggajian) memutus tahap 2. HR tetap boleh menolak kasbon yang masih menunggu manager |
 | Absen Manual / Koreksi Absen | HR | Termasuk request absen terlewat (internet mati) dengan keterangan karyawan | HR mengedit langsung; belum ada pengajuan dari karyawan |
 | Approval CEO dan GM | CEO, GM | Jenis pengajuan belum jelas (K-7) | Belum ada |
 
 **Sumber "atasan langsung"** di sistem adalah `hris.employees.reporting_to`. Kolom ini bisa diisi lewat import Excel (kolom "NIP Atasan" / `manager_nip`), form karyawan, atau promosi rekrutmen. Org chart di `/dashboard/hris/org-chart` dibangun dari kolom ini, tetapi hanya memuat 200 karyawan pertama.
 
-**"Manager Departemen"**: tabel `hris.departments` tidak punya kolom kepala departemen. Approval kasbon dua tahap butuh sumber ini (Q-APV-2).
+**"Manager Departemen"**: tabel `hris.departments` tidak punya kolom kepala departemen. Diputuskan lewat Q-APV-2: karyawan aktif berlevel Manager ke atas pertama **yang punya akun login** di rantai `reporting_to` pemohon (penelusuran tetap naik melewati manager tanpa akun), disimpan di `hris.loans.manager_approver_id` saat pengajuan. Tidak ada manager berakun di rantai: tahap 1 dilewati, kasbon langsung ke HR.
 
 ## Hierarki org chart (ringkas)
 
