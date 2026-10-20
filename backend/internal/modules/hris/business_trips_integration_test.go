@@ -248,3 +248,60 @@ func TestBusinessTripDateIsServerSide(t *testing.T) {
 		t.Fatalf("overnight clock-out = %s", co.raw)
 	}
 }
+
+// Temuan lanjutan EPIC-062: kuasa HR Perjalanan Dinas hanya super_admin/admin/
+// hrd. hiring_manager (peran rekrutmen) berperilaku seperti karyawan biasa:
+// mengajukan sendiri, memutus hanya sebagai atasan langsung, daftar hanya miliknya.
+func TestBusinessTripHRPowerExcludesHiringManager(t *testing.T) {
+	h, _ := newFileHarness(t)
+	hr, _ := h.staff("hrd", nil, true)
+	hm, hmID := h.staff("hiring_manager", nil, true, emp{name: "Manajer Rekrutmen"})
+	sub, _ := h.staff("pos", nil, true, emp{name: "Bawahan HM", boss: &hmID})
+	other, otherID := h.staff("pos", nil, true, emp{name: "Rekan Lain"})
+	base := "/api/hris/business-trips"
+	body := func(start string, extra map[string]any) map[string]any {
+		m := map[string]any{"start_date": start, "end_date": start, "destination": "Gudang Cikarang", "purpose": "Stock opname gudang"}
+		for k, v := range extra {
+			m[k] = v
+		}
+		return m
+	}
+
+	otherTrip := h.do(&other, "POST", base, body("2026-10-06", nil))
+	expect(t, otherTrip, 200, "")
+	otherTripID := otherTrip.data()["id"].(string)
+	subTrip := h.do(&sub, "POST", base, body("2026-10-07", nil))
+	expect(t, subTrip, 200, "")
+	subTripID := subTrip.data()["id"].(string)
+
+	// Tidak bisa mencatat dinas karyawan lain.
+	expect(t, h.do(&hm, "POST", base, body("2026-10-08", map[string]any{"employee_id": otherID})), 403,
+		"Hanya HRD yang bisa mencatat Perjalanan Dinas karyawan lain")
+	// Tidak bisa memutus pengajuan karyawan yang bukan bawahannya.
+	decide := func(s *testutil.Staff, id, action string) call {
+		return h.do(s, "POST", base+"/"+id+"/decide", map[string]any{"action": action})
+	}
+	expect(t, decide(&hm, otherTripID, "approve"), 403, "Hanya atasan langsung atau HRD yang bisa memproses pengajuan ini")
+	expect(t, decide(&hm, otherTripID, "cancel"), 403, "Hanya pemohon (saat menunggu) atau HRD yang bisa membatalkan Perjalanan Dinas")
+	// Daftar dengan employee_id orang lain hanya mengembalikan miliknya (kosong).
+	if n := len(h.do(&hm, "GET", base+"?employee_id="+otherID, nil).list()); n != 0 {
+		t.Fatalf("hiring_manager list for other employee = %d", n)
+	}
+	own := h.do(&hm, "POST", base, body("2026-10-09", nil))
+	expect(t, own, 200, "")
+	if rows := h.do(&hm, "GET", base+"?employee_id="+otherID, nil).list(); len(rows) != 1 || rows[0].(map[string]any)["id"] != own.data()["id"] {
+		t.Fatalf("hiring_manager list must be own only: %v", rows)
+	}
+	// Tetap bisa memutus sebagai atasan langsung dan melihat antrean bawahan.
+	if n := len(h.do(&hm, "GET", base+"?scope=approvals&status=pending", nil).list()); n != 1 {
+		t.Fatalf("hiring_manager approvals queue = %d", n)
+	}
+	expect(t, decide(&hm, subTripID, "approve"), 200, "")
+
+	// HRD tetap bisa: daftar semua, memutus sebagai cadangan, mencatat untuk orang lain.
+	if n := len(h.do(&hr, "GET", base+"?employee_id="+otherID, nil).list()); n != 1 {
+		t.Fatalf("hrd list for other employee = %d", n)
+	}
+	expect(t, decide(&hr, otherTripID, "approve"), 200, "")
+	expect(t, h.do(&hr, "POST", base, body("2026-10-10", map[string]any{"employee_id": otherID})), 200, "")
+}

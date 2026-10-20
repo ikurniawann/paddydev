@@ -49,6 +49,11 @@ func (s *store) InTx(ctx context.Context, fn func(Repository) error) error {
 // hrRoles is HR_ROLES in lib/hris/workforce-auth.
 var hrRoles = map[string]bool{"super_admin": true, "admin": true, "hrd": true, "hiring_manager": true}
 
+// tripHRRoles are the app roles holding the HR powers of Perjalanan Dinas
+// (EPIC-062 R7: "HRD"). Narrower than hrRoles: hiring_manager is a
+// recruitment role and acts as a plain employee/direct manager on trips.
+var tripHRRoles = map[string]bool{"super_admin": true, "admin": true, "hrd": true}
+
 // Actor is WorkforceActor (plus the logbook's department): the signed-in
 // account and the hris.employees record linked to it. approved_by,
 // validated_by, completed_by… reference employees, so they take EmployeeID,
@@ -60,6 +65,9 @@ type Actor struct {
 	EmployeeID   *string
 	DepartmentID *string
 	IsHR         bool
+	// IsHRD: super_admin/admin/hrd only (tripHRRoles); gates the HR powers of
+	// Perjalanan Dinas. IsHR stays the broader flag for every other feature.
+	IsHRD bool
 	// PerformanceMenu: the account holds the HR side of the Kinerja menu, not
 	// only the employee-level Review/Tugas Departemen (set by withLogbook).
 	PerformanceMenu bool
@@ -80,7 +88,7 @@ func (s *Service) Actor(ctx context.Context, u *auth.User) (*Actor, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Actor{UserID: u.ID, Role: u.Role, FullName: u.FullName, EmployeeID: id, DepartmentID: dept, IsHR: hrRoles[u.Role]}, nil
+	return &Actor{UserID: u.ID, Role: u.Role, FullName: u.FullName, EmployeeID: id, DepartmentID: dept, IsHR: hrRoles[u.Role], IsHRD: tripHRRoles[u.Role]}, nil
 }
 
 func (s *store) EmployeeIDByUser(ctx context.Context, userID string) (*string, error) {

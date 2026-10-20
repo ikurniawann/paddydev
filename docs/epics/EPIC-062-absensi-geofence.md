@@ -150,3 +150,4 @@ Rekomendasi di bawah dipakai sebagai ruling rencana (R1–R11). **User perlu men
   - Filter "Di luar area saja" di Rekap dan kolom geofence di export CSV/XLSX/PDF absensi.
   - Persetujuan Perjalanan Dinas masuk antrean gabungan "Persetujuan Tim" ESS saat Paket Approval atasan (langkah 5) dikerjakan.
   - Pengajuan absen manual/koreksi karyawan (AB-04/AB-06) untuk kasus tanpa internet.
+- 2026-10-20: Temuan lanjutan: kuasa HR Perjalanan Dinas (lihat semua, memutus cadangan/override, membatalkan yang disetujui, mencatat dinas karyawan lain) hanya `super_admin`/`admin`/`hrd`; `hiring_manager` (peran rekrutmen) tidak, dan berperilaku seperti karyawan biasa (ajukan sendiri, memutus hanya sebagai atasan langsung). Go: `Actor.IsHRD` (`tripHRRoles`), `IsHR` tidak berubah untuk fitur lain; frontend: tab Perjalanan Dinas di Absensi HRD hanya untuk peran itu (`canManageTrips`).
