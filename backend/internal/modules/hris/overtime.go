@@ -127,6 +127,9 @@ func (s *Service) CreateOvertime(ctx context.Context, a *Actor, in overtimeInput
 	if hours > 12 {
 		return nil, httpx.BadRequest("Durasi lembur maksimal 12 jam")
 	}
+	if hours < 1 {
+		return nil, httpx.BadRequest("Durasi lembur minimal 1 jam")
+	}
 	source := "company"
 	if isSelf {
 		source = "employee"

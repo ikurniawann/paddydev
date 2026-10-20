@@ -22,6 +22,7 @@ export const BPJS_KES_FIELDS: FieldDef[] = [
   { key: "bpjs_kes_employee", label: "Karyawan", suffix: "%" },
   { key: "bpjs_kes_employer", label: "Perusahaan", suffix: "%" },
   { key: "bpjs_kes_max_upah", label: "Batas Upah Maks", suffix: "Rp" },
+  { key: "bpjs_kes_subsidy_amount", label: "Subsidi BPJS Kesehatan (masa kerja > 1 tahun)", suffix: "Rp" },
 ];
 
 export const TAPERA_FIELDS: FieldDef[] = [
@@ -103,12 +104,12 @@ export const TOGGLE_FIELDS: { key: string; label: string; help: string }[] = [
   {
     key: "personal_leave_deduction",
     label: "Potong gaji untuk Izin Pribadi",
-    help: "THP ÷ pembagi hari × hari izin pribadi (rule Odoo PIP).",
+    help: "1 hari THP (gaji pokok + transport + makan + jabatan) ÷ hari kerja terjadwal × hari izin. Tunjangan per hari tidak dipotong dua kali; intern tidak dipotong.",
   },
   {
     key: "sick_leave_deduction",
-    label: "Potong transport & makan saat Izin Sakit",
-    help: "(Transport + makan) ÷ pembagi hari × hari sakit (rule Odoo PIS).",
+    label: "Potong transport & makan saat Sakit / Cuti Melahirkan",
+    help: "Hanya tunjangan flat: (transport + makan) ÷ pembagi hari × hari sakit & melahirkan. Tunjangan per hari sudah tidak dibayar saat tidak hadir.",
   },
 ];
 

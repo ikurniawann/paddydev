@@ -399,18 +399,18 @@ func (s *service) calculateRun(ctx context.Context, runID string, includeThr boo
 	if err := deleteRunDetails(ctx, s.db, runID); err != nil {
 		return nil, fmt.Errorf("delete old payroll details: %w", opaque(err))
 	}
-	employees, err := s.ports.Employees.Active(ctx, s.db)
+	period, err := s.attendancePeriod(ctx, run.PeriodMonth, run.PeriodYear)
+	if err != nil {
+		return nil, err
+	}
+	start, end := period.Start, period.End
+	employees, err := s.ports.Employees.PayrollEmployees(ctx, s.db, start, end)
 	if err != nil {
 		return nil, fmt.Errorf("load active employees: %w", opaque(err))
 	}
 	if len(employees) == 0 {
 		return nil, httpx.BadRequest("Tidak ada karyawan aktif ditemukan")
 	}
-	period, err := s.attendancePeriod(ctx, run.PeriodMonth, run.PeriodYear)
-	if err != nil {
-		return nil, err
-	}
-	start, end := period.Start, period.End
 	holidays, err := s.ports.Workforce.Holidays(ctx, s.db, start, end)
 	if err != nil {
 		return nil, err
@@ -429,7 +429,7 @@ func (s *service) calculateRun(ctx context.Context, runID string, includeThr boo
 		return nil, opaque(err)
 	}
 	opts := domain.BuildOptions{OvertimeRequireClockout: config.OvertimeRequireClockout,
-		OvertimeRestFromSchedule: config.OvertimeRestFromSchedule}
+		OvertimeRestFromSchedule: config.OvertimeRestFromSchedule, HealthSubsidyAmount: config.BpjsKesSubsidyAmount}
 
 	out := &calcResult{Data: []*obj{}, Summary: calcSummary{EmployeeNames: []string{}, Skipped: []skipped{},
 		AllocationWarnings: []allocationWarning{}}, AttendancePeriod: period.info()}
@@ -544,7 +544,7 @@ func (s *service) payrollInput(ctx context.Context, e EmployeeBrief, companyID s
 	if err != nil {
 		return nil, records, err
 	}
-	emp := domain.Employee{ID: e.ID, EmploymentStatus: e.EmploymentStatus, JoinDate: e.JoinDate}
+	emp := domain.Employee{ID: e.ID, EmploymentStatus: e.EmploymentStatus, JoinDate: e.JoinDate, EndDate: e.EndDate, IsActive: e.IsActive}
 	in := domain.BuildInputRange(emp, *salary, records, loans, holidays, month, year, start, end, includeThr, opts)
 	return &in, records, nil
 }

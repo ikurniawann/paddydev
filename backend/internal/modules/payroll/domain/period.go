@@ -102,6 +102,20 @@ func ScheduledDays(rows []ShiftRow, start, end string) (days int, hasSchedule bo
 	return days, true
 }
 
+// IsWorkDate: a date with a shift in the schedule in force that day; without
+// a schedule in force, Monday–Friday that is not a national holiday (the
+// hris DescribeLeaveDays rule). Payroll counts leave on work dates only.
+func IsWorkDate(date string, schedule []ShiftRow, holidays map[string]bool) bool {
+	for _, r := range schedule {
+		if r.EffectiveFrom <= date && (r.EffectiveTo == nil || *r.EffectiveTo >= date) {
+			row := ResolveScheduleRow(schedule, date)
+			return row != nil && row.ShiftID != nil
+		}
+	}
+	dow := ISODayOfWeek(date)
+	return dow >= 1 && dow <= 5 && !holidays[date]
+}
+
 // LeaveRange is a leave's inclusive date span.
 type LeaveRange struct{ Start, End string }
 
@@ -186,6 +200,10 @@ func SplitOvertimeWith(requests []OvertimeRequest, attendance []AttendanceRow, h
 				hours = math.Min(req.Hours, actual)
 			}
 		}
+		// Tabel payslip Paddy: lembur dibayar minimal 1 jam (EPIC-059 R9).
+		if hours < 1 {
+			continue
+		}
 		if holidays[req.Date] || req.DayType == "rest_day" || restDay(req.Date) {
 			holiday += hours
 		} else {
@@ -268,4 +286,15 @@ func DateText(v *string) *string {
 		return nil
 	}
 	return &s
+}
+
+// ServiceOverOneYear: more than one year of service at periodEnd (the
+// cut-off date): join + 1 year falls strictly before periodEnd (EPIC-059).
+func ServiceOverOneYear(joinDate, periodEnd string) bool {
+	join, err1 := time.Parse(isoDate, joinDate)
+	end, err2 := time.Parse(isoDate, periodEnd)
+	if err1 != nil || err2 != nil {
+		return false
+	}
+	return join.AddDate(1, 0, 0).Before(end)
 }

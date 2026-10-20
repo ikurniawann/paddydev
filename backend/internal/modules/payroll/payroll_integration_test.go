@@ -134,6 +134,17 @@ func (f *fakeEmployees) Active(context.Context, database.Querier) ([]EmployeeBri
 	return out, nil
 }
 
+func (f *fakeEmployees) PayrollEmployees(_ context.Context, _ database.Querier, start, end string) ([]EmployeeBrief, error) {
+	var out []EmployeeBrief
+	for _, id := range f.order {
+		b := f.briefs[id]
+		if b.IsActive || (b.EndDate != nil && *b.EndDate >= start && *b.EndDate <= end) {
+			out = append(out, b)
+		}
+	}
+	return out, nil
+}
+
 type fakeWorkforce struct {
 	// lastRange is the period PeriodRecords was last asked for.
 	lastRange  [2]string

@@ -67,6 +67,7 @@ var settingsFields = concat(
 	[]settingField{{key: "overtime_requires_clockout", kind: "bool"}, {key: "overtime_rest_from_schedule", kind: "bool"},
 		{key: "personal_leave_deduction", kind: "bool"},
 		{key: "sick_leave_deduction", kind: "bool"}},
+	nums("num", rupiah(), "bpjs_kes_subsidy_amount"),
 	nums("num", pct(), "loan_max_installment_percent"),
 	nums("int", validate.NumOpts{Min: validate.Bound(1), Max: validate.Bound(10)}, "loan_max_active_per_employee"),
 )

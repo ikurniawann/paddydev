@@ -70,6 +70,7 @@ type Config struct {
 	LateMinMinutes         float64 // a late day counts toward the tier at >= this many minutes
 	LoanMaxInstallmentPct  float64
 	LoanMaxActivePerPerson float64
+	BpjsKesSubsidyAmount   float64
 
 	Pph21Method              string // annualized | ter
 	Pph21BpjsBasis           string // employer | employee | both (BPJS added to the TER DPP)
@@ -267,5 +268,6 @@ func BuildConfig(settings, taxConfig Row) Config {
 	c.LateAmount = settings.num("late_deduction_amount", d.LateAmount)
 	c.LoanMaxInstallmentPct = settings.num("loan_max_installment_percent", d.LoanMaxInstallmentPct)
 	c.LoanMaxActivePerPerson = settings.num("loan_max_active_per_employee", d.LoanMaxActivePerPerson)
+	c.BpjsKesSubsidyAmount = settings.num("bpjs_kes_subsidy_amount", d.BpjsKesSubsidyAmount)
 	return c
 }

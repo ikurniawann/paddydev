@@ -147,6 +147,22 @@ func (payrollEmployees) Active(ctx context.Context, q database.Querier) ([]payro
 	})
 }
 
+// PayrollEmployees is Active plus the inactive employees whose end_date falls
+// in [start, end], so a leaver is still paid pro-rata for the days worked.
+func (payrollEmployees) PayrollEmployees(ctx context.Context, q database.Querier, start, end string) ([]payroll.EmployeeBrief, error) {
+	rows, err := q.Query(ctx, `SELECT id::text, full_name, nip, is_active, employment_status, join_date::text,
+		department_id::text, end_date::text FROM hris.employees
+		WHERE is_active = true OR (end_date BETWEEN $1::date AND $2::date)`, start, end)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (payroll.EmployeeBrief, error) {
+		var b payroll.EmployeeBrief
+		err := r.Scan(&b.ID, &b.FullName, &b.NIP, &b.IsActive, &b.EmploymentStatus, &b.JoinDate, &b.DepartmentID, &b.EndDate)
+		return b, err
+	})
+}
+
 func (payrollEmployees) DirectReports(ctx context.Context, q database.Querier, managerID string) ([]string, error) {
 	rows, err := q.Query(ctx, `SELECT id::text FROM hris.employees WHERE reporting_to = $1 AND is_active = true`, managerID)
 	if err != nil {
