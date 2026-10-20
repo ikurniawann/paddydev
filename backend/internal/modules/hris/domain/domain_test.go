@@ -354,10 +354,10 @@ func TestLeavesCSV(t *testing.T) {
 		}
 	}
 	bare := row
-	bare.LeaveType, bare.EmployeeName, bare.EmployeeNip, bare.Department, bare.JobTitle = "marriage", nil, nil, nil, nil
+	bare.LeaveType, bare.EmployeeName, bare.EmployeeNip, bare.Department, bare.JobTitle = "lainnya", nil, nil, nil, nil
 	bare.HasApprover, bare.ApprovedAt, bare.Reason = false, nil, nil
 	line := strings.Split(LeavesCSV([]LeaveCSVRow{bare}), "\n")[1]
-	eq(t, strings.Contains(line, `"marriage"`), true)
+	eq(t, strings.Contains(line, `"lainnya"`), true)
 	if strings.Count(line, `"-"`) < 6 {
 		t.Fatalf("expected dash placeholders: %s", line)
 	}
