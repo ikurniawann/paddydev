@@ -84,3 +84,9 @@ Dijawab user 20-10-2026: "lakukan sesuai rekomen". Semua dari 12 pertanyaan mema
   - Cek pemilik employee di endpoint kuota case-sensitive (UUID huruf besar ditolak, gagal-tertutup).
   - Fallback Next tidak mengecek kuota/tabrakan (Go melayani `/api/hris`).
   - Trailer commit 9b89ae8/2a8ca37/ab04943.. memakai nama model subagent.
+- 2026-10-20 15:29 WIB: **Level jabatan live diisi dari judul** (keputusan user: Supervisor/SPV → Supervisor, Assistant Manager, Manager, General Manager, CEO → C-Level; Coordinator, Lead, dan Art Director tetap Staff).
+  - Skrip: `backend/database/sql/fixes/2026-10-20_positions_level_dari_judul.sql`. Mode `-v preview=1` berjalan read-only lalu ROLLBACK. Skrip hanya menaikkan level Staff/Senior Staff/kosong dan tidak pernah menurunkan.
+  - Uji di DB test: 15 jabatan contoh; 10 dinaikkan, pengecualian tetap; terapkan ulang mengubah 0 baris. DB test kemudian dipulihkan.
+  - Live: backup `~/Desktop/paddydev-backups/paddydev-db-before-positions-level-20261020-152906.dump`, lalu `UPDATE 41` COMMIT. Hasilnya, karyawan aktif yang berhak Izin Leader: Supervisor 20, Manager 9, Assistant Manager 1, General Manager 1, C-Level 1 (total 32). 17 jabatan Coordinator/Lead/Art Director tetap Staff. Pratinjau ulang: 0 baris tersisa.
+  - Catatan: karyawan uji "QA Dimas Dua Entitas" masih aktif di live sebagai Store Manager.
+  - Level jabatan juga tampil di lowongan dan PDF CV rekrutmen (kosmetik).
