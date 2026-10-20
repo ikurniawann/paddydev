@@ -77,6 +77,19 @@ func TestLoanApprovalFollowsLoansMenu(t *testing.T) {
 	e.call(&loansHR, "POST", "/api/hris/loans/"+loan["id"].(string)+"/approve", map[string]any{"approved": true}, 200)
 }
 
+// Approving needs the "approve" action on Pinjaman, not just the menu.
+func TestLoanApprovalNeedsApproveAction(t *testing.T) {
+	e := setup(t)
+	readOnly := hrStaff(e, map[string][]string{"hris.kepegawaian.loans": {"read", "create", "update"}})
+	e.employee("HR Baca", readOnly.UserID, true)
+	worker := e.employee("Peminjam", e.staff.UserID, true)
+	e.salary(worker, e.co, 5000000)
+	loan := e.call(&e.staff, "POST", "/api/hris/loans", map[string]any{
+		"loan_type": "kasbon", "principal_amount": 1000000, "tenor_months": 2}, 200)["data"].(map[string]any)
+	wantErr(t, e.call(&readOnly, "POST", "/api/hris/loans/"+loan["id"].(string)+"/approve", map[string]any{"approved": true}, 403),
+		"Insufficient permissions")
+}
+
 func TestHRWithoutKinerjaMenuIsNotPerformanceHR(t *testing.T) {
 	e := setup(t)
 	opsHR := hrStaff(e, map[string][]string{"hris.kepegawaian": nil})

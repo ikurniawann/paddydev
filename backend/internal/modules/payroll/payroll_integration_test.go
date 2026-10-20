@@ -213,6 +213,7 @@ func setup(t *testing.T, periods ...AttendancePeriods) *env {
 	deps := testutil.Deps(t, func() time.Time { return fixedNow })
 	hr := testutil.CreateStaff(t, testutil.StaffOptions{Role: "hrd", Menus: map[string][]string{
 		"hris.compensation": nil, "hris.performance": nil, "hris.performance.kpi-config": nil,
+		"hris.kepegawaian.loans": {"read", "create", "update", "approve"},
 	}})
 	staff := testutil.CreateStaff(t, testutil.StaffOptions{Role: "pos", Menus: map[string][]string{"hris.workforce": nil}})
 	ctx := context.Background()
