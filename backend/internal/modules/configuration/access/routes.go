@@ -20,10 +20,10 @@ type handler struct {
 	auth *auth.Service
 }
 
-// Routes mounts the IAM settings routes.
+// Routes mounts the IAM settings routes and HRIS → Hak Akses HRIS.
 func Routes(d module.Deps, db database.DB) []module.Route {
 	h := handler{db: db, auth: d.Auth}
-	return []module.Route{
+	return append([]module.Route{
 		{Pattern: "GET /api/settings/iam/roles", Handler: httpx.Handle(h.listRoles)},
 		{Pattern: "POST /api/settings/iam/roles", Handler: httpx.Handle(h.createRole)},
 		{Pattern: "GET /api/settings/iam/roles/{id}", Handler: httpx.Handle(h.getRole)},
@@ -36,7 +36,7 @@ func Routes(d module.Deps, db database.DB) []module.Route {
 		{Pattern: "GET /api/settings/iam/menus/{id}", Handler: httpx.Handle(h.getMenu)},
 		{Pattern: "PUT /api/settings/iam/menus/{id}", Handler: httpx.Handle(h.updateMenu)},
 		{Pattern: "DELETE /api/settings/iam/menus/{id}", Handler: httpx.Handle(h.deleteMenu)},
-	}
+	}, h.hrisAccessRoutes()...)
 }
 
 var (

@@ -1650,6 +1650,26 @@
     "path": "/api/gym/sessions/{id}"
   },
   {
+    "module": "configuration",
+    "method": "GET",
+    "path": "/api/hris/access"
+  },
+  {
+    "module": "configuration",
+    "method": "PUT",
+    "path": "/api/hris/access/accounts/{id}"
+  },
+  {
+    "module": "configuration",
+    "method": "GET",
+    "path": "/api/hris/access/audit"
+  },
+  {
+    "module": "configuration",
+    "method": "PUT",
+    "path": "/api/hris/access/roles/{code}"
+  },
+  {
     "module": "hris",
     "method": "GET",
     "path": "/api/hris/announcements"

@@ -224,6 +224,10 @@ func archiveEmail(nip string) string {
 }
 
 func (s *service) createUser(ctx context.Context, actorID string, b *employeeBody) (*employeeView, error) {
+	// Refused before the employee row is written (ruling M3).
+	if err := checkHrisRole(b, nil); err != nil {
+		return nil, err
+	}
 	email := *b.str("email")
 	owner, err := s.ports.Employees.EmailOwner(ctx, s.db, email)
 	if err != nil {
@@ -434,6 +438,11 @@ func (s *service) provision(ctx context.Context, actorID, employeeID string, b *
 		if err := syncIamRole(ctx, tx, userID, role, actorID); err != nil {
 			return err
 		}
+		if b.has("hris_role") {
+			if err := applyHrisRole(ctx, tx, userID, b, &role, actorID); err != nil {
+				return err
+			}
+		}
 		audit(ctx, tx, actorID, userID, "create_user", kit.Obj("employee_id", employeeID, "email", email, "role", role))
 		return nil
 	})
@@ -464,6 +473,15 @@ func (s *service) updateUser(ctx context.Context, actorID, id string, b *employe
 		if taken {
 			return nil, httpx.Conflict(emailInUseMessage)
 		}
+	}
+
+	// Refused before the employee patch and the account sync (ruling M3).
+	var prevRole *string
+	if existing.UserID != nil {
+		prevRole = profileColumn(ctx, s.db, *existing.UserID, "role")
+	}
+	if err := checkHrisRole(b, prevRole); err != nil {
+		return nil, err
 	}
 
 	patch := []Column{{"updated_at", s.stamp()}}
@@ -641,6 +659,11 @@ func (s *service) syncAccount(ctx context.Context, actorID, userID string, b *em
 			return err
 		}
 	}
+	if b.has("hris_role") {
+		if err := applyHrisRole(ctx, s.db, userID, b, prevRole, actorID); err != nil {
+			return err
+		}
+	}
 	fields := b.keys(false)
 	for _, k := range []string{"email", "full_name"} {
 		if !b.has(k) {
@@ -649,6 +672,43 @@ func (s *service) syncAccount(ctx context.Context, actorID, userID string, b *em
 	}
 	audit(ctx, s.db, actorID, userID, "update_user", kit.Obj("fields", fields))
 	return nil
+}
+
+const errHrisRoleNeedsHrd = "Role HRIS hanya untuk akun dengan peran aplikasi hrd"
+
+// checkHrisRole refuses an HRIS role for an account whose app role is not
+// hrd (EPIC-061, Q-RA-7). null (back to the app role) is always allowed.
+func checkHrisRole(b *employeeBody, prevRole *string) error {
+	if !b.has("hris_role") || b.hrisRole == nil {
+		return nil
+	}
+	app := roleOf(b.role)
+	if app == "" && prevRole != nil {
+		app = *prevRole
+	}
+	if app != "hrd" {
+		return httpx.BadRequest(errHrisRoleNeedsHrd)
+	}
+	return nil
+}
+
+// applyHrisRole sets the IAM role of an HR account: the HRIS role, or the
+// app role again when hris_role is null. A null on an account that is not
+// hrd leaves its IAM roles alone.
+func applyHrisRole(ctx context.Context, q database.Querier, userID string, b *employeeBody, prevRole *string, actorID string) error {
+	if err := checkHrisRole(b, prevRole); err != nil {
+		return err
+	}
+	code := roleOf(b.role)
+	if code == "" && prevRole != nil {
+		code = *prevRole
+	}
+	if b.hrisRole != nil {
+		code = *b.hrisRole
+	} else if code != "hrd" {
+		return nil
+	}
+	return syncIamRole(ctx, q, userID, code, actorID)
 }
 
 // dedupe keeps the last value of a column assigned twice (a JS object key

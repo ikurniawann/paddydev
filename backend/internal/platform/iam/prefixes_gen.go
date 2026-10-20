@@ -32,6 +32,7 @@ var (
 	HrisRecruitment         = []string{"hris.recruitment"}
 	HrisLoans               = []string{"hris.kepegawaian.loans", "hris.compensation"}
 	HrisAnalytics           = []string{"hris.insights.analytics"}
+	HrisAccess              = []string{"hris.access"}
 	Accounting              = []string{"accounting"}
 	Crm                     = []string{"crm"}
 	CrmSettings             = []string{"crm.settings"}
@@ -128,6 +129,7 @@ var ByKey = map[string][]string{
 	"hrisRecruitment":         HrisRecruitment,
 	"hrisLoans":               HrisLoans,
 	"hrisAnalytics":           HrisAnalytics,
+	"hrisAccess":              HrisAccess,
 	"accounting":              Accounting,
 	"crm":                     Crm,
 	"crmSettings":             CrmSettings,

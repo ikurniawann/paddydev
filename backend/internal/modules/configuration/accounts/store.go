@@ -13,6 +13,7 @@ import (
 
 	"nuhabit/backend/internal/modules/configuration/kit"
 	"nuhabit/backend/internal/platform/database"
+	"nuhabit/backend/internal/platform/iam"
 	"nuhabit/backend/internal/platform/permaudit"
 )
 
@@ -68,13 +69,17 @@ type appUser struct {
 	HoldingName, CompanyName, BranchName         *string
 	LastSignInAt                                 *time.Time
 	Warehouses                                   []warehouseRow
+	// HrisRole is the account's admin_hris / hris_* IAM role (EPIC-061).
+	HrisRole *string
 }
 
 // loadAppUser reads the profile and its scope names, nil without profile.
 func loadAppUser(ctx context.Context, q database.Querier, userID string) (*appUser, error) {
 	row, err := kit.QueryOne(ctx, q, `SELECT "id", "role", "status", "brand_id", "business_scope", "holding_id",
-       "company_id", "branch_id", "can_switch_stall", "can_central_checkout", "default_warehouse_id", `+permissionsEmbed+`
-  FROM configuration.users WHERE "id" = $1`, userID)
+       "company_id", "branch_id", "can_switch_stall", "can_central_checkout", "default_warehouse_id",
+       (SELECT r.code FROM iam.user_roles ur JOIN iam.roles r ON r.id = ur.role_id
+         WHERE ur.user_id = "users"."id" AND r.code = ANY($2::text[]) ORDER BY r.code LIMIT 1) AS "hris_role", `+permissionsEmbed+`
+  FROM configuration.users WHERE "id" = $1`, userID, iam.HrisStaffRoleCodes)
 	if err != nil || row == nil {
 		return nil, err
 	}
@@ -85,6 +90,7 @@ func loadAppUser(ctx context.Context, q database.Querier, userID string) (*appUs
 		HoldingID: row.StrPtr("holding_id"), CompanyID: row.StrPtr("company_id"), BranchID: row.StrPtr("branch_id"),
 		CanSwitchStall: row.Bool("can_switch_stall"), CanCentralCheckout: row.Bool("can_central_checkout"),
 		DefaultWarehouseID: row.StrPtr("default_warehouse_id"), Permissions: perms,
+		HrisRole: row.StrPtr("hris_role"),
 	}
 	for _, s := range []struct {
 		id    *string

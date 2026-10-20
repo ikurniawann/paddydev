@@ -200,7 +200,9 @@ describe("Go route manifest", () => {
       "/api/hris/schedules", "/api/hris/employees/schedule-type", "/api/hris/employees/export",
       "/api/hris/employees/import", "/api/hris/employees/import-template", "/api/users/email-owner",
       // Kuota bulanan Izin Pribadi / Izin Leader (EPIC-058).
-      "/api/hris/leave-quota"];
+      "/api/hris/leave-quota",
+      // Hak Akses HRIS (EPIC-061): hanya di Go, tanpa fallback Next.
+      "/api/hris/access"];
     const goNative = (p: string) =>
       goNativePrefixes.some((n) => p === n || p.startsWith(`${n}/`));
     const missing = switched

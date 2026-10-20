@@ -36,6 +36,8 @@ export const IAM = {
   hrisLoans: ["hris.kepegawaian.loans", "hris.compensation"],
   /** Analytics rekrutmen — membaca data kandidat. */
   hrisAnalytics: ["hris.insights.analytics"],
+  /** HRIS → Hak Akses HRIS (EPIC-061): AdminHRIS mengatur akses role HR. */
+  hrisAccess: ["hris.access"],
   accounting: ["accounting"],
   crm: ["crm"],
   crmSettings: ["crm.settings"],
