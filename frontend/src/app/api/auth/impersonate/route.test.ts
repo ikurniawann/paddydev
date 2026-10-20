@@ -6,6 +6,7 @@ import { NextRequest } from "next/server";
 
 const TARGET = "22222222-2222-4222-8222-222222222222";
 const SYSTEM_MSG = "Login As ke akun Super Admin/Admin hanya untuk Super Admin";
+const TOKEN_MSG = "Login As hanya dari sesi login biasa";
 const NESTED_MSG = "Tidak bisa Login As dari sesi Login As; keluar lalu masuk dengan akun sendiri";
 
 const mocks = vi.hoisted(() => ({
@@ -44,7 +45,9 @@ const post = (cookie = "nuhabit_session=tok") =>
   POST(
     new NextRequest("https://dashboard.test/api/auth/impersonate", {
       method: "POST",
-      headers: { "Content-Type": "application/json", cookie },
+      headers: cookie
+        ? { "Content-Type": "application/json", cookie }
+        : { "Content-Type": "application/json", authorization: "Bearer nh_token" },
       body: JSON.stringify({ user_id: TARGET }),
     })
   );
@@ -94,6 +97,13 @@ describe("POST /api/auth/impersonate", () => {
     expect(res.status).toBe(403);
     expect(await res.json()).toEqual({ success: false, error: NESTED_MSG });
     expect(mocks.isImpersonationSession).toHaveBeenCalledWith("tok");
+    expect(mocks.createSession).not.toHaveBeenCalled();
+  });
+
+  it("lewat token API (tanpa cookie sesi) → 403, tanpa sesi", async () => {
+    const res = await post("");
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ success: false, error: TOKEN_MSG });
     expect(mocks.createSession).not.toHaveBeenCalled();
   });
 });

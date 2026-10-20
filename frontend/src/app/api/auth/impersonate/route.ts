@@ -9,6 +9,7 @@ import { requireIamSuperAdmin } from "@/lib/iam/system-role-guard";
 import { accountHoldsSystemRole, systemRoleCodes } from "@/lib/users/system-account-guard";
 
 const SYSTEM_IMPERSONATE_ERROR = "Login As ke akun Super Admin/Admin hanya untuk Super Admin";
+const TOKEN_IMPERSONATE_ERROR = "Login As hanya dari sesi login biasa";
 const NESTED_IMPERSONATE_ERROR = "Tidak bisa Login As dari sesi Login As; keluar lalu masuk dengan akun sendiri";
 
 const impersonateSchema = z.object({
@@ -19,16 +20,18 @@ const impersonateSchema = z.object({
  * Login As (impersonation) — pemegang menu Manajemen User. Mengganti session
  * cookie dengan session baru milik user target. Kembali ke akun sendiri dengan
  * logout lalu login ulang. Akun ber-role sistem (super_admin/admin sebagai role
- * aplikasi atau IAM) hanya oleh pemegang role IAM super_admin, dan tidak dari
- * dalam sesi Login As — sama dengan Go identity.Impersonate (temuan EPIC-061).
+ * aplikasi atau IAM) hanya oleh pemegang role IAM super_admin; hanya dari sesi
+ * login biasa (bukan token API) dan tidak dari dalam sesi Login As — sama dengan Go identity.Impersonate (temuan EPIC-061).
  */
 export async function POST(request: NextRequest) {
   try {
     const admin = await requireIamMenuPrefix(IAM.settingsUsers);
     const { user_id } = await validateBody(request, impersonateSchema);
 
+    // Tanpa cookie sesi, pemanggil masuk lewat token API: token tidak pernah jadi sesi.
     const currentToken = readSessionToken(request.cookies);
-    if (currentToken && (await isImpersonationSession(currentToken))) {
+    if (!currentToken) throw ApiError.forbidden(TOKEN_IMPERSONATE_ERROR);
+    if (await isImpersonationSession(currentToken)) {
       throw ApiError.forbidden(NESTED_IMPERSONATE_ERROR);
     }
 

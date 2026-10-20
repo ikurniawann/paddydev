@@ -345,6 +345,7 @@ func (s *Service) ChangePassword(ctx context.Context, userID, current, next stri
 
 var (
 	errSystemImpersonation = httpx.Forbidden("Login As ke akun Super Admin/Admin hanya untuk Super Admin")
+	errTokenImpersonation  = httpx.Forbidden("Login As hanya dari sesi login biasa")
 	errNestedImpersonation = httpx.Forbidden("Tidak bisa Login As dari sesi Login As; keluar lalu masuk dengan akun sendiri")
 )
 
@@ -358,12 +359,17 @@ type Impersonated struct {
 
 // Impersonate mirrors POST /api/auth/impersonate ("Login As"): never the
 // caller's own account, a missing or banned account, or a super admin, and
-// never from inside a Login As session. An account holding a system role
+// only from a dashboard session: never through an Open API token, never from
+// inside a Login As session. An account holding a system role
 // (super_admin/admin as app or IAM role) is for IAM super_admin callers
 // only (EPIC-061). The new session's user agent records the admin
 // ("impersonated-by:<id> <ua>"), which is the only trail the TS route leaves.
 // sessionTokenHash is the caller's session (empty when none).
 func (s *Service) Impersonate(ctx context.Context, admin *auth.User, sessionTokenHash, targetID string, userAgent string) (*Impersonated, *Session, error) {
+	// An Open API token never becomes a session.
+	if admin.ViaAPIToken {
+		return nil, nil, errTokenImpersonation
+	}
 	if sessionTokenHash != "" {
 		nested, err := s.repo.IsImpersonationSession(ctx, sessionTokenHash)
 		if err != nil {

@@ -479,3 +479,26 @@ func TestImpersonateSystemAccounts(t *testing.T) {
 		t.Fatalf("chained Login As: %d %s", status, body)
 	}
 }
+
+// TestImpersonateRefusesAPIToken: Login As only from a dashboard session;
+// an Open API token can never be turned into a session.
+func TestImpersonateRefusesAPIToken(t *testing.T) {
+	deps, mux := newModule(t)
+	admin := testutil.CreateStaff(t, testutil.StaffOptions{Role: "admin", Menus: map[string][]string{"settings.users": nil}})
+	target := testutil.CreateStaff(t, testutil.StaffOptions{Role: "pos"})
+	token := "nh_" + testutil.RandomHex(32)
+	exec(t, deps, `INSERT INTO configuration.api_tokens (name, token_hash, token_prefix, user_id, scopes)
+		VALUES ('go-test', $1, $2, $3, '{*}')`, auth.HashToken(token), token[:15], admin.UserID)
+	t.Cleanup(func() {
+		exec(t, deps, `DELETE FROM configuration.api_tokens WHERE token_hash = $1`, auth.HashToken(token))
+	})
+	r := testutil.Request("POST", "/api/auth/impersonate", map[string]any{"user_id": target.UserID})
+	r.Header.Set("Authorization", "Bearer "+token)
+	rec, _ := testutil.Do(t, mux, r)
+	if rec.Code != 403 || rec.Body.String() != `{"success":false,"error":"Login As hanya dari sesi login biasa"}` || len(setCookies(rec)) != 0 {
+		t.Fatalf("impersonate with token: %d %s", rec.Code, rec.Body.String())
+	}
+	if n := count(t, deps, `SELECT count(*) FROM auth.sessions WHERE user_id = $1`, target.UserID); n != 1 {
+		t.Fatalf("token Login As created sessions: %d", n-1)
+	}
+}
