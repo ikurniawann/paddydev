@@ -4,6 +4,7 @@ import (
 	"context"
 	"math"
 	"net/http"
+	"slices"
 
 	"nuhabit/backend/internal/modules/payroll/domain"
 	"nuhabit/backend/internal/platform/database"
@@ -17,6 +18,19 @@ import (
 // interest free).
 
 const invalidLoan = "Jenis pinjaman, jumlah (> 0), dan tenor (1–60 bulan) wajib valid"
+
+// loanTypes are the requestable loan types (EPIC-060 R1; emergency removed).
+var loanTypes = []string{"kasbon", "loan"}
+
+// kasbonTHP is the kasbon THP (EPIC-060 R2): base + transport + meal +
+// position allowance over every active salary row; nil without one.
+func (s *service) kasbonTHP(ctx context.Context, employeeID string) (*float64, error) {
+	var thp *float64
+	err := s.db.QueryRow(ctx, `SELECT sum(base_salary + coalesce(transport_allowance, 0) + coalesce(meal_allowance, 0)
+		+ coalesce(position_allowance, 0))::float8 FROM hris.employee_salary WHERE employee_id = $1 AND is_active`,
+		employeeID).Scan(&thp)
+	return thp, err
+}
 
 var loanListPeople = []embed{{"employee", "employee_id", loanListEmp}, {"approved_by", "approved_by", personFields}}
 
@@ -114,13 +128,29 @@ func (s *service) createLoan(ctx context.Context, a *actor, in loanInput) (*obj,
 	if !emp.IsActive {
 		return nil, httpx.BadRequest("Karyawan sudah tidak aktif")
 	}
+	if in.LoanType == "emergency" {
+		return nil, httpx.BadRequest("Pinjaman Darurat sudah tidak tersedia")
+	}
+	if !slices.Contains(loanTypes, in.LoanType) {
+		return nil, httpx.BadRequest(invalidLoan)
+	}
 	raw, monthly, total := domain.LoanTerms(in.Principal, rate, in.Tenor)
 	config, base, count, err := s.loanLimits(ctx, target, true)
 	if err != nil {
 		return nil, err
 	}
 	showCap := a.Payroll || (a.EmployeeID != nil && *a.EmployeeID == target)
-	if msg := domain.ValidateLoanLimitsFor(raw, base, config.LoanMaxInstallmentPct, count, config.LoanMaxActivePerPerson, showCap); msg != "" {
+	var msg string
+	if in.LoanType == "kasbon" {
+		thp, err := s.kasbonTHP(ctx, target)
+		if err != nil {
+			return nil, err
+		}
+		msg = domain.ValidateKasbon(in.Principal, in.Tenor, emp.EmploymentStatus, thp, count, config.LoanMaxActivePerPerson, showCap)
+	} else {
+		msg = domain.ValidateLoanLimitsFor(raw, base, config.LoanMaxInstallmentPct, count, config.LoanMaxActivePerPerson, showCap)
+	}
+	if msg != "" {
 		return nil, httpx.BadRequest(msg)
 	}
 	row, err := queryObj(ctx, s.db, `INSERT INTO hris.loans (employee_id, loan_type, principal_amount, interest_rate,
@@ -136,10 +166,13 @@ func (s *service) decideLoan(ctx context.Context, userID, loanID string, approve
 	if err != nil {
 		return nil, err
 	}
-	var employeeID, status string
+	var employeeID, status, loanType string
 	var installment *string
-	err = s.db.QueryRow(ctx, `SELECT employee_id::text, COALESCE(status, ''), monthly_installment::text
-		FROM hris.loans WHERE id::text = $1`, loanID).Scan(&employeeID, &status, &installment)
+	var principal float64
+	var tenor int
+	err = s.db.QueryRow(ctx, `SELECT employee_id::text, COALESCE(status, ''), monthly_installment::text, loan_type,
+		principal_amount::float8, tenor_months FROM hris.loans WHERE id::text = $1`, loanID).Scan(
+		&employeeID, &status, &installment, &loanType, &principal, &tenor)
 	if database.IsNoRows(err) {
 		return nil, httpx.NotFound("Pinjaman tidak ditemukan")
 	}
@@ -157,8 +190,25 @@ func (s *service) decideLoan(ctx context.Context, userID, loanID string, approve
 		if err != nil {
 			return nil, err
 		}
-		if msg := domain.ValidateLoanLimitsFor(domain.JSNumber(textOrNil(installment)), base, config.LoanMaxInstallmentPct,
-			count, config.LoanMaxActivePerPerson, showCap); msg != "" {
+		var msg string
+		if loanType == "kasbon" {
+			emp, err := s.brief(ctx, employeeID)
+			if err != nil {
+				return nil, err
+			}
+			if emp == nil {
+				return nil, httpx.NotFound("Karyawan tidak ditemukan")
+			}
+			thp, err := s.kasbonTHP(ctx, employeeID)
+			if err != nil {
+				return nil, err
+			}
+			msg = domain.ValidateKasbon(principal, tenor, emp.EmploymentStatus, thp, count, config.LoanMaxActivePerPerson, showCap)
+		} else {
+			msg = domain.ValidateLoanLimitsFor(domain.JSNumber(textOrNil(installment)), base, config.LoanMaxInstallmentPct,
+				count, config.LoanMaxActivePerPerson, showCap)
+		}
+		if msg != "" {
 			return nil, httpx.BadRequest(msg)
 		}
 		month, year := domain.FirstInstallmentPeriod(now)

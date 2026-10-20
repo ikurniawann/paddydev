@@ -657,7 +657,7 @@ func TestLoans(t *testing.T) {
 
 	// The employee files for themselves: interest forced to 0.
 	created := e.call(&e.staff, "POST", "/api/hris/loans", map[string]any{"employee_id": hrEmp, "loan_type": "kasbon",
-		"principal_amount": "3000000", "tenor_months": 3, "interest_rate": 5}, 200)
+		"principal_amount": "2000000", "tenor_months": 2, "interest_rate": 5}, 200)
 	loan := created["data"].(map[string]any)
 	if created["message"] != "Pengajuan pinjaman berhasil dibuat, menunggu approval" || loan["employee_id"] != worker ||
 		loan["interest_rate"] != "0.00" || loan["monthly_installment"] != "1000000.00" || loan["status"] != "pending" {

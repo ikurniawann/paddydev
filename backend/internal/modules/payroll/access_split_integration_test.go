@@ -164,7 +164,7 @@ func TestLoanApprovalHidesCapWithoutPayrollMenu(t *testing.T) {
 	worker := e.employee("Peminjam", e.staff.UserID, true)
 	e.salary(worker, e.co, 5000000)
 	loan := e.call(&e.staff, "POST", "/api/hris/loans", map[string]any{
-		"loan_type": "kasbon", "principal_amount": 3000000, "tenor_months": 3}, 200)["data"].(map[string]any)
+		"loan_type": "loan", "principal_amount": 3000000, "tenor_months": 3}, 200)["data"].(map[string]any)
 	e.exec(`UPDATE hris.employee_salary SET base_salary = 2000000 WHERE employee_id = $1`, worker)
 	wantErr(t, e.call(&loansHR, "POST", "/api/hris/loans/"+loan["id"].(string)+"/approve", map[string]any{"approved": true}, 400),
 		"Cicilan Rp 1.000.000/bulan melebihi batas 30% dari gaji pokok")
