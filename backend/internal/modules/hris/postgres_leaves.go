@@ -2,6 +2,7 @@ package hris
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -225,4 +226,61 @@ func (s *store) ManagerContact(ctx context.Context, employeeID string) (string, 
 		return "", nil, false, nil
 	}
 	return name, phone, err == nil, err
+}
+
+// EmployeePositionLevel is the level of the employee's position ("" without
+// one); found is false when the employee does not exist.
+func (s *store) EmployeePositionLevel(ctx context.Context, employeeID string) (string, bool, error) {
+	var level *string
+	err := s.db.QueryRow(ctx, `SELECT p.level FROM hris.employees e
+		LEFT JOIN hris.positions p ON p.id = e.job_title_id WHERE e.id = $1`, employeeID).Scan(&level)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", false, nil
+	}
+	if err != nil || level == nil {
+		return "", err == nil, err
+	}
+	return *level, true, nil
+}
+
+// LockLeaveEmployee serialises leave requests of one employee so the quota
+// and overlap checks cannot both pass for two concurrent requests.
+func (s *store) LockLeaveEmployee(ctx context.Context, employeeID string) error {
+	_, err := s.db.Exec(ctx, `SELECT 1 FROM hris.employees WHERE id = $1 FOR NO KEY UPDATE`, employeeID)
+	return err
+}
+
+// OverlappingLeave is a pending/approved request of the employee covering any
+// day of [start, end]; nil when none.
+func (s *store) OverlappingLeave(ctx context.Context, employeeID, start, end string) (*Row, error) {
+	return queryRow(ctx, s.db, `SELECT leave_type::text AS leave_type, status::text AS status,
+		       start_date::text AS start_date, end_date::text AS end_date
+		FROM hris.leaves
+		WHERE employee_id = $1 AND status IN ('pending', 'approved')
+		  AND start_date <= $3::date AND end_date >= $2::date
+		ORDER BY start_date LIMIT 1`, employeeID, start, end)
+}
+
+// MonthlyLeaveUse sums total_days of pending/approved requests per type whose
+// start_date falls in [from, to].
+func (s *store) MonthlyLeaveUse(ctx context.Context, employeeID, from, to string) (map[string]float64, error) {
+	rows, err := s.db.Query(ctx, `SELECT leave_type::text, COALESCE(SUM(total_days), 0)::float8
+		FROM hris.leaves
+		WHERE employee_id = $1 AND status IN ('pending', 'approved')
+		  AND start_date BETWEEN $2::date AND $3::date
+		GROUP BY leave_type`, employeeID, from, to)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	use := map[string]float64{}
+	for rows.Next() {
+		var kind string
+		var days float64
+		if err := rows.Scan(&kind, &days); err != nil {
+			return nil, err
+		}
+		use[kind] = days
+	}
+	return use, rows.Err()
 }

@@ -10,9 +10,6 @@ import (
 	"nuhabit/backend/internal/platform/validate"
 )
 
-var leaveTypes = []string{"annual", "sick", "maternity", "paternity", "unpaid", "emergency",
-	"pilgrimage", "menstrual", "marriage", "bereavement", "personal"}
-
 // coerceInt is z.coerce.number().int().min(lo).max(hi).default(def) on a
 // query form (values are strings).
 func coerceInt(f *validate.Form, key string, lo, hi *float64, def int) int {
@@ -67,7 +64,7 @@ func (h handlers) createLeave(w http.ResponseWriter, r *http.Request, a *Actor) 
 	}
 	var in leaveRequest
 	in.EmployeeID = f.UUID("employee_id", optional)
-	in.LeaveType = strOr(f.Enum("leave_type", validate.Rule{}, leaveTypes))
+	in.LeaveType = strOr(f.Enum("leave_type", validate.Rule{}, domain.LeaveTypeCodes()))
 	in.StartDate = strOr(f.Str("start_date", validate.Rule{}, validate.StrOpts{Check: matches(domain.DateRe, "Tanggal mulai harus berformat YYYY-MM-DD")}))
 	in.EndDate = strOr(f.Str("end_date", validate.Rule{}, validate.StrOpts{Check: matches(domain.DateRe, "Tanggal selesai harus berformat YYYY-MM-DD")}))
 	in.Reason = strOr(f.Str("reason", validate.Rule{}, validate.StrOpts{Check: minLen(10, "Reason must be at least 10 characters")}))
