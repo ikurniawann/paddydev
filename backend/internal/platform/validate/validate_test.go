@@ -150,3 +150,19 @@ func TestZodFormatChecks(t *testing.T) {
 		}
 	}
 }
+
+func TestCanonicalUUID(t *testing.T) {
+	const want = "7b0c1d2e-3f40-4a5b-8c6d-7e8f90a1b2c3"
+	for _, in := range []string{want, "7B0C1D2E-3F40-4A5B-8C6D-7E8F90A1B2C3", "7b0c1d2e3f404a5b8c6d7e8f90a1b2c3",
+		"{7b0c1d2e-3f40-4a5b-8c6d-7e8f90a1b2c3}", "{7B0C1D2E3F404A5B8C6D7E8F90A1B2C3}"} {
+		if got, ok := CanonicalUUID(in); !ok || got != want {
+			t.Errorf("CanonicalUUID(%q) = %q, %v", in, got, ok)
+		}
+	}
+	for _, in := range []string{"", "nope", "7b0c1d2e-3f40-4a5b-8c6d-7e8f90a1b2c", "7b0c1d2e-3f40-4a5b-8c6d-7e8f90a1b2cz",
+		"7b0c1d2e3f40-4a5b-8c6d-7e8f90a1b2c3", " 7b0c1d2e-3f40-4a5b-8c6d-7e8f90a1b2c3", "{7b0c1d2e-3f40-4a5b-8c6d-7e8f90a1b2c3"} {
+		if got, ok := CanonicalUUID(in); ok {
+			t.Errorf("CanonicalUUID(%q) = %q, want invalid", in, got)
+		}
+	}
+}

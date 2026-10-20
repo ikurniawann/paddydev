@@ -215,3 +215,32 @@ func TestSuperAdminMintsSystemAccountToken(t *testing.T) {
 		t.Fatalf("super_admin → token for admin = %d %s", code, raw)
 	}
 }
+
+// TestSystemAccountTokenIDForms: user_id is canonicalised as a uuid before
+// the guard and the insert; a malformed one is a 400.
+func TestSystemAccountTokenIDForms(t *testing.T) {
+	superTarget := testutil.CreateStaff(t, testutil.StaffOptions{Role: "super_admin"})
+	plain := testutil.CreateStaff(t, testutil.StaffOptions{Role: "pos"})
+	hrd := testutil.CreateStaff(t, testutil.StaffOptions{Role: "hrd", Menus: map[string][]string{"settings.integrations": nil}})
+	mux, tx := setup(t)
+	post := func(userID string) (int, string, map[string]any) {
+		return call(t, mux, testutil.AsStaff(testutil.Request("POST", "/api/admin/api-tokens",
+			map[string]any{"name": "Agent", "scopes": []string{"*"}, "user_id": userID}), hrd))
+	}
+	for _, id := range []string{strings.ToUpper(superTarget.UserID), strings.ReplaceAll(superTarget.UserID, "-", "")} {
+		if code, raw, _ := post(id); code != 403 || raw != systemTokenMsg {
+			t.Errorf("token for super_admin as %q = %d %s", id, code, raw)
+		}
+	}
+	var n int
+	if err := tx.QueryRow(context.Background(), `SELECT count(*) FROM configuration.api_tokens WHERE user_id = $1`, superTarget.UserID).Scan(&n); err != nil || n != 0 {
+		t.Fatalf("refused tokens written: %d %v", n, err)
+	}
+	if code, raw, _ := post("nope"); code != 400 || raw != `{"success":false,"error":"user_id tidak valid"}` {
+		t.Fatalf("malformed user_id = %d %s", code, raw)
+	}
+	code, raw, body := post(strings.ToUpper(plain.UserID))
+	if code != 201 || body["data"].(map[string]any)["user_id"] != plain.UserID {
+		t.Fatalf("upper-case plain user_id = %d %s", code, raw)
+	}
+}

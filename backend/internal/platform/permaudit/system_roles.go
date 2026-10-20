@@ -42,16 +42,17 @@ func IsSystemRole(ctx context.Context, q database.Querier, role *string) (bool, 
 }
 
 // HoldsSystemRole reports whether the account holds a system role as its
-// app role or as an IAM role. The id is compared as text so a malformed id
-// is simply not found.
+// app role or as an IAM role. The id is compared as a uuid, so every form a
+// uuid write accepts (upper case, no hyphens, braces) matches; a malformed
+// id is an error, never "not a system account" (EPIC-061).
 func HoldsSystemRole(ctx context.Context, q database.Querier, userID string) (bool, error) {
 	codes, err := SystemRoleCodes(ctx, q)
 	if err != nil {
 		return false, err
 	}
 	var held bool
-	err = q.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM configuration.users WHERE id::text = $1 AND role = ANY($2))
+	err = q.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM configuration.users WHERE id = $1::uuid AND role = ANY($2))
 		OR EXISTS (SELECT 1 FROM iam.user_roles ur JOIN iam.roles r ON r.id = ur.role_id
-		  WHERE ur.user_id::text = $1 AND r.code = ANY($2))`, userID, codes).Scan(&held)
+		  WHERE ur.user_id = $1::uuid AND r.code = ANY($2))`, userID, codes).Scan(&held)
 	return held, err
 }

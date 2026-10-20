@@ -146,7 +146,11 @@ func (h handler) create(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	// The token runs as this account; the default is the admin creating it.
-	userID := jsString(orFallback(body["user_id"], orFallback(adminID, "")))
+	// Canonicalised as a uuid before the guard and the insert (EPIC-061).
+	userID, ok := validate.CanonicalUUID(jsString(orFallback(body["user_id"], orFallback(adminID, ""))))
+	if !ok {
+		return httpx.BadRequest("user_id tidak valid")
+	}
 	var exists string
 	err = h.db.QueryRow(r.Context(), `SELECT id::text FROM configuration.users WHERE id = $1`, userID).Scan(&exists)
 	if database.IsNoRows(err) {

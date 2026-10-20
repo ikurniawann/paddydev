@@ -11,6 +11,7 @@ import (
 	"nuhabit/backend/internal/platform/iam"
 	"nuhabit/backend/internal/platform/module"
 	"nuhabit/backend/internal/platform/permaudit"
+	"nuhabit/backend/internal/platform/validate"
 )
 
 // "Hak Akses HRIS" (EPIC-061, RA-03 / Q-RA-5/7): AdminHRIS changes, for
@@ -176,7 +177,12 @@ func (h handler) putHrisAccount(w http.ResponseWriter, r *http.Request) error {
 		return httpx.Forbidden(errHrisRoleScope)
 	}
 	ctx := r.Context()
+	// Canonical uuid form for every compare below; a malformed id stays
+	// as is and is simply not found (EPIC-061).
 	userID := r.PathValue("id")
+	if id, ok := validate.CanonicalUUID(userID); ok {
+		userID = id
+	}
 	err = database.WithTx(ctx, h.db, func(tx pgx.Tx) error {
 		var appRole string
 		err := tx.QueryRow(ctx, `SELECT role FROM configuration.users WHERE id::text = $1`, userID).Scan(&appRole)

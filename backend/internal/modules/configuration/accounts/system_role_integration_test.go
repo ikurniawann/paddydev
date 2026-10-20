@@ -3,6 +3,7 @@ package accounts_test
 import (
 	"context"
 	"net/http"
+	"strings"
 	"testing"
 
 	"nuhabit/backend/internal/app"
@@ -275,5 +276,31 @@ func TestAdminUserCreateSyncsIam(t *testing.T) {
 		FROM iam.permission_audit_logs l JOIN configuration.users u ON u.id = l.target_user_id
 		WHERE l.source = 'user_role' AND u.email = $1 AND l.actor_id = $2`, email, hrd.UserID); got != ">finance_staff" {
 		t.Fatalf("user role trail = %v", got)
+	}
+}
+
+// TestSystemAccountIDForms: the path id of /api/admin/users is canonicalised
+// as a uuid before the guards, so upper case or unhyphenated forms of a
+// system account's id are refused like the canonical one; a malformed id
+// is a 400 before anything runs (temuan re-review EPIC-061).
+func TestSystemAccountIDForms(t *testing.T) {
+	superTarget := testutil.CreateStaff(t, testutil.StaffOptions{Role: "super_admin"})
+	hrd := testutil.CreateStaff(t, testutil.StaffOptions{Role: "hrd", Menus: map[string][]string{"settings.users": nil}})
+	e := setupStaff(t, hrd)
+	before := e.account(superTarget.UserID)
+	for _, id := range []string{strings.ToUpper(superTarget.UserID), strings.ReplaceAll(superTarget.UserID, "-", "")} {
+		code, out, _ := e.do("PATCH", "/api/admin/users/"+id, map[string]any{"role": "hrd"})
+		wantError(t, code, out, 403, systemRoleMsg)
+		code, out, _ = e.do("POST", "/api/admin/users/"+id+"/reset-password", nil)
+		wantError(t, code, out, 403, systemRoleMsg)
+	}
+	if got := e.account(superTarget.UserID); got != before {
+		t.Fatalf("refused id forms changed the account: %s → %s", before, got)
+	}
+	for _, c := range []struct{ method, path string }{
+		{"PATCH", "/api/admin/users/nope"}, {"POST", "/api/admin/users/nope/reset-password"},
+	} {
+		code, out, _ := e.do(c.method, c.path, map[string]any{"full_name": "Nama Lain"})
+		wantError(t, code, out, 400, "Invalid id")
 	}
 }

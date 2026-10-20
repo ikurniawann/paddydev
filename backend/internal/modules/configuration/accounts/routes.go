@@ -16,6 +16,7 @@ import (
 	"nuhabit/backend/internal/platform/httpx"
 	"nuhabit/backend/internal/platform/iam"
 	"nuhabit/backend/internal/platform/module"
+	"nuhabit/backend/internal/platform/validate"
 )
 
 type handlers struct {
@@ -295,6 +296,16 @@ func (h handlers) createAdmin(w http.ResponseWriter, r *http.Request) error {
 	return httpx.JSON(w, http.StatusCreated, dataMessage{Data: profile, Message: "User berhasil dibuat"})
 }
 
+// pathUserID is the account id of /api/admin/users/{id}, canonicalised as a
+// uuid before any guard compares it (EPIC-061); malformed is a 400.
+func pathUserID(r *http.Request) (string, error) {
+	id, ok := validate.CanonicalUUID(r.PathValue("id"))
+	if !ok {
+		return "", httpx.BadRequest("Invalid id")
+	}
+	return id, nil
+}
+
 func (h handlers) updateAdmin(w http.ResponseWriter, r *http.Request) error {
 	actor, err := h.guard(r)
 	if err != nil {
@@ -308,7 +319,11 @@ func (h handlers) updateAdmin(w http.ResponseWriter, r *http.Request) error {
 	if err := f.Err("Validation failed"); err != nil {
 		return err
 	}
-	profile, err := h.svc.updateAdmin(r.Context(), actor, r.PathValue("id"), b, h.superAdminGate(r))
+	id, err := pathUserID(r)
+	if err != nil {
+		return err
+	}
+	profile, err := h.svc.updateAdmin(r.Context(), actor, id, b, h.superAdminGate(r))
 	if err != nil {
 		return err
 	}
@@ -320,7 +335,11 @@ func (h handlers) resetAdminPassword(w http.ResponseWriter, r *http.Request) err
 	if err != nil {
 		return err
 	}
-	temp, err := h.svc.resetAdminPassword(r.Context(), actor, r.PathValue("id"), h.superAdminGate(r))
+	id, err := pathUserID(r)
+	if err != nil {
+		return err
+	}
+	temp, err := h.svc.resetAdminPassword(r.Context(), actor, id, h.superAdminGate(r))
 	if err != nil {
 		return err
 	}

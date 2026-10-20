@@ -2,6 +2,7 @@ package permaudit_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"nuhabit/backend/internal/platform/permaudit"
@@ -54,4 +55,35 @@ func TestSetUserRoleRecordsChange(t *testing.T) {
 	if rows != "1:hris_manager" {
 		t.Fatalf("audit = %s, want one row (the repeat is no change)", rows)
 	}
+}
+
+// TestHoldsSystemRoleIDForms: the id is compared as a uuid, so every form
+// PostgreSQL accepts for a write (upper case, no hyphens, braces) is found;
+// a malformed id is an error, never "not a system account".
+func TestHoldsSystemRoleIDForms(t *testing.T) {
+	super := testutil.CreateStaff(t, testutil.StaffOptions{Role: "super_admin"})
+	iamOnly := testutil.CreateStaff(t, testutil.StaffOptions{Role: "hrd"})
+	tx := testutil.Tx(t)
+	ctx := context.Background()
+	if _, err := tx.Exec(ctx, `INSERT INTO iam.roles (code, name, is_system) VALUES ('super_admin', 'Super Admin', true) ON CONFLICT (code) DO NOTHING`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO iam.user_roles (user_id, role_id, is_primary) SELECT $1, id, true FROM iam.roles WHERE code = 'super_admin'`, iamOnly.UserID); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{super.UserID, iamOnly.UserID} {
+		for _, form := range []string{strings.ToUpper(id), strings.ReplaceAll(id, "-", ""), "{" + id + "}"} {
+			held, err := permaudit.HoldsSystemRole(ctx, tx, form)
+			if err != nil || !held {
+				t.Errorf("HoldsSystemRole(%q) = %v, %v", form, held, err)
+			}
+		}
+	}
+	if _, err := tx.Exec(ctx, `SAVEPOINT malformed`); err != nil {
+		t.Fatal(err)
+	}
+	if held, err := permaudit.HoldsSystemRole(ctx, tx, "nope"); err == nil {
+		t.Errorf("malformed id = %v, nil; want an error", held)
+	}
+	_, _ = tx.Exec(ctx, `ROLLBACK TO SAVEPOINT malformed`)
 }
