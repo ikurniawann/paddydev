@@ -10,6 +10,7 @@ func TestAttendance(t *testing.T) {
 	h := newHarness(t)
 	hr, _ := h.staff("hrd", nil, true)
 	staff, own := h.staff("pos", nil, true, emp{name: "Absen Test"})
+	h.grantDelete(hr, "hris.workforce.attendance")
 	shift := h.scalar(`INSERT INTO hris.shifts (name, start_time, end_time, late_tolerance_minutes)
 		VALUES ('Pagi Roster', '08:00', '16:00', 10) RETURNING id::text`)
 	h.exec(`INSERT INTO hris.employee_shifts (employee_id, day_of_week, shift_id, effective_from) VALUES ($1, 1, $2, '2026-01-01')`, own, shift)
@@ -63,7 +64,7 @@ func TestAttendance(t *testing.T) {
 	if s := stats.data(); s["month"] != 10.0 || s["month_late"] != 1.0 || s["active_employees"] != nil {
 		t.Fatalf("stats = %s", stats.raw)
 	}
-	expect(t, h.do(&staff, "DELETE", "/api/hris/attendance/"+att, nil), 403, "Forbidden: Only HRD can delete attendance records")
+	expect(t, h.do(&staff, "DELETE", "/api/hris/attendance/"+att, nil), 403, "Insufficient permissions")
 	// HR deletion needs a reason (attendance adjustment log).
 	expect(t, h.do(&hr, "DELETE", "/api/hris/attendance/"+att, nil), 400, "Alasan penyesuaian wajib diisi (minimal 5 karakter)")
 	expect(t, h.do(&hr, "DELETE", "/api/hris/attendance/"+att, map[string]any{"reason": "Data uji dihapus"}), 200, "")
@@ -74,6 +75,7 @@ func TestLeaves(t *testing.T) {
 	hr, _ := h.staff("hrd", []string{menuWorkforce}, true)
 	boss, bossID := h.staff("pos", nil, true, emp{name: "Atasan Cuti", phone: "0812 3456 7890"})
 	staff, own := h.staff("pos", nil, true, emp{name: "Pemohon Cuti"})
+	h.grantDelete(hr, "hris.workforce.leaves")
 	h.exec(`UPDATE hris.employees SET reporting_to = $2 WHERE id = $1`, own, bossID)
 	h.exec(`INSERT INTO hris.public_holidays (holiday_date, name, type) VALUES ('2031-12-25', 'Natal Test', 'nasional')`)
 
@@ -136,8 +138,8 @@ func TestLeaves(t *testing.T) {
 		t.Fatalf("csv = %s", csv.raw)
 	}
 	expect(t, h.do(&hr, "GET", "/api/hris/leaves/export?leave_type=sick", nil), 404, "No leave data found")
-	expect(t, h.do(&staff, "DELETE", "/api/hris/leaves/"+leaveID, nil), 403, "Forbidden: Only HRD can delete leave requests")
-	expect(t, h.do(&hr, "DELETE", "/api/hris/leaves/"+leaveID, nil), 200, "")
+	expect(t, h.do(&staff, "DELETE", "/api/hris/leaves/"+leaveID, nil), 403, "Insufficient permissions")
+	expect(t, h.do(&hr, "DELETE", "/api/hris/leaves/"+leaveID+"?reason=Pengajuan%20ganda", nil), 200, "")
 
 	// Balances: the owner reads (row created on first read), HRD writes.
 	bal := h.do(&staff, "GET", "/api/hris/leave-balances/"+own+"?year=2027", nil)
@@ -160,6 +162,7 @@ func TestOvertimeAndShifts(t *testing.T) {
 	hr, _ := h.staff("hrd", []string{menuKepegawaian}, true)
 	boss, bossID := h.staff("pos", nil, true)
 	staff, own := h.staff("pos", nil, true)
+	h.grantDelete(hr, "hris.kepegawaian.shifts")
 	h.exec(`UPDATE hris.employees SET reporting_to = $2 WHERE id = $1`, own, bossID)
 
 	created := h.do(&staff, "POST", "/api/hris/overtime", map[string]any{
@@ -204,18 +207,22 @@ func TestOvertimeAndShifts(t *testing.T) {
 	expect(t, h.do(&hr, "PATCH", "/api/hris/shifts/"+sid, map[string]any{"start_time": "25:00"}), 400, "Jam mulai tidak valid")
 	expect(t, h.do(&hr, "PATCH", "/api/hris/shifts/"+sid, map[string]any{"sort_order": 3}), 200, "")
 	expect(t, h.do(&hr, "PATCH", "/api/hris/shifts/x", nil), 400, "ID shift tidak valid")
-	del := h.do(&hr, "DELETE", "/api/hris/shifts/"+sid, nil)
+	del := h.do(&hr, "DELETE", "/api/hris/shifts/"+sid+"?reason=Shift%20uji%20dihapus", nil)
 	expect(t, del, 200, "")
 	if del.body["message"] != "Shift dihapus" {
 		t.Fatalf("delete = %s", del.raw)
 	}
-	expect(t, h.do(&hr, "DELETE", "/api/hris/shifts/"+sid, nil), 404, "Shift tidak ditemukan")
+	if got := h.scalar(`SELECT count(*)::text FROM audit.audit_log WHERE action = 'hris.shifts.delete' AND entity_id = $1 AND reason = 'Shift uji dihapus'`, sid); got != "1" {
+		t.Fatalf("shift delete audit rows = %s", got)
+	}
+	expect(t, h.do(&hr, "DELETE", "/api/hris/shifts/"+sid+"?reason=Shift%20uji%20dihapus", nil), 404, "Shift tidak ditemukan")
 }
 
 func TestHolidays(t *testing.T) {
 	h := newHarness(t)
 	hr, _ := h.staff("hrd", []string{menuKepegawaian}, false)
 	staff, _ := h.staff("pos", nil, false)
+	h.grantDelete(hr, "hris.kepegawaian.holidays")
 
 	created := h.do(&hr, "POST", "/api/hris/holidays", map[string]any{"holiday_date": "2031-08-17", "name": " HUT RI ", "status": "draft"})
 	expect(t, created, 201, "")
@@ -241,8 +248,8 @@ func TestHolidays(t *testing.T) {
 	id := created.data()["id"].(string)
 	expect(t, h.do(&hr, "PATCH", "/api/hris/holidays/"+id, map[string]any{"status": "aktif", "note": ""}), 200, "")
 	expect(t, h.do(&hr, "PATCH", "/api/hris/holidays/"+id, map[string]any{"type": "regional"}), 400, "Tipe libur tidak valid")
-	expect(t, h.do(&hr, "DELETE", "/api/hris/holidays/"+id, nil), 200, "")
-	expect(t, h.do(&hr, "DELETE", "/api/hris/holidays/"+id, nil), 404, "Hari libur tidak ditemukan")
+	expect(t, h.do(&hr, "DELETE", "/api/hris/holidays/"+id+"?reason=Libur%20salah%20input", nil), 200, "")
+	expect(t, h.do(&hr, "DELETE", "/api/hris/holidays/"+id+"?reason=Libur%20salah%20input", nil), 404, "Hari libur tidak ditemukan")
 
 	preview := h.do(&hr, "GET", "/api/hris/holidays/import?year=2026", nil)
 	expect(t, preview, 200, "")

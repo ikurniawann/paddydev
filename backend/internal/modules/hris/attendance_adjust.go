@@ -421,9 +421,6 @@ func (s *Service) AdjustAttendance(ctx context.Context, a *Actor, id string, in 
 
 // DeleteAttendanceWithReason removes a row (logged with its last state).
 func (s *Service) DeleteAttendanceWithReason(ctx context.Context, a *Actor, id, reason string, meta audit.Entry) error {
-	if !canManageAttendance(a) {
-		return httpx.Forbidden("Forbidden: Only HRD can delete attendance records")
-	}
 	if err := requireReason(reason); err != nil {
 		return err
 	}

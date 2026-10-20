@@ -139,6 +139,7 @@ func TestSelfService(t *testing.T) {
 
 	// Announcements.
 	hr, _ := h.staff("hrd", []string{menuKepegawaian}, true)
+	h.grantDelete(hr, "hris.kepegawaian.announcements")
 	expect(t, h.do(&hr, "POST", "/api/hris/announcements", map[string]any{"title": " "}), 400, "Validasi gagal")
 	expect(t, h.do(&hr, "POST", "/api/hris/announcements", map[string]any{"title": "Video", "video_url": "https://evil.test/v"}), 400,
 		"URL video harus YouTube atau Vimeo yang valid")
@@ -183,7 +184,7 @@ func TestSelfService(t *testing.T) {
 		t.Fatalf("cms list = %s", list.raw)
 	}
 	expect(t, h.do(&hr, "PATCH", "/api/hris/announcements/"+id, map[string]any{"title": "Rapat 2", "target_scope": "global"}), 200, "")
-	expect(t, h.do(&hr, "DELETE", "/api/hris/announcements/"+id, nil), 200, "")
+	expect(t, h.do(&hr, "DELETE", "/api/hris/announcements/"+id+"?reason=Pengumuman%20kedaluwarsa", nil), 200, "")
 	expect(t, h.do(&hr, "PATCH", "/api/hris/announcements/"+id, map[string]any{"title": "x"}), 404, "Pengumuman tidak ditemukan")
 
 	// Notifications.
@@ -204,6 +205,7 @@ func TestLogbookReportsMaster(t *testing.T) {
 	other := h.department("Logbook Lain")
 	hr, _ := h.staff("hrd", []string{"hris.insights", "hris.master", "hris.performance"}, true)
 	staff, _ := h.staff("pos", nil, true, emp{dept: &dept})
+	h.grantDelete(hr, "hris.master.departments", "hris.master.employment-statuses")
 
 	me := h.do(&staff, "GET", "/api/hris/logbook?resource=me", nil)
 	if me.data()["is_full_access"] != false || me.data()["employee"].(map[string]any)["department"].(map[string]any)["name"] != "Logbook Dept" {
@@ -269,7 +271,7 @@ func TestLogbookReportsMaster(t *testing.T) {
 		"Kode departemen sudah digunakan")
 	expect(t, h.do(&hr, "POST", "/api/master/departments", map[string]any{"name": ""}), 400, "Validation failed")
 	expect(t, h.do(&hr, "POST", "/api/master/departments", "not json"), 500, "Terjadi kesalahan server")
-	expect(t, h.do(&hr, "DELETE", "/api/master/departments/"+dept, nil), 400, "Tidak dapat dihapus, masih ada 1 karyawan di departemen ini")
+	expect(t, h.do(&hr, "DELETE", "/api/master/departments/"+dept+"?reason=Departemen%20dobel", nil), 400, "Tidak dapat dihapus, masih ada 1 karyawan di departemen ini")
 	expect(t, h.do(&hr, "PUT", "/api/master/departments/00000000-0000-0000-0000-000000000000", map[string]any{"name": "A", "code": "B"}), 404,
 		"Departemen tidak ditemukan")
 	pos := h.do(&hr, "POST", "/api/master/positions", map[string]any{"title": "Barista Test", "brand_id": ""})
@@ -282,7 +284,7 @@ func TestLogbookReportsMaster(t *testing.T) {
 	if st.data()["color"] != "gray" {
 		t.Fatalf("status = %s", st.raw)
 	}
-	expect(t, h.do(&hr, "DELETE", "/api/master/employment-statuses/"+st.data()["id"].(string), nil), 200, "")
+	expect(t, h.do(&hr, "DELETE", "/api/master/employment-statuses/"+st.data()["id"].(string)+"?reason=Status%20tidak%20dipakai", nil), 200, "")
 	expect(t, h.do(&hr, "GET", "/api/master/positions", nil), 200, "")
 }
 

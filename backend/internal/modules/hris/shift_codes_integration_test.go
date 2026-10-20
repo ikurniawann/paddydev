@@ -23,7 +23,12 @@ func TestShiftCodes(t *testing.T) {
 		"name": "Lain", "code": "SPG 1", "start_time": "09:00", "end_time": "17:00"})
 	expect(t, bad, http.StatusBadRequest, "Kode shift 1–12 huruf/angka tanpa spasi")
 	def := h.scalar(`SELECT id::text FROM hris.shifts WHERE code = 'DEF'`)
-	del := h.do(&hr, http.MethodDelete, "/api/hris/shifts/"+def, nil)
+	// The built-in shift is refused for its own reason, not the guard's:
+	// group-only staff (no leaf delete) get 403, and the leaf holder with a
+	// reason reaches the handler's 400.
+	expect(t, h.do(&hr, http.MethodDelete, "/api/hris/shifts/"+def+"?reason=Hapus%20shift%20bawaan", nil), http.StatusForbidden, "Insufficient permissions")
+	h.grantDelete(hr, iam.LeafShift)
+	del := h.do(&hr, http.MethodDelete, "/api/hris/shifts/"+def+"?reason=Hapus%20shift%20bawaan", nil)
 	expect(t, del, http.StatusBadRequest, "Shift bawaan DEF/NS tidak bisa dihapus atau dinonaktifkan")
 	off := h.do(&hr, http.MethodPatch, "/api/hris/shifts/"+def, map[string]any{"is_active": false})
 	expect(t, off, http.StatusBadRequest, "Shift bawaan DEF/NS tidak bisa dihapus atau dinonaktifkan")
