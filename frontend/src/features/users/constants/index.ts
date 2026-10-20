@@ -51,6 +51,17 @@ export const SYSTEM_ROLES: readonly string[] = ["super_admin", "admin"];
 
 export const isSystemRole = (role: string | null | undefined) => !!role && SYSTEM_ROLES.includes(role);
 
+export const SYSTEM_ACCOUNT_LOCKED_NOTICE =
+  "Akun ini memegang role Super Admin/Admin; hanya Super Admin yang bisa mengubahnya.";
+
+/**
+ * Karyawan yang akun loginnya ber-role sistem tidak bisa disimpan selain oleh Super Admin
+ * (server menolak 403 karena simpan form selalu menyentuh akun login). Role IAM-saja tidak
+ * terlihat di sini; untuk itu server tetap penentu.
+ */
+export const isLockedSystemAccount = (accountRole: string | null | undefined, canAssignSystemRoles: boolean) =>
+  !canAssignSystemRoles && isSystemRole(accountRole);
+
 /** Opsi role untuk form: tanpa role sistem bagi selain Super Admin, kecuali `current` (agar labelnya tetap tampil). */
 export function roleOptionsFor(canAssignSystemRoles: boolean, current?: string) {
   if (canAssignSystemRoles) return ROLE_OPTIONS;
