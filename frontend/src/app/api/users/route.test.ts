@@ -11,12 +11,25 @@ const service = {
   resetUserEmployeePassword: vi.fn(),
 };
 const single = vi.fn();
+// Guard role sistem (system-account-guard → pg-client IAM).
+const iamDbQuery = vi.fn();
+const iamDbQueryOne = vi.fn();
+const resolveRoleIds = vi.fn();
+const iam = { superAdmin: false, holdsSystem: false };
 
 vi.mock("@/lib/api/auth", async (orig) => ({
   ...(await orig<typeof import("@/lib/api/auth")>()),
   requireIamMenuPrefix: (...a: unknown[]) => requireIamMenuPrefix(...a),
 }));
 vi.mock("@/lib/users/user-service", () => service);
+vi.mock("@/lib/iam/pg-client", () => ({
+  iamDbQuery: (...a: unknown[]) => iamDbQuery(...a),
+  iamDbQueryOne: (...a: unknown[]) => iamDbQueryOne(...a),
+}));
+vi.mock("@/lib/iam/get-user-menus", async (orig) => ({
+  ...(await orig<typeof import("@/lib/iam/get-user-menus")>()),
+  resolveRoleIds: (...a: unknown[]) => resolveRoleIds(...a),
+}));
 vi.mock("@/lib/pg/create-client", () => ({
   createPgClient: () => ({
     from: () => ({ select: () => ({ eq: () => ({ single }) }) }),
@@ -45,6 +58,16 @@ beforeEach(async () => {
   Object.values(service).forEach((fn) => fn.mockReset());
   single.mockReset();
   requireIamMenuPrefix.mockReset().mockResolvedValue({ id: "actor-1", role: "hrd" });
+  iam.superAdmin = false;
+  iam.holdsSystem = false;
+  resolveRoleIds.mockReset().mockResolvedValue(["role-1"]);
+  iamDbQuery.mockReset().mockResolvedValue([{ code: "super_admin" }, { code: "admin" }]);
+  iamDbQueryOne.mockReset().mockImplementation(async (sql: string) => {
+    if (sql.includes("hris.employees")) return { user_id: "u-9" };
+    if (sql.includes("AS held")) return { held: iam.holdsSystem };
+    if (sql.includes("code = 'super_admin'")) return { ok: iam.superAdmin };
+    return null;
+  });
 });
 
 describe("tanpa grant settings.users", () => {
@@ -199,5 +222,80 @@ describe("POST /api/users/[id]/reset-password", () => {
       tempPassword: "ArkivX!",
     });
     expect(service.resetUserEmployeePassword).toHaveBeenCalledWith("u-9");
+  });
+});
+
+describe("role sistem hanya Super Admin (temuan lanjutan EPIC-061)", () => {
+  const SYSTEM_MSG = "Role Super Admin/Admin hanya bisa diatur oleh Super Admin";
+  const withAccount = (role: string) => ({
+    ...validEmployee,
+    is_access_app: true,
+    password: "rahasia123",
+    role,
+    ...(role === "super_admin" ? {} : { business_scope: "holding", holding_id: ID }),
+  });
+  const forbidden = async (res: Response) => {
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ success: false, error: SYSTEM_MSG });
+  };
+
+  it.each(["super_admin", "admin"])("POST memberi role %s tanpa super_admin → 403, tidak menulis", async (role) => {
+    const { POST } = await import("./route");
+    await forbidden(await POST(jsonReq(withAccount(role))));
+    expect(service.createUserEmployee).not.toHaveBeenCalled();
+  });
+
+  it("POST role super_admin oleh super_admin → 201", async () => {
+    iam.superAdmin = true;
+    service.createUserEmployee.mockResolvedValue({ id: ID });
+    const { POST } = await import("./route");
+    expect((await POST(jsonReq(withAccount("super_admin")))).status).toBe(201);
+  });
+
+  it("POST role biasa tidak butuh super_admin", async () => {
+    service.createUserEmployee.mockResolvedValue({ id: ID });
+    const { POST } = await import("./route");
+    expect((await POST(jsonReq(withAccount("hrd")))).status).toBe(201);
+  });
+
+  it("PUT mempromosikan ke admin → 403", async () => {
+    const { PUT } = await import("./[id]/route");
+    await forbidden(await PUT(jsonReq({ is_access_app: true, role: "admin", business_scope: "holding", holding_id: ID }), ctx));
+    expect(service.updateUserEmployee).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["menonaktifkan", { account_status: "inactive" }],
+    ["mencabut akses", { is_access_app: false }],
+    ["mengganti email login", { email: "baru@example.com" }],
+    ["menurunkan role", { is_access_app: true, role: "hrd", business_scope: "holding", holding_id: ID }],
+  ])("PUT %s akun ber-role sistem → 403", async (_name, body) => {
+    iam.holdsSystem = true;
+    const { PUT } = await import("./[id]/route");
+    await forbidden(await PUT(jsonReq(body), ctx));
+    expect(service.updateUserEmployee).not.toHaveBeenCalled();
+  });
+
+  it("PUT data karyawan saja pada akun ber-role sistem tetap boleh", async () => {
+    iam.holdsSystem = true;
+    service.updateUserEmployee.mockResolvedValue({ id: ID });
+    const { PUT } = await import("./[id]/route");
+    expect((await PUT(jsonReq({ phone: "0812" }), ctx)).status).toBe(200);
+  });
+
+  it("PUT akun ber-role sistem oleh super_admin → 200", async () => {
+    iam.holdsSystem = true;
+    iam.superAdmin = true;
+    service.updateUserEmployee.mockResolvedValue({ id: ID });
+    const { PUT } = await import("./[id]/route");
+    expect((await PUT(jsonReq({ account_status: "inactive" }), ctx)).status).toBe(200);
+  });
+
+  it("reset password akun ber-role sistem → 403", async () => {
+    iam.holdsSystem = true;
+    single.mockResolvedValue({ data: { user_id: "u-9", is_access_app: true }, error: null });
+    const { POST } = await import("./[id]/reset-password/route");
+    await forbidden(await POST(getReq(), ctx));
+    expect(service.resetUserEmployeePassword).not.toHaveBeenCalled();
   });
 });

@@ -190,6 +190,12 @@ func (b *employeeBody) touchesAccount(create bool) bool {
 	return false
 }
 
+// touchesLogin reports whether an update reaches the linked login account:
+// an account field, or the email and name the account mirrors.
+func (b *employeeBody) touchesLogin() bool {
+	return b.touchesAccount(false) || b.has("email") || b.has("full_name")
+}
+
 func roleOf(role *string) string {
 	if role == nil {
 		return ""

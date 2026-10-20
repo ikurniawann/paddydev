@@ -24,7 +24,8 @@ import {
 import type { BusinessTree } from "@/features/configuration/business/types";
 import type { UserRole } from "@/types";
 import type { UserEmployeeFormValues } from "../types";
-import { ROLE_OPTIONS, emptyUserForm } from "../constants";
+import { useAuth } from "@/hooks/use-auth";
+import { emptyUserForm, roleOptionsFor, withAssignableRole } from "../constants";
 import { useUpdateUser } from "../mutations";
 import { BusinessScopePicker } from "./business-scope-picker";
 import { StallAssignmentPicker } from "./stall-assignment-picker";
@@ -56,12 +57,15 @@ export function CreateAccountDialog({ employee, onClose }: CreateAccountDialogPr
   const updateUser = useUpdateUser();
   const { data: businessTreeData } = useBusinessTree();
   const businessTree = businessTreeData ?? EMPTY_TREE;
+  // Role Super Admin/Admin hanya oleh super_admin (server tetap penentu).
+  const canAssignSystemRoles = useAuth().user?.role === "super_admin";
 
-  const [form, setForm] = useState<UserEmployeeFormValues>({
-    ...emptyUserForm,
-    is_access_app: true,
-    password: generatePassword(),
-  });
+  const [form, setForm] = useState<UserEmployeeFormValues>(() =>
+    withAssignableRole(
+      { ...emptyUserForm, is_access_app: true, password: generatePassword() },
+      canAssignSystemRoles
+    )
+  );
   // email login bisa disetel ulang oleh HRD / Super Admin (default email karyawan)
   const [loginEmail, setLoginEmail] = useState(employee.email);
   const [createdCredentials, setCreatedCredentials] = useState<{
@@ -219,7 +223,7 @@ export function CreateAccountDialog({ employee, onClose }: CreateAccountDialogPr
             <div>
               <label className="text-xs font-medium text-gray-600">Role</label>
               <Combobox
-                options={ROLE_OPTIONS}
+                options={roleOptionsFor(canAssignSystemRoles)}
                 value={form.role}
                 onChange={(value) =>
                   setField({

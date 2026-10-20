@@ -223,7 +223,7 @@ func archiveEmail(nip string) string {
 	return "arsip-" + clean + "@resign.invalid"
 }
 
-func (s *service) createUser(ctx context.Context, actorID string, b *employeeBody) (*employeeView, error) {
+func (s *service) createUser(ctx context.Context, actorID string, b *employeeBody, gate superAdminGate) (*employeeView, error) {
 	// Refused before the employee row is written (ruling M3).
 	if err := checkHrisRole(b, nil); err != nil {
 		return nil, err
@@ -238,6 +238,12 @@ func (s *service) createUser(ctx context.Context, actorID string, b *employeeBod
 	}
 	if owner != nil && !b.releaseEmail {
 		return nil, httpx.Conflict(emailHeldByResigned)
+	}
+	// Releasing the email reactivates the resigned employee's login account.
+	if owner != nil && owner.UserID != nil {
+		if err := s.guardSystemAccount(ctx, gate, *owner.UserID); err != nil {
+			return nil, err
+		}
 	}
 	nip := ""
 	if n := b.str("nip"); n != nil {
@@ -453,7 +459,7 @@ func (s *service) provision(ctx context.Context, actorID, employeeID string, b *
 // updateUser updates an employee; accounts false (no Manajemen User) may not
 // change the email of an employee linked to a login account, since the email
 // syncs to that account.
-func (s *service) updateUser(ctx context.Context, actorID, id string, b *employeeBody, accounts bool) (*employeeView, error) {
+func (s *service) updateUser(ctx context.Context, actorID, id string, b *employeeBody, accounts bool, gate superAdminGate) (*employeeView, error) {
 	existing, err := s.ports.Employees.Access(ctx, s.db, id)
 	if err != nil || existing == nil {
 		return nil, errEmployeeNotFound
@@ -482,6 +488,13 @@ func (s *service) updateUser(ctx context.Context, actorID, id string, b *employe
 	}
 	if err := checkHrisRole(b, prevRole); err != nil {
 		return nil, err
+	}
+	// Editing the login of a system account (role, status, access, password,
+	// or the email and name it syncs) is for super_admin only.
+	if accounts && existing.UserID != nil && b.touchesLogin() {
+		if err := s.guardSystemAccount(ctx, gate, *existing.UserID); err != nil {
+			return nil, err
+		}
 	}
 
 	patch := []Column{{"updated_at", s.stamp()}}
@@ -778,13 +791,16 @@ func (s *service) resetPassword(ctx context.Context, userID string) (*resetResul
 }
 
 // resetEmployeePassword is resetEmployeeAppPassword.
-func (s *service) resetEmployeePassword(ctx context.Context, employeeID string) (*resetResult, error) {
+func (s *service) resetEmployeePassword(ctx context.Context, employeeID string, gate superAdminGate) (*resetResult, error) {
 	e, err := s.ports.Employees.Access(ctx, s.db, employeeID)
 	if err != nil || e == nil {
 		return nil, httpx.NotFound("Employee not found")
 	}
 	if !e.IsAccessApp || e.UserID == nil {
 		return nil, httpx.BadRequest("This employee does not have app access")
+	}
+	if err := s.guardSystemAccount(ctx, gate, *e.UserID); err != nil {
+		return nil, err
 	}
 	return s.resetPassword(ctx, *e.UserID)
 }

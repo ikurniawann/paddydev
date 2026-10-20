@@ -259,7 +259,8 @@ func TestCreateAndGetUser(t *testing.T) {
 
 func TestCreateUserWithAppAccount(t *testing.T) {
 	e := settingsUsers(t)
-	if _, err := e.tx.Exec(context.Background(), `INSERT INTO iam.roles (code, name, is_system) VALUES ('super_admin', 'Super Admin', true)
+	// A non-system role: granting super_admin/admin is for IAM super_admin only (system_role_integration_test.go).
+	if _, err := e.tx.Exec(context.Background(), `INSERT INTO iam.roles (code, name) VALUES ('hrd', 'HRD')
 		ON CONFLICT (code) DO NOTHING`); err != nil {
 		t.Fatal(err)
 	}
@@ -267,7 +268,8 @@ func TestCreateUserWithAppAccount(t *testing.T) {
 	b := employeeBody(email)
 	b["is_access_app"] = true
 	b["password"] = "rahasia123"
-	b["role"] = "super_admin"
+	b["role"] = "hrd"
+	b["business_scope"], b["holding_id"] = "holding", e.holding()
 	b["approval_permissions"] = []any{
 		map[string]any{"module": "pos", "workflow": "pos_void", "approval_level": "approver", "approval_limit": "150000.50"},
 		map[string]any{"module": "hris", "workflow": "leave_request", "approval_level": "checker", "is_active": false},
@@ -278,7 +280,7 @@ func TestCreateUserWithAppAccount(t *testing.T) {
 	}
 	data := body["data"].(map[string]any)
 	acc, _ := data["appAccount"].(map[string]any)
-	if acc == nil || acc["role"] != "super_admin" || acc["status"] != "active" || acc["canSwitchStall"] != false ||
+	if acc == nil || acc["role"] != "hrd" || acc["status"] != "active" || acc["canSwitchStall"] != false ||
 		data["userId"] != acc["id"] || data["isAccessApp"] != true {
 		t.Fatalf("app account %v", data)
 	}
@@ -308,7 +310,7 @@ func TestCreateUserWithAppAccount(t *testing.T) {
 		}
 	}
 	if n := e.scalar(`SELECT count(*) FROM iam.user_roles ur JOIN iam.roles r ON r.id = ur.role_id
-  WHERE ur.user_id = $1 AND r.code = 'super_admin' AND ur.is_primary`, userID); n != int64(1) {
+  WHERE ur.user_id = $1 AND r.code = 'hrd' AND ur.is_primary`, userID); n != int64(1) {
 		t.Fatalf("iam role %v", n)
 	}
 	if n := e.scalar(`SELECT count(*) FROM configuration.admin_user_audit_logs WHERE target_user_id = $1 AND action = 'create_user'`, userID); n != int64(1) {
@@ -345,11 +347,14 @@ func TestUpdateUserProvisionsAccount(t *testing.T) {
 	_, body, _ := e.do("POST", "/api/users", employeeBody(email))
 	id := body["data"].(map[string]any)["id"].(string)
 
-	code, body, _ := e.do("PUT", "/api/users/"+id, map[string]any{"is_access_app": true, "role": "super_admin"})
+	holding := e.holding()
+	code, body, _ := e.do("PUT", "/api/users/"+id, map[string]any{"is_access_app": true, "role": "hrd",
+		"business_scope": "holding", "holding_id": holding})
 	wantError(t, code, body, 400, "Password and role are required to enable app access")
 
 	code, body, raw := e.do("PUT", "/api/users/"+id, map[string]any{
-		"phone": nil, "notes": "catatan", "is_access_app": true, "password": "rahasia123", "role": "super_admin",
+		"phone": nil, "notes": "catatan", "is_access_app": true, "password": "rahasia123", "role": "hrd",
+		"business_scope": "holding", "holding_id": holding,
 	})
 	if code != 200 {
 		t.Fatalf("provision: %d %s", code, raw)
@@ -371,11 +376,13 @@ func TestUpdateUserProvisionsAccount(t *testing.T) {
 
 func TestProvisionFailureKeepsEmployeeOnly(t *testing.T) {
 	e := settingsUsers(t)
+	holding := e.holding()
 	appUser := func(email string) map[string]any {
 		b := employeeBody(email)
 		b["is_access_app"] = true
 		b["password"] = "rahasia123"
-		b["role"] = "super_admin"
+		b["role"] = "hrd"
+		b["business_scope"], b["holding_id"] = "holding", holding
 		return b
 	}
 	assertRolledBack := func(email string) {
@@ -457,7 +464,7 @@ func TestAdminUsers(t *testing.T) {
 	e := settingsUsers(t)
 	email := uniqueEmail()
 	code, body, raw := e.do("POST", "/api/admin/users", map[string]any{
-		"email": email, "password": "rahasia123", "full_name": "Admin Baru", "role": "admin", "status": "inactive",
+		"email": email, "password": "rahasia123", "full_name": "Admin Baru", "role": "hrd", "status": "inactive",
 	})
 	if code != 201 || body["message"] != "User berhasil dibuat" {
 		t.Fatalf("create: %d %s", code, raw)
@@ -520,7 +527,7 @@ func TestAdminUsers(t *testing.T) {
 
 	// The duplicate email fails inside the auth insert: 400 with PostgreSQL's message.
 	code, body, _ = e.do("POST", "/api/admin/users", map[string]any{
-		"email": email, "password": "rahasia123", "full_name": "Admin Dua", "role": "admin",
+		"email": email, "password": "rahasia123", "full_name": "Admin Dua", "role": "hrd",
 	})
 	wantError(t, code, body, 400, `duplicate key value violates unique constraint "users_email_key"`)
 }

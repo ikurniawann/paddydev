@@ -25,7 +25,7 @@ import {
   type UserEmployeeFormValues,
 } from "@/lib/hris/users-form";
 import type { CreateUserEmployeeInput, UserEmployeeItem } from "../types";
-import { EMPLOYEES_ROUTES, emptyUserForm } from "../constants";
+import { EMPLOYEES_ROUTES, emptyUserForm, withAssignableRole } from "../constants";
 import { useCreateUser, useUpdateUser } from "../mutations";
 import { fetchEmailOwner } from "../api";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -70,14 +70,18 @@ function UserEmployeeForm({
   const canManageAccounts = useIamAccess().hasPrefix(IAM.settingsUsers);
   // Role HRIS (EPIC-061): server menolak key hris_role dari selain super_admin.
   const canSetHrisRole = useAuth().user?.role === "super_admin";
+  // Role sistem (Super Admin/Admin) juga hanya oleh super_admin; server tetap penentu.
+  const canAssignSystemRoles = canSetHrisRole;
   const { data: businessTree = EMPTY_TREE } = useBusinessTree(canManageAccounts);
   const { data: lookups } = useUserFormLookups();
   const createMutation = useCreateUser();
   const updateMutation = useUpdateUser();
 
-  const [form, setForm] = useState<UserEmployeeFormValues>(() =>
-    detail ? userFormFromItem(detail) : emptyUserForm
-  );
+  const [form, setForm] = useState<UserEmployeeFormValues>(() => {
+    const initial = detail ? userFormFromItem(detail) : emptyUserForm;
+    // Akun baru: role sistem bawaan dikosongkan bagi selain super_admin.
+    return detail?.userId ? initial : withAssignableRole(initial, canAssignSystemRoles);
+  });
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const [releasePrompt, setReleasePrompt] = useState<string | null>(null);
 
@@ -179,6 +183,7 @@ function UserEmployeeForm({
                 isEdit={isEdit}
                 hasExistingAppAccount={hasExistingAppAccount}
                 canSetHrisRole={canSetHrisRole}
+                canAssignSystemRoles={canAssignSystemRoles}
                 onChange={setField}
                 onResetPassword={
                   isEdit && hasExistingAppAccount ? () => setResetDialogOpen(true) : undefined
