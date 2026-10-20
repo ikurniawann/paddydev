@@ -79,3 +79,19 @@ func TestLateTierUsesFourComponentThp(t *testing.T) {
 	}), c)
 	eq(t, "1 hari THP 4 komponen", r.LateDeduction, 140_000)
 }
+
+// Upah harian: BaseSalary adalah upah per hari, jadi 1 hari THP = 1 upah harian
+// + (transport + makan + jabatan)/pembagi (EPIC-059 R5).
+func TestLateTierDailyUsesDayWage(t *testing.T) {
+	c := DefaultConfig()
+	c.LateMode, c.LateMinMinutes = "tier", 1
+	c.LateTiers = []LateTier{{Min: 1, Days: 1, Basis: "thp"}}
+	r := Calculate(base4(func(in *Input) {
+		in.PayBasis = "daily"
+		in.BaseSalary, in.DivisorDays = 100_000, 26
+		in.TransportAllowance, in.MealAllowance, in.PositionAllowance = 260_000, 260_000, 260_000
+		in.AttendanceDays, in.AllowanceDays, in.PaidDays = 20, 20, 20
+		in.LateDayMinutes = []float64{30}
+	}), c)
+	eq(t, "1 hari upah harian + 3 tunjangan/26", r.LateDeduction, 130_000)
+}

@@ -399,7 +399,12 @@ func Calculate(in Input, c Config) Result {
 	if c.LateMode == "tier" {
 		days, basis := LateTierDays(countLateDays(in.LateDayMinutes, c.LateMinMinutes), c.LateTiers)
 		if basis == "thp" {
-			late = Round(perDay(ThpDayBasis(in), days))
+			if in.PayBasis == "daily" {
+				// BaseSalary is the daily wage here: one day = wage + allowances/divisor.
+				late = Round(dayWage*days + perDay(in.TransportAllowance+in.MealAllowance+in.PositionAllowance, days))
+			} else {
+				late = Round(perDay(ThpDayBasis(in), days))
+			}
 		} else {
 			late = Round(dayWage * days)
 		}
