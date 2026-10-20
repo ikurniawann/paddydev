@@ -198,7 +198,11 @@ func (h handlers) impersonate(w http.ResponseWriter, r *http.Request) error {
 	if v, ok := r.Header["User-Agent"]; ok && len(v) > 0 {
 		ua = v[0]
 	}
-	target, session, err := h.svc.Impersonate(r.Context(), admin, *userID, ua)
+	tokenHash := ""
+	if token := auth.ReadSessionToken(r); token != "" {
+		tokenHash = auth.HashToken(token)
+	}
+	target, session, err := h.svc.Impersonate(r.Context(), admin, tokenHash, *userID, ua)
 	if err != nil {
 		return err
 	}

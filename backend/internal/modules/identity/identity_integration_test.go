@@ -436,3 +436,46 @@ func TestScope(t *testing.T) {
 		t.Fatalf("%d %s", rec.Code, rec.Body.String())
 	}
 }
+
+// TestImpersonateSystemAccounts: Login As into an account holding a system
+// role (super_admin/admin, as app role or IAM role) is for IAM super_admin
+// only, and never from inside a Login As session (temuan EPIC-061).
+func TestImpersonateSystemAccounts(t *testing.T) {
+	testutil.RequireSeededIAM(t, testutil.IAMBaseline{GrantedRoles: []string{"super_admin"}, Menus: []string{"settings.users"}})
+	deps, mux := newModule(t)
+	const sysMsg = `{"success":false,"error":"Login As ke akun Super Admin/Admin hanya untuk Super Admin"}`
+	hrd := testutil.CreateStaff(t, testutil.StaffOptions{Role: "hrd", Menus: map[string][]string{"settings.users": nil}})
+	superCaller := testutil.CreateStaff(t, testutil.StaffOptions{Role: "super_admin"})
+	adminTarget := testutil.CreateStaff(t, testutil.StaffOptions{Role: "admin"})
+	iamSuper := testutil.CreateStaff(t, testutil.StaffOptions{Role: "hrd"})
+	exec(t, deps, `INSERT INTO iam.user_roles (user_id, role_id, is_primary) SELECT $1, id, true FROM iam.roles WHERE code = 'super_admin'`, iamSuper.UserID)
+	employee := testutil.CreateStaff(t, testutil.StaffOptions{Role: "pos", FullName: "Karyawan Biasa"})
+
+	post := func(as testutil.Staff, target string) (int, string) {
+		rec, _ := testutil.Do(t, mux, testutil.AsStaff(testutil.Request("POST", "/api/auth/impersonate", map[string]any{"user_id": target}), as))
+		return rec.Code, rec.Body.String()
+	}
+	for _, target := range []testutil.Staff{adminTarget, iamSuper} {
+		if status, body := post(hrd, target.UserID); status != 403 || body != sysMsg {
+			t.Errorf("hrd → %s: %d %s", target.Role, status, body)
+		}
+	}
+	if n := count(t, deps, `SELECT count(*) FROM auth.sessions WHERE user_agent LIKE 'impersonated-by:%' AND user_id = ANY($1)`,
+		[]string{adminTarget.UserID, iamSuper.UserID}); n != 0 {
+		t.Fatalf("refused Login As created %d sessions", n)
+	}
+	if status, body := post(hrd, employee.UserID); status != 200 {
+		t.Fatalf("hrd → employee: %d %s", status, body)
+	}
+	if status, body := post(superCaller, adminTarget.UserID); status != 200 {
+		t.Fatalf("super_admin → admin: %d %s", status, body)
+	}
+
+	// Inside a Login As session no further Login As.
+	exec(t, deps, `UPDATE auth.sessions SET user_agent = 'impersonated-by:' || $2 || ' Mozilla/5.0' WHERE token_hash = $1`,
+		auth.HashToken(superCaller.Token), superCaller.UserID)
+	status, body := post(superCaller, employee.UserID)
+	if status != 403 || body != `{"success":false,"error":"Tidak bisa Login As dari sesi Login As; keluar lalu masuk dengan akun sendiri"}` {
+		t.Fatalf("chained Login As: %d %s", status, body)
+	}
+}

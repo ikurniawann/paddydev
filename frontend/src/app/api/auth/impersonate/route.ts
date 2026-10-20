@@ -2,22 +2,35 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { ApiError, validateBody, requireIamMenuPrefix } from "@/lib/api/auth";
 import { IAM } from "@/lib/iam/prefixes";
-import { createSession, setSessionCookie } from "@/lib/auth/session";
+import { createSession, isImpersonationSession, setSessionCookie } from "@/lib/auth/session";
+import { readSessionToken } from "@/lib/auth/constants";
 import { queryOne } from "@/lib/db";
+import { requireIamSuperAdmin } from "@/lib/iam/system-role-guard";
+import { accountHoldsSystemRole, systemRoleCodes } from "@/lib/users/system-account-guard";
+
+const SYSTEM_IMPERSONATE_ERROR = "Login As ke akun Super Admin/Admin hanya untuk Super Admin";
+const NESTED_IMPERSONATE_ERROR = "Tidak bisa Login As dari sesi Login As; keluar lalu masuk dengan akun sendiri";
 
 const impersonateSchema = z.object({
   user_id: z.string().uuid(),
 });
 
 /**
- * Login As (impersonation) — khusus super_admin. Mengganti session cookie
- * dengan session baru milik user target, sehingga super admin masuk sebagai
- * user tersebut. Kembali ke akun sendiri dengan logout lalu login ulang.
+ * Login As (impersonation) — pemegang menu Manajemen User. Mengganti session
+ * cookie dengan session baru milik user target. Kembali ke akun sendiri dengan
+ * logout lalu login ulang. Akun ber-role sistem (super_admin/admin sebagai role
+ * aplikasi atau IAM) hanya oleh pemegang role IAM super_admin, dan tidak dari
+ * dalam sesi Login As — sama dengan Go identity.Impersonate (temuan EPIC-061).
  */
 export async function POST(request: NextRequest) {
   try {
     const admin = await requireIamMenuPrefix(IAM.settingsUsers);
     const { user_id } = await validateBody(request, impersonateSchema);
+
+    const currentToken = readSessionToken(request.cookies);
+    if (currentToken && (await isImpersonationSession(currentToken))) {
+      throw ApiError.forbidden(NESTED_IMPERSONATE_ERROR);
+    }
 
     if (user_id === admin.id) {
       throw ApiError.badRequest("You are already logged in as this account");
@@ -42,6 +55,9 @@ export async function POST(request: NextRequest) {
     if (target.is_banned) throw ApiError.badRequest("User account is banned");
     if (target.role === "super_admin") {
       throw ApiError.forbidden("Cannot impersonate a super admin account");
+    }
+    if (await accountHoldsSystemRole(target.id, await systemRoleCodes())) {
+      await requireIamSuperAdmin(admin, SYSTEM_IMPERSONATE_ERROR);
     }
 
     const { token, expiresAt } = await createSession(target.id, {

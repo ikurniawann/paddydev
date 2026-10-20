@@ -76,6 +76,11 @@ type Repository interface {
 	// ImpersonationTarget returns nil when the id has no auth.users plus
 	// configuration.users pair.
 	ImpersonationTarget(ctx context.Context, userID string) (*Target, error)
+	// HoldsSystemRole: the account holds super_admin/admin (or another
+	// iam.roles is_system role) as app role or IAM role.
+	HoldsSystemRole(ctx context.Context, userID string) (bool, error)
+	// IsImpersonationSession: the session row was created by Login As.
+	IsImpersonationSession(ctx context.Context, tokenHash string) (bool, error)
 	Scope(ctx context.Context, userID string) (*scope.Scope, error)
 }
 
@@ -95,6 +100,7 @@ type Sessions interface {
 	Session(r *http.Request) (*auth.SessionUser, error)
 	RequireUser(r *http.Request) (*auth.User, error)
 	RequireMenuPrefix(r *http.Request, prefixes ...string) (*auth.User, error)
+	HasRoleCode(ctx context.Context, u *auth.User, code string) (bool, error)
 }
 
 // Service holds the use cases.
@@ -337,6 +343,11 @@ func (s *Service) ChangePassword(ctx context.Context, userID, current, next stri
 
 // ── impersonate ──────────────────────────────────────────────────────────
 
+var (
+	errSystemImpersonation = httpx.Forbidden("Login As ke akun Super Admin/Admin hanya untuk Super Admin")
+	errNestedImpersonation = httpx.Forbidden("Tidak bisa Login As dari sesi Login As; keluar lalu masuk dengan akun sendiri")
+)
+
 // Impersonated is the data of POST /api/auth/impersonate.
 type Impersonated struct {
 	ID       string  `json:"id"`
@@ -346,10 +357,22 @@ type Impersonated struct {
 }
 
 // Impersonate mirrors POST /api/auth/impersonate ("Login As"): never the
-// caller's own account, a missing or banned account, or a super admin. The
-// new session's user agent records the admin ("impersonated-by:<id> <ua>"),
-// which is the only trail the TS route leaves.
-func (s *Service) Impersonate(ctx context.Context, admin *auth.User, targetID string, userAgent string) (*Impersonated, *Session, error) {
+// caller's own account, a missing or banned account, or a super admin, and
+// never from inside a Login As session. An account holding a system role
+// (super_admin/admin as app or IAM role) is for IAM super_admin callers
+// only (EPIC-061). The new session's user agent records the admin
+// ("impersonated-by:<id> <ua>"), which is the only trail the TS route leaves.
+// sessionTokenHash is the caller's session (empty when none).
+func (s *Service) Impersonate(ctx context.Context, admin *auth.User, sessionTokenHash, targetID string, userAgent string) (*Impersonated, *Session, error) {
+	if sessionTokenHash != "" {
+		nested, err := s.repo.IsImpersonationSession(ctx, sessionTokenHash)
+		if err != nil {
+			return nil, nil, err
+		}
+		if nested {
+			return nil, nil, errNestedImpersonation
+		}
+	}
 	if targetID == admin.ID {
 		return nil, nil, httpx.BadRequest("You are already logged in as this account")
 	}
@@ -365,6 +388,19 @@ func (s *Service) Impersonate(ctx context.Context, admin *auth.User, targetID st
 	}
 	if target.Role != nil && *target.Role == "super_admin" {
 		return nil, nil, httpx.Forbidden("Cannot impersonate a super admin account")
+	}
+	system, err := s.repo.HoldsSystemRole(ctx, target.ID)
+	if err != nil {
+		return nil, nil, err
+	}
+	if system {
+		super, err := s.sessions.HasRoleCode(ctx, admin, "super_admin")
+		if err != nil {
+			return nil, nil, err
+		}
+		if !super {
+			return nil, nil, errSystemImpersonation
+		}
 	}
 	ua := validate.JSTrim("impersonated-by:" + admin.ID + " " + userAgent)
 	session, err := s.createSession(ctx, target.ID, &ua)

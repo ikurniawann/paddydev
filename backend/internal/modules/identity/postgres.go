@@ -6,6 +6,7 @@ import (
 
 	"nuhabit/backend/internal/modules/identity/domain"
 	"nuhabit/backend/internal/platform/database"
+	"nuhabit/backend/internal/platform/permaudit"
 	"nuhabit/backend/internal/platform/scope"
 )
 
@@ -127,6 +128,20 @@ func (p *Postgres) ImpersonationTarget(ctx context.Context, userID string) (*Tar
 		return nil, err
 	}
 	return &t, nil
+}
+
+// HoldsSystemRole is permaudit.HoldsSystemRole.
+func (p *Postgres) HoldsSystemRole(ctx context.Context, userID string) (bool, error) {
+	return permaudit.HoldsSystemRole(ctx, p.db, userID)
+}
+
+// IsImpersonationSession: the session's user agent carries the Login As
+// marker ("impersonated-by:<id> <ua>").
+func (p *Postgres) IsImpersonationSession(ctx context.Context, tokenHash string) (bool, error) {
+	var nested bool
+	err := p.db.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM auth.sessions WHERE token_hash = $1 AND user_agent LIKE 'impersonated-by:%')`,
+		tokenHash).Scan(&nested)
+	return nested, err
 }
 
 // Scope is getApiUserScope's profile read.
