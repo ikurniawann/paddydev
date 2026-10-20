@@ -41,17 +41,25 @@ func shiftIDByCode(ctx context.Context, q database.Querier, code string) (string
 
 // applyFixedSchedule clears per-date schedules from `from` on and saves the
 // fixed weekly pattern from `from`; it returns the cleared per-date rows.
-func applyFixedSchedule(ctx context.Context, r Repository, employeeID, from, actorName string) (int, error) {
+// Clearing rows needs the clear guard and is audited (EPIC-061).
+func applyFixedSchedule(ctx context.Context, r Repository, employeeID, from string, actor *auth.User, g clearGuard) (int, error) {
 	q := r.querier()
 	tag, err := q.Exec(ctx, `DELETE FROM hris.employee_shift_days WHERE employee_id = $1 AND work_date >= $2::date`, employeeID, from)
 	if err != nil {
+		return 0, err
+	}
+	n := int(tag.RowsAffected())
+	if err := g.check(n); err != nil {
+		return 0, err
+	}
+	if err := g.audit(ctx, q, actor, "hris.schedule.clear", employeeID, map[string]any{"cleared_days": n, "from": from}, n); err != nil {
 		return 0, err
 	}
 	ns, err := shiftIDByCode(ctx, q, "NS")
 	if err != nil {
 		return 0, err
 	}
-	return int(tag.RowsAffected()), r.SaveShiftPattern(ctx, employeeID, from, fixedPatternDays(ns), actorName)
+	return n, r.SaveShiftPattern(ctx, employeeID, from, fixedPatternDays(ns), actor.FullName)
 }
 
 // stopWeeklyPattern ends running weekly rows the day before `from` and
@@ -115,7 +123,7 @@ func (s *Service) checkScheduleFrom(ctx context.Context, from string) error {
 	return s.ensureAttendanceOpen(ctx, from)
 }
 
-func (s *Service) ChangeScheduleType(ctx context.Context, actor *auth.User, ids []string, to, from string, dryRun bool) (*scheduleTypeResult, error) {
+func (s *Service) ChangeScheduleType(ctx context.Context, actor *auth.User, ids []string, to, from string, dryRun bool, g clearGuard) (*scheduleTypeResult, error) {
 	if to != scheduleShift && to != scheduleNonShift {
 		return nil, httpx.BadRequest("Tipe jadwal harus Shift atau Non-Shift")
 	}
@@ -125,7 +133,7 @@ func (s *Service) ChangeScheduleType(ctx context.Context, actor *auth.User, ids 
 	var res *scheduleTypeResult
 	err := s.repo.InTx(ctx, func(r Repository) error {
 		var err error
-		res, err = changeScheduleTypeTx(ctx, r, actor, ids, to, from, dryRun)
+		res, err = changeScheduleTypeTx(ctx, r, actor, ids, to, from, dryRun, g)
 		return err
 	})
 	return res, err
@@ -139,7 +147,7 @@ func namePrefix(n int, name string) string {
 	return ""
 }
 
-func (s *Service) ApplyFixedSchedule(ctx context.Context, actor *auth.User, branchID string, ids []string, from string) (*scheduleTypeResult, error) {
+func (s *Service) ApplyFixedSchedule(ctx context.Context, actor *auth.User, branchID string, ids []string, from string, g clearGuard) (*scheduleTypeResult, error) {
 	if err := s.checkScheduleFrom(ctx, from); err != nil {
 		return nil, err
 	}
@@ -177,7 +185,7 @@ func (s *Service) ApplyFixedSchedule(ctx context.Context, actor *auth.User, bran
 			}
 		}
 		for _, t := range targets {
-			n, err := applyFixedSchedule(ctx, r, t.ID, from, actor.FullName)
+			n, err := applyFixedSchedule(ctx, r, t.ID, from, actor, g)
 			if err != nil {
 				return err
 			}
@@ -200,6 +208,7 @@ type scheduleTypeBody struct {
 	to     string
 	from   string
 	dryRun bool
+	reason string
 }
 
 func readScheduleTypeBody(r *http.Request, bulk bool) (scheduleTypeBody, error) {
@@ -210,6 +219,7 @@ func readScheduleTypeBody(r *http.Request, bulk bool) (scheduleTypeBody, error) 
 	var b scheduleTypeBody
 	b.to = strOr(f.Enum("schedule_type", validate.Rule{}, []string{scheduleShift, scheduleNonShift}))
 	b.from = strOr(reqStr(f, "effective_from", "Tanggal mulai wajib diisi (YYYY-MM-DD)", validate.StrOpts{Check: matches(domain.DateRe, "Tanggal mulai wajib diisi (YYYY-MM-DD)")}))
+	b.reason = strOr(f.Str("reason", optional, validate.StrOpts{}))
 	if bulk {
 		b.ids = f.Strings("employee_ids", validate.Rule{}, 1000, validate.StrOpts{Check: validate.UUIDCheck})
 		if v := f.Bool("dry_run", optional); v != nil {
@@ -250,7 +260,11 @@ func (h handlers) putScheduleType(w http.ResponseWriter, r *http.Request, u *aut
 	if err != nil {
 		return err
 	}
-	res, err := h.svc.ChangeScheduleType(r.Context(), u, []string{id}, b.to, b.from, false)
+	g, err := h.clearGuardFor(r, u, b.reason)
+	if err != nil {
+		return err
+	}
+	res, err := h.svc.ChangeScheduleType(r.Context(), u, []string{id}, b.to, b.from, false, g)
 	if err != nil {
 		return err
 	}
@@ -262,7 +276,11 @@ func (h handlers) bulkScheduleType(w http.ResponseWriter, r *http.Request, u *au
 	if err != nil {
 		return err
 	}
-	res, err := h.svc.ChangeScheduleType(r.Context(), u, b.ids, b.to, b.from, b.dryRun)
+	g, err := h.clearGuardFor(r, u, b.reason)
+	if err != nil {
+		return err
+	}
+	res, err := h.svc.ChangeScheduleType(r.Context(), u, b.ids, b.to, b.from, b.dryRun, g)
 	if err != nil {
 		return err
 	}
@@ -277,13 +295,18 @@ func (h handlers) applyFixedSchedule(w http.ResponseWriter, r *http.Request, u *
 	branch := f.UUID("branch_id", nullish)
 	ids := f.Strings("employee_ids", optional, 1000, validate.StrOpts{Check: validate.UUIDCheck})
 	from := strOr(reqStr(f, "effective_from", "Tanggal mulai wajib diisi (YYYY-MM-DD)", validate.StrOpts{Check: matches(domain.DateRe, "Tanggal mulai wajib diisi (YYYY-MM-DD)")}))
+	reason := strOr(f.Str("reason", optional, validate.StrOpts{}))
 	if branch == nil && len(ids) == 0 {
 		f.Fail("branch_id", "custom", "Pilih cabang atau karyawan")
 	}
 	if err := formErr(f, ""); err != nil {
 		return err
 	}
-	res, err := h.svc.ApplyFixedSchedule(r.Context(), u, strOr(branch), ids, from)
+	g, err := h.clearGuardFor(r, u, reason)
+	if err != nil {
+		return err
+	}
+	res, err := h.svc.ApplyFixedSchedule(r.Context(), u, strOr(branch), ids, from, g)
 	if err != nil {
 		return err
 	}
@@ -292,7 +315,7 @@ func (h handlers) applyFixedSchedule(w http.ResponseWriter, r *http.Request, u *
 
 // changeScheduleTypeTx is ChangeScheduleType on r (callers own the
 // transaction and the from-date check); the import reuses it.
-func changeScheduleTypeTx(ctx context.Context, r Repository, actor *auth.User, ids []string, to, from string, dryRun bool) (*scheduleTypeResult, error) {
+func changeScheduleTypeTx(ctx context.Context, r Repository, actor *auth.User, ids []string, to, from string, dryRun bool, g clearGuard) (*scheduleTypeResult, error) {
 	res := &scheduleTypeResult{Warnings: []string{}}
 	q := r.querier()
 	targets, err := loadScheduleTargets(ctx, q, ids)
@@ -315,7 +338,7 @@ func changeScheduleTypeTx(ctx context.Context, r Repository, actor *auth.User, i
 			continue
 		}
 		if to == scheduleNonShift {
-			n, err := applyFixedSchedule(ctx, r, t.ID, from, actor.FullName)
+			n, err := applyFixedSchedule(ctx, r, t.ID, from, actor, g)
 			if err != nil {
 				return nil, err
 			}

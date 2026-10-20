@@ -573,6 +573,7 @@ type scheduleImportInput struct {
 	Step               string // preview | commit | error_file
 	Fingerprint        string
 	AckWarnings        bool
+	Guard              clearGuard
 }
 
 const maxScheduleChanges = 500
@@ -635,9 +636,13 @@ func (s *Service) ImportSchedule(ctx context.Context, actor *auth.User, in sched
 		if err != nil {
 			return err
 		}
+		replaced, err := replacedScheduleDays(ctx, q, res.Assignments)
+		if err != nil {
+			return err
+		}
 		if in.Step != "commit" {
 			out = map[string]any{"summary": summary, "errors": res.Errors, "warnings": res.Warnings,
-				"fingerprint": fp, "changes": changes}
+				"fingerprint": fp, "changes": changes, "replaced_days": replaced}
 			return nil
 		}
 		switch {
@@ -647,6 +652,9 @@ func (s *Service) ImportSchedule(ctx context.Context, actor *auth.User, in sched
 			return httpx.BadRequest(`Centang "Saya sudah memeriksa peringatan" sebelum menyimpan`)
 		case fp != in.Fingerprint:
 			return httpx.Conflict("Jadwal sudah diubah orang lain sejak preview — unggah ulang file")
+		}
+		if err := in.Guard.check(replaced); err != nil {
+			return err
 		}
 		var batch string
 		if err := q.QueryRow(ctx, `SELECT gen_random_uuid()::text`).Scan(&batch); err != nil {
@@ -672,6 +680,10 @@ func (s *Service) ImportSchedule(ctx context.Context, actor *auth.User, in sched
 				"branch": rng.Branch.Name, "from": rng.from(), "to": rng.to(), "batch_id": batch, "days": days[id]}); err != nil {
 				return err
 			}
+		}
+		if err := in.Guard.audit(ctx, q, actor, "hris.schedule.replace", batch, map[string]any{
+			"replaced_days": replaced, "branch": rng.Branch.Name, "from": rng.from(), "to": rng.to()}, replaced); err != nil {
+			return err
 		}
 		out = map[string]any{"summary": summary, "message": fmt.Sprintf("Jadwal %d karyawan disimpan (%s–%s)",
 			len(res.EmployeeIDs), domain.FormatDateID(rng.from()), domain.FormatDateID(rng.to()))}
@@ -770,10 +782,14 @@ func (h handlers) importSchedules(w http.ResponseWriter, r *http.Request, u *aut
 	if err != nil {
 		return err
 	}
+	g, err := h.clearGuardFor(r, u, strings.TrimSpace(r.FormValue("reason")))
+	if err != nil {
+		return err
+	}
 	in := scheduleImportInput{
 		BranchID: r.FormValue("branch_id"), From: r.FormValue("from"), To: r.FormValue("to"),
 		Data: data, FileName: header.Filename, Step: r.FormValue("step"),
-		Fingerprint: r.FormValue("fingerprint"), AckWarnings: r.FormValue("ack_warnings") == "true",
+		Fingerprint: r.FormValue("fingerprint"), AckWarnings: r.FormValue("ack_warnings") == "true", Guard: g,
 	}
 	out, errFile, err := h.svc.ImportSchedule(r.Context(), u, in)
 	if err != nil {

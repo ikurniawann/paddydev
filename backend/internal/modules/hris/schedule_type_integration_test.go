@@ -25,7 +25,7 @@ func TestScheduleTypeToNonShiftClearsFutureDays(t *testing.T) {
 	}
 
 	c := h.do(&hr, http.MethodPut, "/api/hris/employees/"+e+"/schedule-type", map[string]any{
-		"schedule_type": "non_shift", "effective_from": "2026-10-06"})
+		"schedule_type": "non_shift", "effective_from": "2026-10-06", "reason": "Pindah ke jadwal tetap kantor"})
 	expect(t, c, http.StatusOK, "")
 	if h.scalar(`SELECT schedule_type FROM hris.employees WHERE id = $1`, e) != "non_shift" {
 		t.Fatal("type not changed")

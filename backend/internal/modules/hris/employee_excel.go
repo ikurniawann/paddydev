@@ -322,6 +322,7 @@ type employeeImportInput struct {
 	Mode          string // add | replace
 	Step          string // preview | commit | error_file
 	ReleaseEmails bool
+	Guard         clearGuard
 }
 
 type employeeImportChange struct {
@@ -554,7 +555,7 @@ func (s *Service) ImportEmployees(ctx context.Context, actor *auth.User, in empl
 			}
 		}
 		for _, p := range plans {
-			if err := s.applyImportRow(ctx, r, actor, p.row, p.id, p.before, p.branch, today); err != nil {
+			if err := s.applyImportRow(ctx, r, actor, p.row, p.id, p.before, p.branch, today, in.Guard); err != nil {
 				return err
 			}
 		}
@@ -567,7 +568,7 @@ func (s *Service) ImportEmployees(ctx context.Context, actor *auth.User, in empl
 
 // applyImportRow writes one validated row inside the import transaction.
 func (s *Service) applyImportRow(ctx context.Context, r Repository, actor *auth.User, row domain.EmployeeImportRow,
-	id string, before map[string]any, branch, today string) error {
+	id string, before map[string]any, branch, today string, g clearGuard) error {
 	q := r.querier()
 	set := map[string]any{}
 	for k, v := range row.Set {
@@ -615,7 +616,7 @@ func (s *Service) applyImportRow(ctx context.Context, r Repository, actor *auth.
 			return importRowError(row.Line, err)
 		}
 		if scheduleTo == scheduleNonShift {
-			if _, err := applyFixedSchedule(ctx, r, id, today, actor.FullName); err != nil {
+			if _, err := applyFixedSchedule(ctx, r, id, today, actor, g); err != nil {
 				return err
 			}
 		}
@@ -632,7 +633,7 @@ func (s *Service) applyImportRow(ctx context.Context, r Repository, actor *auth.
 			}
 		}
 		if scheduleTo != "" {
-			if _, err := changeScheduleTypeTx(ctx, r, actor, []string{id}, scheduleTo, today, false); err != nil {
+			if _, err := changeScheduleTypeTx(ctx, r, actor, []string{id}, scheduleTo, today, false, g); err != nil {
 				return err
 			}
 		}
@@ -713,8 +714,18 @@ func (h handlers) importEmployees(w http.ResponseWriter, r *http.Request, u *aut
 	if len(data) > 5<<20 {
 		return httpx.BadRequest("Ukuran file maksimal 5 MB")
 	}
+	// Ruling R4: an import that clears per-date days needs "delete" on Jadwal
+	// Kerja; without a reason from the form the file name is the reason.
+	reason := strings.TrimSpace(r.FormValue("reason"))
+	if reason == "" {
+		reason = "Impor data karyawan: " + header.Filename
+	}
+	g, err := h.clearGuardFor(r, u, reason)
+	if err != nil {
+		return err
+	}
 	in := employeeImportInput{Data: data, FileName: header.Filename, Mode: r.FormValue("mode"), Step: r.FormValue("step"),
-		ReleaseEmails: r.FormValue("release_emails") == "true"}
+		ReleaseEmails: r.FormValue("release_emails") == "true", Guard: g}
 	out, errFile, err := h.svc.ImportEmployees(r.Context(), u, in)
 	if err != nil {
 		return err
