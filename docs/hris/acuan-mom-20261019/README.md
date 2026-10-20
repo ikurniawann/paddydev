@@ -7,6 +7,7 @@ Sumber kebenaran aturan HRIS Paddy (cuti/izin, approval, payroll, kasbon, absens
 | [status-requirement.md](status-requirement.md) | Status 31 requirement ES/AP/PY/KP/AB/LA terhadap kode & data live, dengan bukti dan langkah berikutnya |
 | [aturan-payroll.md](aturan-payroll.md) | Tabel payslip Paddy baris per baris dibandingkan dengan kalkulator Go, plus setting live yang harus benar |
 | [matriks-approval.md](matriks-approval.md) | Matriks approval MOM §4.2, ringkasan org chart, masalah data `reporting_to` |
+| [role-hak-akses.md](role-hak-akses.md) | Analisis RA-01..03 (hak hapus, akses per akun, AdminHRIS) dengan pertanyaan Q-RA-1..8 dan rekomendasi |
 | [pertanyaan-rekomendasi.md](pertanyaan-rekomendasi.md) | Pertanyaan terbuka (K-n MOM + baru) dengan rekomendasi, dan urutan eksekusi |
 
 **Sumber asli (di luar repo):** PDF `20261019_-_MOM_WIT_for_Paddy_HRIS_-_R0.pdf`, `Org_Chart_Paddy_2026_-_Draft_5.xlsx`, dan tabel payslip (gambar), dikirim user 20-10-2026.
