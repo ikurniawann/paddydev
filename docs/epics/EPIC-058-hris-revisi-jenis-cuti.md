@@ -90,3 +90,7 @@ Dijawab user 20-10-2026: "lakukan sesuai rekomen". Semua dari 12 pertanyaan mema
   - Live: backup `~/Desktop/paddydev-backups/paddydev-db-before-positions-level-20261020-152906.dump`, lalu `UPDATE 41` COMMIT. Hasilnya, karyawan aktif yang berhak Izin Leader: Supervisor 20, Manager 9, Assistant Manager 1, General Manager 1, C-Level 1 (total 32). 17 jabatan Coordinator/Lead/Art Director tetap Staff. Pratinjau ulang: 0 baris tersisa.
   - Catatan: karyawan uji "QA Dimas Dua Entitas" masih aktif di live sebagai Store Manager.
   - Level jabatan juga tampil di lowongan dan PDF CV rekrutmen (kosmetik).
+- 2026-10-20: **Keputusan user, intern:** "Izin Pribadi tetap kuota 3x per bulan tapi tidak memotong THP (PIP dikecualikan untuk status intern). Tunjangan per hari ikut aturan yang ada."
+  - Live (read-only): 8 karyawan aktif berstatus `intern`; setting PIP menyala; intern belum punya riwayat cuti.
+  - Status Magang punya dua kode: `intern` (master live) dan `internship` (promosi rekrutmen). Keduanya dikecualikan.
+  - Rencana amandemen: `docs/superpowers/plans/2026-10-20-intern-izin-pribadi-tanpa-pip.md` (4 task). **Deploy EPIC-058 menunggu amandemen ini selesai.**
