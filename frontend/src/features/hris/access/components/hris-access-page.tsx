@@ -9,7 +9,10 @@ import { fetchHrisAccess, fetchPermissionAudit, saveHrisAccount, saveHrisRoleAcc
 import { hrisAccessQueryKeys } from "../query-keys";
 import type { HrisAccessChange, HrisAccessMenu, HrisAccessRole, HrisAccessView, PermissionAuditRow } from "../types";
 
-const SOURCE_LABEL: Record<PermissionAuditRow["source"], string> = {
+// admin_hris adalah sumber role HR turunan: perubahannya ikut ke semua role hris_* lewat sync.
+const ADMIN_HRIS = "admin_hris";
+
+const SOURCE_LABEL:Record<PermissionAuditRow["source"], string> = {
   role_permissions: "Role Management",
   hris_access: "Hak Akses HRIS",
   hris_mask: "Masker role HRIS",
@@ -122,9 +125,18 @@ export function HrisAccessPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Menu</TableHead>
-                  {data.roles.map((role) => (
-                    <TableHead key={role.code}>{role.name}</TableHead>
-                  ))}
+                  {data.roles.map((role) =>
+                    role.code === ADMIN_HRIS ? (
+                      <TableHead key={role.code} className="align-bottom">
+                        {role.name} (sumber)
+                        <span className="block text-xs font-normal text-gray-500">
+                          Perubahan di kolom ini berlaku untuk semua role HR
+                        </span>
+                      </TableHead>
+                    ) : (
+                      <TableHead key={role.code}>{role.name}</TableHead>
+                    )
+                  )}
                 </TableRow>
               </TableHeader>
               <TableBody>

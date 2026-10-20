@@ -202,3 +202,54 @@ func TestHrisAccessEnableKeepsDeleteReduction(t *testing.T) {
 		t.Fatalf("payroll after re-sending access = %s, want delete kept", got)
 	}
 }
+
+// Turning an admin_hris group off and on again restores the grants it had
+// (ruling #4); the derived roles follow after the sync.
+func TestHrisAccessAdminHrisReenableRestores(t *testing.T) {
+	manager := hrisManager(t)
+	mux, text := setup(t)
+	grant := func(role, menu string) string {
+		return text(`SELECT coalesce((SELECT p.granted_actions::text FROM iam.role_menu_permissions p
+			JOIN iam.roles r ON r.id = p.role_id JOIN iam.menus m ON m.id = p.menu_id
+			WHERE r.code = $1 AND m.code = $2 AND p.is_active), 'none')`, role, menu)
+	}
+	leaves := []string{"hris.compensation.payroll", "hris.compensation.salary"}
+	before := map[string]string{}
+	for _, role := range []string{"admin_hris", "hris_manager"} {
+		for _, leaf := range leaves {
+			before[role+leaf] = grant(role, leaf)
+			if before[role+leaf] == "none" {
+				t.Skipf("%s holds no %s on this database", role, leaf)
+			}
+		}
+	}
+	if !strings.Contains(before["admin_hris"+leaves[0]], `"delete"`) {
+		t.Skip("admin_hris has no delete on payroll on this database")
+	}
+	expect(t, do(t, mux, &manager, "PUT", "/api/hris/access/roles/admin_hris", change("hris.compensation", ptr(false), nil)), 200, "")
+	for _, leaf := range leaves {
+		if got := grant("hris_manager", leaf); got != "none" {
+			t.Fatalf("hris_manager %s after off = %s", leaf, got)
+		}
+	}
+	expect(t, do(t, mux, &manager, "PUT", "/api/hris/access/roles/admin_hris", change("hris.compensation", ptr(true), nil)), 200, "")
+	for _, role := range []string{"admin_hris", "hris_manager"} {
+		for _, leaf := range leaves {
+			if got := grant(role, leaf); got != before[role+leaf] {
+				t.Errorf("%s %s after off/on = %s, want %s", role, leaf, got, before[role+leaf])
+			}
+		}
+	}
+}
+
+// A derived role cannot be given a menu its source admin_hris lacks.
+func TestHrisAccessNeedsAdminHrisMenu(t *testing.T) {
+	manager := hrisManager(t)
+	mux, text := setup(t)
+	text(`UPDATE iam.role_menu_permissions p SET is_active = false FROM iam.roles r, iam.menus m
+		WHERE r.id = p.role_id AND m.id = p.menu_id AND r.code = 'admin_hris' AND m.code = 'hris.recruitment.psikotes' RETURNING 'ok'`)
+	expect(t, do(t, mux, &manager, "PUT", "/api/hris/access/roles/hris_manager", change("hris.recruitment.psikotes", ptr(true), nil)), 400,
+		`{"success":false,"error":"Admin HRIS belum punya akses menu ini"}`)
+	// Turning it off stays allowed.
+	expect(t, do(t, mux, &manager, "PUT", "/api/hris/access/roles/hris_manager", change("hris.recruitment.psikotes", ptr(false), nil)), 200, "")
+}

@@ -25,6 +25,7 @@ const (
 	errHrisAccessFirst  = "Aktifkan akses menu dulu sebelum memberi hak hapus"
 	errHrisAccountScope = "Akun ini bukan akun HR (peran aplikasi hrd)"
 	errHrisNoChange     = "Tidak ada perubahan"
+	errHrisSourceMenu   = "Admin HRIS belum punya akses menu ini"
 )
 
 type hrisAccessChange struct {
@@ -115,6 +116,19 @@ func (h handler) putHrisRoleAccess(w http.ResponseWriter, r *http.Request) error
 		for _, c := range body.Changes {
 			if role.Code == "admin_hris" {
 				err = applyAdminHris(ctx, tx, role.ID, byCode[c.MenuCode], c, u.ID)
+			} else if c.Access != nil && *c.Access {
+				// A derived role only narrows admin_hris: the sync would drop a
+				// menu the source lacks, so refuse instead of a silent no-op.
+				var held bool
+				if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM iam.role_menu_permissions p
+					JOIN iam.roles r ON r.id = p.role_id JOIN iam.menus m ON m.id = p.menu_id
+					WHERE r.code = 'admin_hris' AND m.code = $1 AND p.is_active)`, c.MenuCode).Scan(&held); err != nil {
+					return err
+				}
+				if !held {
+					return httpx.BadRequest(errHrisSourceMenu)
+				}
+				err = applyMask(ctx, tx, role.Code, c, u.ID)
 			} else {
 				err = applyMask(ctx, tx, role.Code, c, u.ID)
 			}

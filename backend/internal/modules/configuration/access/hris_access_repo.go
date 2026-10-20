@@ -181,7 +181,11 @@ func hrisAccess(ctx context.Context, q database.Querier) (*hrisAccessView, error
 	return v, nil
 }
 
-// applyAdminHris changes the source role's own grants (ruling R8).
+// applyAdminHris changes the source role's own grants (ruling R8). Access
+// on keeps the stored actions of a row turned off before, and turns its
+// inactive descendants back on with their stored actions, so off then on
+// restores the previous grants; a menu never granted gets its offered
+// actions without "delete" (final review ruling #4).
 func applyAdminHris(ctx context.Context, tx pgx.Tx, roleID string, m scopeMenu, c hrisAccessChange, actorID string) error {
 	if c.Access != nil && *c.Access {
 		acts := slices.DeleteFunc(slices.Clone(m.Actions), func(a string) bool { return a == "delete" })
@@ -189,8 +193,15 @@ func applyAdminHris(ctx context.Context, tx pgx.Tx, roleID string, m scopeMenu, 
 		if _, err := tx.Exec(ctx, `INSERT INTO iam.role_menu_permissions (role_id, menu_id, granted_actions, is_active, created_by, updated_by, updated_at)
 			VALUES ($1, $2, $3::jsonb, true, $4, $4, now())
 			ON CONFLICT (role_id, menu_id) DO UPDATE SET
-			  granted_actions = CASE WHEN role_menu_permissions.is_active THEN role_menu_permissions.granted_actions ELSE EXCLUDED.granted_actions END,
+			  granted_actions = CASE WHEN jsonb_typeof(role_menu_permissions.granted_actions) = 'array'
+			      AND jsonb_array_length(role_menu_permissions.granted_actions) > 0
+			    THEN role_menu_permissions.granted_actions ELSE EXCLUDED.granted_actions END,
 			  is_active = true, updated_by = EXCLUDED.updated_by, updated_at = now()`, roleID, m.ID, string(raw), actorID); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `UPDATE iam.role_menu_permissions p SET is_active = true, updated_by = $3, updated_at = now()
+			FROM iam.menus d WHERE d.id = p.menu_id AND p.role_id = $1 AND NOT p.is_active
+			  AND d.deleted_at IS NULL AND d.code LIKE $2 || '.%'`, roleID, m.Code, actorID); err != nil {
 			return err
 		}
 		if _, err := tx.Exec(ctx, `INSERT INTO iam.role_menu_permissions (role_id, menu_id, granted_actions, is_active, created_by, updated_by, updated_at)

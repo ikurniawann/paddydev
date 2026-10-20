@@ -6,6 +6,7 @@ import { HrisAccessPage } from "./hris-access-page";
 const api = vi.hoisted(() => {
   const view = {
     roles: [
+      { code: "admin_hris", name: "Admin HRIS" },
       { code: "hris_manager", name: "HR Manager" },
       { code: "hris_non_payroll", name: "HR Staff (Non-Payroll)" },
     ],
@@ -13,6 +14,7 @@ const api = vi.hoisted(() => {
       { code: "hris.workforce.attendance", name: "Absensi", parent_code: "hris.workforce", level: 3, access_toggle: true, delete_toggle: true },
     ],
     grants: {
+      admin_hris: { "hris.workforce.attendance": ["delete", "read"] },
       hris_manager: { "hris.workforce.attendance": ["delete", "read"] },
       hris_non_payroll: { "hris.workforce.attendance": ["read"] },
     },
@@ -53,4 +55,11 @@ it("mengganti role HRIS sebuah akun", async () => {
   renderPage();
   fireEvent.change(await screen.findByLabelText("Role HRIS Rina HR"), { target: { value: "hris_manager" } });
   await waitFor(() => expect(api.saveHrisAccount).toHaveBeenCalledWith("u1", "hris_manager"));
+});
+
+it("kolom admin_hris ditandai sebagai sumber role HR", async () => {
+  renderPage();
+  const header = await screen.findByRole("columnheader", { name: /Admin HRIS \(sumber\)/ });
+  expect(header.textContent).toContain("Perubahan di kolom ini berlaku untuk semua role HR");
+  expect(screen.getByRole("columnheader", { name: "HR Manager" })).toBeTruthy();
 });
