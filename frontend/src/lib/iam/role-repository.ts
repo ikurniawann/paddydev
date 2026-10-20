@@ -132,7 +132,9 @@ export async function deleteIamRoleInDb(id: string): Promise<boolean> {
 export async function replaceIamRolePermissionsInDb(
   roleId: string,
   permissions: Array<{ menuId: string; grantedActions: string[] }>,
-  updatedBy: string
+  updatedBy: string,
+  /** admin_hris: jalankan sync role HR turunan di transaksi yang sama (EPIC-061, R10). */
+  options: { syncHrisStaffRoles?: boolean } = {}
 ): Promise<void> {
   const pool = getIamPool();
   const client = await pool.connect();
@@ -162,6 +164,10 @@ export async function replaceIamRolePermissionsInDb(
           updated_at = now()`,
         [roleId, permission.menuId, JSON.stringify(actions), updatedBy]
       );
+    }
+
+    if (options.syncHrisStaffRoles) {
+      await client.query("SELECT iam.sync_hris_staff_roles()");
     }
 
     await client.query("COMMIT");

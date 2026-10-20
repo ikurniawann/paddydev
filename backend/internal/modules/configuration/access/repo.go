@@ -135,7 +135,7 @@ func hrisRoleIDs(ctx context.Context, q database.Querier) ([]string, error) {
 func replacePermissions(ctx context.Context, db database.DB, roleID string, grants []grant, updatedBy string) error {
 	return database.WithTx(ctx, db, func(tx pgx.Tx) error {
 		var code string
-		if err := tx.QueryRow(ctx, `SELECT code FROM iam.roles WHERE id = $1`, roleID).Scan(&code); err != nil {
+		if err := tx.QueryRow(ctx, `SELECT code FROM iam.roles WHERE id = $1 FOR UPDATE`, roleID).Scan(&code); err != nil {
 			return err
 		}
 		source := code == "admin_hris"

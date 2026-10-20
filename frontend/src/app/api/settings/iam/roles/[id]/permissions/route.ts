@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { ApiError, requireIamMenuPrefix, validateBody } from "@/lib/api/auth";
 import { apiHandler } from "@/lib/api/handler";
 import { IAM } from "@/lib/iam/prefixes";
+import { ADMIN_HRIS_EMPTY_ERROR, requireSuperAdminForSystemRole } from "@/lib/iam/system-role-guard";
 import {
   getIamRoleFromDb,
   listRolePermissionsMatrixFromDb,
@@ -34,6 +35,11 @@ export const PUT = apiHandler(async (request: NextRequest, { params }: RouteCont
   const { id } = await params;
   const body = await validateBody(request, rolePermissionsSchema);
   const row = await getRoleOr404(id);
-  await replaceIamRolePermissionsInDb(id, normalizeRolePermissions(body.permissions), user.id);
+  if (row.is_system) await requireSuperAdminForSystemRole(user);
+  const permissions = normalizeRolePermissions(body.permissions);
+  // admin_hris adalah sumber role HR turunan: tidak boleh kosong, dan sync jalan di transaksi yang sama.
+  const isAdminHris = row.code === "admin_hris";
+  if (isAdminHris && permissions.length === 0) throw ApiError.badRequest(ADMIN_HRIS_EMPTY_ERROR);
+  await replaceIamRolePermissionsInDb(id, permissions, user.id, { syncHrisStaffRoles: isAdminHris });
   return permissionsResponse(id, row);
 }, "PUT /api/settings/iam/roles/[id]/permissions");

@@ -22,3 +22,4 @@ CREATE TABLE IF NOT EXISTS iam.permission_audit_logs (
 );
 CREATE INDEX IF NOT EXISTS permission_audit_logs_created_idx ON iam.permission_audit_logs (created_at DESC);
 CREATE INDEX IF NOT EXISTS permission_audit_logs_role_idx ON iam.permission_audit_logs (role_code, created_at DESC);
+CREATE INDEX IF NOT EXISTS permission_audit_logs_target_user_idx ON iam.permission_audit_logs (target_user_id, created_at DESC) WHERE target_user_id IS NOT NULL;

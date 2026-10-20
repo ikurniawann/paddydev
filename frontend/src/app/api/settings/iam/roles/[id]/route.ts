@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { ApiError, requireIamMenuPrefix, validateBody } from "@/lib/api/auth";
 import { apiHandler } from "@/lib/api/handler";
 import { IAM } from "@/lib/iam/prefixes";
+import { requireSuperAdminForSystemRole } from "@/lib/iam/system-role-guard";
 import { mapRoleDetail } from "@/lib/iam/role-mapper";
 import {
   deleteIamRoleInDb,
@@ -25,11 +26,12 @@ export const GET = apiHandler(async (_request: NextRequest, { params }: RouteCon
 }, "GET /api/settings/iam/roles/[id]");
 
 export const PUT = apiHandler(async (request: NextRequest, { params }: RouteContext) => {
-  await requireIamMenuPrefix(IAM.settingsRoles);
+  const user = await requireIamMenuPrefix(IAM.settingsRoles);
   const { id } = await params;
   const body = await validateBody(request, roleUpdateSchema);
   const existing = await getIamRoleFromDb(id);
   if (!existing) throw notFound();
+  if (existing.is_system) await requireSuperAdminForSystemRole(user);
   if (existing.is_system && body.code && body.code !== existing.code) {
     throw ApiError.badRequest("System role code cannot be changed");
   }
