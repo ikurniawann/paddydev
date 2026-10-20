@@ -325,4 +325,6 @@ WHERE deleted_at IS NULL
     -- Tagihan Member (1 Okt 2026):
     'pos.operations.member-bills',
     -- Pengaturan Pembelian / aturan PO wajib dari PR (14 Okt 2026):
-    'items.raw-material.purchasing.settings', 'items.product.purchasing.settings');
+    'items.raw-material.purchasing.settings', 'items.product.purchasing.settings',
+    -- HRIS Jadwal Kerja (migrasi 20261019090300) dan Hak Akses HRIS (EPIC-061, migrasi 20261022090200):
+    'hris.kepegawaian.schedules', 'hris.access');
