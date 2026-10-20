@@ -2,9 +2,15 @@
 
 Setiap pertanyaan diberi rekomendasi agar bisa dijawab cepat ("ikuti rekomendasi" / "ubah: …"). Poin K-n merujuk MOM §6; Q-… adalah pertanyaan baru dari analisis kode dan data live 20-10-2026.
 
-## Wajib dijawab sebelum task terkait dikerjakan
+## Keputusan user 20-10-2026
 
-| No | Pertanyaan | Rekomendasi | Memblokir |
+> "Ikuti semua rekomendasi di pertanyaan-rekomendasi.md (K-12, K-10, Q-PY-1..4, K-6/Q-KP-1..2, Q-APV-1..3, K-13, K-3, K-14, K-9, Q-AB-1). K-7 tetap menunggu Paddy."
+
+Semua rekomendasi pada tabel di bawah **berlaku sebagai keputusan**, kecuali **K-7** (approval CEO & GM), yang masih menunggu Paddy. Perubahan setting atau data live (Q-PY-4 cutoff 20, K-14 koordinat, perbaikan `reporting_to`) tetap dijalankan hanya setelah user menyetujui langkah eksekusinya.
+
+## Pertanyaan & rekomendasi
+
+| No | Pertanyaan | Rekomendasi (= keputusan, kecuali K-7) | Memblokir |
 |---|---|---|---|
 | K-12 | Pembagi harian untuk prorate, "1 hari THP", dan potongan tunjangan: hari kerja aktual per periode, angka tetap (23/24), atau hari kalender? Acuan payslip menulis "Total Hari Kerja Terjadwal" (gaji/tunjangan) dan "Total Hari Periode Berjalan" (Izin Pribadi) | Pakai **hari kerja terjadwal** karyawan dalam periode 21 → 20 untuk semuanya, termasuk Izin Pribadi, agar satu angka dipakai di seluruh slip | ES-06, PY-01, PY-03, PY-04 |
 | K-10 | Jumlah hari kerja per periode: 23 (5 hari) dan 24 (6 hari)? | Jangan ditanam sebagai konstanta. Hitung dari jadwal karyawan; skema 5/6 hari hanya penentu hari libur mingguan | PY-03 |

@@ -18,7 +18,7 @@ Detail lengkap ada di `docs/hris/acuan-mom-20261019/`:
 ## Cara pakai
 
 1. Cari ID requirement atau topiknya di `status-requirement.md`. Kolom "Status MOM" menentukan boleh tidaknya dikerjakan.
-2. Jika statusnya **Konfirmasi (K-n)** atau **Menunggu TnC**, buka `pertanyaan-rekomendasi.md`. Kalau jawaban user belum tercatat di epic, tanyakan dengan menyertakan rekomendasinya. Jangan menebak.
+2. Jika statusnya **Konfirmasi (K-n)** atau **Menunggu TnC**, buka `pertanyaan-rekomendasi.md`. Rekomendasi di sana sudah diputuskan user pada 20-10-2026, kecuali K-7 dan semua butir yang statusnya "Menunggu TnC". Untuk yang belum diputuskan, tanyakan dengan menyertakan rekomendasinya. Jangan menebak.
 3. Rumus payroll diambil dari `aturan-payroll.md`, bukan dari kode yang ada.
 4. Approver diambil dari `matriks-approval.md`. "Atasan langsung" = `hris.employees.reporting_to`.
 5. Cek setting & data live (read-only) sebelum menyimpulkan perilaku. Banyak aturan bergantung pada setting, bukan kode.
