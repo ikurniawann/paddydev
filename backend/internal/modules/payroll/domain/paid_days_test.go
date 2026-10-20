@@ -85,3 +85,38 @@ func TestOvertimeUnderOneHourNotPaid(t *testing.T) {
 		t.Fatalf("Regular = %v, want 2 (0,5 jam tidak dibayar)", got.Regular)
 	}
 }
+
+func TestServiceOverOneYear(t *testing.T) {
+	for _, c := range []struct {
+		join, end string
+		want      bool
+	}{
+		{"2025-10-20", "2026-10-20", false}, // tepat 1 tahun: belum lebih
+		{"2025-10-19", "2026-10-20", true},
+		{"2026-01-01", "2026-10-20", false},
+		{"bukan-tanggal", "2026-10-20", false},
+	} {
+		if got := ServiceOverOneYear(c.join, c.end); got != c.want {
+			t.Errorf("ServiceOverOneYear(%s, %s) = %v, want %v", c.join, c.end, got, c.want)
+		}
+	}
+}
+
+func TestHealthSubsidyOverridesStructure(t *testing.T) {
+	sal := Salary{BaseSalary: "2200000.00", HealthAllowance: "50000.00"}
+	opts := DefaultBuildOptions()
+	opts.HealthSubsidyAmount = 100_000
+	senior := BuildInputRange(Employee{ID: "a", JoinDate: "2024-01-01"}, sal, WorkforceRecords{}, nil, nil, 10, 2026, "2026-09-21", "2026-10-20", false, opts)
+	if senior.HealthAllowance != 100_000 || !senior.HealthEligible {
+		t.Fatalf("senior: allowance=%v eligible=%v", senior.HealthAllowance, senior.HealthEligible)
+	}
+	junior := BuildInputRange(Employee{ID: "b", JoinDate: "2026-01-01"}, sal, WorkforceRecords{}, nil, nil, 10, 2026, "2026-09-21", "2026-10-20", false, opts)
+	if junior.HealthEligible {
+		t.Fatal("junior (< 1 tahun) tidak berhak subsidi")
+	}
+	// Setting 0: perilaku lama (nominal struktur).
+	old := BuildInputRange(Employee{ID: "a", JoinDate: "2024-01-01"}, sal, WorkforceRecords{}, nil, nil, 10, 2026, "2026-09-21", "2026-10-20", false)
+	if old.HealthAllowance != 50_000 {
+		t.Fatalf("tanpa setting: allowance=%v, want 50.000", old.HealthAllowance)
+	}
+}

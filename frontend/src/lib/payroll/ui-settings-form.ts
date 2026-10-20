@@ -22,6 +22,7 @@ export const BPJS_KES_FIELDS: FieldDef[] = [
   { key: "bpjs_kes_employee", label: "Karyawan", suffix: "%" },
   { key: "bpjs_kes_employer", label: "Perusahaan", suffix: "%" },
   { key: "bpjs_kes_max_upah", label: "Batas Upah Maks", suffix: "Rp" },
+  { key: "bpjs_kes_subsidy_amount", label: "Subsidi BPJS Kesehatan (masa kerja > 1 tahun)", suffix: "Rp" },
 ];
 
 export const TAPERA_FIELDS: FieldDef[] = [

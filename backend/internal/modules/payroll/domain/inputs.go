@@ -36,6 +36,9 @@ type BuildOptions struct {
 	// OvertimeRestFromSchedule pays overtime on a day without a shift in the
 	// employee's schedule at the rest-day rate (EPIC-055; off = before).
 	OvertimeRestFromSchedule bool
+	// HealthSubsidyAmount > 0 replaces the structure's health allowance with a
+	// global BPJS Kesehatan subsidy for more than one year of service (EPIC-059).
+	HealthSubsidyAmount float64
 }
 
 // DefaultBuildOptions keep the pre-EPIC-055 behaviour.
@@ -271,6 +274,11 @@ func BuildInputRange(emp Employee, salary Salary, rec WorkforceRecords, loans []
 	}
 	orTrue := func(b *bool) bool { return b == nil || *b }
 
+	health := OrZero(salary.HealthAllowance)
+	healthEligible := HealthEligible(emp.JoinDate, end, minService)
+	if opt.HealthSubsidyAmount > 0 {
+		health, healthEligible = opt.HealthSubsidyAmount, ServiceOverOneYear(emp.JoinDate, end)
+	}
 	return Input{
 		EmployeeID: emp.ID, PeriodMonth: month, PeriodYear: year,
 		BaseSalary:         OrZero(salary.BaseSalary),
@@ -294,8 +302,8 @@ func BuildInputRange(emp Employee, salary Salary, rec WorkforceRecords, loans []
 		MealPerDay:         str(salary.MealMode, "flat") == "per_day",
 		PositionPerDay:     str(salary.PositionMode, "flat") == "per_day",
 		PositionAllowance:  OrZero(salary.PositionAllowance),
-		HealthAllowance:    OrZero(salary.HealthAllowance),
-		HealthEligible:     HealthEligible(emp.JoinDate, end, minService),
+		HealthAllowance:    health,
+		HealthEligible:     healthEligible,
 		OvertimeScheme:     str(salary.OvertimeScheme, "standard"),
 		LateDayMinutes:     lateDayMinutes,
 		PersonalLeaveDays:  float64(personal),

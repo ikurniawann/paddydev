@@ -287,3 +287,14 @@ func DateText(v *string) *string {
 	}
 	return &s
 }
+
+// ServiceOverOneYear: more than one year of service at periodEnd (the
+// cut-off date): join + 1 year falls strictly before periodEnd (EPIC-059).
+func ServiceOverOneYear(joinDate, periodEnd string) bool {
+	join, err1 := time.Parse(isoDate, joinDate)
+	end, err2 := time.Parse(isoDate, periodEnd)
+	if err1 != nil || err2 != nil {
+		return false
+	}
+	return join.AddDate(1, 0, 0).Before(end)
+}
