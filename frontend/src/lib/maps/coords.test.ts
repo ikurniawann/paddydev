@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { GEOFENCE_DEFAULT_RADIUS_M } from "@/lib/hris/geofence";
-import { coordsFromInputs, isUsableCoord, parseLatLng, resolveRadiusM, roundCoord } from "./coords";
+import { GEOFENCE_DEFAULT_RADIUS_M, coordsFromInputs, isUsableCoord, parseLatLng, resolveRadiusM, roundCoord } from "./coords";
 
 describe("coords", () => {
   it("membulatkan ke 6 desimal (numeric(9,6))", () => {

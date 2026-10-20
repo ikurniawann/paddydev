@@ -123,12 +123,13 @@ Rekomendasi di bawah dipakai sebagai ruling rencana (R1–R11). **User perlu men
   9. Tab Perjalanan Dinas HRD menyembunyikan Setujui/Tolak pada perjalanan dinas milik HRD yang sedang login.
 
 - 2026-10-20: **Langkah rilis** (semua oleh manusia; agent tidak mengubah data live):
-  1. Backup DB, lalu terapkan migrasi `20261023090000_attendance_geofence.sql` dan `20261023090100_business_trips.sql` (setelah migrasi EPIC-061 `20261022090000`–`20261022090200`).
+  1. Backup DB, lalu terapkan migrasi `20261023090000_attendance_geofence.sql` dan `20261023090100_business_trips.sql` (setelah migrasi EPIC-061 `20261022090000`–`20261022090200`). Terapkan migrasi di luar jam sibuk absen (07:00–10:00 WIB): migrasi menambah CHECK dan indeks pada `hris.attendance` yang mengunci tulis sebentar.
   2. Jalankan `SELECT iam.sync_hris_staff_roles();` (grant `admin_hris` bertambah menu `ess.business-trip`).
   3. Build ulang API dan web.
   4. HR mengisi koordinat toko aktif lewat Lokasi Toko (K-14; data dari Paddy). Sebelum terisi, absen tercatat "Belum dicek".
   5. Tidak ada perubahan data live oleh agent.
 
+- 2026-10-20: **Review akhir**: Ready to merge, 0 Critical/Important. Perbaikan: (1) teks bantuan panel absen ESS menyatakan GPS wajib; (2) test integrasi radius per toko (400 m valid, 250 m 422 dengan `radius_m` 250); (3) siklus modul `geofence.ts` ↔ `coords.ts` diputus (`GEOFENCE_DEFAULT_RADIUS_M` pindah ke `lib/maps/coords.ts`, diekspor ulang dari `geofence.ts`); (4) langkah rilis: migrasi di luar jam sibuk absen. Ditunda: keterlambatan diukur saat kirim ulang setelah 422, filter Rekap termasuk "Belum dicek", notifikasi atasan untuk pengajuan dinas pending.
 - 2026-10-20: **Temuan minor ditunda** (ringkasan dari ledger; tidak memblokir rilis):
   - Task 1: batas clamp `h` dan kasus batas sudah ditutup di Task 2; hitungan karakter catatan di klien memakai code point seperti rune Go (Task 6).
   - Task 2: indeks parsial `idx_attendance_geofence_invalid` belum dipakai query (menunggu filter "Di luar area saja"); `date` di body untuk non-HRD diabaikan diam-diam (P5).

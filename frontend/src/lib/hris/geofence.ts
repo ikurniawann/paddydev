@@ -4,7 +4,7 @@
  * ini tidak menghitung jarak.
  */
 
-import { isUsableCoord } from "@/lib/maps/coords";
+import { GEOFENCE_DEFAULT_RADIUS_M, isUsableCoord } from "@/lib/maps/coords";
 
 export type GeofenceStatus = "valid" | "invalid" | "unchecked" | "dinas";
 
@@ -30,8 +30,8 @@ export function geofenceLabel(
   return label;
 }
 
-/** Radius bawaan (MOM AB-01); dipakai hanya bila server tidak mengirim `radius_m`. */
-export const GEOFENCE_DEFAULT_RADIUS_M = 100;
+/** Didefinisikan di lib/maps/coords (agar komponen peta tidak mengimpor lib/hris); diekspor ulang di sini. */
+export { GEOFENCE_DEFAULT_RADIUS_M };
 
 /** Panjang minimal keterangan absen di luar area (MOM AB-03), dihitung per karakter (code point). */
 export const GEOFENCE_NOTE_MIN = 5;

@@ -1,4 +1,5 @@
-import { GEOFENCE_DEFAULT_RADIUS_M } from "@/lib/hris/geofence";
+/** Radius bawaan (MOM AB-01); dipakai hanya bila server tidak mengirim `radius_m`. */
+export const GEOFENCE_DEFAULT_RADIUS_M = 100;
 
 /** Koordinat titik peta (derajat desimal WGS84). */
 export interface LatLngPoint {

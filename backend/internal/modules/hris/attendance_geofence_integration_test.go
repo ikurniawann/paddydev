@@ -80,6 +80,34 @@ func TestClockInOutsideAreaNeedsNote(t *testing.T) {
 	}
 }
 
+// Radius per toko (configuration.branches.geofence_radius_m) menggantikan
+// default 100 m: 400 m menjadikan ±334 m valid, 250 m tetap di luar area.
+func TestClockInStoreRadiusOverride(t *testing.T) {
+	h, _ := newFileHarness(t)
+	photo := dataURL("image/png", pngBytes(t))
+	store := h.branch("Toko Radius Khusus")
+
+	wide, wideID := h.staff("pos", nil, true, emp{name: "Crew Radius Lebar"})
+	tight, tightID := h.staff("pos", nil, true, emp{name: "Crew Radius Sempit"})
+	h.exec(`INSERT INTO hris.employee_placements (employee_id, branch_id, is_primary, start_date) VALUES
+		($1, $3, true, '2026-01-01'), ($2, $3, true, '2026-01-01')`, wideID, tightID, store)
+
+	h.exec(`UPDATE configuration.branches SET geofence_radius_m = 400 WHERE id = $1`, store)
+	in := h.do(&wide, "POST", "/api/hris/attendance", clockInBody(photo, farFromStore, ""))
+	expect(t, in, 200, "")
+	if d := in.data(); d["clock_in_geofence"] != "valid" || d["clock_in_distance_m"] != 334.0 {
+		t.Fatalf("radius 400 clock-in = %s", in.raw)
+	}
+
+	h.exec(`UPDATE configuration.branches SET geofence_radius_m = 250 WHERE id = $1`, store)
+	out := h.do(&tight, "POST", "/api/hris/attendance", clockInBody(photo, farFromStore, ""))
+	expect(t, out, 422, "")
+	if det := out.body["details"].(map[string]any); det["code"] != "geofence_note_required" ||
+		det["radius_m"] != 250.0 || det["distance_m"] != 334.0 {
+		t.Fatalf("radius 250 details = %s", out.raw)
+	}
+}
+
 func TestClockOutOutsideAreaNeedsNote(t *testing.T) {
 	h, _ := newFileHarness(t)
 	staff, own := h.staff("pos", nil, true, emp{name: "Crew Pulang Jauh"})

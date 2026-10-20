@@ -175,7 +175,7 @@ export function EssClockPanel() {
           <Clock className="mr-2 h-4 w-4" /> Clock Out
         </Button>
         <p className="flex items-center gap-1 text-xs text-gray-500">
-          <MapPin className="h-3.5 w-3.5" /> Foto selfie wajib; aktifkan GPS agar lokasi dicek terhadap area toko
+          <MapPin className="h-3.5 w-3.5" /> Foto selfie dan GPS wajib; lokasi dicek terhadap area toko
         </p>
       </div>
 
