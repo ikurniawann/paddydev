@@ -26,7 +26,7 @@
 | Other Allowance | Allowance | (nominal input) | `OTHER_EARNING` / `OTHER_EARNING_NONTAX` | ✅ |
 | Total Pendapatan | Computation | Gaji Pokok + Tunjangan + Lembur + Subsidi BPJS Kes + Insentif | gross = base + fixed + variable + transport + meal + housing + jabatan + health + lembur + THR + bonus + earning lain | ✅ (lebih luas) |
 | Potongan Izin Pribadi | Deduction | THP / **Total Hari Periode Berjalan** × Hari Izin Pribadi | PIP = **seluruh slip** (gross + nontax) / pembagi hari kerja × hari; setting `personal_leave_deduction` (live: on). Intern dikecualikan (PR #3) | ⚠️ basis harus 4 komponen; pembagi menunggu K-12 |
-| Pinjaman Karyawan / Kasbon | Deduction | Sesuai jadwal cicilan & sisa pinjaman; **maks. ½ THP**; default maks. 2 cicilan 50%/50%; **Probation, Freelance, Intern tidak bisa mengajukan** | Cicilan rata mulai bulan setelah approve; batas cicilan ≤ `loan_max_installment_percent` (live 30%) × **gaji pokok**; tenor 1–60 (default 3); tanpa cek status kepegawaian | ⚠️ |
+| Pinjaman Karyawan / Kasbon | Deduction | Sesuai jadwal cicilan & sisa pinjaman; **maks. ½ THP**; default maks. 2 cicilan 50%/50%; **Probation, Freelance, Intern tidak bisa mengajukan** | Cicilan rata mulai bulan setelah approve. Kasbon (EPIC-060): pokok ≤ 50% THP (Gaji Pokok + Transport + Makan + Jabatan), tenor 1 atau 2 (default 2, 50/50), Probation/Freelance/Intern/Magang diblokir. Jenis `loan` tetap batas lama (cicilan ≤ `loan_max_installment_percent` × gaji pokok, tenor 1–60) menunggu TnC | ✅ |
 | Potongan Izin Sakit | Deduction | (Tunj. Transport + Tunj. Makan) / Total Hari Kerja Bulan Berjalan × Hari Sakit | PIS = (transport + makan) / pembagi × hari sakit; setting `sick_leave_deduction` (live: on). **Risiko potong ganda**: dengan mode `per_day`, hari sakit sudah tidak dibayar lewat tunjangan harian | ⚠️ cek interaksi PIS × per_day |
 | Denda | Deduction | Nominal input HR manual; default Rp0 | Kode manual `PENALTY`, digabung ke "Potongan Lain" | 🟡 butuh baris sendiri |
 | PPh Pasal 21 | Deduction | TER per masa pajak; Pasal 17 tahunan di masa pajak terakhir | `pph21_method = ter` (live: ter); Pasal 17 tahunan **hanya bulan Desember** (hard-code), tidak untuk karyawan yang keluar di tengah tahun | 🟡 masa pajak terakhir karyawan keluar |
@@ -39,7 +39,7 @@ Catatan acuan: rumus "Total Potongan" di tabel Paddy tertulis "Pinjaman Karyawan
 ## Perbedaan yang paling berdampak
 
 1. **"1 hari THP" memakai seluruh slip, bukan 4 komponen.** Ini berlaku untuk PIP dan potongan telat tier ber-basis `thp`. Karyawan yang lembur atau dapat bonus jadi terpotong lebih besar dari aturan.
-2. **Kasbon**: plafon 30% gaji pokok (harus 50% THP), tenor bebas 1–60 (harus 1 atau 2), tanpa blokir Probation/Freelance/Intern, Pinjaman Darurat masih bisa diajukan, approval satu tahap.
+2. ~~**Kasbon**: plafon 30% gaji pokok, tenor bebas 1–60, tanpa blokir status, Pinjaman Darurat masih bisa diajukan, approval satu tahap.~~ **Selesai di EPIC-060** (plafon 50% THP, tenor 1/2, status diblokir, Pinjaman Darurat dihapus, approval dua tahap); menunggu review & rilis.
 3. **Cuti Melahirkan** belum memotong transport + makan (MOM §3.1, ES-06).
 4. **Minimum lembur 1 jam** belum ada.
 5. **Subsidi BPJS Kesehatan** masih nominal bebas, syarat masa kerja default 0 hari.

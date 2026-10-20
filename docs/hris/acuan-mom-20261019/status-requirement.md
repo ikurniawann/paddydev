@@ -36,7 +36,7 @@ Kolom "Status MOM" menyalin status di dokumen MOM (Disepakati / Konfirmasi / Men
 | AP-02 | Lembur wajib diajukan sebelum dilaksanakan; approval atasan langsung | Disepakati | 🟡 | Alur pengajuan lembur ada (pending → approved/rejected, HR atau atasan). **Tanggal lampau tetap diterima**; API `GET /api/hris/overtime?scope=approvals` ada tapi tanpa UI | Tolak pengajuan untuk waktu yang sudah lewat; UI antrean atasan |
 | AP-03 | Jenis lembur Weekday / Weekend | Konfirmasi K-13 | 🟡 | `day_type` hanya `regular`/`rest_day`, diisi HR; form ESS tanpa pilihan jenis; payroll menyatukan libur nasional + rest day (tarif 2×) | Pilihan Weekday/Weekend di form; tarif menunggu SOP Lembur (K-13) |
 | AP-04 | Koreksi lembur oleh AdminHRIS | Disepakati | 🟡 | Tidak ada endpoint ubah pengajuan lembur; HR hanya bisa mengoreksi `overtime_hours` di absensi (tercatat di audit) | Endpoint + UI koreksi lembur (HR) dengan audit log |
-| AP-05 | Kasbon disetujui Manager Departemen **dan** HR (akses Payroll) | Disepakati | ⚠️ | Satu tahap: siapa pun dengan aksi `approve` di menu Pinjaman (`payroll/loans.go`). Tidak ada langkah manager; departemen tidak punya kolom kepala | Approval 2 tahap (manager departemen → HR Penggajian); tentukan sumber "manager departemen" (Q-APV-2) |
+| AP-05 | Kasbon disetujui Manager Departemen **dan** HR (akses Payroll) | Disepakati | ✅ | Dua tahap untuk kasbon (EPIC-060): Manager Departemen (atasan berlevel Manager ke atas pertama di rantai `reporting_to`, disimpan di `manager_approver_id`; dilewati bila tidak ada) lalu HR dengan aksi `approve` di menu Pinjaman **dan** Penggajian. Antrean persetujuan manager ada di ESS. Jenis `loan` tetap satu tahap | Menunggu review & rilis (migrasi `20261021100000`) |
 | AP-06 | Approval CEO dan GM | Konfirmasi K-7 | ❌ ⏳ | Tidak ada rantai multi-tahap/eskalasi di HRIS. Tabel generik `configuration.user_approval_permissions` hanya dipakai accounting/procurement | Tunggu K-7 (untuk pengajuan apa) |
 
 ## Payroll & Periode Kerja
@@ -53,8 +53,8 @@ Kolom "Status MOM" menyalin status di dokumen MOM (Disepakati / Konfirmasi / Men
 
 | ID | Requirement | Status MOM | Kode | Bukti / perilaku sekarang | Langkah berikutnya |
 |---|---|---|---|---|---|
-| KP-01 | Hapus fitur Pinjaman Darurat | Disepakati | ❌ | `emergency` masih bisa dipilih (`frontend/src/lib/hris/loans-view.ts`); live: 1 pengajuan darurat **pending** | Sembunyikan dari form & tolak di API; putuskan nasib 1 pengajuan pending (Q-KP-1) |
-| KP-02 | Kasbon maks. 50% THP, tenor 1 atau 2 | Konfirmasi K-6 | ⚠️ | Batas = cicilan ≤ `loan_max_installment_percent` (live **30%**) dari **gaji pokok**; tenor 1–60 (default form 3). Tidak ada blokir status Probation/Freelance/Intern (tabel payslip). Live: 1 kasbon tenor 3 | Plafon 50% THP (4 komponen), tenor {1,2}, blokir status; default 50/50 |
+| KP-01 | Hapus fitur Pinjaman Darurat | Disepakati | ✅ | Pengajuan baru `emergency` ditolak 400 di API dan tidak ada di form ESS/HR; riwayat tetap terbaca dengan label lama (EPIC-060). Live: 1 pengajuan darurat **pending** | HR memutus manual 1 pengajuan pending sebelum rilis (Q-KP-1) |
+| KP-02 | Kasbon maks. 50% THP, tenor 1 atau 2 | Konfirmasi K-6 | ✅ | Kasbon: pokok ≤ 50% THP (Gaji Pokok + Transport + Makan + Jabatan dari struktur gaji aktif), tenor 1 atau 2 (default 2, 50/50), status Probation/Freelance/Intern/Magang diblokir, maksimal kasbon aktif ditegakkan saat pengajuan & approve (EPIC-060). Jenis `loan` tetap aturan lama (menunggu TnC, KP-03). Live: 1 kasbon lama tenor 3 tidak diubah | Menunggu review & rilis |
 | KP-03 | Aturan Pinjaman | Menunggu TnC | ⏳ | Jenis sekarang: `kasbon`, `loan`, `emergency`; bunga flat (hanya HR) | Tunggu TnC |
 
 ## Absensi & Timesheet
@@ -79,9 +79,9 @@ Kolom "Status MOM" menyalin status di dokumen MOM (Disepakati / Konfirmasi / Men
 
 | Status | Jumlah | ID |
 |---|---|---|
-| ✅ selesai (termasuk yang menunggu deploy/merge) | 6 | ES-01, ES-02, ES-04, ES-07, ES-08, AB-07 (mekanisme; aturan final menunggu TnC) |
+| ✅ selesai (termasuk yang menunggu deploy/merge) | 9 | ES-01, ES-02, ES-04, ES-07, ES-08, AB-07 (mekanisme; aturan final menunggu TnC), AP-05, KP-01, KP-02 (EPIC-060, menunggu review & rilis) |
 | 🟡 sebagian | 13 | ES-03, ES-05, ES-06, AP-01, AP-02, AP-03, AP-04, PY-01, PY-02, PY-03, PY-04, AB-02, LA-01 |
-| ⚠️ berbeda | 4 | AP-05, KP-02, AB-04, AB-05 |
-| ❌ belum ada | 6 | AP-06, PY-05, KP-01, AB-01, AB-03, AB-06 |
+| ⚠️ berbeda | 2 | AB-04, AB-05 |
+| ❌ belum ada | 5 | AP-06, PY-05, AB-01, AB-03, AB-06 |
 | ⏳ hanya menunggu TnC | 2 | ES-09, KP-03 |
 | **Total** | **31** | |
