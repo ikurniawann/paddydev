@@ -237,11 +237,17 @@ func BuildInputRange(emp Employee, salary Salary, rec WorkforceRecords, loans []
 			}
 			// Hanya unpaid/personal/sick/maternity yang memotong; leader dan
 			// jenis lain full paid (EPIC-058).
-			switch l.LeaveType {
-			case "unpaid":
+			if l.LeaveType == "unpaid" {
 				unpaid++
 				unpaidDates[d] = true
 				continue
+			}
+			// Tanggal dengan absensi efektif sudah dibayar sebagai hari kerja:
+			// tidak dipotong PIP/PIS dan tidak dihitung dua kali.
+			if attended[d] {
+				continue
+			}
+			switch l.LeaveType {
 			case "personal":
 				personal++
 			case "sick":
@@ -249,9 +255,7 @@ func BuildInputRange(emp Employee, salary Salary, rec WorkforceRecords, loans []
 			case "maternity":
 				maternity++
 			}
-			if !attended[d] {
-				paidLeaveDates[d] = true
-			}
+			paidLeaveDates[d] = true
 		}
 	}
 	paidLeave := 0

@@ -246,3 +246,29 @@ func TestPaidDaysCappedWithoutSchedule(t *testing.T) {
 		t.Fatalf("PaidDays = %v, want 22 (hari kerja periode)", in.PaidDays)
 	}
 }
+
+// Tanggal yang punya absensi efektif sudah dibayar sebagai hari kerja: Izin Pribadi,
+// Sakit dan Melahirkan pada tanggal itu tidak dihitung sebagai hari potongan PIP/PIS.
+func TestLeaveOnAttendedDateNotDeducted(t *testing.T) {
+	emp := Employee{ID: "e", JoinDate: "2020-01-01", EmploymentStatus: "permanent"}
+	sal := Salary{BaseSalary: "2200000.00", TransportAllowance: "220000.00"}
+	att := []AttendanceRow{
+		{Date: "2026-09-14", Status: "present", HasClockOut: true},
+		{Date: "2026-09-15", Status: "late", HasClockOut: true},
+		{Date: "2026-09-16", Status: "present", HasClockOut: true},
+	}
+	rec := WorkforceRecords{Schedule: weekdaySchedule(), Attendance: att, Leaves: []Leave{
+		{ptr("2026-09-14"), ptr("2026-09-14"), "personal"},
+		{ptr("2026-09-15"), ptr("2026-09-15"), "sick"},
+		{ptr("2026-09-16"), ptr("2026-09-16"), "maternity"},
+	}}
+	in := BuildInputRange(emp, sal, rec, nil, nil, 9, 2026, "2026-09-01", "2026-09-30", false)
+	if in.PersonalLeaveDays != 0 || in.SickLeaveDays != 0 || in.MaternityLeaveDays != 0 {
+		t.Fatalf("personal=%v sick=%v maternity=%v, want 0 (tanggal sudah hadir)", in.PersonalLeaveDays, in.SickLeaveDays, in.MaternityLeaveDays)
+	}
+	c := DefaultConfig()
+	c.PersonalLeaveDeduction, c.SickLeaveDeduction = true, true
+	r := Calculate(in, c)
+	eq(t, "PIP", r.PersonalLeaveDeduction, 0)
+	eq(t, "PIS", r.SickLeaveDeduction, 0)
+}
