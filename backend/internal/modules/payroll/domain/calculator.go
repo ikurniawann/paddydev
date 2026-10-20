@@ -65,8 +65,12 @@ type Input struct {
 	LateDayMinutes    []float64 // late minutes of each late day (tier mode)
 	PersonalLeaveDays float64
 	SickLeaveDays     float64
-	ManualInputs      []ManualInput
-	Ytd               YearToDate
+	// EPIC-059: hari dibayar (hadir + cuti dibayar, hari kerja) untuk gaji
+	// pokok monthly_prorated & jabatan per hari; hari cuti melahirkan.
+	PaidDays           float64
+	MaternityLeaveDays float64
+	ManualInputs       []ManualInput
+	Ytd                YearToDate
 }
 
 // ManualInput is one manual slip component (hris.payroll_inputs).

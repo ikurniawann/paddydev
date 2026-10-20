@@ -183,23 +183,55 @@ func BuildInputRange(emp Employee, salary Salary, rec WorkforceRecords, loans []
 	}
 	ot := SplitOvertimeWith(rec.Overtime, rec.Attendance, holidays, restSchedule, opt.OvertimeRequireClockout)
 
-	unpaid, personal, sick := 0, 0, 0
+	// Hari cuti dihitung pada hari kerja (EPIC-059 R3) di dalam cakupan.
+	// Hari dibayar = hadir + cuti selain unpaid pada hari kerja tanpa absensi
+	// efektif; tanggal unpaid tidak pernah dibayar.
+	attended := map[string]bool{}
+	for _, a := range rec.Attendance {
+		if a.Status != "absent" && (!partial || inCoverage(a.Date)) {
+			attended[a.Date] = true
+		}
+	}
+	unpaidDates, paidLeaveDates := map[string]bool{}, map[string]bool{}
+	unpaid, personal, sick, maternity := 0, 0, 0, 0
 	for _, l := range rec.Leaves {
 		s, e := DateText(l.StartDate), DateText(l.EndDate)
 		if s == nil || e == nil {
 			continue
 		}
-		days := ClampedLeaveDays(LeaveRange{*s, *e}, start, end)
-		// Hanya unpaid/personal/sick yang memotong. leader (Izin Leader) dan
-		// jenis cuti lain sengaja tidak dihitung (EPIC-058).
-		switch l.LeaveType {
-		case "unpaid":
-			unpaid += days
-		case "personal":
-			personal += days
-		case "sick":
-			sick += days
+		from, to := max(*s, start), min(*e, end)
+		for _, d := range EachDate(from, to) {
+			if !IsWorkDate(d, schedule, holidays) || (partial && !inCoverage(d)) {
+				continue
+			}
+			// Hanya unpaid/personal/sick/maternity yang memotong; leader dan
+			// jenis lain full paid (EPIC-058).
+			switch l.LeaveType {
+			case "unpaid":
+				unpaid++
+				unpaidDates[d] = true
+				continue
+			case "personal":
+				personal++
+			case "sick":
+				sick++
+			case "maternity":
+				maternity++
+			}
+			if !attended[d] {
+				paidLeaveDates[d] = true
+			}
 		}
+	}
+	paidLeave := 0
+	for d := range paidLeaveDates {
+		if !unpaidDates[d] {
+			paidLeave++
+		}
+	}
+	paidDays := float64(attendanceDays + paidLeave)
+	if hasSchedule && scheduled > 0 && paidDays > workingDays {
+		paidDays = workingDays
 	}
 	// Pembagi hari struktur; tanpa pembagi: hari kerja hasil hitung, kecuali
 	// upah harian (Odoo: struktur kosong = base_days 0, aturan per hari tidak
@@ -261,6 +293,8 @@ func BuildInputRange(emp Employee, salary Salary, rec WorkforceRecords, loans []
 		LateDayMinutes:     lateDayMinutes,
 		PersonalLeaveDays:  float64(personal),
 		SickLeaveDays:      float64(sick),
+		MaternityLeaveDays: float64(maternity),
+		PaidDays:           paidDays,
 		LoanDeduction:      LoanDeductionForPeriod(loans, month, year),
 		LoanBreakdown:      LoanInstallmentDetails(loans, month, year),
 		JoinDate:           emp.JoinDate,

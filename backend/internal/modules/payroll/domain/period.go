@@ -102,6 +102,20 @@ func ScheduledDays(rows []ShiftRow, start, end string) (days int, hasSchedule bo
 	return days, true
 }
 
+// IsWorkDate: a date with a shift in the schedule in force that day; without
+// a schedule in force, Monday–Friday that is not a national holiday (the
+// hris DescribeLeaveDays rule). Payroll counts leave on work dates only.
+func IsWorkDate(date string, schedule []ShiftRow, holidays map[string]bool) bool {
+	for _, r := range schedule {
+		if r.EffectiveFrom <= date && (r.EffectiveTo == nil || *r.EffectiveTo >= date) {
+			row := ResolveScheduleRow(schedule, date)
+			return row != nil && row.ShiftID != nil
+		}
+	}
+	dow := ISODayOfWeek(date)
+	return dow >= 1 && dow <= 5 && !holidays[date]
+}
+
 // LeaveRange is a leave's inclusive date span.
 type LeaveRange struct{ Start, End string }
 
