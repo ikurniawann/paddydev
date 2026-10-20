@@ -195,3 +195,54 @@ func TestActiveEmployeeEndDateNotClipped(t *testing.T) {
 	}
 	eq(t, "pokok monthly penuh", Calculate(in, DefaultConfig()).BaseSalary, 2_200_000)
 }
+
+// Tanpa jadwal: hari dibayar tidak melebihi hari kerja periode, dan pokok
+// monthly_prorated / jabatan per_day tidak melebihi 100% (× faktor cakupan).
+// Sep 2026 = 22 hari kerja Senin–Jumat.
+func TestPaidDaysCappedWithoutSchedule(t *testing.T) {
+	emp := Employee{ID: "e", JoinDate: "2020-01-01", EmploymentStatus: "permanent"}
+	weekdays := func(skip ...string) []AttendanceRow {
+		var att []AttendanceRow
+		for _, d := range EachDate("2026-09-01", "2026-09-30") {
+			skipped := false
+			for _, s := range skip {
+				skipped = skipped || s == d
+			}
+			if ISODayOfWeek(d) <= 5 && !skipped {
+				att = append(att, AttendanceRow{Date: d, Status: "present", HasClockOut: true})
+			}
+		}
+		return att
+	}
+	sick := []Leave{{ptr("2026-09-29"), ptr("2026-09-30"), "sick"}}
+	twentyPlusSick := WorkforceRecords{Attendance: weekdays("2026-09-29", "2026-09-30"), Leaves: sick}
+	sal := Salary{BaseSalary: "2000000.00", PayBasis: ptr("monthly_prorated"), PositionAllowance: "400000.00", PositionMode: ptr("per_day")}
+
+	// (a) pembagi struktur kosong: pembagi = 20 hari hadir, hari dibayar 22.
+	in := BuildInputRange(emp, sal, twentyPlusSick, nil, nil, 9, 2026, "2026-09-01", "2026-09-30", false)
+	r := Calculate(in, DefaultConfig())
+	if r.BaseSalary > 2_000_000 || r.PositionAllowance > 400_000 {
+		t.Fatalf("(a) tanpa pembagi: pokok = %v (≤ 2.000.000), jabatan = %v (≤ 400.000)", r.BaseSalary, r.PositionAllowance)
+	}
+	// (b) pembagi struktur 20 pada bulan 22 hari kerja.
+	sal20 := sal
+	sal20.WorkingDaysDivisor = "20"
+	in = BuildInputRange(emp, sal20, twentyPlusSick, nil, nil, 9, 2026, "2026-09-01", "2026-09-30", false)
+	r = Calculate(in, DefaultConfig())
+	if r.BaseSalary > 2_000_000 || r.PositionAllowance > 400_000 {
+		t.Fatalf("(b) pembagi 20: pokok = %v (≤ 2.000.000), jabatan = %v (≤ 400.000)", r.BaseSalary, r.PositionAllowance)
+	}
+	// Hadir penuh dengan pembagi 20: tepat 100%.
+	in = BuildInputRange(emp, sal20, WorkforceRecords{Attendance: weekdays()}, nil, nil, 9, 2026, "2026-09-01", "2026-09-30", false)
+	r = Calculate(in, DefaultConfig())
+	eq(t, "pokok hadir penuh pembagi 20", r.BaseSalary, 2_000_000)
+	eq(t, "jabatan hadir penuh pembagi 20", r.PositionAllowance, 400_000)
+
+	// Hadir 22 hari kerja + 2 Sabtu: hari dibayar dibatasi 22 hari kerja periode.
+	extra := append(weekdays(), AttendanceRow{Date: "2026-09-05", Status: "present", HasClockOut: true},
+		AttendanceRow{Date: "2026-09-12", Status: "present", HasClockOut: true})
+	in = BuildInputRange(emp, sal20, WorkforceRecords{Attendance: extra}, nil, nil, 9, 2026, "2026-09-01", "2026-09-30", false)
+	if in.PaidDays != 22 {
+		t.Fatalf("PaidDays = %v, want 22 (hari kerja periode)", in.PaidDays)
+	}
+}

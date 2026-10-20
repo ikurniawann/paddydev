@@ -264,6 +264,17 @@ func BuildInputRange(emp Employee, salary Salary, rec WorkforceRecords, loans []
 	if hasSchedule && scheduled > 0 && paidDays > workingDays {
 		paidDays = workingDays
 	}
+	// Tanpa jadwal: paling banyak hari kerja (Senin–Jumat bukan libur) di
+	// dalam cakupan periode.
+	if !hasSchedule {
+		workDates := 0
+		for _, d := range EachDate(start, end) {
+			if IsWorkDate(d, nil, holidays) && (!partial || inCoverage(d)) {
+				workDates++
+			}
+		}
+		paidDays = math.Min(paidDays, float64(workDates))
+	}
 	// Pembagi (EPIC-059 K-12): hari kerja terjadwal periode untuk gaji bulanan;
 	// tanpa jadwal, pembagi struktur lalu hari kerja hasil hitung. Upah harian
 	// tidak berubah (struktur kosong = aturan per hari tidak berlaku).

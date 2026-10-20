@@ -322,7 +322,8 @@ func Calculate(in Input, c Config) Result {
 		if paid == 0 {
 			paid = in.AttendanceDays
 		}
-		base = Round(perDay(fullBase, paid))
+		// Tidak pernah melebihi pokok bulanan × faktor cakupan.
+		base = math.Min(Round(perDay(fullBase, paid)), Round(fullBase*factor))
 		dayWage = perDay(fullBase, 1)
 	default:
 		base = Round(fullBase * factor)
@@ -371,7 +372,7 @@ func Calculate(in Input, c Config) Result {
 	}
 	position := Round(in.PositionAllowance * factor)
 	if in.PositionPerDay {
-		position = Round(perDay(in.PositionAllowance, positionDays))
+		position = math.Min(Round(perDay(in.PositionAllowance, positionDays)), position)
 	}
 	health := 0.0
 	if in.HealthEligible { // G7
