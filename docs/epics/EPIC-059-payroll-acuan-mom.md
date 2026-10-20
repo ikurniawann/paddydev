@@ -24,7 +24,8 @@ Lihat `docs/superpowers/plans/2026-10-20-payroll-acuan-mom.md`.
 
 ## Automation Log
 - 2026-10-20: epic dibuat. Keputusan user: "Ikuti semua rekomendasi di pertanyaan-rekomendasi.md (K-12, K-10, Q-PY-1..4, K-6/Q-KP-1..2, Q-APV-1..3, K-13, K-3, K-14, K-9, Q-AB-1). K-7 tetap menunggu Paddy." Prasyarat: PR ikurniawann/paddydev#3 (intern tanpa PIP) di-merge dulu.
-- 2026-10-21: implementasi selesai (Task 1-7) dan diverifikasi (Task 8); status `review`. Branch `feat/epic059-payroll-acuan` (bertumpuk di atas EPIC-060/PR #4 dan merge `main` berisi PR #3, jadi PR #4 di-merge dulu).
+- 2026-10-20: implementasi selesai (Task 1-7) dan diverifikasi (Task 8); status `review`. Branch `feat/epic059-payroll-acuan` (bertumpuk di atas EPIC-060/PR #4 dan merge `main` berisi PR #3, jadi PR #4 di-merge dulu).
+- 2026-10-20: gelombang fix review akhir (TDD, `go test ./internal/modules/payroll/... ./internal/app` hijau): (1) Critical — karyawan keluar lewat alur Resign (jadwal `effective_to` = `end_date`) tidak lagi dibayar sebulan penuh: ukuran periode penuh (pembagi & penyebut faktor) menganggap baris jadwal yang berakhir tepat pada `end_date` tetap berlaku sampai akhir periode, cakupan tetap berhenti di `end_date` (`TestLeaverResignFlowScheduleTruncated`); (2) tanpa jadwal, `PaidDays` dibatasi hari kerja dalam cakupan dan `Calculate` menjepit pokok `monthly_prorated` <= pokok x faktor serta jabatan `per_day` <= jabatan x faktor (`TestPaidDaysCappedWithoutSchedule`); (3) clip `end_date` hanya untuk karyawan **nonaktif**, `Employee.IsActive` diisi dari `EmployeeBrief` (`TestActiveEmployeeEndDateNotClipped`, `TestPayrollRunEndDateClipsLeaversOnly`); (4) Izin Pribadi/Sakit/Melahirkan pada tanggal yang punya absensi efektif tidak dipotong PIP/PIS (`TestLeaveOnAttendedDateNotDeducted`); (5) pratinjau skrip Task 7 menampilkan daftar tiap struktur dan karyawan tanpa jadwal, diuji di DB test saja (pratinjau + terapkan di dalam `BEGIN...ROLLBACK`, `UPDATE 24`, md5 `hris.employee_salary` sebelum/sesudah sama). Laporan: `.superpowers/sdd/2026-10-20-payroll-acuan-mom/final-fix-report.md`.
 
 ### Commit
 | Task | Commit | Isi |
@@ -36,7 +37,7 @@ Lihat `docs/superpowers/plans/2026-10-20-payroll-acuan-mom.md`.
 | 5 | `2af0248` | setting global `bpjs_kes_subsidy_amount` (subsidi BPJS Kes masa kerja > 1 tahun); migrasi `20261021110000_payroll_bpjs_kes_subsidy.sql` |
 | 6 | `f8968b2` | karyawan keluar di tengah periode ikut run, dibayar prorata sampai `end_date` (port baru `PayrollEmployees`) |
 | 7 | `f0013b7` | skrip ops `backend/database/sql/fixes/2026-10-21_payroll_struktur_gaji_acuan.sql` (pratinjau/terapkan struktur gaji ke acuan; **belum dijalankan**) |
-| 8 | commit docs ini | verifikasi menyeluruh, test simulasi `TestPayrollRunAcuanPayslip`, pembaruan dokumen |
+| 8 | `40863b2`, `2768f63` | verifikasi menyeluruh, test simulasi `TestPayrollRunAcuanPayslip`, pembaruan dokumen |
 
 ### Ruling
 - R1 hari efektif = absensi berstatus bukan `absent` (dasar Transport & Makan `per_day`).
@@ -59,14 +60,16 @@ Ruling pengendali selama eksekusi:
 - Skema zod Next lama (`lib/payroll/settings.ts`) tidak diubah karena route payroll-settings dilayani Go; bila fallback Next aktif, key subsidi terbuang saat PUT (follow-up).
 - Branch dibuat dari EPIC-060 + merge `main` (PR #3) karena ports.go dan fake Employees diubah kedua epic.
 
-### Bukti test (21-10-2026, DB test `127.0.0.1:55499`)
+### Bukti test (20-10-2026, DB test `127.0.0.1:55499`)
 - `go test ./... -count=1`: 27 nama test gagal, **identik** dengan baseline `main` (kegagalan lama di 13 paket: configuration/master, configuration/settings, crm/engagement, crm/partners, gymcredits, gymscheduling, gymtraining, hris, salesfunnel, site, spa, storedvalue, platform/auth; `diff` daftar nama kosong, tidak ada nama baru). Paket `payroll` dan `payroll/domain` hijau.
 - `frontend`: `npx vitest run` 761 file lulus (2 skip), 5535 test lulus, 10 skip, 0 gagal; `npx tsc --noEmit -p .` tanpa output.
 - Simulasi angka `TestPayrollRunAcuanPayslip` (`backend/internal/modules/payroll/acuan_integration_test.go`, test integrasi permanen lewat API `/calculate`): struktur `monthly_prorated` + `per_day`, pokok 2.200.000, transport 220.000, makan 220.000, jabatan 440.000, jadwal Senin-Jumat, Juni 2026 (22 hari kerja), hadir 20 hari + 1 Izin Pribadi + 1 Sakit. Hasil: Gaji Pokok 2.200.000 (= /22 x 22), Transport 200.000 dan Makan 200.000 (x 20/22), Jabatan 440.000, Potongan Izin Pribadi 120.000 ((2.200.000 + 440.000) / 22), Potongan Sakit 0, bruto 3.040.000.
 
 ### Catatan rilis
 - Migrasi baru `20261021110000_payroll_bpjs_kes_subsidy.sql` (kolom setting `bpjs_kes_subsidy_amount`, default 0 = perilaku lama). Berlaku setelah migrasi kasbon `20261021100000`.
-- **Skrip ops Task 7 dan `cutoff_day = 20` BELUM dijalankan di live** dan menunggu persetujuan user setelah melihat pratinjau/simulasi. Tanpa itu, struktur gaji live (240 `monthly`) tetap memakai perhitungan lama; aturan baru efektif untuk struktur `monthly_prorated`/`per_day`.
+- **Skrip ops Task 7 dan `cutoff_day = 20` BELUM dijalankan di live** dan menunggu persetujuan user setelah melihat pratinjau/simulasi.
+- Yang **langsung berubah setelah rilis, juga untuk struktur `monthly` live** (240 struktur, tanpa skrip): pembagi per hari = hari kerja terjadwal periode bila karyawan punya jadwal (K-12); basis Potongan Izin Pribadi = 4 komponen (pokok + jabatan + transport/makan `flat`) tanpa potongan ganda; Potongan Sakit hanya transport/makan `flat` dan kini termasuk Cuti Melahirkan; potongan telat tier basis `thp` = THP 4 komponen; hari cuti dihitung pada hari kerja saja (Izin Pribadi/Sakit/Melahirkan pada tanggal yang punya absensi efektif tidak dipotong); tunjangan jabatan `per_day` mengikuti hari dibayar; label slip "Potongan Sakit & Cuti Melahirkan".
+- Yang **baru berlaku setelah skrip Task 7 dijalankan**: gaji pokok `monthly_prorated` menurut hari dibayar, serta tunjangan transport, makan dan jabatan `per_day`.
 - Lembur < 1 jam yang sudah approved di periode yang masih terbuka **tidak akan dibayar lagi** setelah rilis.
 - Pembagi per hari untuk karyawan bulanan berjadwal berubah dari pembagi struktur (mis. 26/25) menjadi jumlah hari kerja terjadwal periode.
 - Potongan telat tier basis THP untuk 18 struktur `daily` live berubah (upah harian + tunjangan, sebelumnya basis keliru ~96 ribu per hari terlalu kecil).
@@ -81,8 +84,8 @@ Ruling pengendali selama eksekusi:
 - Teks bantuan PIP menyebut "hari kerja terjadwal" padahal ada fallback pembagi struktur.
 - Lembur: test hris hanya jalur pengajuan sendiri (bukan penugasan HR); test payroll hanya bucket reguler.
 - Subsidi BPJS Kes masih dikali faktor prorata kontrak (konsisten dengan tunjangan lain); tanya user bila ingin flat. Belum ada test join 29 Feb, setting 0 + senior < masa minimum, dan hasil `Calculate` 100.000.
-- Karyawan dengan semua kontrak dimulai setelah `end_date`: cakupan kosong sehingga dibayar penuh (sama dengan perilaku lama tanpa overlap). Belum ada test cabang clip dengan kontrak, `ed == end`, `end_date` NULL nonaktif, dan run-level karyawan keluar.
-- Skrip ops Task 7: pratinjau belum menampilkan daftar tiap struktur yang akan diubah (dibutuhkan user untuk menyetujui); jendela peringatan 30 hari bergulir (bukan periode payroll); mode apply tanpa `ON_ERROR_STOP` bisa commit setelah gagal; header tidak menyebut psql >= 13.
+- Karyawan dengan semua kontrak dimulai setelah `end_date`: cakupan kosong sehingga dibayar penuh (sama dengan perilaku lama tanpa overlap). Belum ada test cabang clip dengan kontrak, `ed == end`, dan `end_date` NULL nonaktif.
+- Skrip ops Task 7: jendela peringatan 30 hari bergulir (bukan periode payroll); mode apply tanpa `ON_ERROR_STOP` bisa commit setelah gagal; header tidak menyebut psql >= 13.
 
 ### Follow-up (di luar epic ini)
 - PPh21 Pasal 17 tahunan pada masa pajak terakhir karyawan yang keluar di tengah tahun (sekarang hanya Desember).

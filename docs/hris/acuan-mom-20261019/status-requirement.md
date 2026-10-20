@@ -1,6 +1,6 @@
 # Status Requirement HRIS — MOM 19-10-2026 (ES / AP / PY / KP / AB / LA)
 
-Dicek terhadap kode `main` (`4b7056e` + EPIC-058 `97e4c8f`) dan data live (hanya baca) pada 20-10-2026. Diperbarui 21-10-2026 untuk EPIC-059 (PY-01, PY-03, PY-04, ES-06: terkode di branch `feat/epic059-payroll-acuan`, menunggu review & rilis; setting dan data live belum diubah). Status:
+Dicek terhadap kode `main` (`4b7056e` + EPIC-058 `97e4c8f`) dan data live (hanya baca) pada 20-10-2026. Diperbarui 20-10-2026 untuk EPIC-059 (PY-01, PY-03, PY-04, ES-06: terkode di branch `feat/epic059-payroll-acuan`, menunggu review & rilis; setting dan data live belum diubah). Status:
 
 | Tanda | Arti |
 |---|---|
