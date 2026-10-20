@@ -2,6 +2,7 @@ package access_test
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"nuhabit/backend/internal/platform/testutil"
@@ -112,4 +113,34 @@ func TestHrisDeleteGrantOnlySuperAdmin(t *testing.T) {
 	expect(t, do(t, mux, &admin, "PUT", path, perms(row(attendance, "read"))), 200, "")
 	expect(t, do(t, mux, &admin, "PUT", path, perms(row(attendance, "read", "delete"))), 403, errHrisDeleteSuper)
 	expect(t, do(t, mux, &super, "PUT", path, perms(row(attendance, "read", "delete"), row(leaves, "read", "delete"))), 200, "")
+}
+
+// The delete guard sees the canonical menu id: uppercase, no-hyphen and
+// braced uuid forms cannot slip "delete" on an HRIS leaf past it; an
+// invalid id is a 400 (re-review CRITICAL, uuid bypass).
+func TestHrisDeleteGrantUUIDForms(t *testing.T) {
+	admin := testutil.CreateStaff(t, testutil.StaffOptions{Menus: map[string][]string{"settings.roles": nil}})
+	super := testutil.CreateStaff(t, testutil.StaffOptions{Role: "super_admin"})
+	mux, text := setup(t)
+	role := text(`INSERT INTO iam.roles (code, name) VALUES ($1, 'Go Role') RETURNING id::text`, "go_role_"+testutil.RandomHex(3))
+	leaves := text(`SELECT id::text FROM iam.menus WHERE code = 'hris.workforce.leaves'`)
+	path := "/api/settings/iam/roles/" + role + "/permissions"
+	withDelete := func(menu string) map[string]any {
+		return map[string]any{"permissions": []any{map[string]any{"menuId": menu, "isGranted": true, "grantedActions": []string{"read", "delete"}}}}
+	}
+	for _, form := range []string{strings.ToUpper(leaves), strings.ReplaceAll(leaves, "-", ""), "{" + strings.ToUpper(leaves) + "}"} {
+		expect(t, do(t, mux, &admin, "PUT", path, withDelete(form)), 403, errHrisDeleteSuper)
+	}
+	for _, bad := range []string{"not-a-uuid", leaves + "0", "{" + leaves} {
+		if r := do(t, mux, &admin, "PUT", path, withDelete(bad)); r.Status != 400 || !strings.Contains(r.Raw, `"Validation failed"`) {
+			t.Fatalf("menuId %q: got %d %s, want 400 Validation failed", bad, r.Status, r.Raw)
+		}
+	}
+	if got := text(`SELECT count(*)::text FROM iam.role_menu_permissions WHERE role_id = $1`, role); got != "0" {
+		t.Fatalf("refused saves wrote %s grants", got)
+	}
+	expect(t, do(t, mux, &super, "PUT", path, withDelete(strings.ToUpper(leaves))), 200, "")
+	if got := text(`SELECT menu_id::text || ' ' || granted_actions::text FROM iam.role_menu_permissions WHERE role_id = $1 AND is_active`, role); got != leaves+` ["read", "delete"]` {
+		t.Fatalf("super grant = %s", got)
+	}
 }

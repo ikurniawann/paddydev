@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"slices"
 
+	"github.com/jackc/pgx/v5"
+
 	"nuhabit/backend/internal/modules/configuration/kit"
 	"nuhabit/backend/internal/platform/auth"
 	"nuhabit/backend/internal/platform/database"
@@ -279,18 +281,19 @@ func (h handler) putPermissions(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 	}
-	if isHrisRole(row.Code) {
-		if err := h.requireSuperAdminFor(r, user, errHrisRoleSuperAdmin); err != nil {
+	// HR roles and new "delete" on HRIS menus need super_admin; checked on
+	// the locked role row, so a concurrent save cannot change the outcome.
+	guard := func(tx pgx.Tx, code string) error {
+		if isHrisRole(code) {
+			return h.requireSuperAdminFor(r, user, errHrisRoleSuperAdmin)
+		}
+		added, err := addsHrisDelete(r.Context(), tx, id, grants)
+		if err != nil || !added {
 			return err
 		}
-	} else if added, err := addsHrisDelete(r.Context(), h.db, id, grants); err != nil {
-		return err
-	} else if added {
-		if err := h.requireSuperAdminFor(r, user, errHrisDeleteSuperAdmin); err != nil {
-			return err
-		}
+		return h.requireSuperAdminFor(r, user, errHrisDeleteSuperAdmin)
 	}
-	if err := replacePermissions(r.Context(), h.db, id, grants, user.ID); err != nil {
+	if err := replacePermissions(r.Context(), h.db, id, grants, user.ID, guard); err != nil {
 		return err
 	}
 	return h.permissionsResponse(w, r, id, row)

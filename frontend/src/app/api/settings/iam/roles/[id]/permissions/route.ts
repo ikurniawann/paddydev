@@ -46,10 +46,16 @@ export const PUT = apiHandler(async (request: NextRequest, { params }: RouteCont
   if (row.is_system) await requireSuperAdminForSystemRole(user);
   const permissions = normalizeRolePermissions(body.permissions);
   if (isHrisStaffRole(row.code)) await requireIamSuperAdmin(user, HRIS_ROLE_SUPER_ADMIN_ERROR);
-  else if (await addsHrisDelete(id, permissions)) await requireIamSuperAdmin(user, HRIS_DELETE_SUPER_ADMIN_ERROR);
   // admin_hris adalah sumber role HR turunan: tidak boleh kosong, dan sync jalan di transaksi yang sama.
   const isAdminHris = row.code === "admin_hris";
   if (isAdminHris && permissions.length === 0) throw ApiError.badRequest(ADMIN_HRIS_EMPTY_ERROR);
-  await replaceIamRolePermissionsInDb(id, permissions, user.id, { syncHrisStaffRoles: isAdminHris });
+  await replaceIamRolePermissionsInDb(id, permissions, user.id, {
+    syncHrisStaffRoles: isAdminHris,
+    // Dicek ulang pada baris role yang terkunci, seperti Go: role HR dan penambahan hapus HRIS hanya Super Admin.
+    guard: async (query, code) => {
+      if (isHrisStaffRole(code)) await requireIamSuperAdmin(user, HRIS_ROLE_SUPER_ADMIN_ERROR);
+      else if (await addsHrisDelete(query, id, permissions)) await requireIamSuperAdmin(user, HRIS_DELETE_SUPER_ADMIN_ERROR);
+    },
+  });
   return permissionsResponse(id, row);
 }, "PUT /api/settings/iam/roles/[id]/permissions");

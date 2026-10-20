@@ -143,7 +143,7 @@ func addsHrisDelete(ctx context.Context, q database.Querier, roleID string, gran
 	}
 	var added bool
 	err := q.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM iam.menus m
-		WHERE m.id::text = ANY($2::text[]) AND m.code LIKE 'hris.%'
+		WHERE m.id = ANY($2::uuid[]) AND m.code LIKE 'hris.%'
 		  AND NOT EXISTS (SELECT 1 FROM iam.role_menu_permissions p
 		    WHERE p.role_id = $1 AND p.menu_id = m.id AND p.is_active AND p.granted_actions ? 'delete'))`, roleID, ids).Scan(&added)
 	return added, err
@@ -152,12 +152,19 @@ func addsHrisDelete(ctx context.Context, q database.Querier, roleID string, gran
 // replacePermissions is replaceIamRolePermissionsInDb: deactivate every
 // grant of the role, then upsert the checked ones, in one transaction. For
 // admin_hris it re-runs the HR role sync; every grant change is recorded in
-// iam.permission_audit_logs (EPIC-061).
-func replacePermissions(ctx context.Context, db database.DB, roleID string, grants []grant, updatedBy string) error {
+// iam.permission_audit_logs (EPIC-061). guard runs once the role row is
+// locked, against the role's current code and grants.
+func replacePermissions(ctx context.Context, db database.DB, roleID string, grants []grant, updatedBy string,
+	guard func(tx pgx.Tx, code string) error) error {
 	return database.WithTx(ctx, db, func(tx pgx.Tx) error {
 		var code string
 		if err := tx.QueryRow(ctx, `SELECT code FROM iam.roles WHERE id = $1 FOR UPDATE`, roleID).Scan(&code); err != nil {
 			return err
+		}
+		if guard != nil {
+			if err := guard(tx, code); err != nil {
+				return err
+			}
 		}
 		source := code == "admin_hris"
 		watched := []string{roleID}

@@ -8,7 +8,25 @@ const h = vi.hoisted(() => ({
   superAdmin: false,
   addsDelete: false,
   remove: vi.fn(async () => true),
-  replace: vi.fn(async () => {}),
+  written: [] as unknown[],
+  guardSql: [] as string[],
+  // Seperti replaceIamRolePermissionsInDb: guard jalan di transaksi setelah baris role dikunci, baru menulis.
+  replace: vi.fn(
+    async (
+      _id: string,
+      perms: unknown,
+      _by: string,
+      opts?: { guard?: (q: (sql: string, params: unknown[]) => Promise<{ rows: unknown[] }>, code: string) => Promise<void> }
+    ) => {
+      await opts?.guard?.(async (sql, params) => {
+        h.guardSql.push(sql);
+        const ids = (params[1] as string[]) ?? [];
+        return { rows: [{ added: h.addsDelete || ids.includes(h.leaf) }] };
+      }, String(h.role.code));
+      h.written.push(perms);
+    }
+  ),
+  leaf: "0000000a-0000-4000-8000-0000000000aa",
   update: vi.fn(async () => true),
 }));
 
@@ -41,6 +59,8 @@ beforeEach(() => {
   h.superAdmin = false;
   h.addsDelete = false;
   h.remove.mockClear();
+  h.written = [];
+  h.guardSql = [];
   h.replace.mockClear();
   h.update.mockClear();
 });
@@ -82,7 +102,7 @@ describe("PUT /api/settings/iam/roles/[id]/permissions", () => {
     h.superAdmin = true;
     const { PUT } = await import("./[id]/permissions/route");
     expect((await PUT(put(grants), ctx)).status).toBe(200);
-    expect(h.replace).toHaveBeenCalledWith(ID, [{ menuId: MENU, grantedActions: ["read"] }], "u1", { syncHrisStaffRoles: false });
+    expect(h.replace).toHaveBeenCalledWith(ID, [{ menuId: MENU, grantedActions: ["read"] }], "u1", expect.objectContaining({ syncHrisStaffRoles: false }));
   });
 
   it("admin_hris kosong → 400", async () => {
@@ -100,7 +120,7 @@ describe("PUT /api/settings/iam/roles/[id]/permissions", () => {
     h.superAdmin = true;
     const { PUT } = await import("./[id]/permissions/route");
     expect((await PUT(put(grants), ctx)).status).toBe(200);
-    expect(h.replace).toHaveBeenCalledWith(ID, [{ menuId: MENU, grantedActions: ["read"] }], "u1", { syncHrisStaffRoles: true });
+    expect(h.replace).toHaveBeenCalledWith(ID, [{ menuId: MENU, grantedActions: ["read"] }], "u1", expect.objectContaining({ syncHrisStaffRoles: true }));
   });
 });
 
@@ -124,7 +144,7 @@ describe("Role HR di Role Management", () => {
         expect((await res.json()).error).toBe(HR_ERR);
       }
       expect(h.update).not.toHaveBeenCalled();
-      expect(h.replace).not.toHaveBeenCalled();
+      expect(h.written).toEqual([]);
       expect(h.remove).not.toHaveBeenCalled();
     });
   }
@@ -155,14 +175,14 @@ describe("Hak hapus HRIS di Role Management", () => {
     const res = await PUT(put({ permissions: [{ menuId: MENU, isGranted: true, grantedActions: ["read", "delete"] }] }), ctx);
     expect(res.status).toBe(403);
     expect((await res.json()).error).toBe(DELETE_ERR);
-    expect(h.replace).not.toHaveBeenCalled();
+    expect(h.written).toEqual([]);
   });
 
   it("delete yang sudah ada (bukan penambahan) tetap boleh", async () => {
     h.role = { ...h.role, code: "kasir", is_system: false };
     const { PUT } = await import("./[id]/permissions/route");
     expect((await PUT(put({ permissions: [{ menuId: MENU, isGranted: true, grantedActions: ["read", "delete"] }] }), ctx)).status).toBe(200);
-    expect(h.replace).toHaveBeenCalled();
+    expect(h.written).toHaveLength(1);
   });
 
   it("super_admin boleh menambah delete HRIS", async () => {
@@ -171,5 +191,42 @@ describe("Hak hapus HRIS di Role Management", () => {
     h.superAdmin = true;
     const { PUT } = await import("./[id]/permissions/route");
     expect((await PUT(put({ permissions: [{ menuId: MENU, isGranted: true, grantedActions: ["read", "delete"] }] }), ctx)).status).toBe(200);
+  });
+});
+
+// Re-review: menuId dikanonikkan (huruf kecil, bertanda hubung) dan dibandingkan sebagai uuid, jadi bentuk
+// uuid lain tidak lolos guard hak hapus HRIS; id tidak valid → 400.
+describe("menuId bentuk uuid lain", () => {
+  const withDelete = (menuId: string) => put({ permissions: [{ menuId, isGranted: true, grantedActions: ["read", "delete"] }] });
+
+  for (const form of [h.leaf.toUpperCase(), h.leaf.replaceAll("-", ""), `{${h.leaf.toUpperCase()}}`]) {
+    it(`${form} oleh bukan super_admin → 403 tanpa menulis`, async () => {
+      h.role = { ...h.role, code: "kasir", is_system: false };
+      const { PUT } = await import("./[id]/permissions/route");
+      const res = await PUT(withDelete(form), ctx);
+      expect(res.status).toBe(403);
+      expect((await res.json()).error).toBe(DELETE_ERR);
+      expect(h.written).toEqual([]);
+      expect(h.guardSql.join(" ")).toContain("::uuid[]");
+    });
+  }
+
+  for (const bad of ["not-a-uuid", `${h.leaf}0`, `{${h.leaf}`]) {
+    it(`${bad} → 400`, async () => {
+      h.role = { ...h.role, code: "kasir", is_system: false };
+      const { PUT } = await import("./[id]/permissions/route");
+      const res = await PUT(withDelete(bad), ctx);
+      expect(res.status).toBe(400);
+      expect((await res.json()).error).toBe("Validation failed");
+      expect(h.written).toEqual([]);
+    });
+  }
+
+  it("super_admin boleh, menuId ditulis dalam bentuk kanonik", async () => {
+    h.role = { ...h.role, code: "kasir", is_system: false };
+    h.superAdmin = true;
+    const { PUT } = await import("./[id]/permissions/route");
+    expect((await PUT(withDelete(h.leaf.toUpperCase()), ctx)).status).toBe(200);
+    expect(h.written).toEqual([[{ menuId: h.leaf, grantedActions: ["read", "delete"] }]]);
   });
 });

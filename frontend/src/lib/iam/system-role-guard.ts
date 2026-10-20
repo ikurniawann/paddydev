@@ -5,6 +5,7 @@
 import { ApiError, type ApiUser } from "@/lib/api/auth";
 import { resolveRoleIds } from "./get-user-menus";
 import { iamDbQueryOne } from "./pg-client";
+import type { RoleTxQuery } from "./role-repository";
 
 export const SYSTEM_ROLE_SUPER_ADMIN_ERROR = "Role sistem hanya bisa diubah oleh Super Admin";
 export const ADMIN_HRIS_EMPTY_ERROR = "admin_hris harus punya minimal satu menu: role HR lain diturunkan darinya";
@@ -34,19 +35,23 @@ export async function requireSuperAdminForSystemRole(user: ApiUser): Promise<voi
   await requireIamSuperAdmin(user, SYSTEM_ROLE_SUPER_ADMIN_ERROR);
 }
 
-/** True bila grant menambah "delete" pada menu HRIS yang belum dipegang role dengan delete (Go addsHrisDelete). */
+/**
+ * True bila grant menambah "delete" pada menu HRIS yang belum dipegang role dengan delete (Go addsHrisDelete).
+ * Dijalankan di transaksi simpan setelah baris role dikunci; id dibandingkan sebagai uuid.
+ */
 export async function addsHrisDelete(
+  query: RoleTxQuery,
   roleId: string,
   permissions: { menuId: string; grantedActions: string[] }[]
 ): Promise<boolean> {
   const ids = permissions.filter((p) => p.grantedActions.includes("delete")).map((p) => p.menuId);
   if (ids.length === 0) return false;
-  const row = await iamDbQueryOne<{ added: boolean }>(
+  const { rows } = await query(
     `SELECT EXISTS (SELECT 1 FROM iam.menus m
-      WHERE m.id::text = ANY($2::text[]) AND m.code LIKE 'hris.%'
+      WHERE m.id = ANY($2::uuid[]) AND m.code LIKE 'hris.%'
         AND NOT EXISTS (SELECT 1 FROM iam.role_menu_permissions p
           WHERE p.role_id = $1 AND p.menu_id = m.id AND p.is_active AND p.granted_actions ? 'delete')) AS added`,
     [roleId, ids]
   );
-  return Boolean(row?.added);
+  return Boolean((rows[0] as { added?: boolean } | undefined)?.added);
 }
