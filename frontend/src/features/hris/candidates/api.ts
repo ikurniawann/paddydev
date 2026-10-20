@@ -1,4 +1,5 @@
 import { apiGet, apiPost, apiDelete, buildListUrl } from "@/lib/api-client";
+import { withReasonQuery } from "@/lib/hris/delete-reason";
 import type { Brand } from "@/types";
 import type { CandidateCreateInput } from "@/lib/recruitment/candidate-query";
 import type { CvOcrFields } from "@/lib/recruitment/cv-ocr";
@@ -52,7 +53,8 @@ export async function createCandidate(payload: CandidateCreateInput, cvFile?: Fi
   return candidate;
 }
 
-export const deleteCandidate = (id: string) => apiDelete(`/api/candidates/${id}`);
+export const deleteCandidate = (id: string, reason: string) =>
+  apiDelete(withReasonQuery(`/api/candidates/${id}`, reason));
 
 export async function fetchCandidateDetail(id: string): Promise<CandidateDetailResult> {
   const [candidate, activities, notes] = await Promise.all([

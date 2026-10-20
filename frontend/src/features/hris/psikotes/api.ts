@@ -1,4 +1,5 @@
 import { apiGet, apiPost, apiPut, apiDelete } from "@/lib/api-client";
+import { withReasonQuery } from "@/lib/hris/delete-reason";
 import type {
   PsikotesInstrument,
   PsikotesQuestion,
@@ -28,4 +29,5 @@ export const createQuestion = (instrumentId: string, payload: QuestionPayload) =
 export const updateQuestion = (id: string, payload: QuestionPayload) =>
   apiPut<{ data: PsikotesQuestion }>(`/api/psikotes/questions/${id}`, payload).then((r) => r.data);
 
-export const deleteQuestion = (id: string) => apiDelete(`/api/psikotes/questions/${id}`);
+export const deleteQuestion = (id: string, reason: string) =>
+  apiDelete(withReasonQuery(`/api/psikotes/questions/${id}`, reason));

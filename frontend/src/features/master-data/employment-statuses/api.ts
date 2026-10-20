@@ -1,4 +1,5 @@
 import { apiGet, apiPost, apiPut, apiDelete } from "@/lib/api-client";
+import { withReasonQuery } from "@/lib/hris/delete-reason";
 import type { EmploymentStatusItem, EmploymentStatusPayload } from "./types";
 
 const BASE = "/api/master/employment-statuses";
@@ -12,5 +13,5 @@ export const createEmploymentStatus = (body: EmploymentStatusPayload) =>
 export const updateEmploymentStatus = (id: string, body: EmploymentStatusPayload) =>
   apiPut<{ data: EmploymentStatusItem; message?: string }>(`${BASE}/${id}`, body);
 
-export const deleteEmploymentStatus = (id: string) =>
-  apiDelete(`${BASE}/${id}`);
+export const deleteEmploymentStatus = (id: string, reason: string) =>
+  apiDelete(withReasonQuery(`${BASE}/${id}`, reason));

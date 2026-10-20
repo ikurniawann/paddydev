@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Input } from "@/components/ui/input";
 import { SCHEDULE_TYPE_OPTIONS, scheduleTypeConfirmText, type ScheduleType } from "@/lib/hris/schedule-type";
 import { bulkScheduleType, type ScheduleTypeResult } from "../api";
+import { retryWithReason } from "@/lib/hris/delete-reason";
 
 interface Props {
   open: boolean;
@@ -41,7 +42,9 @@ export function BulkScheduleTypeDialog({ open, ids, today, onOpenChange, onDone 
     if (!target || !impact) return;
     setBusy(true);
     try {
-      const res = await bulkScheduleType(body(false));
+      const res = await retryWithReason("Hapus jadwal per tanggal", (reason) =>
+        bulkScheduleType({ ...body(false), ...(reason ? { reason } : {}) })
+      );
       res.data.warnings.forEach((w) => toast.warning(w));
       toast.success(res.message ?? "Tipe jadwal disimpan");
       onDone();

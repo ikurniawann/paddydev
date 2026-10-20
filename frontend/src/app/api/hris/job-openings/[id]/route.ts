@@ -10,6 +10,7 @@ import {
   validateJobOpening,
 } from "@/lib/hris/job-openings";
 import { readJson } from "@/lib/hris/workforce-route";
+import { HRIS_LEAF, auditHrisDelete, requireHrisDelete } from "@/lib/hris/delete-guard";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -27,9 +28,10 @@ export const PATCH = apiHandler(async (request: NextRequest, { params }: RoutePa
   return NextResponse.json({ data, message: "Lowongan berhasil diperbarui" });
 }, "hris/job-openings PATCH");
 
-export const DELETE = apiHandler(async (_request: NextRequest, { params }: RouteParams) => {
-  const guard = await requireIamGuard(IAM.hrisRecruitment);
-  if (guard.error) return guard.error;
-  await deleteJobOpening((await params).id);
+export const DELETE = apiHandler(async (request: NextRequest, { params }: RouteParams) => {
+  const { user, reason } = await requireHrisDelete(request, HRIS_LEAF.jobPortal);
+  const { id } = await params;
+  await deleteJobOpening(id);
+  await auditHrisDelete(request, user, "recruitment.job_openings", id, reason);
   return NextResponse.json({ message: "Lowongan berhasil dihapus" });
 }, "hris/job-openings DELETE");

@@ -100,6 +100,8 @@ const forbidden: [string, () => Promise<RouteModule>, string[]][] = [
   ["promote", () => import("@/app/api/hris/promote/route"), ["POST"]],
   ["shifts", () => import("@/app/api/hris/shifts/route"), ["POST"]],
   ["shifts/[id]", () => import("@/app/api/hris/shifts/[id]/route"), ["PATCH", "DELETE"]],
+  // Hapus cuti kini dijaga aksi delete menu (requireIamAction), bukan sesi saja.
+  ["leaves/[id]", () => import("@/app/api/hris/leaves/[id]/route"), ["DELETE"]],
   ["reports", () => import("@/app/api/hris/reports/route"), ["GET"]],
 ];
 
@@ -108,7 +110,7 @@ const unauthenticated: [string, () => Promise<RouteModule>, string[]][] = [
   ["payslips/[id]/pdf", () => import("@/app/api/hris/payslips/[id]/pdf/route"), ["GET"]],
   ["loans", () => import("@/app/api/hris/loans/route"), ["GET", "POST"]],
   ["leaves", () => import("@/app/api/hris/leaves/route"), ["GET", "POST"]],
-  ["leaves/[id]", () => import("@/app/api/hris/leaves/[id]/route"), ["GET", "PUT", "DELETE"]],
+  ["leaves/[id]", () => import("@/app/api/hris/leaves/[id]/route"), ["GET", "PUT"]],
   ["leaves/approve", () => import("@/app/api/hris/leaves/approve/route"), ["POST"]],
   ["leaves/attachment", () => import("@/app/api/hris/leaves/attachment/route"), ["POST"]],
   ["leaves/attachment/[...path]", () => import("@/app/api/hris/leaves/attachment/[...path]/route"), ["GET"]],

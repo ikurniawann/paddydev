@@ -6,6 +6,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const requireIamMenuPrefix = vi.fn();
+const requireIamAction = vi.fn();
 const requireApiUser = vi.fn();
 const loadGrantedMenuCodesForUser = vi.fn();
 const queryOne = vi.fn();
@@ -17,6 +18,7 @@ vi.mock("@/lib/api/auth", async (importOriginal) => {
   return {
     ...actual,
     requireIamMenuPrefix: (...args: unknown[]) => requireIamMenuPrefix(...args),
+    requireIamAction: (...args: unknown[]) => requireIamAction(...args),
     requireApiUser: (...args: unknown[]) => requireApiUser(...args),
   };
 });
@@ -74,6 +76,7 @@ beforeEach(() => {
   updateCalls.length = 0;
   selectCalls.length = 0;
   requireIamMenuPrefix.mockReset();
+  requireIamAction.mockReset();
   requireApiUser.mockReset();
   loadGrantedMenuCodesForUser.mockReset();
   queryOne.mockReset();
@@ -119,10 +122,19 @@ describe("PUT /api/hris/employees/[id]", () => {
 describe("DELETE /api/hris/employees/[id]", () => {
   it("401 tanpa sesi", async () => {
     const { ApiError } = await import("@/lib/api/auth");
-    requireIamMenuPrefix.mockRejectedValue(ApiError.unauthorized());
+    requireIamAction.mockRejectedValue(ApiError.unauthorized());
+    const { DELETE } = await detailRoute();
+    const res = await DELETE(req("http://x?reason=Karyawan%20keluar", { method: "DELETE" }), params);
+    expect(res.status).toBe(401);
+    expect(requireIamAction).toHaveBeenCalledWith(["hris.kepegawaian.users"], "delete");
+    expect(updateCalls).toHaveLength(0);
+  });
+
+  it("400 tanpa alasan hapus", async () => {
+    requireIamAction.mockResolvedValue({ id: "u-1", full_name: "HR", role: "hrd", brand_id: null });
     const { DELETE } = await detailRoute();
     const res = await DELETE(req("http://x", { method: "DELETE" }), params);
-    expect(res.status).toBe(401);
+    expect(res.status).toBe(400);
     expect(updateCalls).toHaveLength(0);
   });
 });

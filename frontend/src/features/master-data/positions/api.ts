@@ -1,4 +1,5 @@
 import { apiGet, apiPost, apiPut, apiDelete } from "@/lib/api-client";
+import { withReasonQuery } from "@/lib/hris/delete-reason";
 import type { PositionItem, PositionPayload } from "./types";
 
 const BASE = "/api/master/positions";
@@ -12,5 +13,5 @@ export const createPosition = (body: PositionPayload) =>
 export const updatePosition = (id: string, body: PositionPayload) =>
   apiPut<{ data: PositionItem; message?: string }>(`${BASE}/${id}`, body);
 
-export const deletePosition = (id: string) =>
-  apiDelete(`${BASE}/${id}`);
+export const deletePosition = (id: string, reason: string) =>
+  apiDelete(withReasonQuery(`${BASE}/${id}`, reason));

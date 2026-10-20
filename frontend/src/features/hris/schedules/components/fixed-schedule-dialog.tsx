@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Input } from "@/components/ui/input";
 import { applyFixedSchedule } from "@/features/users/api";
 import { dmy } from "@/lib/hris/schedule-type";
+import { retryWithReason } from "@/lib/hris/delete-reason";
 
 interface Props {
   open: boolean;
@@ -25,7 +26,9 @@ export function FixedScheduleDialog({ open, onOpenChange, branchId, branchName, 
   async function apply() {
     setBusy(true);
     try {
-      const res = await applyFixedSchedule({ branch_id: branchId, effective_from: from });
+      const res = await retryWithReason("Hapus jadwal per tanggal", (reason) =>
+        applyFixedSchedule({ branch_id: branchId, effective_from: from, ...(reason ? { reason } : {}) })
+      );
       toast.success(res.message ?? "Jadwal tetap diterapkan");
       onDone();
       onOpenChange(false);

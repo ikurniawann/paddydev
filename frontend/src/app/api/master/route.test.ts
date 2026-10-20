@@ -12,6 +12,7 @@ vi.mock("@/lib/db", () => ({
 vi.mock("@/lib/api/auth", async (orig) => ({
   ...(await orig<typeof import("@/lib/api/auth")>()),
   requireIamMenuPrefix: vi.fn().mockResolvedValue({ id: "u1", full_name: "HR", role: "hrd" }),
+  requireIamAction: vi.fn().mockResolvedValue({ id: "u1", full_name: "HR", role: "hrd" }),
 }));
 
 const ID = "00000000-0000-4000-8000-000000000001";
@@ -44,9 +45,23 @@ describe("/api/master/departments", () => {
   it("DELETE: masih dipakai karyawan → 400 tanpa menghapus", async () => {
     queryOne.mockResolvedValue({ n: 3 });
     const { DELETE } = await import("./departments/[id]/route");
-    const res = await DELETE(req(), ctx);
+    const res = await DELETE(
+      new Request("http://x/api?reason=Departemen%20dobel", { method: "DELETE" }) as unknown as NextRequest,
+      ctx
+    );
     expect(res.status).toBe(400);
     expect((await res.json()).error).toBe("Tidak dapat dihapus, masih ada 3 karyawan di departemen ini");
+    expect(query).not.toHaveBeenCalled();
+  });
+});
+
+describe("/api/master/departments hapus tanpa alasan", () => {
+  it("DELETE: alasan kosong/pendek → 400 tanpa menyentuh database", async () => {
+    const { DELETE } = await import("./departments/[id]/route");
+    const res = await DELETE(new Request("http://x/api?reason=abcd", { method: "DELETE" }) as unknown as NextRequest, ctx);
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe("Alasan hapus wajib diisi (minimal 5 karakter)");
+    expect(queryOne).not.toHaveBeenCalled();
     expect(query).not.toHaveBeenCalled();
   });
 });

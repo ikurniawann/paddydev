@@ -9,6 +9,7 @@ import {
   updateSalary,
 } from "@/lib/hris/employee-salary-repo";
 import { readJson } from "@/lib/hris/workforce-route";
+import { HRIS_LEAF, auditHrisDelete, requireHrisDelete } from "@/lib/hris/delete-guard";
 
 /**
  * GET    /api/hris/employee-salary/[id] — detail versi gaji
@@ -34,9 +35,10 @@ export const PUT = apiHandler(async (request: NextRequest, { params }: RoutePara
   return NextResponse.json({ data, message: "Data salary berhasil diupdate" });
 }, "hris/employee-salary/[id] PUT");
 
-export const DELETE = apiHandler(async (_request: NextRequest, { params }: RouteParams) => {
-  await requireIamMenuPrefix(IAM.hrisCompensation);
+export const DELETE = apiHandler(async (request: NextRequest, { params }: RouteParams) => {
+  const { user, reason } = await requireHrisDelete(request, HRIS_LEAF.salary);
   const { id } = await params;
   await deactivateSalary(id);
+  await auditHrisDelete(request, user, "hris.employee_salary", id, reason);
   return NextResponse.json({ message: "Data salary berhasil dihapus" });
 }, "hris/employee-salary/[id] DELETE");

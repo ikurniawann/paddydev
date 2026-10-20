@@ -5,6 +5,7 @@ import { readJson } from "@/lib/hris/workforce-route";
 import { IAM } from "@/lib/iam/prefixes";
 import { createServerPgClient } from "@/lib/pg/create-client";
 import { deleteRun, getRun, updateRun, updateRunSchema } from "@/lib/payroll/runs";
+import { HRIS_LEAF, auditHrisDelete, requireHrisDelete } from "@/lib/hris/delete-guard";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -24,9 +25,10 @@ export const PUT = apiHandler(async (request: NextRequest, { params }: Ctx) => {
 }, "hris/payroll/[id].PUT");
 
 /** DELETE /api/hris/payroll/[id]: run paid tidak bisa dihapus. */
-export const DELETE = apiHandler(async (_request: NextRequest, { params }: Ctx) => {
-  await requireIamMenuPrefix(IAM.hrisCompensation);
+export const DELETE = apiHandler(async (request: NextRequest, { params }: Ctx) => {
+  const { user, reason } = await requireHrisDelete(request, HRIS_LEAF.runPenggajian);
   const { id } = await params;
   await deleteRun(await createServerPgClient(), id);
+  await auditHrisDelete(request, user, "hris.payroll_runs", id, reason);
   return NextResponse.json({ message: "Payroll run berhasil dihapus" });
 }, "hris/payroll/[id].DELETE");

@@ -7,13 +7,22 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const requireIamMenuPrefix = vi.fn();
+const requireIamAction = vi.fn();
 const updateCalls: Record<string, unknown>[] = [];
 const deleteCalls: string[] = [];
 
 vi.mock("@/lib/api/auth", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api/auth")>();
-  return { ...actual, requireIamMenuPrefix: (...args: unknown[]) => requireIamMenuPrefix(...args) };
+  return {
+    ...actual,
+    requireIamMenuPrefix: (...args: unknown[]) => requireIamMenuPrefix(...args),
+    requireIamAction: (...args: unknown[]) => requireIamAction(...args),
+  };
 });
+vi.mock("@/lib/audit", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/audit")>()),
+  recordAuditAfterCommit: vi.fn(async () => {}),
+}));
 
 vi.mock("@/lib/pg/create-client", () => ({
   createServerPgClient: async () => ({
@@ -49,14 +58,18 @@ beforeEach(() => {
   updateCalls.length = 0;
   deleteCalls.length = 0;
   requireIamMenuPrefix.mockReset();
+  requireIamAction.mockReset();
 });
+
+const deleteRequest = (search = "?reason=Dokumen%20salah%20unggah") =>
+  new Request(`http://localhost/api/hris/employees/documents/doc-1${search}`, { method: "DELETE" }) as never;
 
 describe("tanpa sesi valid", () => {
   it("DELETE → 401 dan TIDAK menyentuh database", async () => {
     const { ApiError } = await import("@/lib/api/auth");
-    requireIamMenuPrefix.mockRejectedValue(ApiError.unauthorized());
+    requireIamAction.mockRejectedValue(ApiError.unauthorized());
     const { DELETE } = await routeModule();
-    const res = await DELETE(new Request("http://localhost", { method: "DELETE" }) as never, params);
+    const res = await DELETE(deleteRequest(), params);
     expect(res.status).toBe(401);
     expect(deleteCalls).toHaveLength(0);
   });
@@ -74,10 +87,19 @@ describe("tanpa sesi valid", () => {
 describe("login tapi tanpa hak menu HRIS", () => {
   it("DELETE → 403 dan tidak menghapus apa pun", async () => {
     const { ApiError } = await import("@/lib/api/auth");
-    requireIamMenuPrefix.mockRejectedValue(ApiError.forbidden());
+    requireIamAction.mockRejectedValue(ApiError.forbidden());
     const { DELETE } = await routeModule();
-    const res = await DELETE(new Request("http://localhost", { method: "DELETE" }) as never, params);
+    const res = await DELETE(deleteRequest(), params);
     expect(res.status).toBe(403);
+    expect(requireIamAction).toHaveBeenCalledWith(["hris.kepegawaian.users"], "delete");
+    expect(deleteCalls).toHaveLength(0);
+  });
+
+  it("DELETE berhak tanpa alasan → 400 dan tidak menghapus apa pun", async () => {
+    requireIamAction.mockResolvedValue({ id: "u1", full_name: "HR", role: "hrd", brand_id: null });
+    const { DELETE } = await routeModule();
+    const res = await DELETE(deleteRequest(""), params);
+    expect(res.status).toBe(400);
     expect(deleteCalls).toHaveLength(0);
   });
 });

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { withDeleteReason } from "@/lib/hris/delete-reason";
 import { bulkPlacement, createPlacement, deletePlacement, updatePlacement } from "./api";
 import { placementQueryKeys } from "./query-keys";
 import type { BulkPlacementPayload, PlacementPayload } from "./types";
@@ -28,7 +29,7 @@ export function useUpdatePlacement() {
 
 export function useDeletePlacement() {
   const onSuccess = useInvalidatePlacements();
-  return useMutation({ mutationFn: deletePlacement, onSuccess });
+  return useMutation({ mutationFn: withDeleteReason("Hapus penempatan", (id: string, reason) => deletePlacement(id, reason)), retry: false, onSuccess });
 }
 
 export function useBulkPlacement() {

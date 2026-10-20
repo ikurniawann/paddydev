@@ -1,4 +1,5 @@
 import { apiDelete, apiGet, apiPatch, apiPost, apiPut, buildListUrl } from "@/lib/api-client";
+import { withReasonQuery } from "@/lib/hris/delete-reason";
 import type {
   CreateDeptTaskPayload,
   CreateKpiTargetPayload,
@@ -66,8 +67,8 @@ export const fetchKpiTargets = () =>
 export const createKpiTarget = (payload: CreateKpiTargetPayload) =>
   apiPost<{ data: unknown }>(`${BASE}/targets`, payload);
 
-export const deleteKpiTarget = (id: string) =>
-  apiDelete(buildListUrl(`${BASE}/targets`, { id }));
+export const deleteKpiTarget = (id: string, reason: string) =>
+  apiDelete(withReasonQuery(buildListUrl(`${BASE}/targets`, { id }), reason));
 
 // ── Task Departemen ──
 const DEPT_TASKS = "/api/hris/dept-tasks";

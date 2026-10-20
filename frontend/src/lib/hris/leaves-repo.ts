@@ -16,9 +16,6 @@ import { notifyLeaveRequestWa } from "./leave-wa";
 import type { WorkforceActor } from "./workforce-auth";
 import { DATE_RE, requireLinkedEmployee, unwrap } from "./workforce-route";
 
-/** Role yang boleh menghapus pengajuan cuti. */
-const LEAVE_DELETE_ROLES = ["hrd", "super_admin", "admin"] as const;
-
 export const leaveListQuerySchema = z.object({
   employee_id: z.string().optional(),
   status: z.string().optional(),
@@ -260,10 +257,8 @@ export async function updateLeave(
   return { message: "Leave request updated successfully", data };
 }
 
-export async function deleteLeave(actor: WorkforceActor, id: string) {
-  if (!(LEAVE_DELETE_ROLES as readonly string[]).includes(actor.role)) {
-    throw ApiError.forbidden("Forbidden: Only HRD can delete leave requests");
-  }
+/** Hapus pengajuan; route memeriksa aksi "delete" di Cuti & Izin (EPIC-061). */
+export async function deleteLeave(id: string) {
   const db = await createServerPgClient();
   unwrap(await db.from("leaves").delete().eq("id", id));
 }

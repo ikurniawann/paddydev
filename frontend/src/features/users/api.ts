@@ -1,4 +1,5 @@
 import { apiGet, apiPost, apiPut, apiPatch, apiDelete, buildListUrl } from "@/lib/api-client";
+import { withReasonQuery } from "@/lib/hris/delete-reason";
 import type { ShiftScheduleRowLike } from "@/lib/hris/employee-profile-shifts";
 import type { ScheduleType } from "@/lib/hris/schedule-type";
 import type { CreateUserEmployeeInput, UpdateUserEmployeeInput } from "@/lib/users/schemas";
@@ -246,8 +247,8 @@ export const patchEmployeeContract = (contractId: string, payload: ContractActio
     payload
   );
 
-export const deleteEmployeeContract = (contractId: string) =>
-  apiDelete(`/api/hris/contracts/${contractId}`);
+export const deleteEmployeeContract = (contractId: string, reason: string) =>
+  apiDelete(withReasonQuery(`/api/hris/contracts/${contractId}`, reason));
 
 export async function uploadContractSignedDocument(contractId: string, file: File) {
   const formData = new FormData();
@@ -266,14 +267,14 @@ export async function uploadContractSignedDocument(contractId: string, file: Fil
   return json as { message: string };
 }
 
-export const deleteContractSignedDocument = (contractId: string) =>
-  apiDelete(`/api/hris/contracts/${contractId}/signed-document`);
+export const deleteContractSignedDocument = (contractId: string, reason: string) =>
+  apiDelete(withReasonQuery(`/api/hris/contracts/${contractId}/signed-document`, reason));
 
 export const createEmployeeDocument = (payload: EmployeeDocumentInput) =>
   apiPost<{ data: unknown }>("/api/hris/employees/documents", payload);
 
-export const deleteEmployeeDocument = (docId: string) =>
-  apiDelete(`/api/hris/employees/documents/${docId}`);
+export const deleteEmployeeDocument = (docId: string, reason: string) =>
+  apiDelete(withReasonQuery(`/api/hris/employees/documents/${docId}`, reason));
 
 export const fetchUserFormLookups = async (): Promise<UserFormLookups> => {
   const [deptsRes, posRes, statusRes, managersRes, sectionsRes] = await Promise.all([
@@ -343,7 +344,7 @@ export interface ScheduleTypeResult {
 export const fetchScheduleType = (id: string) =>
   apiGet<{ data: { schedule_type: ScheduleType; future_days: number } }>(`/api/hris/employees/${id}/schedule-type`);
 
-export const saveScheduleType = (id: string, body: { schedule_type: ScheduleType; effective_from: string }) =>
+export const saveScheduleType = (id: string, body: { schedule_type: ScheduleType; effective_from: string; reason?: string }) =>
   apiPut<{ data: ScheduleTypeResult; message?: string }>(`/api/hris/employees/${id}/schedule-type`, body);
 
 export const bulkScheduleType = (body: {
@@ -351,9 +352,10 @@ export const bulkScheduleType = (body: {
   schedule_type: ScheduleType;
   effective_from: string;
   dry_run?: boolean;
+  reason?: string;
 }) => apiPost<{ data: ScheduleTypeResult; message?: string }>("/api/hris/employees/schedule-type/bulk", body);
 
-export const applyFixedSchedule = (body: { branch_id?: string; employee_ids?: string[]; effective_from: string }) =>
+export const applyFixedSchedule = (body: { branch_id?: string; employee_ids?: string[]; effective_from: string; reason?: string }) =>
   apiPost<{ data: ScheduleTypeResult; message?: string }>("/api/hris/schedules/fixed", body);
 
 export const resignEmployee = (

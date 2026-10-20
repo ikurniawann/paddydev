@@ -7,6 +7,7 @@ import { NextResponse } from "next/server";
 
 const requireIamGuard = vi.fn();
 const requireIamMenuPrefix = vi.fn();
+const requireIamAction = vi.fn();
 const dbTouched = vi.fn();
 
 vi.mock("@/lib/api/auth", async (importOriginal) => {
@@ -15,6 +16,8 @@ vi.mock("@/lib/api/auth", async (importOriginal) => {
     ...actual,
     requireIamGuard: (...args: unknown[]) => requireIamGuard(...args),
     requireIamMenuPrefix: (...args: unknown[]) => requireIamMenuPrefix(...args),
+    // Hapus HRIS dijaga aksi delete menu daun.
+    requireIamAction: (...args: unknown[]) => requireIamAction(...args),
   };
 });
 
@@ -40,6 +43,7 @@ beforeEach(async () => {
   dbTouched.mockReset();
   requireIamGuard.mockReset().mockResolvedValue(forbidden());
   requireIamMenuPrefix.mockReset().mockRejectedValue(ApiError.forbidden());
+  requireIamAction.mockReset().mockRejectedValue(ApiError.forbidden());
 });
 
 describe("tanpa grant → 403 tanpa query", () => {

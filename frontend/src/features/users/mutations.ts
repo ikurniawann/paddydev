@@ -1,6 +1,7 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { withDeleteReason } from "@/lib/hris/delete-reason";
 import type { CreateUserEmployeeInput, UpdateUserEmployeeInput } from "@/lib/users/schemas";
 import {
   createEmployeeContract,
@@ -56,7 +57,8 @@ export function useContractAction(employeeId: string) {
 export function useDeleteEmployeeContract(employeeId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (contractId: string) => deleteEmployeeContract(contractId),
+    mutationFn: withDeleteReason("Hapus draft kontrak", (contractId: string, reason) => deleteEmployeeContract(contractId, reason)),
+    retry: false,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: usersQueryKeys.contracts(employeeId) });
     },
@@ -77,7 +79,8 @@ export function useUploadContractSignedDocument(employeeId: string) {
 export function useDeleteContractSignedDocument(employeeId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (contractId: string) => deleteContractSignedDocument(contractId),
+    mutationFn: withDeleteReason("Hapus scan kontrak bertanda tangan", (contractId: string, reason) => deleteContractSignedDocument(contractId, reason)),
+    retry: false,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: usersQueryKeys.contracts(employeeId) });
     },
@@ -121,7 +124,8 @@ export function useCreateEmployeeDocument(employeeId: string) {
 export function useDeleteEmployeeDocument(employeeId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (docId: string) => deleteEmployeeDocument(docId),
+    mutationFn: withDeleteReason("Hapus dokumen karyawan", (docId: string, reason) => deleteEmployeeDocument(docId, reason)),
+    retry: false,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: usersQueryKeys.documents(employeeId) });
     },

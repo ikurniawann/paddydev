@@ -8,18 +8,17 @@ import {
   updateAttendance,
 } from "@/lib/hris/attendance-repo";
 import { readJson, requireWorkforceActor } from "@/lib/hris/workforce-route";
+import { HRIS_LEAF, auditHrisDelete, requireHrisDelete } from "@/lib/hris/delete-guard";
 
 /**
  * GET    /api/hris/attendance/:id — detail (HR, atau pemilik record)
  * PUT    /api/hris/attendance/:id — koreksi/validasi (HR)
- * DELETE /api/hris/attendance/:id — hapus (super_admin/admin/hrd)
+ * DELETE /api/hris/attendance/:id — hapus (aksi delete di menu Absensi + alasan)
  */
 
 interface RouteParams {
   params: Promise<{ id: string }>;
 }
-
-const DELETE_ROLES = ["super_admin", "admin", "hrd"];
 
 export const GET = apiHandler(async (_request: NextRequest, { params }: RouteParams) => {
   const actor = await requireWorkforceActor();
@@ -38,12 +37,10 @@ export const PUT = apiHandler(async (request: NextRequest, { params }: RoutePara
   return NextResponse.json({ message: "Attendance updated successfully", data });
 }, "hris/attendance/[id] PUT");
 
-export const DELETE = apiHandler(async (_request: NextRequest, { params }: RouteParams) => {
-  const actor = await requireWorkforceActor();
-  if (!DELETE_ROLES.includes(actor.role)) {
-    throw ApiError.forbidden("Forbidden: Only HRD can delete attendance records");
-  }
+export const DELETE = apiHandler(async (request: NextRequest, { params }: RouteParams) => {
+  const { user, reason } = await requireHrisDelete(request, HRIS_LEAF.absensi);
   const { id } = await params;
   await deleteAttendance(id);
+  await auditHrisDelete(request, user, "hris.attendance", id, reason);
   return NextResponse.json({ message: "Attendance deleted successfully" });
 }, "hris/attendance/[id] DELETE");

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { withDeleteReason } from "@/lib/hris/delete-reason";
 import { departmentsQueryKeys } from "./query-keys";
 import { createDepartment, updateDepartment, deleteDepartment } from "./api";
 import type { DepartmentPayload } from "./types";
@@ -30,7 +31,8 @@ export function useUpdateDepartment() {
 export function useDeleteDepartment() {
   const invalidate = useInvalidateDepartments();
   return useMutation({
-    mutationFn: (id: string) => deleteDepartment(id),
+    mutationFn: withDeleteReason("Hapus departemen", (id: string, reason) => deleteDepartment(id, reason)),
+    retry: false,
     onSuccess: invalidate,
   });
 }

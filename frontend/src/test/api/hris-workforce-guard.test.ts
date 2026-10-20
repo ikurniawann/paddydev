@@ -17,6 +17,8 @@ vi.mock("@/lib/api/auth", async (importOriginal) => {
   return {
     ...actual,
     requireIamMenuPrefix: (...args: unknown[]) => requireIamMenuPrefix(...args),
+    // Hapus HRIS dijaga aksi delete menu daun (requireIamAction): ikut grant palsu yang sama.
+    requireIamAction: (prefixes: unknown) => requireIamMenuPrefix(prefixes),
     requireIamGuard: (...args: unknown[]) => requireIamGuard(...args),
     requireApiUser: (...args: unknown[]) => requireApiUser(...args),
   };
@@ -80,6 +82,7 @@ const forbidden: [string, () => Promise<RouteModule>, string[]][] = [
   ["announcements/[id]/read", () => import("@/app/api/hris/announcements/[id]/read/route"), ["POST"]],
   ["announcements/cover", () => import("@/app/api/hris/announcements/cover/route"), ["POST"]],
   ["attendance/export", () => import("@/app/api/hris/attendance/export/route"), ["GET"]],
+  ["attendance/[id]", () => import("@/app/api/hris/attendance/[id]/route"), ["DELETE"]],
   ["contracts", () => import("@/app/api/hris/contracts/route"), ["GET"]],
   ["contracts/expiring", () => import("@/app/api/hris/contracts/expiring/route"), ["GET"]],
   ["contracts/[id]", () => import("@/app/api/hris/contracts/[id]/route"), ["PATCH", "DELETE"]],
@@ -131,7 +134,7 @@ const unauthenticated: [string, () => Promise<RouteModule>, string[]][] = [
   ["announcements/feed", () => import("@/app/api/hris/announcements/feed/route"), ["GET"]],
   ["announcements/cover/[...path]", () => import("@/app/api/hris/announcements/cover/[...path]/route"), ["GET"]],
   ["attendance", () => import("@/app/api/hris/attendance/route"), ["GET", "POST"]],
-  ["attendance/[id]", () => import("@/app/api/hris/attendance/[id]/route"), ["GET", "PUT", "DELETE"]],
+  ["attendance/[id]", () => import("@/app/api/hris/attendance/[id]/route"), ["GET", "PUT"]],
   ["attendance/stats", () => import("@/app/api/hris/attendance/stats/route"), ["GET"]],
   ["attendance/schedule", () => import("@/app/api/hris/attendance/schedule/route"), ["GET"]],
   ["attendance/daily-roster", () => import("@/app/api/hris/attendance/daily-roster/route"), ["GET"]],

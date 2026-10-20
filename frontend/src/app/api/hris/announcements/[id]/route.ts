@@ -10,6 +10,7 @@ import {
   updateAnnouncement,
 } from "@/lib/hris/announcements-repo";
 import { readJson, requireUuid, requireWorkforceActor } from "@/lib/hris/workforce-route";
+import { HRIS_LEAF, auditHrisDelete, requireHrisDelete } from "@/lib/hris/delete-guard";
 
 /**
  * GET    /api/hris/announcements/[id] — pengelola (semua) / karyawan (bila tayang & menyasar)
@@ -39,9 +40,10 @@ export const PATCH = apiHandler(async (req: NextRequest, { params }: RouteParams
   return NextResponse.json({ data, message: "Pengumuman diperbarui" });
 }, "hris/announcements/[id] PATCH");
 
-export const DELETE = apiHandler(async (_req: NextRequest, { params }: RouteParams) => {
-  await requireIamMenuPrefix(IAM.hrisKepegawaian);
+export const DELETE = apiHandler(async (request: NextRequest, { params }: RouteParams) => {
+  const { user, reason } = await requireHrisDelete(request, HRIS_LEAF.pengumuman);
   const id = requireUuid((await params).id);
   await deleteAnnouncement(id);
+  await auditHrisDelete(request, user, "hris.announcements", id, reason);
   return NextResponse.json({ message: "Pengumuman dihapus" });
 }, "hris/announcements/[id] DELETE");

@@ -1,4 +1,5 @@
 import { apiDelete, apiGet, apiPatch, apiPost, buildListUrl } from "@/lib/api-client";
+import { withReasonQuery } from "@/lib/hris/delete-reason";
 import type {
   BulkPlacementPayload,
   ClockPlacements,
@@ -31,7 +32,8 @@ export const createPlacement = (employeeId: string, payload: PlacementPayload) =
 export const updatePlacement = (id: string, payload: PlacementPayload) =>
   apiPatch<{ data: Placement; message?: string }>(`/api/hris/employee-placements/${id}`, payload);
 
-export const deletePlacement = (id: string) => apiDelete(`/api/hris/employee-placements/${id}`);
+export const deletePlacement = (id: string, reason: string) =>
+  apiDelete(withReasonQuery(`/api/hris/employee-placements/${id}`, reason));
 
 export const bulkPlacement = (payload: BulkPlacementPayload) =>
   apiPost<{ data: { created: number; skipped: number }; message?: string }>(

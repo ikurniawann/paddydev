@@ -3,6 +3,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import { useState } from "react";
+import { DeleteReasonHost } from "@/components/hris/delete-reason-host";
 
 export default function QueryProvider({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(() => new QueryClient({
@@ -28,6 +29,7 @@ export default function QueryProvider({ children }: { children: React.ReactNode 
   return (
     <QueryClientProvider client={queryClient}>
       {children}
+      <DeleteReasonHost />
       {/* Devtools hanya muncul di development */}
       <ReactQueryDevtools initialIsOpen={false} />
     </QueryClientProvider>

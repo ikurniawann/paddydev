@@ -6,6 +6,7 @@ import { query } from "@/lib/db";
 import { uploadFile, validateFile } from "@/lib/storage";
 import { readCvFile } from "@/lib/recruitment/candidate-cv";
 import { requireCandidate } from "@/lib/recruitment/candidates-repo";
+import { HRIS_LEAF, auditHrisDelete, requireHrisDelete } from "@/lib/hris/delete-guard";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -35,10 +36,11 @@ export const POST = apiHandler(async (request: Request, { params }: RouteParams)
 }, "cv-upload");
 
 // DELETE /api/candidates/[id]/cv-upload
-export const DELETE = apiHandler(async (_request: Request, { params }: RouteParams) => {
-  await requireIamMenuPrefix(IAM.hrisRecruitment);
+export const DELETE = apiHandler(async (request: Request, { params }: RouteParams) => {
+  const { user, reason } = await requireHrisDelete(request, HRIS_LEAF.kandidat);
   const { id } = await params;
   await requireCandidate(id);
   await setCvUrl(id, null);
+  await auditHrisDelete(request, user, "recruitment.candidate_cv", id, reason);
   return NextResponse.json({ message: "CV berhasil dihapus" });
 }, "cv-upload");

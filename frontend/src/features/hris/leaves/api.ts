@@ -1,4 +1,5 @@
 import { buildListUrl, apiGet, apiPost, apiPut, apiDelete } from "@/lib/api-client";
+import { withReasonQuery } from "@/lib/hris/delete-reason";
 import type {
   LeaveItem,
   LeaveListParams,
@@ -20,7 +21,8 @@ export const createLeave = (body: CreateLeavePayload) =>
 export const updateLeave = (id: string, body: UpdateLeavePayload) =>
   apiPut<{ data: LeaveItem; message?: string }>(`${BASE}/${id}`, body);
 
-export const deleteLeave = (id: string) => apiDelete(`${BASE}/${id}`);
+export const deleteLeave = (id: string, reason: string) =>
+  apiDelete(withReasonQuery(`${BASE}/${id}`, reason));
 
 export const approveLeave = (body: ApproveLeavePayload) =>
   apiPost<{ data: LeaveItem; wa_link?: string | null }>(`${BASE}/approve`, body);

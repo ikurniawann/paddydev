@@ -1,4 +1,5 @@
 import { apiDelete, apiGet, apiPatch, apiPost } from "@/lib/api-client";
+import { withReasonQuery } from "@/lib/hris/delete-reason";
 import type { Announcement, AnnouncementPayload, Department } from "./types";
 
 export const fetchAnnouncements = () =>
@@ -12,7 +13,8 @@ export const saveAnnouncement = (payload: AnnouncementPayload, id?: string) =>
     ? apiPatch<{ message?: string }>(`/api/hris/announcements/${id}`, payload)
     : apiPost<{ message?: string }>("/api/hris/announcements", payload);
 
-export const deleteAnnouncement = (id: string) => apiDelete(`/api/hris/announcements/${id}`);
+export const deleteAnnouncement = (id: string, reason: string) =>
+  apiDelete(withReasonQuery(`/api/hris/announcements/${id}`, reason));
 
 /** Kirim gambar data URL, kembalikan path cover tersimpan. */
 export const uploadAnnouncementCover = (image: string) =>

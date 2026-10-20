@@ -19,6 +19,7 @@ import type { ScheduleType } from "@/lib/hris/schedule-type";
 import { applyFixedSchedule } from "../api";
 import { useSaveEmployeeShiftPattern } from "../mutations";
 import { useActiveShiftOptions, useEmployeeShiftSchedule } from "../queries";
+import { retryWithReason } from "@/lib/hris/delete-reason";
 
 /**
  * Tab "Jadwal Shift" di detail karyawan: HRD/Super Admin mengatur pola
@@ -64,7 +65,9 @@ export function EmployeeShiftsTab({
   async function handleApplyFixed() {
     setApplying(true);
     try {
-      const res = await applyFixedSchedule({ employee_ids: [employeeId], effective_from: effectiveFrom });
+      const res = await retryWithReason("Hapus jadwal per tanggal", (reason) =>
+        applyFixedSchedule({ employee_ids: [employeeId], effective_from: effectiveFrom, ...(reason ? { reason } : {}) })
+      );
       toast.success(res.message ?? "Jadwal tetap diterapkan");
       await scheduleQuery.refetch?.();
     } catch (error) {
