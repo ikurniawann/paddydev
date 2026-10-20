@@ -53,7 +53,9 @@ func DistanceMeters(lat1, lng1, lat2, lng2 float64) float64 {
 	rad := func(v float64) float64 { return v * math.Pi / 180 }
 	dLat, dLng := rad(lat2-lat1), rad(lng2-lng1)
 	h := math.Pow(math.Sin(dLat/2), 2) + math.Cos(rad(lat1))*math.Cos(rad(lat2))*math.Pow(math.Sin(dLng/2), 2)
-	return 2 * 6_371_000 * math.Asin(math.Sqrt(h))
+	// Rounding can push h a hair above 1 for near-antipodal points; clamp so
+	// Asin never returns NaN.
+	return 2 * 6_371_000 * math.Asin(math.Sqrt(math.Min(1, h)))
 }
 
 // usableCoord rejects NaN, out-of-range and 0,0 positions (a GPS fix that

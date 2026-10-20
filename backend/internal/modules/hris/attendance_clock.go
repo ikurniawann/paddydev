@@ -13,7 +13,8 @@ import (
 // Clock-in and clock-out (lib/hris/attendance-repo.ts clockIn/clockOut):
 // a selfie is required both ways, a non-HR account only clocks itself, one
 // attendance row per employee and date, and the clock-in snapshots the
-// scheduled shift and its lateness.
+// scheduled shift and its lateness. Both directions are judged against the
+// store geofence (EPIC-062); out of area needs a note.
 
 const maxSelfieBytes = 2 * 1024 * 1024
 
@@ -110,7 +111,8 @@ func (s *Service) ClockIn(ctx context.Context, a *Actor, in clockInput) (row *Ro
 		return nil, nil, httpx.NotFound("Akun ini tidak terhubung ke data karyawan")
 	}
 	date := strOr(in.Date)
-	if date == "" {
+	if date == "" || !a.IsHR {
+		// Only HR picks the day; an employee clocks the server's today (P5).
 		date = domain.TodayWIB(s.now())
 	}
 	if existing, err = s.repo.AttendanceIDOn(ctx, *employeeID, date); err != nil || existing != nil {
@@ -121,6 +123,13 @@ func (s *Service) ClockIn(ctx context.Context, a *Actor, in clockInput) (row *Ro
 	}
 	branch, err := s.clockBranch(ctx, a, *employeeID, date, in.BranchID)
 	if err != nil {
+		return nil, nil, err
+	}
+	geo, err := s.geofenceFor(ctx, a, *employeeID, date, branch, in.Location)
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := requireGeofenceNote(geo, in.Notes); err != nil {
 		return nil, nil, err
 	}
 	photo, err := s.saveSelfie(in.Photo, *employeeID)
@@ -155,6 +164,8 @@ func (s *Service) ClockIn(ctx context.Context, a *Actor, in clockInput) (row *Ro
 	f.add("notes", nilIfEmpty(in.Notes))
 	f.add("status", "present")
 	f.add("branch_id", branch)
+	f.add("clock_in_geofence", geo.status())
+	f.add("clock_in_distance_m", geo.distance())
 	row, err = s.repo.InsertAttendance(ctx, f)
 	return row, nil, periodWriteError(err)
 }
@@ -212,6 +223,13 @@ func (s *Service) ClockOut(ctx context.Context, a *Actor, in clockInput) (*Row, 
 	if err := s.ensureAttendanceOpen(ctx, attendanceDate(att)); err != nil {
 		return nil, err
 	}
+	geo, err := s.geofenceFor(ctx, a, employeeID, attendanceDate(att), att.StrPtr("branch_id"), in.Location)
+	if err != nil {
+		return nil, err
+	}
+	if err := requireGeofenceNote(geo, in.Notes); err != nil {
+		return nil, err
+	}
 	photo, err := s.saveSelfie(in.Photo, employeeID)
 	if err != nil {
 		return nil, err
@@ -225,6 +243,8 @@ func (s *Service) ClockOut(ctx context.Context, a *Actor, in clockInput) (*Row, 
 	f.add("clock_out_location", locationJSON(in.Location))
 	f.add("clock_out_photo_url", photo)
 	f.add("notes", notes)
+	f.add("clock_out_geofence", geo.status())
+	f.add("clock_out_distance_m", geo.distance())
 	row, err := s.repo.UpdateAttendance(ctx, id, f)
 	return row, periodWriteError(err)
 }

@@ -40,6 +40,9 @@ type PlacementRepo interface {
 	ClearOtherPrimary(ctx context.Context, employeeID, exceptID, start string, end *string) error
 	ActiveBranches(ctx context.Context) ([]*Row, error)
 	BranchExists(ctx context.Context, id string) (bool, error)
+	// BranchGeofence is the store's name, coordinates and radius override
+	// (EPIC-062); nil when the store does not exist.
+	BranchGeofence(ctx context.Context, id string) (*Row, error)
 	PlacementEmployeeExists(ctx context.Context, id string) (bool, error)
 }
 
@@ -150,6 +153,11 @@ func (s *store) BranchExists(ctx context.Context, id string) (bool, error) {
 	var ok bool
 	err := s.db.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM configuration.branches WHERE id::text = $1)`, id).Scan(&ok)
 	return ok, err
+}
+
+func (s *store) BranchGeofence(ctx context.Context, id string) (*Row, error) {
+	row, err := queryRow(ctx, s.db, `SELECT name, lat, lng, geofence_radius_m FROM configuration.branches WHERE id::text = $1`, id)
+	return row, ignoreBadInput(err)
 }
 
 func (s *store) PlacementEmployeeExists(ctx context.Context, id string) (bool, error) {
