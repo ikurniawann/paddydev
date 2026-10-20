@@ -21,6 +21,8 @@ vi.mock("@/lib/api/auth", async (importOriginal) => {
   return {
     ...actual,
     requireIamMenuPrefix: (...args: unknown[]) => requireIamMenuPrefix(...args),
+    // Aksi menu (approve pinjaman) ikut grant palsu yang sama.
+    requireIamAction: (prefixes: unknown) => requireIamMenuPrefix(prefixes),
     requireIamGuard: (...args: unknown[]) => requireIamGuard(...args),
     requireApiUser: (...args: unknown[]) => requireApiUser(...args),
   };
