@@ -5,6 +5,8 @@ import {
   geofenceLabel,
   geofenceNoteRequired,
   isGeofenceStatus,
+  toBranchLocationPayload,
+  validateBranchLocation,
 } from "./geofence";
 
 describe("geofenceLabel", () => {
@@ -60,5 +62,40 @@ describe("geofenceNoteRequired", () => {
     expect(geofenceNoteRequired(400, body)).toBeNull();
     expect(geofenceNoteRequired(422, { error: "Validation failed", details: [] })).toBeNull();
     expect(geofenceNoteRequired(422, null)).toBeNull();
+  });
+});
+
+describe("validateBranchLocation", () => {
+  it("sama dengan aturan server", () => {
+    expect(validateBranchLocation({ lat: "", lng: "", radius: "" })).toBe("");
+    expect(validateBranchLocation({ lat: "-6.8889", lng: "107.596", radius: "250" })).toBe("");
+    expect(validateBranchLocation({ lat: "-6.8889", lng: "", radius: "" })).toBe(
+      "Latitude dan longitude wajib diisi berdua atau dikosongkan berdua"
+    );
+    expect(validateBranchLocation({ lat: "0", lng: "0", radius: "" })).toBe(
+      "Koordinat tidak valid (latitude -90..90, longitude -180..180, bukan 0,0)"
+    );
+    expect(validateBranchLocation({ lat: "-6.9", lng: "107.6", radius: "10" })).toBe("Radius absensi 25–1000 meter");
+    expect(validateBranchLocation({ lat: "-6.9", lng: "107.6", radius: "120.5" })).toBe("Radius absensi 25–1000 meter");
+  });
+  it("menerima batas radius 25 dan 1000, menolak 24 dan 1001", () => {
+    const f = (radius: string) => validateBranchLocation({ lat: "", lng: "", radius });
+    expect(f("25")).toBe("");
+    expect(f("1000")).toBe("");
+    expect(f("24")).toBe("Radius absensi 25–1000 meter");
+    expect(f("1001")).toBe("Radius absensi 25–1000 meter");
+    expect(f("abc")).toBe("Radius absensi 25–1000 meter");
+  });
+  it("membentuk payload API", () => {
+    expect(toBranchLocationPayload({ lat: "-6.8889", lng: "107.596", radius: "" })).toEqual({
+      lat: -6.8889,
+      lng: 107.596,
+      geofence_radius_m: null,
+    });
+    expect(toBranchLocationPayload({ lat: "", lng: "", radius: "250" })).toEqual({
+      lat: null,
+      lng: null,
+      geofence_radius_m: 250,
+    });
   });
 });

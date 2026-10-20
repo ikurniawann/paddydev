@@ -2,7 +2,8 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { withDeleteReason } from "@/lib/hris/delete-reason";
-import { bulkPlacement, createPlacement, deletePlacement, updatePlacement } from "./api";
+import type { BranchLocationPayload } from "@/lib/hris/geofence";
+import { bulkPlacement, createPlacement, deletePlacement, saveBranchLocation, updatePlacement } from "./api";
 import { placementQueryKeys } from "./query-keys";
 import type { BulkPlacementPayload, PlacementPayload } from "./types";
 
@@ -35,4 +36,12 @@ export function useDeletePlacement() {
 export function useBulkPlacement() {
   const onSuccess = useInvalidatePlacements();
   return useMutation({ mutationFn: (payload: BulkPlacementPayload) => bulkPlacement(payload), onSuccess });
+}
+
+export function useSaveBranchLocation() {
+  const onSuccess = useInvalidatePlacements();
+  return useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: BranchLocationPayload }) => saveBranchLocation(id, payload),
+    onSuccess,
+  });
 }

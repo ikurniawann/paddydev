@@ -4,6 +4,8 @@
  * ini tidak menghitung jarak.
  */
 
+import { isUsableCoord } from "@/lib/maps/coords";
+
 export type GeofenceStatus = "valid" | "invalid" | "unchecked" | "dinas";
 
 export const GEOFENCE_META: Record<GeofenceStatus, { label: string; className: string }> = {
@@ -58,4 +60,43 @@ export function geofenceNoteRequired(status: number, body: unknown): GeofenceNot
     radiusM: typeof d.radius_m === "number" ? d.radius_m : GEOFENCE_DEFAULT_RADIUS_M,
     branchName: typeof d.branch_name === "string" ? d.branch_name : null,
   };
+}
+
+/** Batas override radius absensi per toko (meter); sama dengan server. */
+const RADIUS_MIN_M = 25;
+const RADIUS_MAX_M = 1000;
+
+/** Isian dialog Lokasi Toko (HRIS), semuanya teks input. */
+export interface BranchLocationForm {
+  lat: string;
+  lng: string;
+  /** Override radius; kosong = radius bawaan */
+  radius: string;
+}
+
+/** Body PUT /api/hris/branches/{id}/location: PUT penuh, kunci yang hilang menjadi null. */
+export interface BranchLocationPayload {
+  lat: number | null;
+  lng: number | null;
+  geofence_radius_m: number | null;
+}
+
+/** Validasi form Lokasi Toko; pesan sama dengan server (EPIC-062 R9). "" bila valid. */
+export function validateBranchLocation(form: BranchLocationForm): string {
+  const hasLat = form.lat.trim() !== "";
+  const hasLng = form.lng.trim() !== "";
+  if (hasLat !== hasLng) return "Latitude dan longitude wajib diisi berdua atau dikosongkan berdua";
+  if (hasLat && !isUsableCoord(Number(form.lat), Number(form.lng))) {
+    return "Koordinat tidak valid (latitude -90..90, longitude -180..180, bukan 0,0)";
+  }
+  if (form.radius.trim() !== "") {
+    const r = Number(form.radius);
+    if (!Number.isInteger(r) || r < RADIUS_MIN_M || r > RADIUS_MAX_M) return "Radius absensi 25–1000 meter";
+  }
+  return "";
+}
+
+export function toBranchLocationPayload(form: BranchLocationForm): BranchLocationPayload {
+  const num = (v: string) => (v.trim() === "" ? null : Number(v));
+  return { lat: num(form.lat), lng: num(form.lng), geofence_radius_m: num(form.radius) };
 }

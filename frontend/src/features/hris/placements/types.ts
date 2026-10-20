@@ -8,7 +8,12 @@ export interface StoreBranch {
   /** numeric pg sebagai string, null bila belum diisi */
   lat: string | null;
   lng: string | null;
+  /** Override radius absensi (meter); null = radius bawaan */
+  geofence_radius_m: number | null;
 }
+
+/** Respons PUT /api/hris/branches/{id}/location: hanya kolom yang disimpan. */
+export type SavedBranchLocation = Pick<StoreBranch, "id" | "code" | "name" | "lat" | "lng" | "geofence_radius_m">;
 
 /** Baris hris.employee_placements beserta nama toko. */
 export interface Placement {

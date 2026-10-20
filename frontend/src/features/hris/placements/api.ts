@@ -1,5 +1,6 @@
-import { apiDelete, apiGet, apiPatch, apiPost, buildListUrl } from "@/lib/api-client";
+import { apiDelete, apiGet, apiPatch, apiPost, apiPut, buildListUrl } from "@/lib/api-client";
 import { withReasonQuery } from "@/lib/hris/delete-reason";
+import type { BranchLocationPayload } from "@/lib/hris/geofence";
 import type {
   BulkPlacementPayload,
   ClockPlacements,
@@ -7,11 +8,16 @@ import type {
   PlacementOverviewFilter,
   PlacementOverviewRow,
   PlacementPayload,
+  SavedBranchLocation,
   StoreBranch,
 } from "./types";
 
 export const fetchStoreBranches = () =>
   apiGet<{ data: StoreBranch[] }>("/api/hris/branches").then((res) => res.data ?? []);
+
+/** PUT penuh: kirim selalu ketiga kunci (kunci yang hilang disimpan sebagai null). */
+export const saveBranchLocation = (id: string, payload: BranchLocationPayload) =>
+  apiPut<{ data: SavedBranchLocation }>(`/api/hris/branches/${id}/location`, payload);
 
 export const fetchEmployeePlacements = (employeeId: string) =>
   apiGet<{ data: Placement[] }>(`/api/hris/employees/${employeeId}/placements`).then((res) => res.data ?? []);
