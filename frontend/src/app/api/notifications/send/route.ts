@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { ApiError, requireApiUser, validateBody } from "@/lib/api/auth";
+import { ApiError, requireIamMenuPrefix, validateBody } from "@/lib/api/auth";
 import { apiHandler } from "@/lib/api/handler";
 import { query, queryOne } from "@/lib/db";
+import { IAM } from "@/lib/iam/prefixes";
 import { buildInterviewScheduledMessage } from "@/lib/notifications/candidate-message";
 import { candidateStatusEmail, sendEmail } from "@/lib/resend";
 import { sendWhatsAppText } from "@/lib/whatsapp";
 
-// Mengirim notifikasi kandidat adalah aksi HR: dibatasi ke peran HR.
+// Mengirim notifikasi kandidat adalah aksi HR: dibatasi ke peran HR yang
+// juga memegang menu Rekrutmen (EPIC-057: akun Non-Rekrutmen ditolak).
 const NOTIFY_ROLES = ["super_admin", "admin", "hrd", "hiring_manager"];
 
 const bodySchema = z.object({
@@ -30,7 +32,7 @@ interface CandidateRow {
 }
 
 export const POST = apiHandler(async (request: NextRequest) => {
-  const user = await requireApiUser();
+  const user = await requireIamMenuPrefix(IAM.hrisRecruitment);
   if (!NOTIFY_ROLES.includes(user.role)) throw ApiError.forbidden();
 
   const body = await validateBody(request, bodySchema);

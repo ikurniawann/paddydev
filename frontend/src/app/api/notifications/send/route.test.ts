@@ -4,7 +4,7 @@ import { NextRequest } from "next/server";
 import { ApiError } from "@/lib/api/auth";
 
 const mocks = vi.hoisted(() => ({
-  requireApiUser: vi.fn(),
+  requireIamMenuPrefix: vi.fn(),
   query: vi.fn(),
   queryOne: vi.fn(),
   sendWhatsAppText: vi.fn(),
@@ -13,7 +13,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/lib/api/auth", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/api/auth")>()),
-  requireApiUser: mocks.requireApiUser,
+  requireIamMenuPrefix: mocks.requireIamMenuPrefix,
 }));
 vi.mock("@/lib/db", () => ({ query: mocks.query, queryOne: mocks.queryOne }));
 vi.mock("@/lib/whatsapp", () => ({ sendWhatsAppText: mocks.sendWhatsAppText }));
@@ -36,7 +36,7 @@ const logRow = () => mocks.query.mock.calls[0][1] as unknown[];
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.requireApiUser.mockResolvedValue({ id: "u1", role: "hrd", full_name: "HR", brand_id: null });
+  mocks.requireIamMenuPrefix.mockResolvedValue({ id: "u1", role: "hrd", full_name: "HR", brand_id: null });
   mocks.queryOne.mockResolvedValue({ full_name: "Sari", email: "sari@x.id", phone: "+62 812-3456", status: "screening" });
   mocks.sendWhatsAppText.mockResolvedValue({ success: true });
   mocks.sendEmail.mockResolvedValue(true);
@@ -44,14 +44,26 @@ beforeEach(() => {
 
 describe("POST /api/notifications/send", () => {
   it("401 tanpa sesi", async () => {
-    mocks.requireApiUser.mockRejectedValue(ApiError.unauthorized());
+    mocks.requireIamMenuPrefix.mockRejectedValue(ApiError.unauthorized());
     expect((await send({ candidate_id: "c1" })).status).toBe(401);
   });
 
   it("403 untuk peran non-HR", async () => {
-    mocks.requireApiUser.mockResolvedValue({ id: "u1", role: "pos", full_name: "K", brand_id: null });
+    mocks.requireIamMenuPrefix.mockResolvedValue({ id: "u1", role: "pos", full_name: "K", brand_id: null });
     expect((await send({ candidate_id: "c1" })).status).toBe(403);
     expect(mocks.queryOne).not.toHaveBeenCalled();
+  });
+
+  it("meminta menu Rekrutmen; HR tanpa menu itu ditolak 403", async () => {
+    await send({ candidate_id: "c1" });
+    expect(mocks.requireIamMenuPrefix).toHaveBeenCalledWith(["hris.recruitment"]);
+
+    mocks.requireIamMenuPrefix.mockRejectedValue(ApiError.forbidden("Insufficient permissions"));
+    mocks.queryOne.mockClear();
+    mocks.sendWhatsAppText.mockClear();
+    expect((await send({ candidate_id: "c1" })).status).toBe(403);
+    expect(mocks.queryOne).not.toHaveBeenCalled();
+    expect(mocks.sendWhatsAppText).not.toHaveBeenCalled();
   });
 
   it("404 bila kandidat tidak ada", async () => {
