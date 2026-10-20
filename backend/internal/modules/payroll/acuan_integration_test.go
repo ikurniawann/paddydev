@@ -77,3 +77,46 @@ func TestPayrollRunAcuanPayslip(t *testing.T) {
 		t.Errorf("gross_salary = %v, want 3040000", gross)
 	}
 }
+
+// PY-04/R11 lewat alur run: karyawan nonaktif yang resign 9 Jun (jadwal ditutup pada
+// end_date seperti alur Resign) dibayar 7/22; karyawan aktif dengan end_date di
+// dalam periode dibayar penuh.
+func TestPayrollRunEndDateClipsLeaversOnly(t *testing.T) {
+	e := setup(t)
+	e.employee("HR Payroll", e.hr.UserID, true)
+	leaver := e.employee("Karyawan Resign", "", false)
+	active := e.employee("Karyawan Kontrak Aktif", "", true)
+	ed := "2026-06-09"
+	shift := "shift-pagi"
+	for _, id := range []string{leaver, active} {
+		b := e.emps.briefs[id]
+		b.EndDate = &ed
+		e.emps.briefs[id] = b
+		e.exec(`INSERT INTO hris.employee_salary (employee_id, company_id, base_salary, ptkp_status, effective_date)
+			VALUES ($1, $2, 2200000, 'TK/0', '2026-01-01')`, id, e.co)
+		var schedule []domain.ShiftRow
+		for dow := 1; dow <= 5; dow++ {
+			row := domain.ShiftRow{DayOfWeek: dow, ShiftID: &shift, EffectiveFrom: "2026-01-01"}
+			if id == leaver {
+				row.EffectiveTo = &ed
+			}
+			schedule = append(schedule, row)
+		}
+		e.work.records[id] = domain.WorkforceRecords{Schedule: schedule}
+	}
+
+	run := e.newRun(6, 2026, e.co)
+	e.call(&e.hr, "POST", "/api/hris/payroll/"+run+"/calculate", nil, 200)
+
+	base := func(emp string) float64 {
+		var v float64
+		e.scalar(&v, `SELECT base_salary::float8 FROM hris.payroll_details WHERE payroll_run_id = $1 AND employee_id = $2`, run, emp)
+		return v
+	}
+	if got := base(leaver); math.Abs(got-700_000) > 0.005 {
+		t.Errorf("leaver base_salary = %v, want 700000 (7/22)", got)
+	}
+	if got := base(active); math.Abs(got-2_200_000) > 0.005 {
+		t.Errorf("active base_salary = %v, want 2200000 (tidak dipotong)", got)
+	}
+}

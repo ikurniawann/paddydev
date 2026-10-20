@@ -11,6 +11,8 @@ type Employee struct {
 	EmploymentStatus string
 	JoinDate         string  // YYYY-MM-DD
 	EndDate          *string // YYYY-MM-DD; resign/akhir kerja (EPIC-059 PY-04)
+	// IsActive: end_date memotong cakupan hanya untuk karyawan nonaktif (R11).
+	IsActive bool
 }
 
 // Salary is the active employee_salary row. Amounts are numeric text.
@@ -111,8 +113,19 @@ func BuildInputRange(emp Employee, salary Salary, rec WorkforceRecords, loans []
 		}
 	}
 	merged := MergeRanges(coverages)
-	// PY-04: tanggal setelah end_date karyawan berada di luar cakupan.
-	if ed := DateText(emp.EndDate); ed != nil && *ed < end && *ed >= start {
+	// PY-04: tanggal setelah end_date karyawan NONAKTIF berada di luar cakupan.
+	// periodSchedule mengukur periode penuh (pembagi & penyebut faktor): alur
+	// Resign menutup jadwal pada end_date, jadi baris yang berakhir tepat pada
+	// end_date dianggap terus berlaku sampai akhir periode.
+	periodSchedule := schedule
+	if ed := DateText(emp.EndDate); !emp.IsActive && ed != nil && *ed < end && *ed >= start {
+		periodSchedule = make([]ShiftRow, len(schedule))
+		for i, r := range schedule {
+			if r.EffectiveTo != nil && *r.EffectiveTo == *ed {
+				r.EffectiveTo = nil
+			}
+			periodSchedule[i] = r
+		}
 		if len(merged) == 0 {
 			merged = []DateRange{{Start: start, End: *ed}}
 		} else {
@@ -128,7 +141,7 @@ func BuildInputRange(emp Employee, salary Salary, rec WorkforceRecords, loans []
 	hasContract := len(merged) > 0
 	partial := hasContract && !(len(merged) == 1 && merged[0].Start == start && merged[0].End == end)
 
-	scheduled, hasSchedule := ScheduledDays(schedule, start, end)
+	scheduled, hasSchedule := ScheduledDays(periodSchedule, start, end)
 	coveredScheduled, coveredCalendar := 0, 0
 	for _, r := range merged {
 		n, _ := ScheduledDays(schedule, r.Start, r.End)

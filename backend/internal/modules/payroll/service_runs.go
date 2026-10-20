@@ -544,7 +544,7 @@ func (s *service) payrollInput(ctx context.Context, e EmployeeBrief, companyID s
 	if err != nil {
 		return nil, records, err
 	}
-	emp := domain.Employee{ID: e.ID, EmploymentStatus: e.EmploymentStatus, JoinDate: e.JoinDate, EndDate: e.EndDate}
+	emp := domain.Employee{ID: e.ID, EmploymentStatus: e.EmploymentStatus, JoinDate: e.JoinDate, EndDate: e.EndDate, IsActive: e.IsActive}
 	in := domain.BuildInputRange(emp, *salary, records, loans, holidays, month, year, start, end, includeThr, opts)
 	return &in, records, nil
 }

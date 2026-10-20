@@ -139,3 +139,59 @@ func TestLeaverProratedToEndDate(t *testing.T) {
 	r := Calculate(in, DefaultConfig())
 	eq(t, "pokok monthly × 7/22", r.BaseSalary, 700_000)
 }
+
+// Alur Resign menulis employee_shifts.effective_to = end_date. Ukuran periode penuh
+// (pembagi dan penyebut faktor cakupan) tetap dari seluruh periode: 7 dari 22.
+func TestLeaverResignFlowScheduleTruncated(t *testing.T) {
+	ed := "2026-09-09"
+	var sched []ShiftRow
+	for _, r := range weekdaySchedule() {
+		r.EffectiveTo = &ed
+		sched = append(sched, r)
+	}
+	emp := Employee{ID: "e", JoinDate: "2020-01-01", EmploymentStatus: "resigned", EndDate: &ed}
+	var att []AttendanceRow
+	for _, d := range []string{"01", "02", "03", "04", "07", "08", "09"} {
+		att = append(att, AttendanceRow{Date: "2026-09-" + d, Status: "present", HasClockOut: true})
+	}
+	rec := WorkforceRecords{Schedule: sched, Attendance: att}
+
+	monthly := Salary{BaseSalary: "2200000.00"}
+	in := BuildInputRange(emp, monthly, rec, nil, nil, 9, 2026, "2026-09-01", "2026-09-30", false)
+	if in.ProrateFactor == nil || Round(*in.ProrateFactor*1000) != Round(7.0/22*1000) {
+		t.Fatalf("factor = %v, want 7/22", *in.ProrateFactor)
+	}
+	if in.DivisorDays != 22 {
+		t.Fatalf("pembagi = %v, want 22 (hari terjadwal seluruh periode)", in.DivisorDays)
+	}
+	eq(t, "pokok monthly × 7/22", Calculate(in, DefaultConfig()).BaseSalary, 700_000)
+
+	prorated := monthly
+	prorated.PayBasis = ptr("monthly_prorated")
+	in = BuildInputRange(emp, prorated, rec, nil, nil, 9, 2026, "2026-09-01", "2026-09-30", false)
+	if in.DivisorDays != 22 || in.PaidDays > 7 {
+		t.Fatalf("monthly_prorated: pembagi = %v (want 22), hari dibayar = %v (want ≤ 7)", in.DivisorDays, in.PaidDays)
+	}
+	if b := Calculate(in, DefaultConfig()).BaseSalary; b > 700_000 {
+		t.Fatalf("pokok monthly_prorated = %v, want ≤ 700.000", b)
+	}
+}
+
+// R11 tentang karyawan keluar: karyawan AKTIF dengan end_date di masa depan di dalam
+// periode (mis. kontrak akan berakhir) tidak dipotong — dibayar sebulan penuh.
+func TestActiveEmployeeEndDateNotClipped(t *testing.T) {
+	emp := Employee{ID: "e", JoinDate: "2020-01-01", EmploymentStatus: "contract", EndDate: ptr("2026-09-09"), IsActive: true}
+	sal := Salary{BaseSalary: "2200000.00"}
+	att := []AttendanceRow{
+		{Date: "2026-09-01", Status: "present", HasClockOut: true},
+		{Date: "2026-09-15", Status: "present", HasClockOut: true},
+	}
+	in := BuildInputRange(emp, sal, WorkforceRecords{Schedule: weekdaySchedule(), Attendance: att}, nil, nil, 9, 2026, "2026-09-01", "2026-09-30", false)
+	if in.ProrateFactor == nil || *in.ProrateFactor != 1 {
+		t.Fatalf("factor = %v, want 1 (karyawan aktif tidak dipotong)", *in.ProrateFactor)
+	}
+	if in.AttendanceDays != 2 {
+		t.Fatalf("AttendanceDays = %v, want 2", in.AttendanceDays)
+	}
+	eq(t, "pokok monthly penuh", Calculate(in, DefaultConfig()).BaseSalary, 2_200_000)
+}
