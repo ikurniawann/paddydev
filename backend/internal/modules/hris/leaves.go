@@ -3,6 +3,7 @@ package hris
 import (
 	"context"
 	"fmt"
+	"strconv"
 
 	"github.com/jackc/pgx/v5"
 
@@ -42,6 +43,17 @@ type LeaveRepo interface {
 	UpdateLeaveBalance(ctx context.Context, id string, f fields) (*Row, error)
 	Publish(ctx context.Context, topic, key string, payload any) error
 	ManagerContact(ctx context.Context, employeeID string) (name string, phone *string, found bool, err error)
+	// EmployeePositionLevel is the level of the employee's position ("" without
+	// one); found is false when the employee does not exist.
+	EmployeePositionLevel(ctx context.Context, employeeID string) (level string, found bool, err error)
+	// LockLeaveEmployee serialises leave requests of one employee (inside a tx).
+	LockLeaveEmployee(ctx context.Context, employeeID string) error
+	// OverlappingLeave is a pending/approved request covering any day of
+	// [start, end] (columns leave_type, status, start_date, end_date as text); nil when none.
+	OverlappingLeave(ctx context.Context, employeeID, start, end string) (*Row, error)
+	// MonthlyLeaveUse sums total_days of pending/approved requests per type
+	// whose start_date falls in [from, to].
+	MonthlyLeaveUse(ctx context.Context, employeeID, from, to string) (map[string]float64, error)
 }
 
 // quotaMove adds (or refunds) days of a year's annual leave.
@@ -99,6 +111,10 @@ type leaveRequest struct {
 // CreateLeave is createLeave: weekends and national holidays do not consume
 // leave (cuti bersama does); a range with no working day is refused.
 func (s *Service) CreateLeave(ctx context.Context, a *Actor, in leaveRequest) (*Row, error) {
+	lt, known := domain.LookupLeaveType(in.LeaveType)
+	if !known || !lt.Selectable {
+		return nil, httpx.BadRequest("Jenis cuti ini sudah tidak berlaku untuk pengajuan baru")
+	}
 	employeeID := a.EmployeeID
 	if a.IsHR && in.EmployeeID != nil && *in.EmployeeID != "" {
 		employeeID = in.EmployeeID
@@ -115,6 +131,18 @@ func (s *Service) CreateLeave(ctx context.Context, a *Actor, in leaveRequest) (*
 	}
 	if in.EndDate < in.StartDate {
 		return nil, httpx.BadRequest("Tanggal selesai tidak boleh sebelum tanggal mulai")
+	}
+	if lt.SingleDay && in.StartDate != in.EndDate {
+		return nil, httpx.BadRequest(lt.Label + " diajukan per satu hari — tanggal mulai dan selesai harus sama")
+	}
+	if lt.LeaderOnly {
+		level, _, err := s.repo.EmployeePositionLevel(ctx, *employeeID)
+		if err != nil {
+			return nil, err
+		}
+		if !domain.IsLeaderLevel(level) {
+			return nil, httpx.BadRequest("Izin Leader hanya untuk jabatan Supervisor ke atas")
+		}
 	}
 	holidays, err := s.repo.ActiveHolidays(ctx, in.StartDate, in.EndDate)
 	if err != nil {
@@ -146,7 +174,36 @@ func (s *Service) CreateLeave(ctx context.Context, a *Actor, in leaveRequest) (*
 	f.add("status", "pending")
 	var leave *Row
 	err = s.repo.InTx(ctx, func(r Repository) error {
-		var err error
+		// Lock, overlap and quota checks share this transaction with the
+		// insert, so two concurrent requests cannot both pass them.
+		if err := r.LockLeaveEmployee(ctx, *employeeID); err != nil {
+			return err
+		}
+		clash, err := r.OverlappingLeave(ctx, *employeeID, in.StartDate, in.EndDate)
+		if err != nil {
+			return err
+		}
+		if clash != nil {
+			state := "menunggu persetujuan"
+			if clash.Str("status") == "approved" {
+				state = "disetujui"
+			}
+			return httpx.BadRequest(fmt.Sprintf("Tanggal ini bertabrakan dengan pengajuan %s (%s s.d. %s, %s)",
+				domain.LeaveTypeLabel(clash.Str("leave_type")), clash.Str("start_date"), clash.Str("end_date"), state))
+		}
+		if lt.MonthlyQuota > 0 {
+			month := domain.MonthOf(in.StartDate)
+			from, to, _ := domain.MonthBounds(month)
+			use, err := r.MonthlyLeaveUse(ctx, *employeeID, from, to)
+			if err != nil {
+				return err
+			}
+			if used := use[lt.Code]; used+float64(totalDays) > float64(lt.MonthlyQuota) {
+				return httpx.BadRequest(fmt.Sprintf("Kuota %s bulan %s sudah habis (%s dari %d hari)",
+					lt.Label, month, strconv.FormatFloat(used, 'f', -1, 64), lt.MonthlyQuota),
+					obj("quota", lt.MonthlyQuota, "used", used, "month", month))
+			}
+		}
 		if leave, err = r.InsertLeave(ctx, f); err != nil {
 			return err
 		}
@@ -455,6 +512,50 @@ func (s *Service) LeaveBalance(ctx context.Context, a *Actor, employeeID string,
 		f.add(col, 0)
 	}
 	return s.repo.InsertLeaveBalance(ctx, f)
+}
+
+// LeaveQuota is the monthly quota of Izin Pribadi / Izin Leader (EPIC-058):
+// the employee themself, or an HR account holding the Cuti menu. It carries
+// days only, never salary amounts.
+func (s *Service) LeaveQuota(ctx context.Context, a *Actor, employeeID *string, month string) (*Row, error) {
+	target := a.EmployeeID
+	if employeeID != nil && *employeeID != "" {
+		target = employeeID
+	}
+	if target == nil {
+		return nil, httpx.Forbidden("Akun ini tidak terhubung ke data karyawan")
+	}
+	own := a.EmployeeID != nil && *target == *a.EmployeeID
+	if !own && !(a.IsHR && a.WorkforceMenu) {
+		return nil, httpx.Forbidden("Insufficient permissions")
+	}
+	if month == "" {
+		month = domain.NowWIB(s.now()).Format("2006-01")
+	}
+	from, to, ok := domain.MonthBounds(month)
+	if !ok {
+		return nil, httpx.BadRequest("Format bulan harus YYYY-MM")
+	}
+	level, found, err := s.repo.EmployeePositionLevel(ctx, *target)
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		return nil, httpx.NotFound("Employee not found")
+	}
+	use, err := s.repo.MonthlyLeaveUse(ctx, *target, from, to)
+	if err != nil {
+		return nil, err
+	}
+	eligible := domain.IsLeaderLevel(level)
+	types := []any{}
+	for _, t := range domain.QuotaLeaveTypes() {
+		used := use[t.Code]
+		types = append(types, obj("leave_type", t.Code, "label", t.Label, "quota", t.MonthlyQuota,
+			"used", used, "remaining", max(0, float64(t.MonthlyQuota)-used), "available", !t.LeaderOnly || eligible))
+	}
+	return obj("employee_id", *target, "month", month, "position_level", level,
+		"leader_eligible", eligible, "types", types), nil
 }
 
 // UpdateLeaveBalance lets HRD set a balance; a new row starts at 12 days.

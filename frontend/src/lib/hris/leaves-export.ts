@@ -1,22 +1,12 @@
 /**
- * Ekspor CSV pengajuan cuti (HR). Label jenis/status khusus ekspor ini
- * dipertahankan karena berkasnya dibaca di luar aplikasi.
+ * Ekspor CSV pengajuan cuti (HR). Label jenis (`leaveTypeExportLabel` di
+ * katalog leave-types.ts, bukan label tampilan) dan label status khusus
+ * ekspor ini dipertahankan karena berkasnya dibaca di luar aplikasi.
  */
 
 import { z } from "zod";
 import type { PgClient } from "@/lib/pg/create-client";
-
-const LEAVE_TYPE_LABELS: Record<string, string> = {
-  annual: "Cuti Tahunan",
-  sick: "Cuti Sakit",
-  maternity: "Cuti Melahirkan",
-  paternity: "Cuti Ayah",
-  unpaid: "Cuti Tanpa Upah",
-  emergency: "Cuti Darurat",
-  personal: "Izin Pribadi",
-  pilgrimage: "Cuti Haji/Umrah",
-  menstrual: "Cuti Haid",
-};
+import { leaveTypeExportLabel } from "./leave-types";
 
 const STATUS_LABELS: Record<string, string> = {
   pending: "Menunggu Persetujuan",
@@ -73,7 +63,7 @@ export function leavesToCsv(rows: LeaveExportRow[]): string {
       r.employee?.full_name || "-",
       r.employee?.department?.name || "-",
       r.employee?.job_title?.title || "-",
-      LEAVE_TYPE_LABELS[r.leave_type] || r.leave_type,
+      leaveTypeExportLabel(r.leave_type),
       r.start_date,
       r.end_date,
       r.total_days || 0,

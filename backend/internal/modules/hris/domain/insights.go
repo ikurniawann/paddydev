@@ -178,13 +178,6 @@ type ReportLeave struct {
 	TotalDays float64
 }
 
-var reportLeaveLabels = map[string]string{
-	"annual": "Tahunan", "sick": "Sakit", "maternity": "Melahirkan", "paternity": "Ayah",
-	"unpaid": "Tidak Dibayar", "emergency": "Darurat", "pilgrimage": "Haji/Umrah",
-	"menstrual": "Haid", "marriage": "Pernikahan", "bereavement": "Duka Cita",
-	"personal": "Izin Pribadi",
-}
-
 type StatusCount struct {
 	Status string `json:"status"`
 	Count  int    `json:"count"`
@@ -376,11 +369,7 @@ func BuildHrisReport(employees []ReportEmployee, departments []ReportDepartment,
 	}
 	l.ByType = make([]LeaveDays, len(typeOrder))
 	for i, t := range typeOrder {
-		label := t
-		if v, ok := reportLeaveLabels[t]; ok {
-			label = v
-		}
-		l.ByType[i] = LeaveDays{Type: label, Days: byType[t]}
+		l.ByType[i] = LeaveDays{Type: LeaveTypeShort(t), Days: byType[t]}
 	}
 	sort.SliceStable(l.ByType, func(i, j int) bool { return l.ByType[i].Days > l.ByType[j].Days })
 	return r

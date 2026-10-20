@@ -2217,6 +2217,11 @@
   {
     "module": "hris",
     "method": "GET",
+    "path": "/api/hris/leave-quota"
+  },
+  {
+    "module": "hris",
+    "method": "GET",
     "path": "/api/hris/leaves"
   },
   {

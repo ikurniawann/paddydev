@@ -35,9 +35,9 @@ describe("leavesToCsv", () => {
 
   it("kolom kosong jadi '-' dan jenis tak dikenal apa adanya", () => {
     const line = leavesToCsv([
-      { ...row, leave_type: "marriage", employee: null, approver: null, approved_at: null, reason: null },
+      { ...row, leave_type: "lainnya", employee: null, approver: null, approved_at: null, reason: null },
     ]).split("\n")[1];
-    expect(line).toContain('"marriage"');
+    expect(line).toContain('"lainnya"');
     expect(line.match(/"-"/g)?.length).toBeGreaterThanOrEqual(6);
   });
 });

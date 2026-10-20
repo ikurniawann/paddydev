@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { ApiError, requireApiUser } from "@/lib/api/auth";
 import { getPool } from "@/lib/db";
 import { loadGrantedMenuCodesForUser } from "@/lib/iam/has-menu";
+import { leaveTypeLabel } from "@/lib/hris/leave-types";
 import {
   INBOX_ITEM_LIMIT,
   INBOX_SECTION_LABEL,
@@ -34,7 +35,7 @@ async function loadLeaves(): Promise<InboxSection> {
     items: rows.map((row) => ({
       id: String(row.id),
       title: String(row.full_name ?? "Karyawan"),
-      subtitle: `${row.leave_type ?? "Cuti"} · ${describeLeaveRange(
+      subtitle: `${leaveTypeLabel(String(row.leave_type ?? "Cuti"))} · ${describeLeaveRange(
         String(row.start_date).slice(0, 10),
         String(row.end_date).slice(0, 10),
         Number(row.total_days ?? 1)

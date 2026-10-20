@@ -126,7 +126,7 @@ func TestDesktopInbox(t *testing.T) {
 	var days string
 	_ = deps.DB.QueryRow(ctx, `SELECT total_days::float8::text FROM hris.leaves WHERE id = $1`, leave).Scan(&days)
 	item := sections[0].(map[string]any)["items"].([]any)[0].(map[string]any)
-	if item["id"] != leave || item["title"] != "Inbox Test" || item["subtitle"] != "annual · "+days+" hari · 18 Agu–20 Sep" ||
+	if item["id"] != leave || item["title"] != "Inbox Test" || item["subtitle"] != "Cuti Tahunan · "+days+" hari · 18 Agu–20 Sep" ||
 		item["href"] != "/dashboard/hris/workforce/leaves" || item["actionable"] != true {
 		t.Fatalf("item %v", item)
 	}

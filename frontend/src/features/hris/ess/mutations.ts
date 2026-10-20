@@ -42,7 +42,10 @@ export function useSubmitMyLeave() {
     mutationFn: ({ form, attachment }: { form: EssLeaveForm; attachment?: string }) =>
       submitMyLeave(form, attachment),
     retry: false,
-    onSuccess: () => qc.invalidateQueries({ queryKey: essQueryKeys.leaves() }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: essQueryKeys.leaves() });
+      qc.invalidateQueries({ queryKey: ["hris", "leaves", "quota"] });
+    },
   });
 }
 

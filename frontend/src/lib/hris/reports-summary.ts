@@ -4,6 +4,7 @@
  */
 
 import type { PgClient } from "@/lib/pg/create-client";
+import { leaveTypeShort } from "./leave-types";
 
 export interface ReportEmployeeRow {
   id: string;
@@ -38,20 +39,6 @@ export interface HrisReportRows {
   attendance: ReportAttendanceRow[];
   leaves: ReportLeaveRow[];
 }
-
-const LEAVE_TYPE_LABELS: Record<string, string> = {
-  annual: "Tahunan",
-  sick: "Sakit",
-  maternity: "Melahirkan",
-  paternity: "Ayah",
-  unpaid: "Tidak Dibayar",
-  emergency: "Darurat",
-  personal: "Izin Pribadi",
-  pilgrimage: "Haji/Umrah",
-  menstrual: "Haid",
-  marriage: "Pernikahan",
-  bereavement: "Duka Cita",
-};
 
 const pad2 = (n: number) => String(n).padStart(2, "0");
 const firstOfMonth = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-01`;
@@ -168,7 +155,7 @@ export function buildHrisReport(rows: HrisReportRows, month: number, year: numbe
       pending_count: leaves.filter((l) => l.status === "pending").length,
       total_days: approved.reduce((s, l) => s + (l.total_days || 0), 0),
       by_type: Object.entries(leaveByType)
-        .map(([type, days]) => ({ type: LEAVE_TYPE_LABELS[type] || type, days }))
+        .map(([type, days]) => ({ type: leaveTypeShort(type), days }))
         .sort((a, b) => b.days - a.days),
     },
   };

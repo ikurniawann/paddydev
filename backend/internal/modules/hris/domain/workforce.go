@@ -119,21 +119,6 @@ func ProratedAnnualQuota(joinDate *string, year int) int {
 	return 13 - int(t.Month()) // months left in the year, join month included
 }
 
-var leaveTypeLabels = map[string]string{
-	"annual": "Cuti Tahunan", "sick": "Sakit", "maternity": "Cuti Melahirkan", "paternity": "Cuti Ayah",
-	"unpaid": "Izin Tanpa Gaji", "emergency": "Izin Darurat", "pilgrimage": "Cuti Ibadah",
-	"menstrual": "Cuti Haid", "marriage": "Cuti Menikah", "bereavement": "Cuti Duka",
-	"personal": "Izin Pribadi",
-}
-
-// LeaveTypeLabel names a leave type for the WhatsApp message.
-func LeaveTypeLabel(t string) string {
-	if l, ok := leaveTypeLabels[t]; ok {
-		return l
-	}
-	return t
-}
-
 var (
 	idWeekdays = []string{"Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"}
 	idMonths   = []string{"Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"}
@@ -229,12 +214,6 @@ func NormalizeWaPhone(phone *string) string {
 
 /* ── Leave CSV export (lib/hris/leaves-export) ───────────────────────── */
 
-var csvLeaveTypes = map[string]string{
-	"annual": "Cuti Tahunan", "sick": "Cuti Sakit", "maternity": "Cuti Melahirkan", "paternity": "Cuti Ayah",
-	"unpaid": "Cuti Tanpa Upah", "emergency": "Cuti Darurat", "pilgrimage": "Cuti Haji/Umrah", "menstrual": "Cuti Haid",
-	"personal": "Izin Pribadi",
-}
-
 var csvLeaveStatuses = map[string]string{
 	"pending": "Menunggu Persetujuan", "approved": "Disetujui", "rejected": "Ditolak", "cancelled": "Dibatalkan",
 }
@@ -283,10 +262,7 @@ func orDash(s *string) string {
 func LeavesCSV(rows []LeaveCSVRow) string {
 	lines := []string{LeaveCSVHeader}
 	for _, r := range rows {
-		typeLabel := r.LeaveType
-		if l, ok := csvLeaveTypes[r.LeaveType]; ok {
-			typeLabel = l
-		}
+		typeLabel := LeaveTypeExportLabel(r.LeaveType)
 		statusLabel := r.Status
 		if l, ok := csvLeaveStatuses[r.Status]; ok {
 			statusLabel = l

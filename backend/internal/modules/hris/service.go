@@ -62,6 +62,9 @@ type Actor struct {
 	// PerformanceMenu: the account holds the HR side of the Kinerja menu, not
 	// only the employee-level Review/Tugas Departemen (set by withLogbook).
 	PerformanceMenu bool
+	// WorkforceMenu: the account holds the Cuti/Absensi menu (hris.workforce);
+	// set by handlers that need it (EPIC-058 leave quota).
+	WorkforceMenu bool
 }
 
 // ActorRepo resolves the employee behind an account.

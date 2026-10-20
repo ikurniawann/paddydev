@@ -277,7 +277,7 @@ func (p *Postgres) InboxSection(ctx context.Context, key string) (*InboxSection,
 			if err := rows.Scan(&it.ID, &leaveType, &start, &end, &days, &it.Title, &sec.Total); err != nil {
 				return nil, err
 			}
-			it.Subtitle = leaveType + " · " + domain.DescribeLeaveRange(deref(start), deref(end), days)
+			it.Subtitle = domain.LeaveTypeLabel(leaveType) + " · " + domain.DescribeLeaveRange(deref(start), deref(end), days)
 			it.Href, it.Actionable = "/dashboard/hris/workforce/leaves", true
 		case "po":
 			var supplier string

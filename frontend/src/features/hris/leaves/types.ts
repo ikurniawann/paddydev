@@ -1,3 +1,12 @@
+/** GET /api/hris/leave-quota (EPIC-058): kuota bulanan, hari saja (tanpa angka gaji). */
+export interface LeaveQuota {
+  employee_id: string;
+  month: string;
+  position_level: string;
+  leader_eligible: boolean;
+  types: { leave_type: string; label: string; quota: number; used: number; remaining: number; available: boolean }[];
+}
+
 export interface LeaveEmployeeLite {
   id: string;
   full_name: string;

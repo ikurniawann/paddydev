@@ -190,6 +190,8 @@ func BuildInputRange(emp Employee, salary Salary, rec WorkforceRecords, loans []
 			continue
 		}
 		days := ClampedLeaveDays(LeaveRange{*s, *e}, start, end)
+		// Hanya unpaid/personal/sick yang memotong. leader (Izin Leader) dan
+		// jenis cuti lain sengaja tidak dihitung (EPIC-058).
 		switch l.LeaveType {
 		case "unpaid":
 			unpaid += days

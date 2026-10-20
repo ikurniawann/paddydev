@@ -27,6 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { LEAVE_TYPES } from "@/lib/hris/leave-types";
 import { LEAVE_TYPE_LABELS, LEAVE_STATUS_LABELS, LEAVE_STATUS_COLORS } from "@/types/hris";
 import { useLeaveList } from "../queries";
 import { downloadLeavesCsv } from "../api";
@@ -139,9 +140,9 @@ export function LeavesPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Semua Jenis</SelectItem>
-                {Object.entries(LEAVE_TYPE_LABELS).map(([value, label]) => (
-                  <SelectItem key={value} value={value}>
-                    {label}
+                {LEAVE_TYPES.map((t) => (
+                  <SelectItem key={t.code} value={t.code}>
+                    {t.selectable ? t.label : `${t.label} (lama)`}
                   </SelectItem>
                 ))}
               </SelectContent>

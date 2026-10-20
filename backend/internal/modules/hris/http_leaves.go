@@ -7,11 +7,9 @@ import (
 
 	"nuhabit/backend/internal/modules/hris/domain"
 	"nuhabit/backend/internal/platform/auth"
+	"nuhabit/backend/internal/platform/iam"
 	"nuhabit/backend/internal/platform/validate"
 )
-
-var leaveTypes = []string{"annual", "sick", "maternity", "paternity", "unpaid", "emergency",
-	"pilgrimage", "menstrual", "marriage", "bereavement", "personal"}
 
 // coerceInt is z.coerce.number().int().min(lo).max(hi).default(def) on a
 // query form (values are strings).
@@ -67,7 +65,7 @@ func (h handlers) createLeave(w http.ResponseWriter, r *http.Request, a *Actor) 
 	}
 	var in leaveRequest
 	in.EmployeeID = f.UUID("employee_id", optional)
-	in.LeaveType = strOr(f.Enum("leave_type", validate.Rule{}, leaveTypes))
+	in.LeaveType = strOr(f.Enum("leave_type", validate.Rule{}, domain.LeaveTypeCodes()))
 	in.StartDate = strOr(f.Str("start_date", validate.Rule{}, validate.StrOpts{Check: matches(domain.DateRe, "Tanggal mulai harus berformat YYYY-MM-DD")}))
 	in.EndDate = strOr(f.Str("end_date", validate.Rule{}, validate.StrOpts{Check: matches(domain.DateRe, "Tanggal selesai harus berformat YYYY-MM-DD")}))
 	in.Reason = strOr(f.Str("reason", validate.Rule{}, validate.StrOpts{Check: minLen(10, "Reason must be at least 10 characters")}))
@@ -178,6 +176,25 @@ func (h handlers) getLeaveBalance(w http.ResponseWriter, r *http.Request, a *Act
 		return err
 	}
 	row, err := h.svc.LeaveBalance(r.Context(), a, r.PathValue("employee_id"), year)
+	if err != nil {
+		return err
+	}
+	return ok(w, dataOf(row))
+}
+
+func (h handlers) getLeaveQuota(w http.ResponseWriter, r *http.Request, a *Actor) error {
+	f := queryForm(r)
+	employeeID := f.Str("employee_id", optional, uuidOf)
+	month := strOr(f.Str("month", optional, validate.StrOpts{}))
+	if err := formErr(f, ""); err != nil {
+		return err
+	}
+	granted, err := h.auth.GrantedMenuCodes(r.Context(), a.UserID, a.Role)
+	if err != nil {
+		return err
+	}
+	a.WorkforceMenu = iam.HasAnyMenuPrefix(granted, iam.HrisWorkforce)
+	row, err := h.svc.LeaveQuota(r.Context(), a, employeeID, month)
 	if err != nil {
 		return err
 	}

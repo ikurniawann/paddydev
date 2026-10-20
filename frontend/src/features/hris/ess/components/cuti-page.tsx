@@ -5,7 +5,8 @@ import { CalendarDaysIcon, ClockIcon, PaperAirplaneIcon } from "@heroicons/react
 import { Button } from "@/components/ui/button";
 import { formatDate } from "@/lib/format";
 import { useEssMe, useMyLeaves } from "../queries";
-import { CutiRequestDialog, LEAVE_TYPE_OPTIONS } from "./cuti-request-dialog";
+import { leaveTypeLabel } from "@/lib/hris/leave-types";
+import { CutiRequestDialog } from "./cuti-request-dialog";
 import { EssLoading, EssNotLinked } from "./ess-states";
 
 /**
@@ -19,10 +20,6 @@ const LEAVE_STATUS_BADGES: Record<string, { label: string; className: string }> 
   rejected: { label: "Ditolak", className: "bg-red-100 text-red-700" },
   cancelled: { label: "Dibatalkan", className: "bg-gray-100 text-gray-600" },
 };
-
-function leaveTypeLabel(value: string): string {
-  return LEAVE_TYPE_OPTIONS.find((option) => option.value === value)?.label ?? value;
-}
 
 export function EssCutiPage() {
   const { data: me, isLoading } = useEssMe();

@@ -11,17 +11,13 @@ import { createPgClient, createServerPgClient } from "@/lib/pg/create-client";
 import { buildWaLink } from "@/lib/recruitment/wa";
 import { describeLeaveDays } from "./holidays";
 import { loadHolidayIndex } from "./holidays-db";
+import { SELECTABLE_LEAVE_CODES } from "./leave-types";
 import { notifyLeaveRequestWa } from "./leave-wa";
 import type { WorkforceActor } from "./workforce-auth";
 import { DATE_RE, requireLinkedEmployee, unwrap } from "./workforce-route";
 
 /** Role yang boleh menghapus pengajuan cuti. */
 const LEAVE_DELETE_ROLES = ["hrd", "super_admin", "admin"] as const;
-
-const LEAVE_TYPES = [
-  "annual", "sick", "maternity", "paternity", "unpaid", "emergency",
-  "pilgrimage", "menstrual", "marriage", "bereavement", "personal",
-] as const;
 
 export const leaveListQuerySchema = z.object({
   employee_id: z.string().optional(),
@@ -35,7 +31,7 @@ export const leaveListQuerySchema = z.object({
 
 export const leaveRequestSchema = z.object({
   employee_id: z.string().uuid().optional(),
-  leave_type: z.enum(LEAVE_TYPES),
+  leave_type: z.enum(SELECTABLE_LEAVE_CODES),
   start_date: z.string().regex(DATE_RE, "Tanggal mulai harus berformat YYYY-MM-DD"),
   end_date: z.string().regex(DATE_RE, "Tanggal selesai harus berformat YYYY-MM-DD"),
   reason: z.string().min(10, "Reason must be at least 10 characters"),

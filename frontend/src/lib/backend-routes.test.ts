@@ -198,7 +198,9 @@ describe("Go route manifest", () => {
       // Go-live HRIS (EPIC-056): Jadwal Kerja per cabang, tipe jadwal,
       // export/import karyawan, cek pemilik email.
       "/api/hris/schedules", "/api/hris/employees/schedule-type", "/api/hris/employees/export",
-      "/api/hris/employees/import", "/api/hris/employees/import-template", "/api/users/email-owner"];
+      "/api/hris/employees/import", "/api/hris/employees/import-template", "/api/users/email-owner",
+      // Kuota bulanan Izin Pribadi / Izin Leader (EPIC-058).
+      "/api/hris/leave-quota"];
     const goNative = (p: string) =>
       goNativePrefixes.some((n) => p === n || p.startsWith(`${n}/`));
     const missing = switched

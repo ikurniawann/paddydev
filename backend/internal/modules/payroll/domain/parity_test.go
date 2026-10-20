@@ -189,6 +189,42 @@ func TestLeaveDeductions(t *testing.T) {
 	eq(t, "net", r.NetSalary, r.GrossSalary-r.TotalDeductions)
 }
 
+// EPIC-058: Izin Leader tidak memotong apa pun; Izin Pribadi satu hari
+// memotong THP / pembagi × 1 (rule PIP EPIC-055, aktif lewat setting).
+func TestLeaderAndPersonalLeavePayroll(t *testing.T) {
+	emp := Employee{ID: "e", JoinDate: "2025-01-01", EmploymentStatus: "permanent"}
+	sal := Salary{BaseSalary: "2600000.00", WorkingDaysDivisor: "26.00"}
+	rec := WorkforceRecords{Leaves: []Leave{
+		{ptr("2026-09-08"), ptr("2026-09-08"), "leader"},
+		{ptr("2026-09-09"), ptr("2026-09-09"), "personal"},
+		{ptr("2026-09-10"), ptr("2026-09-10"), "marriage"},
+	}}
+	in := BuildInput(emp, sal, rec, nil, nil, 9, 2026, false)
+	if in.PersonalLeaveDays != 1 || in.UnpaidLeaveDays != 0 || in.SickLeaveDays != 0 {
+		t.Fatalf("leave days personal=%v unpaid=%v sick=%v", in.PersonalLeaveDays, in.UnpaidLeaveDays, in.SickLeaveDays)
+	}
+
+	c := DefaultConfig()
+	c.PersonalLeaveDeduction = true
+	// THP = 2.600.000 + transport flat 260.000 = 2.860.000; / pembagi 26 × 1 hari = 110.000.
+	r := Calculate(parityInput(func(in *Input) {
+		in.BaseSalary, in.TransportAllowance, in.DivisorDays, in.WorkingDays, in.PersonalLeaveDays = 2_600_000, 260_000, 26, 22, 1
+	}), c)
+	eq(t, "PIP satu hari = THP/pembagi", r.PersonalLeaveDeduction, 110_000)
+
+	// Izin Leader + marriage saja: tidak ada potongan PIP, unpaid, maupun PIS,
+	// meski ketiga setting potongan aktif.
+	c.SickLeaveDeduction = true
+	onlyNoDeduct := BuildInput(emp, sal, WorkforceRecords{Leaves: []Leave{
+		{ptr("2026-09-08"), ptr("2026-09-08"), "leader"},
+		{ptr("2026-09-10"), ptr("2026-09-10"), "marriage"},
+	}}, nil, nil, 9, 2026, false)
+	r = Calculate(onlyNoDeduct, c)
+	eq(t, "leader/marriage: PIP", r.PersonalLeaveDeduction, 0)
+	eq(t, "leader/marriage: unpaid", r.UnpaidLeaveDeduction, 0)
+	eq(t, "leader/marriage: PIS", r.SickLeaveDeduction, 0)
+}
+
 func TestManualInputs(t *testing.T) {
 	c := DefaultConfig()
 	r := Calculate(parityInput(func(in *Input) {
