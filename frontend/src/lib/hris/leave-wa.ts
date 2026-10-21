@@ -55,7 +55,7 @@ export function buildLeaveRequestWaMessage(input: LeaveRequestWaInput): string {
     `Tanggal : ${rentang} (${input.totalDays} hari kerja)`,
   ];
   if (input.reason?.trim()) baris.push(`Alasan : ${input.reason.trim()}`);
-  baris.push("", "Mohon ditinjau di dashboard Arkiv OS (Kehadiran & Cuti → Cuti & Izin).");
+  baris.push("", "Mohon ditinjau di dashboard Arkiv OS (Area Karyawan → Persetujuan Tim).");
   return baris.join("\n");
 }
 
@@ -70,7 +70,7 @@ export async function notifyLeaveRequestWa(
     const atasan = await queryOne<{ full_name: string; phone: string | null }>(
       `SELECT a.full_name, a.phone
        FROM hris.employees e
-       JOIN hris.employees a ON a.id = e.reporting_to AND a.is_active = true
+       JOIN hris.employees a ON a.id = e.reporting_to AND a.is_active = true AND a.id <> e.id
        WHERE e.id = $1`,
       [input.employeeId]
     );

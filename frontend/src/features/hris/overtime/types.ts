@@ -1,6 +1,6 @@
-import type { OvertimeDecisionAction } from "@/lib/hris/overtime-rules";
+import type { OvertimeDayType, OvertimeDecisionAction } from "@/lib/hris/overtime-rules";
 
-export type OvertimeDayType = "regular" | "rest_day";
+export type { OvertimeDayType };
 
 export interface OvertimeRow {
   id: string;
@@ -15,6 +15,11 @@ export interface OvertimeRow {
   rejection_reason: string | null;
   /** rest_day = hari istirahat mingguan, dibayar tarif libur (EPIC-055). */
   day_type?: OvertimeDayType;
+  /** EPIC-063: kapasitas pemutus (atasan langsung / HR cadangan) dan koreksi AdminHRIS terakhir. */
+  decided_as?: "manager" | "hr" | null;
+  decided_by_name?: string | null;
+  corrected_at?: string | null;
+  corrected_by_name?: string | null;
   employee?: { id: string; full_name: string; nip: string | null } | null;
   requester?: { full_name: string } | null;
   decider?: { full_name: string } | null;
@@ -31,4 +36,14 @@ export interface OvertimeDecision {
   action: OvertimeDecisionAction;
   rejection_reason?: string;
   day_type?: OvertimeDayType;
+}
+
+/** PATCH /api/hris/overtime/{id} (AP-04). */
+export interface OvertimeCorrection {
+  id: string;
+  date: string;
+  start_time: string;
+  end_time: string;
+  day_type: OvertimeDayType;
+  reason: string;
 }

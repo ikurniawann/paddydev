@@ -21,6 +21,7 @@ func (h handlers) routes() []module.Route {
 		r("POST /api/hris/employees", h.withMenu(employeeRecordManagers, h.createEmployee)),
 		r("POST /api/hris/employees/schedule-type/bulk", h.withAction("update", employeeRecordManagers, h.bulkScheduleType)),
 		r("GET /api/hris/employees/export", h.withMenu(employeeRecordManagers, h.exportEmployees)),
+		r("GET /api/hris/employees/without-manager", h.withMenu(employeeRecordManagers, h.employeesWithoutManager)),
 		r("GET /api/hris/employees/import-template", h.withMenu(employeeRecordManagers, h.employeeImportTemplate)),
 		r("POST /api/hris/employees/import", h.withAction("update", employeeRecordManagers, h.importEmployees)),
 		r("GET /api/hris/employees/documents", handle(h.listEmployeeDocuments)),
@@ -84,6 +85,8 @@ func (h handlers) routes() []module.Route {
 		r("GET /api/hris/overtime", h.withActor(h.listOvertime)),
 		r("POST /api/hris/overtime", h.withActor(h.createOvertime)),
 		r("POST /api/hris/overtime/decide", h.withActor(h.decideOvertime)),
+		r("GET /api/hris/overtime/day-type", h.withActor(h.overtimeDayTypeHint)),
+		r("PATCH /api/hris/overtime/{id}", h.withAction("update", overtimeManagers, h.correctOvertime)),
 		// business trips (Perjalanan Dinas, EPIC-062)
 		r("GET /api/hris/business-trips", h.withActor(h.listTrips)),
 		r("POST /api/hris/business-trips", h.withActor(h.createTrip)),
@@ -118,6 +121,7 @@ func (h handlers) routes() []module.Route {
 		r("GET /api/hris/me", h.withActor(h.me)),
 		r("GET /api/hris/me/beranda", h.withActor(h.beranda)),
 		r("GET /api/hris/me/team", h.withActor(h.team)),
+		r("GET /api/hris/me/team-approvals", h.withActor(h.teamApprovals)),
 
 		// announcements (cover upload and files: fileRoutes)
 		r("GET /api/hris/announcements", h.withMenu(kepegawaian, h.listAnnouncements)),

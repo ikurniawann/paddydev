@@ -50,6 +50,10 @@ export type AuditAction =
   | "vendor_credit.apply"
   | "purchase_return.revise"
   | "attendance.delete"
+  | "leave.approve"
+  | "leave.reject"
+  | "overtime.approve"
+  | "overtime.reject"
   | `${HrisDeleteEntity}.delete`;
 
 export type AuditEntity =
@@ -61,6 +65,7 @@ export type AuditEntity =
   | "ap_payment"
   | "vendor_credit"
   | "purchase_return"
+  | "hris.overtime_requests"
   | HrisDeleteEntity;
 
 export interface AuditActor {

@@ -94,6 +94,15 @@ func (hrisPayrollSQL) PendingLoanCount(ctx context.Context, q database.Querier) 
 	return n, err
 }
 
+// ManagerPendingLoanCount is the manager's kasbon queue (the scope=approvals
+// list of payroll/loans.go): pending loans naming them as manager approver.
+func (hrisPayrollSQL) ManagerPendingLoanCount(ctx context.Context, q database.Querier, managerID string) (int64, error) {
+	var n int64
+	err := q.QueryRow(ctx, `SELECT count(*) FROM hris.loans
+		WHERE status = 'pending' AND manager_approver_id = $1`, managerID).Scan(&n)
+	return n, err
+}
+
 func (hrisPayrollSQL) LoanUpdatesSince(ctx context.Context, q database.Querier, employeeID string, since *time.Time) (int64, error) {
 	var n int64
 	err := q.QueryRow(ctx, `SELECT count(*) FROM hris.loans

@@ -73,6 +73,7 @@ func New(deps module.Deps, ports Ports) module.Module {
 	svc := NewService(newStore(deps.DB), ports, deps.Log, deps.Now)
 	if deps.Events != nil {
 		deps.Events.Subscribe(TopicLeaveRequested, "hris.leave-request-whatsapp", svc.notifyLeaveRequest)
+		deps.Events.Subscribe(TopicOvertimeRequested, "hris.overtime-request-whatsapp", svc.notifyOvertimeRequest)
 	}
 	return mod{handlers{svc: svc, auth: deps.Auth}}
 }

@@ -1,6 +1,7 @@
 export type { UserEmployeeItem } from "@/lib/users/user-mapper";
 export type { CreateUserEmployeeInput, UpdateUserEmployeeInput } from "@/lib/users/schemas";
 
+import type { NoManagerReason } from "@/lib/hris/reporting-to";
 import type { UserEmployeeItem } from "@/lib/users/user-mapper";
 
 export type {
@@ -107,4 +108,14 @@ export interface LeaveBalanceRow {
   quota?: number;
   used?: number;
   year?: number;
+}
+
+/** GET /api/hris/employees/without-manager (EPIC-063 R9). */
+export interface EmployeeWithoutManager {
+  id: string;
+  nip: string | null;
+  full_name: string;
+  job_title: string | null;
+  department: string | null;
+  reason: NoManagerReason;
 }

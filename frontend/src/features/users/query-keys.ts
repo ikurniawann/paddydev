@@ -5,6 +5,7 @@ export const usersQueryKeys = {
   list: (params?: UserListParams) => ["users", "list", params ?? {}] as const,
   detail: (id: string) => ["users", "detail", id] as const,
   directoryStats: () => ["users", "directory-stats"] as const,
+  withoutManager: () => ["users", "without-manager"] as const,
   formLookups: () => ["users", "form-lookups"] as const,
   hrisEmployee: (id: string) => ["users", "hris-employee", id] as const,
   documents: (employeeId: string) => ["users", "documents", employeeId] as const,

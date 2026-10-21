@@ -205,6 +205,8 @@ describe("Go route manifest", () => {
       "/api/hris/access",
       // Perjalanan Dinas (EPIC-062).
       "/api/hris/business-trips",
+      // Paket Approval atasan (EPIC-063): hanya di Go, tanpa fallback Next.
+      "/api/hris/overtime/day-type", "/api/hris/overtime/{id}", "/api/hris/me/team-approvals", "/api/hris/employees/without-manager",
       // Aktifkan kembali karyawan (EPIC-064).
       "/api/hris/employees/{id}/rehire"];
     const goNative = (p: string) =>

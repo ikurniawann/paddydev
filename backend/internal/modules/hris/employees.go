@@ -141,6 +141,9 @@ func (s *Service) UpdateEmployee(ctx context.Context, id string, in employeeInpu
 	if current == nil {
 		return nil, httpx.NotFound("Karyawan tidak ditemukan")
 	}
+	if in.reportingTo.Sent && selfManager(id, in.reportingTo.Val) {
+		return nil, httpx.BadRequest(errSelfManager)
+	}
 	if e := in.email.Val; !accounts && e != nil {
 		email, userID, err := s.repo.EmployeeLogin(ctx, id)
 		if err != nil {

@@ -20,12 +20,20 @@ export function useCreateBusinessTrip() {
   return useMutation({ mutationFn: (payload: TripPayload) => createBusinessTrip(payload), retry: false, onSuccess });
 }
 
+/**
+ * Keputusan menyegarkan antrean, absensi, dan badge menu (nav-badges), juga saat
+ * server menolak (mis. 409 "sudah diproses orang lain") supaya antrean basi hilang.
+ */
 export function useDecideBusinessTrip() {
-  const onSuccess = useInvalidateTrips();
+  const qc = useQueryClient();
+  const invalidateTrips = useInvalidateTrips();
   return useMutation({
     mutationFn: (vars: { id: string; action: TripAction; rejectionReason?: string }) =>
       decideBusinessTrip(vars.id, vars.action, vars.rejectionReason),
     retry: false,
-    onSuccess,
+    onSettled: () => {
+      invalidateTrips();
+      void qc.invalidateQueries({ queryKey: ["hris", "nav-badges"] });
+    },
   });
 }

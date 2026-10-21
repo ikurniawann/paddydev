@@ -732,3 +732,17 @@ func TestEmployeeKeyConflictMessages(t *testing.T) {
 		t.Fatalf("own key: %d %v", code, body)
 	}
 }
+
+// EPIC-063 R9: Manajemen User / Karyawan tidak boleh menyimpan atasan = diri sendiri.
+func TestUpdateUserRefusesSelfManager(t *testing.T) {
+	e := setup(t, map[string][]string{"hris.kepegawaian.users": {"read", "create", "update"}})
+	plain := employeeBody(uniqueEmail())
+	plain["is_access_app"] = false
+	code, body, raw := e.do("POST", "/api/users", plain)
+	if code != 201 {
+		t.Fatalf("POST employee = %d %s", code, raw)
+	}
+	id := body["data"].(map[string]any)["id"].(string)
+	code, body, _ = e.do("PUT", "/api/users/"+id, map[string]any{"reporting_to": id})
+	wantError(t, code, body, 400, "Atasan langsung tidak boleh karyawan itu sendiri")
+}

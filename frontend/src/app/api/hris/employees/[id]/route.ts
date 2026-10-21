@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireIamMenuPrefix } from "@/lib/api/auth";
+import { ApiError, requireIamMenuPrefix } from "@/lib/api/auth";
 import { apiHandler } from "@/lib/api/handler";
 import { EMPLOYEE_RECORD_MANAGERS, requireEmployeeAccess } from "@/lib/hris/employee-access";
 import { employeeUpdateSchema } from "@/lib/hris/employee-update-schema";
+import { isSelfManager, SELF_MANAGER_ERROR } from "@/lib/hris/reporting-to";
 import { deactivateEmployee, getEmployee, updateEmployee } from "@/lib/hris/employees-repo";
 import { readJson } from "@/lib/hris/workforce-route";
 import { HRIS_LEAF, auditHrisDelete, requireHrisDelete } from "@/lib/hris/delete-guard";
@@ -27,6 +28,7 @@ export const PUT = apiHandler(async (request: NextRequest, { params }: RoutePara
   await requireIamMenuPrefix(EMPLOYEE_RECORD_MANAGERS);
   const { id } = await params;
   const body = await readJson(request, employeeUpdateSchema, "Data karyawan tidak valid");
+  if (isSelfManager(id, body.reporting_to)) throw ApiError.badRequest(SELF_MANAGER_ERROR);
   const data = await updateEmployee(id, body);
   return NextResponse.json({ data, message: "Data karyawan berhasil diupdate" });
 }, "hris/employees/[id] PUT");

@@ -198,3 +198,12 @@ func TestValidateEmployeeImportReplaceRefusesResignedRows(t *testing.T) {
 		t.Fatalf("unchanged resigned row: %+v", errs)
 	}
 }
+
+func TestValidateEmployeeImportRefusesSelfManager(t *testing.T) {
+	header := append(append([]string{}, hdr...), "NIP Atasan")
+	rows := [][]string{{"202505272", "Feti", "", "", "", "", "", "", "", "", "", "202505272"}}
+	_, errs, _ := ValidateEmployeeImport("replace", header, rows, 2, lk())
+	if !issueText(errs, "Baris 2, kolom NIP Atasan: NIP atasan tidak boleh NIP karyawan itu sendiri") {
+		t.Fatalf("errors %+v", errs)
+	}
+}

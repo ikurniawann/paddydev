@@ -1,6 +1,11 @@
 import { describe, it, expect } from "vitest";
 import {
   canDecideOvertime,
+  decidedAs,
+  OVERTIME_DAY_TYPE_OPTIONS,
+  OVERTIME_TOO_LATE,
+  overtimeDayTypeLabel,
+  overtimeStartsInPast,
   type OvertimeDecisionActor,
   type OvertimeDecisionRequest,
 } from "./overtime-rules";
@@ -101,5 +106,70 @@ describe("canDecideOvertime — akun tanpa record karyawan", () => {
     expect(canDecideOvertime(anon, employeeRequest(), "approve").allowed).toBe(false);
     expect(canDecideOvertime(anon, employeeRequest(), "cancel").allowed).toBe(false);
     expect(canDecideOvertime(anon, companyAssignment(), "approve").allowed).toBe(false);
+  });
+});
+
+describe("canDecideOvertime — pesan penolakan selaras Go (EPIC-063)", () => {
+  it("bukan atasan/HRD → pesan yang sama dengan Go domain.CanDecideOvertime", () => {
+    expect(canDecideOvertime(otherActor, employeeRequest(), "approve")).toEqual({
+      allowed: false,
+      reason: "Hanya atasan langsung atau HRD yang bisa memproses pengajuan ini",
+    });
+  });
+});
+
+describe("overtimeStartsInPast — MOM AP-02 (EPIC-063 R3)", () => {
+  const now = new Date("2026-10-05T03:00:30Z"); // Senin 10:00:30 WIB
+
+  it("menit berjalan masih boleh, sebelumnya sudah lewat", () => {
+    expect(overtimeStartsInPast("2026-10-05", "10:00", now)).toBe(false);
+    expect(overtimeStartsInPast("2026-10-05", "09:59", now)).toBe(true);
+    expect(overtimeStartsInPast("2026-10-04", "23:00", now)).toBe(true);
+    expect(overtimeStartsInPast("2026-10-06", "00:00", now)).toBe(false);
+  });
+
+  it("memakai jam WIB, bukan tanggal UTC", () => {
+    const late = new Date("2026-10-05T16:45:00Z"); // 23:45 WIB
+    expect(overtimeStartsInPast("2026-10-06", "00:15", late)).toBe(false);
+    expect(overtimeStartsInPast("2026-10-05", "23:30", late)).toBe(true);
+  });
+
+  it("format tidak dikenal diserahkan ke validasi input", () => {
+    expect(overtimeStartsInPast("05-10-2026", "10:00", now)).toBe(false);
+    expect(overtimeStartsInPast("2026-02-30", "10:00", now)).toBe(false); // bukan tanggal kalender
+    expect(overtimeStartsInPast("2026-10-05", "25:00", now)).toBe(false);
+  });
+
+  it("pesan penolakan sama dengan Go", () => {
+    expect(OVERTIME_TOO_LATE).toBe("Lembur wajib diajukan sebelum dimulai — jam mulai sudah lewat");
+  });
+});
+
+describe("decidedAs — Q-APV-3 (EPIC-063 R1/R2)", () => {
+  it("atasan langsung lebih dulu, HR sebagai cadangan", () => {
+    expect(decidedAs(managerActor, EMPLOYEE, MANAGER)).toBe("manager");
+    expect(decidedAs(hrActor, EMPLOYEE, MANAGER)).toBe("hr");
+    expect(decidedAs({ employeeId: null, isHr: true }, EMPLOYEE, null)).toBe("hr");
+    expect(decidedAs(otherActor, EMPLOYEE, MANAGER)).toBeNull();
+  });
+
+  it("tidak ada yang memutus pengajuannya sendiri", () => {
+    expect(decidedAs({ employeeId: EMPLOYEE, isHr: true }, EMPLOYEE, MANAGER)).toBeNull();
+    expect(decidedAs(selfActor, EMPLOYEE, EMPLOYEE)).toBeNull();
+  });
+
+  it("atasan sekaligus HR → manager", () => {
+    expect(decidedAs({ employeeId: MANAGER, isHr: true }, EMPLOYEE, MANAGER)).toBe("manager");
+  });
+});
+
+describe("overtimeDayTypeLabel — K-13", () => {
+  it("Weekday / Weekend-Libur", () => {
+    expect(overtimeDayTypeLabel("regular")).toBe("Weekday");
+    expect(overtimeDayTypeLabel("rest_day")).toBe("Weekend / Libur");
+    expect(OVERTIME_DAY_TYPE_OPTIONS).toEqual([
+      { value: "regular", label: "Weekday" },
+      { value: "rest_day", label: "Weekend / Libur" },
+    ]);
   });
 });

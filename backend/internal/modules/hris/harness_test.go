@@ -40,6 +40,7 @@ func newHarness(t *testing.T) *harness {
 		WhatsApp: wa, HolidayCalendar: fakeCalendar{}}
 	svc := NewService(newStore(tx), ports, deps.Log, deps.Now)
 	deps.Events.Subscribe(TopicLeaveRequested, "hris.leave-request-whatsapp", svc.notifyLeaveRequest)
+	deps.Events.Subscribe(TopicOvertimeRequested, "hris.overtime-request-whatsapp", svc.notifyOvertimeRequest)
 	if err := deps.Events.Register(context.Background(), tx); err != nil {
 		t.Fatal(err)
 	}
@@ -204,6 +205,15 @@ func (fakePayroll) LatestKPISummary(context.Context, database.Querier, string) (
 	return KPISummary{}, nil
 }
 func (fakePayroll) PendingLoanCount(context.Context, database.Querier) (int64, error) { return 2, nil }
+
+// fakeManagerLoans is the kasbon count fakePayroll reports for a manager's
+// stage (tests set it).
+var fakeManagerLoans int64
+
+func (fakePayroll) ManagerPendingLoanCount(context.Context, database.Querier, string) (int64, error) {
+	return fakeManagerLoans, nil
+}
+
 func (fakePayroll) LoanUpdatesSince(context.Context, database.Querier, string, *time.Time) (int64, error) {
 	return 0, nil
 }

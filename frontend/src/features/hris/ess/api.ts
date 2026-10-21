@@ -12,6 +12,7 @@ import type {
   EssLoanPayload,
   EssLoanRow,
   EssMe,
+  EssOvertimeDayTypeHint,
   EssOvertimeDecision,
   EssOvertimeForm,
   EssOvertimeRow,
@@ -80,6 +81,11 @@ export const fetchMyOvertime = () => softGet<EssOvertimeRow[]>("/api/hris/overti
 
 export const submitOvertime = (form: EssOvertimeForm) =>
   apiPost<{ data: unknown }>("/api/hris/overtime", form);
+
+export const fetchOvertimeDayType = (date: string) =>
+  apiGet<{ data: EssOvertimeDayTypeHint }>(`/api/hris/overtime/day-type?date=${encodeURIComponent(date)}`).then(
+    (res) => res.data
+  );
 
 export const decideOvertime = (
   id: string,
