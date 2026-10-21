@@ -51,12 +51,43 @@ func TestCheckAttendanceRequest(t *testing.T) {
 		{"koreksi sama dengan catatan (detik diabaikan)", AttendanceRequestInput{Date: "2026-10-03", ClockIn: sp("08:02"), Reason: why,
 			HasRow: true, RecordedIn: instant("2026-10-03T01:02:37Z"), RecordedOut: instant("2026-10-03T10:00:00Z")},
 			"", "Jam yang diajukan sama dengan absensi tercatat"},
+		{"koreksi jam masuk setelah jam pulang tercatat", AttendanceRequestInput{Date: "2026-10-03", ClockIn: sp("18:00"), Reason: why, HasRow: true,
+			RecordedIn: instant("2026-10-03T01:00:00Z"), RecordedOut: instant("2026-10-03T10:00:00Z")}, "", "Jam pulang harus setelah jam masuk"},
+		{"koreksi jam masuk sama dengan jam pulang tercatat", AttendanceRequestInput{Date: "2026-10-03", ClockIn: sp("17:00"), Reason: why, HasRow: true,
+			RecordedIn: instant("2026-10-03T01:00:00Z"), RecordedOut: instant("2026-10-03T10:00:00Z")}, "", "Jam pulang harus setelah jam masuk"},
+		{"koreksi baris lewat tengah malam tetap valid", AttendanceRequestInput{Date: "2026-10-03", ClockIn: sp("21:00"), Reason: why, HasRow: true,
+			RecordedIn: instant("2026-10-03T15:00:00Z"), RecordedOut: instant("2026-10-03T23:00:00Z")}, AttendanceRequestCorrection, ""},
+		{"keterangan tepat 5 karakter", AttendanceRequestInput{Date: "2026-10-02", ClockIn: sp("08:00"), Reason: "Lupa!"}, AttendanceRequestManual, ""},
+		{"keterangan 4 karakter", AttendanceRequestInput{Date: "2026-10-02", ClockIn: sp("08:00"), Reason: "Lupa"}, "",
+			"Keterangan wajib diisi (minimal 5 karakter)"},
+		{"keterangan 5 karakter multibyte", AttendanceRequestInput{Date: "2026-10-02", ClockIn: sp("08:00"), Reason: "Ñandú"}, AttendanceRequestManual, ""},
+		{"keterangan 4 karakter multibyte (5 byte)", AttendanceRequestInput{Date: "2026-10-02", ClockIn: sp("08:00"), Reason: "Ñand"}, "",
+			"Keterangan wajib diisi (minimal 5 karakter)"},
 	}
 	for _, c := range cases {
 		kind, msg := CheckAttendanceRequest(c.in, requestNow)
 		if kind != c.kind || msg != c.msg {
 			t.Errorf("%s: got (%q, %q), want (%q, %q)", c.name, kind, msg, c.kind, c.msg)
 		}
+	}
+}
+
+func TestCheckAttendanceRequestWithSeconds(t *testing.T) {
+	const why = "Internet toko mati"
+	now := time.Date(2026, 10, 5, 3, 0, 30, 0, time.UTC) // 10:00:30 WIB
+	if kind, msg := CheckAttendanceRequest(AttendanceRequestInput{Date: "2026-10-05", ClockIn: sp("10:00"), Reason: why}, now); kind != AttendanceRequestManual || msg != "" {
+		t.Errorf("current minute at 10:00:30 = (%q, %q)", kind, msg)
+	}
+	if _, msg := CheckAttendanceRequest(AttendanceRequestInput{Date: "2026-10-05", ClockIn: sp("10:01"), Reason: why}, now); msg != "Jam yang diajukan belum terjadi" {
+		t.Errorf("next minute at 10:00:30 = %q", msg)
+	}
+}
+
+func TestAttendanceGapsAbsentWithClockIn(t *testing.T) {
+	got := AttendanceGaps(GapInput{Start: "2026-10-02", End: "2026-10-02",
+		Recorded: map[string]RecordedDay{"2026-10-02": {Absent: true, ClockIn: instant("2026-10-02T01:00:00Z")}}})
+	if len(got) != 0 {
+		t.Fatalf("absent day with clock-in must not be a gap: %+v", got)
 	}
 }
 
@@ -87,7 +118,7 @@ func TestAttendanceGaps(t *testing.T) {
 	in.OnLeave = map[string]bool{}
 	got = AttendanceGaps(in)
 	if len(got) != 3 || got[0].Date != "2026-09-28" || got[0].Kind != GapMissing || got[0].ClockIn != nil ||
-		got[1].Date != "2026-09-29" || got[2].Kind != GapNoClockOut {
+		got[1].Date != "2026-09-29" || got[1].Kind != GapMissing || got[1].ClockIn != nil || got[2].Kind != GapNoClockOut {
 		t.Fatalf("gaps without pending/leave = %+v", got)
 	}
 	// Tanpa jadwal: hanya absen pulang yang hilang yang diketahui.
@@ -126,6 +157,9 @@ func TestAttendanceNotices(t *testing.T) {
 	if title, msg = AttendanceDecisionNotice("approved", "2026-10-02", nil); title != "Pengajuan absensi disetujui" ||
 		msg != "Pengajuan absensi 2 Okt 2026 disetujui HR. Absensi sudah diperbarui." {
 		t.Fatalf("approved notice = %q / %q", title, msg)
+	}
+	if title, msg = AttendanceDecisionNotice("pending", "2026-10-02", nil); title != "" || msg != "" {
+		t.Fatalf("unknown status notice = %q / %q", title, msg)
 	}
 	if title, msg = AttendanceDecisionNotice("rejected", "2026-10-02", sp("CCTV tidak sesuai")); title != "Pengajuan absensi ditolak" ||
 		msg != "Pengajuan absensi 2 Okt 2026 ditolak HR. Alasan: CCTV tidak sesuai" {

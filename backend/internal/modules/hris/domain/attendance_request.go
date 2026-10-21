@@ -68,6 +68,12 @@ func CheckAttendanceRequest(in AttendanceRequestInput, now time.Time) (kind, msg
 	if clockIn.After(now) || (clockOut != nil && clockOut.After(now)) {
 		return "", "Jam yang diajukan belum terjadi"
 	}
+	// A correction that changes only one side must keep the pair ordered
+	// (a requested clock-out is already rolled to the next day by ClockOutAt;
+	// rows recorded past midnight carry a next-day RecordedOut).
+	if clockOut != nil && !clockOut.After(*clockIn) {
+		return "", "Jam pulang harus setelah jam masuk"
+	}
 	if !in.HasRow {
 		return AttendanceRequestManual, ""
 	}
@@ -171,14 +177,18 @@ func AttendanceRequestNotice(employeeName, kind, date string, clockIn, clockOut 
 }
 
 // AttendanceDecisionNotice is the employee's in-app notification of HR's
-// decision.
+// decision. Only "approved" and "rejected" are decisions; any other status
+// yields empty strings so the caller sends no notification.
 func AttendanceDecisionNotice(status, date string, rejection *string) (title, message string) {
-	if status == "approved" {
+	switch status {
+	case "approved":
 		return "Pengajuan absensi disetujui", "Pengajuan absensi " + ShortDateID(date) + " disetujui HR. Absensi sudah diperbarui."
+	case "rejected":
+		message = "Pengajuan absensi " + ShortDateID(date) + " ditolak HR."
+		if rejection != nil && *rejection != "" {
+			message += " Alasan: " + *rejection
+		}
+		return "Pengajuan absensi ditolak", message
 	}
-	message = "Pengajuan absensi " + ShortDateID(date) + " ditolak HR."
-	if rejection != nil && *rejection != "" {
-		message += " Alasan: " + *rejection
-	}
-	return "Pengajuan absensi ditolak", message
+	return "", ""
 }
