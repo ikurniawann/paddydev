@@ -120,6 +120,7 @@ func (h handlers) routes() []module.Route {
 		r("GET /api/hris/me", h.withActor(h.me)),
 		r("GET /api/hris/me/beranda", h.withActor(h.beranda)),
 		r("GET /api/hris/me/team", h.withActor(h.team)),
+		r("GET /api/hris/me/team-approvals", h.withActor(h.teamApprovals)),
 
 		// announcements (cover upload and files: fileRoutes)
 		r("GET /api/hris/announcements", h.withMenu(kepegawaian, h.listAnnouncements)),

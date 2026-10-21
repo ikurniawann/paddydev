@@ -2362,6 +2362,11 @@
   {
     "module": "hris",
     "method": "GET",
+    "path": "/api/hris/me/team-approvals"
+  },
+  {
+    "module": "hris",
+    "method": "GET",
     "path": "/api/hris/nav-badges"
   },
   {

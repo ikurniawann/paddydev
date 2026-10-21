@@ -2,6 +2,8 @@ package hris
 
 import (
 	"context"
+	"fmt"
+	"net/http"
 
 	"github.com/jackc/pgx/v5"
 
@@ -85,4 +87,94 @@ func (s *Service) notifyOvertimeRequest(ctx context.Context, tx pgx.Tx, e outbox
 			Hours: p.Hours, DayType: p.DayType, Reason: p.Reason, ApproverName: &approver,
 		})
 	})
+}
+
+/* ── Persetujuan Tim (ESS, EPIC-063 R7) ─────────────────────────────── */
+
+// teamApprovalsHref is the ESS menu the team badge belongs to.
+const teamApprovalsHref = "/dashboard/me/persetujuan-tim"
+
+// ApprovalRepo reads the direct manager's queue (and, Task 6, the
+// reporting_to data quality report).
+type ApprovalRepo interface {
+	TeamPendingLeaves(ctx context.Context, managerID string) ([]*Row, error)
+	TeamPendingOvertime(ctx context.Context, managerID string) ([]*Row, error)
+	// TeamPendingCount sums pending leave, employee overtime and business
+	// trip requests of managerID's direct reports.
+	TeamPendingCount(ctx context.Context, managerID string) (int64, error)
+}
+
+// TeamApprovals is GET /api/hris/me/team-approvals: pending leave and
+// overtime requests of the actor's direct reports. Business trips and kasbon
+// keep their own queues (GET /api/hris/business-trips?scope=approvals,
+// GET /api/hris/loans?scope=approvals), which the ESS page reuses.
+func (s *Service) TeamApprovals(ctx context.Context, a *Actor) (*Row, error) {
+	if a.EmployeeID == nil {
+		return obj("leaves", []*Row{}, "overtime", []*Row{}), nil
+	}
+	leaves, err := s.repo.TeamPendingLeaves(ctx, *a.EmployeeID)
+	if err != nil {
+		return nil, err
+	}
+	overtime, err := s.repo.TeamPendingOvertime(ctx, *a.EmployeeID)
+	if err != nil {
+		return nil, err
+	}
+	return obj("leaves", leaves, "overtime", overtime), nil
+}
+
+// teamPendingTotal is the Persetujuan Tim badge: everything waiting for the
+// manager, kasbon at the manager stage included.
+func (s *Service) teamPendingTotal(ctx context.Context, managerID string) (int64, error) {
+	n, err := s.repo.TeamPendingCount(ctx, managerID)
+	if err != nil {
+		return 0, err
+	}
+	loans, err := s.payroll.ManagerPendingLoanCount(ctx, s.repo.querier(), managerID)
+	return n + loans, err
+}
+
+// teamMember joins the requester (alias m) when they report to $1 directly;
+// a reporting_to pointing at oneself (live data) is not a team member (R2).
+func teamMember(alias string) string {
+	return fmt.Sprintf(`JOIN hris.employees m ON m.id = %s.employee_id AND m.reporting_to = $1 AND m.id <> $1`, alias)
+}
+
+const teamEmployee = `json_build_object('id', m.id, 'full_name', m.full_name, 'nip', m.nip) AS employee`
+
+func (s *store) TeamPendingLeaves(ctx context.Context, managerID string) ([]*Row, error) {
+	rows, err := queryRows(ctx, s.db, `SELECT l.id, l.employee_id, l.leave_type, l.start_date::text AS start_date,
+		l.end_date::text AS end_date, l.total_days, l.reason, l.attachment_url, l.created_at, `+teamEmployee+`
+		FROM hris.leaves l `+teamMember("l")+`
+		WHERE l.status = 'pending'
+		ORDER BY l.start_date, l.created_at LIMIT 200`, managerID)
+	return rows, ignoreBadInput(err)
+}
+
+func (s *store) TeamPendingOvertime(ctx context.Context, managerID string) ([]*Row, error) {
+	rows, err := queryRows(ctx, s.db, `SELECT o.id, o.employee_id, o.date::text AS date, o.start_time, o.end_time,
+		o.hours, o.day_type, o.reason, o.created_at, `+teamEmployee+`
+		FROM hris.overtime_requests o `+teamMember("o")+`
+		WHERE o.status = 'pending' AND o.source = 'employee'
+		ORDER BY o.date, o.created_at LIMIT 200`, managerID)
+	return rows, ignoreBadInput(err)
+}
+
+func (s *store) TeamPendingCount(ctx context.Context, managerID string) (int64, error) {
+	var n int64
+	err := s.db.QueryRow(ctx, `SELECT
+		  (SELECT count(*) FROM hris.leaves l `+teamMember("l")+` WHERE l.status = 'pending')
+		+ (SELECT count(*) FROM hris.overtime_requests o `+teamMember("o")+` WHERE o.status = 'pending' AND o.source = 'employee')
+		+ (SELECT count(*) FROM hris.business_trips t `+teamMember("t")+` WHERE t.status = 'pending')`,
+		managerID).Scan(&n)
+	return n, ignoreBadInput(err)
+}
+
+// GET /api/hris/me/team-approvals
+func (h handlers) teamApprovals(w http.ResponseWriter, r *http.Request, a *Actor) error {
+	out, err := h.svc.TeamApprovals(r.Context(), a)
+	if err != nil {
+		return err
+	}
+	return ok(w, dataOf(out))
 }

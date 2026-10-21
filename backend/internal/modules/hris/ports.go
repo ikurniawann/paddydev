@@ -28,6 +28,9 @@ type PayrollReads interface {
 	LatestKPISummary(ctx context.Context, q database.Querier, employeeID string) (KPISummary, error)
 	// PendingLoanCount counts loans waiting for a decision.
 	PendingLoanCount(ctx context.Context, q database.Querier) (int64, error)
+	// ManagerPendingLoanCount counts kasbon waiting for managerID's stage
+	// (EPIC-060 manager_approver_id), for the ESS Persetujuan Tim badge.
+	ManagerPendingLoanCount(ctx context.Context, q database.Querier, managerID string) (int64, error)
 	// LoanUpdatesSince counts the employee's decided loans updated after
 	// since (nil: ever).
 	LoanUpdatesSince(ctx context.Context, q database.Querier, employeeID string, since *time.Time) (int64, error)

@@ -293,6 +293,11 @@ func (s *Service) NavBadges(ctx context.Context, a *Actor) (*Row, error) {
 			return nil, err
 		}
 		badges.Set(announcementsHref, n)
+		team, err := s.teamPendingTotal(ctx, *a.EmployeeID)
+		if err != nil {
+			return nil, err
+		}
+		badges.Set(teamApprovalsHref, team)
 	}
 	return badges, nil
 }
