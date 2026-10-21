@@ -6,6 +6,7 @@
 
 import { z } from "zod";
 import { ApiError } from "@/lib/api/auth";
+import { recordAudit } from "@/lib/audit";
 import { withTransaction } from "@/lib/db";
 import { createPgClient, createServerPgClient } from "@/lib/pg/create-client";
 import { buildWaLink } from "@/lib/recruitment/wa";
@@ -13,6 +14,8 @@ import { describeLeaveDays } from "./holidays";
 import { loadHolidayIndex } from "./holidays-db";
 import { SELECTABLE_LEAVE_CODES } from "./leave-types";
 import { notifyLeaveRequestWa } from "./leave-wa";
+import { auditDateText, decisionActorName } from "./decision-audit";
+import { decidedAs } from "./overtime-rules";
 import type { WorkforceActor } from "./workforce-auth";
 import { DATE_RE, requireLinkedEmployee, unwrap } from "./workforce-route";
 
@@ -283,10 +286,18 @@ export async function decideLeave(actor: WorkforceActor, input: z.infer<typeof l
     .maybeSingle();
   if (!leave) throw ApiError.notFound("Leave request not found");
 
-  const isDirectManager =
-    actor.employeeId !== null && leave.employee?.reporting_to === actor.employeeId;
-  if (!actor.isHr && !isDirectManager) {
-    throw ApiError.forbidden("Forbidden: hanya HRD/admin atau atasan langsung yang bisa memproses");
+  // Q-APV-3 (EPIC-063 R1/R2), sama dengan Go DecideLeave; HR = himpunan HRD (ruling C1/P3).
+  const capacity = decidedAs(
+    { employeeId: actor.employeeId, isHr: actor.isHrd },
+    leave.employee_id,
+    leave.employee?.reporting_to ?? null
+  );
+  if (!capacity) {
+    throw ApiError.forbidden(
+      actor.employeeId !== null && actor.employeeId === leave.employee_id
+        ? "Tidak bisa memutuskan pengajuan cuti sendiri"
+        : "Hanya atasan langsung atau HRD yang bisa memproses pengajuan ini"
+    );
   }
   if (leave.status !== "pending") {
     throw ApiError.badRequest(`Leave request already ${leave.status}`, {
@@ -298,19 +309,17 @@ export async function decideLeave(actor: WorkforceActor, input: z.infer<typeof l
   }
 
   const isApprove = input.action === "approve";
+  const status = isApprove ? "approved" : "rejected";
+  const rejection = isApprove ? null : (input.rejection_reason ?? null);
   await withTransaction(async (client) => {
-    await client.query(
+    const updated = await client.query(
       `UPDATE hris.leaves
        SET status = $2, approved_by = $3, approved_at = now(),
-           rejection_reason = $4
+           rejection_reason = $4, decided_as = $5, decided_by_name = $6
        WHERE id = $1 AND status = 'pending'`,
-      [
-        input.leave_id,
-        isApprove ? "approved" : "rejected",
-        actor.employeeId,
-        isApprove ? null : (input.rejection_reason ?? null),
-      ]
+      [input.leave_id, status, actor.employeeId, rejection, capacity, decisionActorName(actor.fullName)]
     );
+    if (updated.rowCount === 0) throw ApiError.conflict("Pengajuan sudah diproses oleh orang lain");
     if (isApprove && leave.leave_type === "annual") {
       await client.query(
         `INSERT INTO hris.leave_balances (employee_id, year, annual_leave_total, annual_leave_used)
@@ -321,6 +330,15 @@ export async function decideLeave(actor: WorkforceActor, input: z.infer<typeof l
         [leave.employee_id, new Date(leave.start_date).getFullYear(), leave.total_days]
       );
     }
+    await recordAudit(client, {
+      actor: { id: actor.userId, name: decisionActorName(actor.fullName) },
+      action: isApprove ? "leave.approve" : "leave.reject",
+      entity: "hris.leaves",
+      entityId: input.leave_id,
+      entityLabel: `${leave.employee?.full_name ?? ""} · ${auditDateText(leave.start_date)} s.d. ${auditDateText(leave.end_date)}`,
+      before: { status: "pending" },
+      after: { status, decided_as: capacity, rejection_reason: rejection },
+    });
   });
 
   const { data } = await db

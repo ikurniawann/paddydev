@@ -6,9 +6,9 @@
 
 | Pengajuan | Approver | Ketentuan | Kode sekarang |
 |---|---|---|---|
-| Time-off (cuti/izin) | Atasan langsung | SPV mengajukan ke atasannya masing-masing | Satu tahap: HR **atau** `reporting_to`; atasan tidak punya antrean di ESS |
-| Overtime | Atasan langsung | Wajib diajukan sebelum lembur; jenis Weekday / Weekend | Satu tahap: HR atau `reporting_to`; tanggal lampau diterima; jenis hanya regular/rest_day oleh HR |
-| Koreksi Overtime | AdminHRIS | — | Hanya lewat koreksi jam lembur di absensi |
+| Time-off (cuti/izin) | Atasan langsung | SPV mengajukan ke atasannya masing-masing | EPIC-063: atasan langsung approver utama (`decided_as = manager`), HR cadangan/override (`decided_as = hr`, audit `leave.approve\|reject`), tanpa self-approval; antrean ESS Persetujuan Tim. HR = `super_admin`/`admin`/`hrd`; `hiring_manager` bukan cadangan HR |
+| Overtime | Atasan langsung | Wajib diajukan sebelum lembur; jenis Weekday / Weekend | EPIC-063: wajib sebelum jam mulai (WIB) untuk pengajuan sendiri; jenis Weekday/Weekend dari ESS dicek ke jadwal; atasan langsung + HR cadangan (`super_admin`/`admin`/`hrd`), audit `overtime.approve\|reject`; WA atasan saat pengajuan |
+| Koreksi Overtime | AdminHRIS | — | EPIC-063: `PATCH /api/hris/overtime/{id}`, aksi `update` menu `hris.kepegawaian.overtime`, audit `overtime.correct` |
 | Kasbon | Manager Departemen **dan** HR (akses Payroll) | Maks. 50% THP; tenor 1 dan 2 | Dua tahap (EPIC-060): Manager Departemen tersimpan (`manager_approver_id`) memutus tahap 1, lalu HR Penggajian (aksi `approve` menu Pinjaman **dan** akses Penggajian) memutus tahap 2. HR tetap boleh menolak kasbon yang masih menunggu manager |
 | Absen Manual / Koreksi Absen | HR | Termasuk request absen terlewat (internet mati) dengan keterangan karyawan | HR mengedit langsung; belum ada pengajuan dari karyawan |
 | Perjalanan Dinas | Atasan langsung (HRD cadangan & override) | Rentang ≤ 31 hari, diajukan sebelum berangkat | EPIC-062: satu tahap, `reporting_to` atau HRD; pemohon tidak boleh memutus miliknya sendiri; kuasa HRD (lihat semua, memutus cadangan, mencatat dinas karyawan langsung disetujui, membatalkan) hanya `super_admin`/`admin`/`hrd`, bukan `hiring_manager`; audit tiap keputusan |
@@ -43,8 +43,10 @@ CEO
 
 ## Data live yang menghambat approval atasan langsung (20-10-2026)
 
+EPIC-063 tidak mengubah data live. HR memperbaikinya lewat kartu "karyawan aktif tanpa atasan langsung" di halaman Karyawan (laporan baca saja) atas persetujuan user.
+
 | Masalah | Jumlah | Dampak |
 |---|---|---|
 | Karyawan aktif tanpa `reporting_to` | 55 dari 374 (23 `staff`, 15 `Staff`, 12 tanpa jabatan, 4 Store Manager, 1 CEO) | Pengajuan mereka hanya bisa diputus HR |
-| `reporting_to` menunjuk diri sendiri | 1 (Retail Operation Manager) | Berisiko menyetujui pengajuannya sendiri (perlu dicek apakah DecideLeave/overtime menolak self-approval) |
+| `reporting_to` menunjuk diri sendiri | 1 (Retail Operation Manager) | Kode menolak self-approval dan tidak mengirim WA ke dirinya sendiri (EPIC-063); data tetap perlu diperbaiki user |
 | Store Manager tanpa atasan | 4 (termasuk akun uji "QA Dimas Dua Entitas") | Tidak ada atasan untuk time-off/lembur |

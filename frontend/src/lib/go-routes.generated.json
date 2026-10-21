@@ -1991,6 +1991,11 @@
   },
   {
     "module": "hris",
+    "method": "GET",
+    "path": "/api/hris/employees/without-manager"
+  },
+  {
+    "module": "hris",
     "method": "DELETE",
     "path": "/api/hris/employees/{id}"
   },
@@ -2362,6 +2367,11 @@
   {
     "module": "hris",
     "method": "GET",
+    "path": "/api/hris/me/team-approvals"
+  },
+  {
+    "module": "hris",
+    "method": "GET",
     "path": "/api/hris/nav-badges"
   },
   {
@@ -2418,11 +2428,21 @@
     "module": "hris",
     "method": "POST",
     "path": "/api/hris/overtime"
+  },
+  {
+    "module": "hris",
+    "method": "GET",
+    "path": "/api/hris/overtime/day-type"
   },
   {
     "module": "hris",
     "method": "POST",
     "path": "/api/hris/overtime/decide"
+  },
+  {
+    "module": "hris",
+    "method": "PATCH",
+    "path": "/api/hris/overtime/{id}"
   },
   {
     "module": "payroll",

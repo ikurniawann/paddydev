@@ -11,6 +11,7 @@ import {
   fetchMyLoans,
   fetchMyOvertime,
   fetchMyPayslips,
+  fetchOvertimeDayType,
   fetchMyTeam,
   fetchTeamLoanApprovals,
   fetchTodayAttendance,
@@ -29,6 +30,13 @@ export const useMyLeaves = () =>
 
 export const useMyOvertime = () =>
   useQuery({ queryKey: essQueryKeys.overtime(), queryFn: fetchMyOvertime });
+
+export const useOvertimeDayType = (date: string) =>
+  useQuery({
+    queryKey: essQueryKeys.overtimeDayType(date),
+    queryFn: () => fetchOvertimeDayType(date),
+    enabled: /^\d{4}-\d{2}-\d{2}$/.test(date),
+  });
 
 export const useMyLoans = () => useQuery({ queryKey: essQueryKeys.loans(), queryFn: fetchMyLoans });
 

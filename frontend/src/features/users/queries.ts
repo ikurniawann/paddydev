@@ -17,6 +17,7 @@ import {
   fetchUserList,
   fetchShiftOptions,
   fetchEmployeeShiftSchedule,
+  fetchEmployeesWithoutManager,
 } from "./api";
 import { usersQueryKeys } from "./query-keys";
 import type { UserListParams } from "./types";
@@ -161,3 +162,6 @@ export const useEmployeeShiftSchedule = (employeeId: string) =>
     },
     enabled: !!employeeId,
   });
+
+export const useEmployeesWithoutManager = () =>
+  useQuery({ queryKey: usersQueryKeys.withoutManager(), queryFn: fetchEmployeesWithoutManager });

@@ -168,7 +168,7 @@ func TestSelfService(t *testing.T) {
 		t.Fatal("mark read")
 	}
 	badges := h.do(&boss, "GET", "/api/hris/nav-badges", nil)
-	if badges.raw != `{"badges":{"/dashboard/me/cuti":0,"/dashboard/me/lembur":0,"/dashboard/me/pinjaman":0,"/dashboard/me/pengumuman":0}}` {
+	if badges.raw != `{"badges":{"/dashboard/me/cuti":0,"/dashboard/me/lembur":0,"/dashboard/me/pinjaman":0,"/dashboard/me/pengumuman":0,"/dashboard/me/persetujuan-tim":0}}` {
 		t.Fatalf("badges = %s", badges.raw)
 	}
 	hrBadges := h.do(&hr, "GET", "/api/hris/nav-badges", nil)

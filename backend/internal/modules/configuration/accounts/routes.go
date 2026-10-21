@@ -240,6 +240,14 @@ func (h handlers) updateUser(w http.ResponseWriter, r *http.Request) error {
 	if err := f.Err("Validation failed"); err != nil {
 		return err
 	}
+	// EPIC-063 R9: atasan langsung tidak boleh karyawan itu sendiri.
+	if to := b.text["reporting_to"]; to != nil {
+		id, okID := validate.CanonicalUUID(r.PathValue("id"))
+		boss, okBoss := validate.CanonicalUUID(*to)
+		if okID && okBoss && id == boss {
+			return httpx.BadRequest("Atasan langsung tidak boleh karyawan itu sendiri")
+		}
+	}
 	data, err := h.svc.updateUser(r.Context(), actor, r.PathValue("id"), b, accounts, gate)
 	if err != nil {
 		return rethrowUserServiceError(err)

@@ -92,6 +92,37 @@ describe("PUT /api/hris/employees/[id]", () => {
     expect(updateCalls).toHaveLength(0);
   });
 
+  it("atasan langsung = karyawan itu sendiri → 400 tanpa menulis (EPIC-063 R9)", async () => {
+    requireIamMenuPrefix.mockResolvedValue({ id: "hr-1", role: "hrd" });
+    const id = "3f2b8c1e-4a5d-4e6f-8a9b-0c1d2e3f4a5b";
+    const { PUT } = await detailRoute();
+    const res = await PUT(
+      req(`http://x/api/hris/employees/${id}`, {
+        method: "PUT",
+        body: JSON.stringify({ reporting_to: id.toUpperCase().replaceAll("-", "").replace(/^(.{8})(.{4})(.{4})(.{4})(.{12})$/, "$1-$2-$3-$4-$5") }),
+      }),
+      { params: Promise.resolve({ id }) }
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe("Atasan langsung tidak boleh karyawan itu sendiri");
+    expect(updateCalls).toHaveLength(0);
+  });
+
+  it("atasan lain tetap lolos", async () => {
+    requireIamMenuPrefix.mockResolvedValue({ id: "hr-1", role: "hrd" });
+    const id = "3f2b8c1e-4a5d-4e6f-8a9b-0c1d2e3f4a5b";
+    const { PUT } = await detailRoute();
+    const res = await PUT(
+      req(`http://x/api/hris/employees/${id}`, {
+        method: "PUT",
+        body: JSON.stringify({ reporting_to: "9f2b8c1e-4a5d-4e6f-8a9b-0c1d2e3f4a5b" }),
+      }),
+      { params: Promise.resolve({ id }) }
+    );
+    expect(res.status).toBe(200);
+    expect(updateCalls[0].reporting_to).toBe("9f2b8c1e-4a5d-4e6f-8a9b-0c1d2e3f4a5b");
+  });
+
   it("membuang user_id, is_access_app dan kolom di luar allowlist", async () => {
     requireIamMenuPrefix.mockResolvedValue({ id: "hr-1", role: "hrd" });
     const { PUT } = await detailRoute();

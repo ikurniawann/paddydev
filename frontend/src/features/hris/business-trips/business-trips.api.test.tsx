@@ -60,4 +60,22 @@ describe("business-trips mutations", () => {
     expect(spy).toHaveBeenCalledWith({ queryKey: businessTripQueryKeys.all });
     expect(spy).toHaveBeenCalledWith({ queryKey: attendanceQueryKeys.all });
   });
+
+  it("keputusan menyegarkan badge menu dan antrean, juga saat server menolak (409 basi)", async () => {
+    const { Wrap, spy } = wrapper();
+    apiPost.mockResolvedValueOnce({ data: {} });
+    const ok = renderHook(() => useDecideBusinessTrip(), { wrapper: Wrap });
+    ok.result.current.mutate({ id: "t1", action: "approve" });
+    await waitFor(() => expect(ok.result.current.isSuccess).toBe(true));
+    expect(spy).toHaveBeenCalledWith({ queryKey: ["hris", "nav-badges"] });
+
+    spy.mockClear();
+    apiPost.mockRejectedValueOnce(new Error("Pengajuan sudah diproses oleh orang lain"));
+    const stale = renderHook(() => useDecideBusinessTrip(), { wrapper: Wrap });
+    stale.result.current.mutate({ id: "t2", action: "approve" });
+    await waitFor(() => expect(stale.result.current.isError).toBe(true));
+    expect(spy).toHaveBeenCalledWith({ queryKey: ["hris", "nav-badges"] });
+    expect(spy).toHaveBeenCalledWith({ queryKey: businessTripQueryKeys.all });
+    expect(spy).toHaveBeenCalledWith({ queryKey: attendanceQueryKeys.all });
+  });
 });

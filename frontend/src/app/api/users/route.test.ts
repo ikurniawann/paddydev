@@ -179,6 +179,14 @@ describe("/api/users/[id]", () => {
     expect((await res.json()).error).toBe("Employee not found");
   });
 
+  it("PUT: atasan langsung = karyawan itu sendiri → 400 tanpa memanggil service (EPIC-063 R9)", async () => {
+    const { PUT } = await import("./[id]/route");
+    const res = await PUT(jsonReq({ reporting_to: ID.toUpperCase() }), ctx);
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe("Atasan langsung tidak boleh karyawan itu sendiri");
+    expect(service.updateUserEmployee).not.toHaveBeenCalled();
+  });
+
   it("PUT: karyawan tidak ada → 400 berpesan sama", async () => {
     service.updateUserEmployee.mockRejectedValue(new Error("Employee not found"));
     const { PUT } = await import("./[id]/route");

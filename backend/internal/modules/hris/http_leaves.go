@@ -129,7 +129,7 @@ func (h handlers) decideLeave(w http.ResponseWriter, r *http.Request, a *Actor) 
 	if err := formErr(f, message); err != nil {
 		return err
 	}
-	out, err := h.svc.DecideLeave(r.Context(), a, in)
+	out, err := h.svc.DecideLeave(r.Context(), a, in, auditMeta(r))
 	if err != nil {
 		return err
 	}

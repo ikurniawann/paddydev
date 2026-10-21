@@ -180,7 +180,7 @@ function UserEmployeeForm({
           </div>
         ) : null}
         <PersonalSection form={form} onChange={setField} emailLocked={!canManageAccounts && hasExistingAppAccount} />
-        <EmploymentSection form={form} lookups={lookups} onChange={setField} isEdit={isEdit} />
+        <EmploymentSection form={form} lookups={lookups} onChange={setField} isEdit={isEdit} employeeId={editId} />
         <ContactSections form={form} onChange={setField} />
 
         {canManageAccounts ? (

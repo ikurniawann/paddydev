@@ -12,7 +12,8 @@ import (
 
 /* ── Overtime (lib/hris/overtime-rules, payroll/period) ───────────────── */
 
-// OvertimeActor is who decides.
+// OvertimeActor is who decides. IsHR carries ruling C1/P2: callers pass
+// Actor.IsHRD (super_admin/admin/hrd), not Actor.IsHR.
 type OvertimeActor struct {
 	EmployeeID *string
 	IsHR       bool
@@ -56,7 +57,7 @@ func CanDecideOvertime(actor OvertimeActor, req OvertimeRequest, action string) 
 		return false, "Tidak bisa memutuskan pengajuan lembur sendiri"
 	}
 	if !actor.IsHR && !isManager {
-		return false, "Hanya HRD/atasan langsung yang bisa memproses pengajuan ini"
+		return false, "Hanya atasan langsung atau HRD yang bisa memproses pengajuan ini"
 	}
 	return true, ""
 }
@@ -159,7 +160,7 @@ func LeaveRequestWaMessage(in LeaveRequestWa) string {
 	if in.Reason != nil && JSTrim(*in.Reason) != "" {
 		lines = append(lines, "Alasan : "+JSTrim(*in.Reason))
 	}
-	lines = append(lines, "", "Mohon ditinjau di dashboard Paddy OS (Kehadiran & Cuti → Cuti & Izin).")
+	lines = append(lines, "", ApprovalWaFooter)
 	return strings.Join(lines, "\n")
 }
 

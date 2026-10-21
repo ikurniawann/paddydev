@@ -5,6 +5,7 @@ export const essQueryKeys = {
   todayAttendance: () => ["hris", "ess", "today-attendance"] as const,
   leaves: () => ["hris", "ess", "leaves"] as const,
   overtime: () => ["hris", "ess", "overtime"] as const,
+  overtimeDayType: (date: string) => ["hris", "ess", "overtime-day-type", date] as const,
   loans: () => ["hris", "ess", "loans"] as const,
   payslips: () => ["hris", "ess", "payslips"] as const,
   announcements: () => ["hris", "ess", "announcements"] as const,

@@ -190,7 +190,7 @@ describe("POST /api/hris/holidays", () => {
 });
 
 describe("/api/hris/attendance", () => {
-  const employee = { userId: "u-1", role: "employee", employeeId: "emp-me", isHr: false };
+  const employee = { userId: "u-1", role: "employee", employeeId: "emp-me", isHr: false, isHrd: false };
 
   it("action tak dikenal → 400", async () => {
     getWorkforceActor.mockResolvedValue(employee);
@@ -324,7 +324,7 @@ describe("validasi body route kepegawaian", () => {
 
 describe("POST /api/hris/dept-tasks", () => {
   it("karyawan tanpa bawahan tidak bisa membuat task → 403", async () => {
-    getWorkforceActor.mockResolvedValue({ userId: "u-1", role: "employee", employeeId: EMPLOYEE_ID, isHr: false });
+    getWorkforceActor.mockResolvedValue({ userId: "u-1", role: "employee", employeeId: EMPLOYEE_ID, isHr: false, isHrd: false });
     queryOne.mockResolvedValueOnce({ department_id: "dept-1", full_name: "Budi", subordinates: 0 });
     const { POST } = await import("@/app/api/hris/dept-tasks/route");
     const res = await POST(req("http://x", "POST", { title: "Cek stok", recurrence: "daily" }));

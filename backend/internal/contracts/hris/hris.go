@@ -17,3 +17,21 @@ type LeaveRequested struct {
 	TotalDays    int     `json:"total_days"`
 	Reason       *string `json:"reason"`
 }
+
+// TopicOvertimeRequested fires when an employee submits their own overtime
+// request (EPIC-063). The HRIS module sends the WhatsApp note to the
+// employee's direct manager; HR assignments do not fire it.
+const TopicOvertimeRequested = "hris.overtime.requested"
+
+// OvertimeRequested is the TopicOvertimeRequested payload.
+type OvertimeRequested struct {
+	OvertimeID   string  `json:"overtime_id"`
+	EmployeeID   string  `json:"employee_id"`
+	EmployeeName string  `json:"employee_name"`
+	Date         string  `json:"date"`
+	StartTime    string  `json:"start_time"`
+	EndTime      string  `json:"end_time"`
+	Hours        float64 `json:"hours"`
+	DayType      string  `json:"day_type"`
+	Reason       *string `json:"reason"`
+}

@@ -122,7 +122,7 @@ describe("review task departemen: reviewed_by = id karyawan", () => {
   const doneOcc = { id: OCC_ID, status: "done", task_id: "t-1", department_id: DEPT_ID, assignee_employee_id: null };
 
   it("HR tanpa record karyawan → 403, tidak ada UPDATE", async () => {
-    getWorkforceActor.mockResolvedValue({ userId: "u-hr", role: "hrd", employeeId: null, isHr: true });
+    getWorkforceActor.mockResolvedValue({ userId: "u-hr", role: "hrd", employeeId: null, isHr: true, isHrd: true });
     queryOne.mockResolvedValueOnce(doneOcc);
     const { PATCH } = await import("@/app/api/hris/dept-tasks/occurrences/[id]/route");
     const res = await PATCH(req("PATCH", { action: "approve" }), params(OCC_ID));
@@ -131,7 +131,7 @@ describe("review task departemen: reviewed_by = id karyawan", () => {
   });
 
   it("HR dengan record karyawan menulis employeeId, bukan userId", async () => {
-    getWorkforceActor.mockResolvedValue({ userId: "u-hr", role: "hrd", employeeId: EMP_ID, isHr: true });
+    getWorkforceActor.mockResolvedValue({ userId: "u-hr", role: "hrd", employeeId: EMP_ID, isHr: true, isHrd: true });
     queryOne.mockResolvedValueOnce(doneOcc).mockResolvedValueOnce({ full_name: "Rina" });
     const { PATCH } = await import("@/app/api/hris/dept-tasks/occurrences/[id]/route");
     const res = await PATCH(req("PATCH", { action: "approve" }), params(OCC_ID));

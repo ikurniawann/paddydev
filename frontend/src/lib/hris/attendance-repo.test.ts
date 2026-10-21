@@ -6,8 +6,8 @@ vi.mock("@/lib/storage-private", () => ({ savePrivateImage: vi.fn() }));
 
 const { resolveAttendanceListParams, resolveStatsPeriod, todayWib } = await import("./attendance-repo");
 
-const hr = { userId: "u-hr", role: "hrd", employeeId: "emp-hr", isHr: true };
-const staff = { userId: "u-1", role: "employee", employeeId: "emp-me", isHr: false };
+const hr = { userId: "u-hr", role: "hrd", employeeId: "emp-hr", isHr: true, isHrd: true };
+const staff = { userId: "u-1", role: "employee", employeeId: "emp-me", isHr: false, isHrd: false };
 
 describe("resolveAttendanceListParams", () => {
   it("non-HR selalu dipaksa ke record sendiri", () => {

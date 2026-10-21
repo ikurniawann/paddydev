@@ -319,6 +319,10 @@ func ValidateEmployeeImport(mode string, header []string, rows [][]string, first
 					row.Set["job_title_id"] = id
 				}
 			case k == "manager_nip":
+				if m, _ := CleanNIP(val); m != "" && m == nip {
+					fail(k, "NIP atasan tidak boleh NIP karyawan itu sendiri")
+					continue
+				}
 				id, ok := lk.ManagerNIP[val]
 				if !ok {
 					fail(k, "NIP atasan "+val+" tidak ditemukan / tidak aktif")

@@ -424,3 +424,25 @@ func TestContractDocuments(t *testing.T) {
 	expect(t, h.do(&hr, "DELETE", "/api/hris/contracts/11111111-1111-4111-8111-111111111111/signed-document?reason=Scan%20salah%20unggah", nil), 404, "Kontrak tidak ditemukan")
 	expect(t, h.do(&staff, "DELETE", base+"/signed-document", nil), 403, "")
 }
+
+// EPIC-063 final review: Persetujuan Tim links the leave attachment, so the
+// direct manager reads their report's file (and nobody else's).
+func TestLeaveAttachmentReadableByDirectManager(t *testing.T) {
+	h, _ := newFileHarness(t)
+	boss, bossID := h.staff("pos", nil, true)
+	staff, _ := h.staff("pos", nil, true, emp{boss: &bossID})
+	bystander, _ := h.staff("pos", nil, true)
+	img := pngBytes(t)
+
+	saved := h.do(&staff, "POST", "/api/hris/leaves/attachment", map[string]any{"photo": dataURL("image/png", img)})
+	expect(t, saved, 200, "")
+	path := saved.data()["path"].(string)
+	for _, c := range []struct {
+		who  *testutil.Staff
+		want int
+	}{{&boss, 200}, {&staff, 200}, {&bystander, 403}} {
+		if rec := h.send(c.who, httptest.NewRequest("GET", "/api/hris/leaves/attachment/"+path, nil)); rec.Code != c.want {
+			t.Fatalf("attachment read = %d, want %d", rec.Code, c.want)
+		}
+	}
+}
