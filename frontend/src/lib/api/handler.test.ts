@@ -18,6 +18,22 @@ describe("apiErrorResponse", () => {
     expect(res.json).toEqual({ success: false, error: "Data sudah ada di sistem" });
   });
 
+  it.each([
+    ["employees_ktp_key", "No. KTP sudah dipakai karyawan lain"],
+    ["employees_npwp_key", "NPWP sudah dipakai karyawan lain"],
+    ["employees_nip_key", "NIP sudah dipakai karyawan lain"],
+  ])("unique violation %s memakai pesan bentrok yang jelas", async (constraint, error) => {
+    expect(await body(apiErrorResponse({ code: "23505", constraint, message: "duplicate key" }))).toEqual({
+      status: 409,
+      json: { success: false, error },
+    });
+  });
+
+  it("unique violation constraint lain tetap pesan umum", async () => {
+    const res = await body(apiErrorResponse({ code: "23505", constraint: "other_key", message: "duplicate key" }));
+    expect(res.json).toEqual({ success: false, error: "Data sudah ada di sistem" });
+  });
+
   it("galat lain jadi 500 tanpa membocorkan pesan internal", async () => {
     const spy = vi.spyOn(console, "error").mockImplementation(() => {});
     const res = await body(apiErrorResponse(new Error("connection refused 10.0.0.5")));

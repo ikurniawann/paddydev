@@ -72,5 +72,21 @@ var pgErrors = map[string]*Error{
 	"22P02": {Status: http.StatusBadRequest, Message: "Format data tidak valid"},
 }
 
+// uniqueConstraintMessages are the friendly texts for specific unique
+// constraints; they win over the generic 23505 text. Leaf data on purpose:
+// domain packages (employeekeys) read it, httpx never imports them.
+var uniqueConstraintMessages = map[string]string{
+	"employees_ktp_key":  "No. KTP sudah dipakai karyawan lain",
+	"employees_npwp_key": "NPWP sudah dipakai karyawan lain",
+	"employees_nip_key":  "NIP sudah dipakai karyawan lain",
+}
+
+// UniqueConstraintMessage is the friendly text of a named unique
+// constraint; ok is false when the constraint has none.
+func UniqueConstraintMessage(constraint string) (string, bool) {
+	msg, ok := uniqueConstraintMessages[constraint]
+	return msg, ok
+}
+
 // internalError is the body every unexpected failure gets.
 var internalError = &Error{Status: http.StatusInternalServerError, Message: "Terjadi kesalahan server"}

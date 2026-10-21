@@ -588,7 +588,8 @@ func (s *Service) applyImportRow(ctx context.Context, r Repository, actor *auth.
 			return err
 		}
 		if movedUser != nil {
-			if err := guardSystemReactivation(ctx, q, *movedUser, row.Line, superAdmin); err != nil {
+			if err := guardSystemReactivation(ctx, q, *movedUser,
+				fmt.Sprintf("Baris %d: %s", row.Line, msgSystemReactivation), superAdmin); err != nil {
 				return err
 			}
 		}
@@ -688,8 +689,9 @@ func (s *Service) applyImportRow(ctx context.Context, r Repository, actor *auth.
 // guardSystemReactivation: releasing an email re-links and unbans the
 // resigned employee's login; a login holding a system role (super_admin/
 // admin, app or IAM role) is reactivated by IAM super_admin only (EPIC-061
-// Q-RA-5). The row fails, so the whole import is rolled back.
-func guardSystemReactivation(ctx context.Context, q database.Querier, userID string, line int,
+// Q-RA-5). The row fails, so the whole import is rolled back. The rehire
+// endpoint (EPIC-064) shares it; refusal is the 403 message.
+func guardSystemReactivation(ctx context.Context, q database.Querier, userID, refusal string,
 	superAdmin func(context.Context) (bool, error)) error {
 	held, err := permaudit.HoldsSystemRole(ctx, q, userID)
 	if err != nil || !held {
@@ -701,8 +703,11 @@ func guardSystemReactivation(ctx context.Context, q database.Querier, userID str
 			return err
 		}
 	}
-	return httpx.Forbidden(fmt.Sprintf("Baris %d: Akun Super Admin/Admin hanya bisa diaktifkan kembali oleh Super Admin", line))
+	return httpx.Forbidden(refusal)
 }
+
+// msgSystemReactivation is the refusal for a system-role account (R6).
+const msgSystemReactivation = "Akun Super Admin/Admin hanya bisa diaktifkan kembali oleh Super Admin"
 
 // nextEmployeeNIP is the first free EMP-<year>-<seq> (same scheme as /api/users).
 func nextEmployeeNIP(ctx context.Context, q database.Querier, year string) (string, error) {

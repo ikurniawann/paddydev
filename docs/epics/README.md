@@ -66,6 +66,7 @@ deploying-dev · ready-for-qa · blocked · done).
 | [EPIC-061](./EPIC-061-hris-role-hak-akses.md) | Role & Hak Akses HRIS — Hak Hapus, Akses per Akun, AdminHRIS (`MODULE-HRIS`) | review | 2026-10-20 |
 | [EPIC-062](./EPIC-062-absensi-geofence.md) | Paket Absensi — Geofence Cabang & Perjalanan Dinas (`MODULE-HRIS`) | review | 2026-10-20 |
 | [EPIC-063](./EPIC-063-approval-atasan.md) | Paket Approval Atasan — Persetujuan Tim, Lembur Sebelum Dilaksanakan, Weekday/Weekend, Koreksi Lembur AdminHRIS (`MODULE-HRIS`) | review | 2026-10-21 |
+| [EPIC-064](./EPIC-064-hris-aktifkan-kembali.md) | Aktifkan Kembali Karyawan & Pesan Duplikat Jelas (`MODULE-HRIS`) | review | 2026-10-21 |
 
 Aturan:
 - Epic + registry ini adalah sumber kebenaran status pekerjaan (canonical).

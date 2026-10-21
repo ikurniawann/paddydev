@@ -10,3 +10,10 @@ it("label tanpa nama field database", () => {
   expect(auditValue("end_date", "2026-10-07")).toBe("07/10/2026");
   expect(auditValue("is_active", false)).toBe("Tidak");
 });
+
+it("label aktivasi kembali (EPIC-064)", () => {
+  expect(auditActionLabel("employee.rehire")).toBe("Diaktifkan kembali");
+  expect(auditFieldLabel("branch_id")).toBe("Cabang Penempatan");
+  expect(auditFieldLabel("reactivate_login")).toBe("Akun Login Diaktifkan");
+  expect(auditFieldLabel("join_date")).toBe("Tanggal Masuk");
+});

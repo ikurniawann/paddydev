@@ -10,6 +10,13 @@ const PG_ERRORS: Record<string, { status: number; message: string }> = {
   "22P02": { status: 400, message: "Format data tidak valid" }, // invalid_text_representation
 };
 
+/** Pesan ramah untuk unique constraint tertentu; menang atas pesan 23505 umum (paritas httpx.UniqueConstraintMessage di Go). */
+const UNIQUE_CONSTRAINT_MESSAGES: Record<string, string> = {
+  employees_ktp_key: "No. KTP sudah dipakai karyawan lain",
+  employees_npwp_key: "NPWP sudah dipakai karyawan lain",
+  employees_nip_key: "NIP sudah dipakai karyawan lain",
+};
+
 /**
  * Respons galat seragam `{ success: false, error }` (bentuk yang sudah dibaca
  * klien lewat `json.error`). ApiError memakai status & pesannya; galat
@@ -21,7 +28,10 @@ export function apiErrorResponse(error: unknown, context = "api"): NextResponse 
   const code = (error as { code?: unknown } | null)?.code;
   const pg = typeof code === "string" ? PG_ERRORS[code] : undefined;
   if (pg) {
-    return NextResponse.json({ success: false, error: pg.message }, { status: pg.status });
+    const constraint = (error as { constraint?: unknown } | null)?.constraint;
+    const friendly =
+      code === "23505" && typeof constraint === "string" ? UNIQUE_CONSTRAINT_MESSAGES[constraint] : undefined;
+    return NextResponse.json({ success: false, error: friendly ?? pg.message }, { status: pg.status });
   }
   console.error(`[${context}]`, error);
   return NextResponse.json({ success: false, error: "Terjadi kesalahan server" }, { status: 500 });

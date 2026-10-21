@@ -184,6 +184,7 @@ func (h handlers) employeeSubroutes() http.Handler {
 			http.MethodPut: handle(h.saveEmployeeShifts),
 		},
 		"resign": {http.MethodPost: h.withAction("update", employeeRecordManagers, h.resignEmployee)},
+		"rehire": {http.MethodPost: h.withAction("update", employeeRecordManagers, h.rehireEmployee)},
 		"audit":  {http.MethodGet: h.withMenu(kepegawaian, h.employeeAudit)},
 		"schedule-type": {
 			http.MethodGet: h.withMenu(kepegawaian, h.getScheduleType),

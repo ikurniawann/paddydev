@@ -16,6 +16,7 @@ import (
 	"nuhabit/backend/internal/modules/configuration/kit"
 	platformaudit "nuhabit/backend/internal/platform/audit"
 	"nuhabit/backend/internal/platform/database"
+	"nuhabit/backend/internal/platform/employeekeys"
 	"nuhabit/backend/internal/platform/httpx"
 	"nuhabit/backend/internal/platform/validate"
 )
@@ -40,10 +41,35 @@ var emailText = regexp.MustCompile(`(?i)email`)
 // column is 409 "Email sudah dipakai akun lain"; any other error is kept.
 func emailConflictOr(err error) error {
 	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+		// A concurrent write won the race past the employeekeys pre-check.
+		if msg, ok := employeekeys.ConstraintMessage(pgErr.ConstraintName); ok {
+			return httpx.BadRequest(msg)
+		}
+	}
 	if errors.As(err, &pgErr) && pgErr.Code == "23505" && emailText.MatchString(pgErr.ConstraintName+" "+pgErr.Message) {
 		return httpx.Conflict(emailInUseMessage)
 	}
 	return err
+}
+
+// keyConflict is a 400 naming the employee (active or not) that already holds
+// the KTP, NPWP or NIP the body sends. createNIP is the trimmed NIP of a
+// create; on update the body's own NIP is used. excludeID is the employee
+// being updated ("" on create).
+func (s *service) keyConflict(ctx context.Context, b *employeeBody, createNIP, excludeID string) error {
+	k := employeekeys.Keys{KTP: b.str("ktp"), NPWP: b.str("npwp"), NIP: b.str("nip")}
+	if excludeID == "" {
+		k.NIP = &createNIP
+	}
+	conflict, err := employeekeys.Find(ctx, s.db, k, excludeID)
+	if err != nil {
+		return err
+	}
+	if conflict != nil {
+		return httpx.BadRequest(conflict.Message())
+	}
+	return nil
 }
 
 // The user-service errors rethrowUserServiceError turns into a 400.
@@ -248,6 +274,9 @@ func (s *service) createUser(ctx context.Context, actorID string, b *employeeBod
 	nip := ""
 	if n := b.str("nip"); n != nil {
 		nip = validate.JSTrim(*n)
+	}
+	if err := s.keyConflict(ctx, b, nip, ""); err != nil {
+		return nil, err
 	}
 	if nip == "" {
 		if nip, err = s.generateNIP(ctx); err != nil {
@@ -479,6 +508,10 @@ func (s *service) updateUser(ctx context.Context, actorID, id string, b *employe
 		if taken {
 			return nil, httpx.Conflict(emailInUseMessage)
 		}
+	}
+
+	if err := s.keyConflict(ctx, b, "", id); err != nil {
+		return nil, err
 	}
 
 	// Refused before the employee patch and the account sync (ruling M3).

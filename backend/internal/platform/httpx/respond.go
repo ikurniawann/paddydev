@@ -38,6 +38,12 @@ func WriteError(w http.ResponseWriter, r *http.Request, err error) {
 	}
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) {
+		if pgErr.Code == "23505" {
+			if msg, ok := UniqueConstraintMessage(pgErr.ConstraintName); ok {
+				writeEnvelope(w, Conflict(msg))
+				return
+			}
+		}
 		if mapped, ok := pgErrors[pgErr.Code]; ok {
 			writeEnvelope(w, mapped)
 			return

@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"nuhabit/backend/internal/modules/hris/domain"
+	"nuhabit/backend/internal/platform/employeekeys"
 	"nuhabit/backend/internal/platform/httpx"
 )
 
@@ -18,6 +19,8 @@ import (
 type EmployeeRepo interface {
 	DirectoryPage(ctx context.Context, p domain.DirectoryParams) ([]*Row, int64, error)
 	EmployeeExists(ctx context.Context, column, value string, excludeID *string) (bool, error)
+	// EmployeeKeyConflict is the employee (active or not) already holding one of the keys, nil when free.
+	EmployeeKeyConflict(ctx context.Context, k employeekeys.Keys, excludeID string) (*employeekeys.Conflict, error)
 	AutoNipsTaken(ctx context.Context, year int) ([]string, error)
 	InsertEmployee(ctx context.Context, f fields) (*Row, error)
 	EmployeeDetail(ctx context.Context, id string) (*Row, error)
@@ -55,15 +58,14 @@ func (s *Service) CreateEmployee(ctx context.Context, in employeeInput) (*Row, e
 	if in.nip.Val != nil {
 		nip = domain.JSTrim(*in.nip.Val)
 	}
-	if nip != "" {
-		taken, err := s.repo.EmployeeExists(ctx, "nip", nip, nil)
-		if err != nil {
-			return nil, err
-		}
-		if taken {
-			return nil, httpx.BadRequest("NIP sudah digunakan")
-		}
-	} else {
+	keys := in.keys()
+	keys.NIP = &nip
+	if conflict, err := s.repo.EmployeeKeyConflict(ctx, keys, ""); err != nil {
+		return nil, err
+	} else if conflict != nil {
+		return nil, httpx.BadRequest(conflict.Message())
+	}
+	if nip == "" {
 		year := domain.NowWIB(s.now()).Year()
 		taken, err := s.repo.AutoNipsTaken(ctx, year)
 		if err != nil {
@@ -87,6 +89,10 @@ func (s *Service) CreateEmployee(ctx context.Context, in employeeInput) (*Row, e
 	row, err := s.repo.InsertEmployee(ctx, f)
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+		// A concurrent write won the race past the pre-check.
+		if friendly, ok := employeekeys.ConstraintMessage(pgErr.ConstraintName); ok {
+			return nil, httpx.BadRequest(friendly)
+		}
 		if friendly := domain.EmployeeUniqueMessage(pgErr.Message); friendly != "" {
 			return nil, httpx.BadRequest(friendly)
 		}
@@ -152,10 +158,10 @@ func (s *Service) UpdateEmployee(ctx context.Context, id string, in employeeInpu
 			return nil, errOr(err, httpx.BadRequest("Email sudah digunakan"))
 		}
 	}
-	if n := in.nip.Val; n != nil && *n != "" {
-		if taken, err := s.repo.EmployeeExists(ctx, "nip", *n, &id); err != nil || taken {
-			return nil, errOr(err, httpx.BadRequest("NIP sudah digunakan"))
-		}
+	if conflict, err := s.repo.EmployeeKeyConflict(ctx, in.keys(), id); err != nil {
+		return nil, err
+	} else if conflict != nil {
+		return nil, httpx.BadRequest(conflict.Message())
 	}
 
 	f := in.columns()
@@ -165,6 +171,12 @@ func (s *Service) UpdateEmployee(ctx context.Context, id string, in employeeInpu
 	now := s.clock()
 	f.set("updated_at", now)
 	updated, err := s.repo.UpdateEmployee(ctx, id, f)
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+		if friendly, ok := employeekeys.ConstraintMessage(pgErr.ConstraintName); ok {
+			return nil, httpx.BadRequest(friendly)
+		}
+	}
 	if err != nil {
 		return nil, err
 	}

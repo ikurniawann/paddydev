@@ -24,6 +24,11 @@ const HISTORY_TYPE_LABELS: Record<string, string> = {
   demotion: "Demosi",
   status_change: "Perubahan Status",
   salary_change: "Perubahan Gaji",
+  resign: "Resign",
+  terminated: "Diberhentikan",
+  end_of_contract: "Kontrak Berakhir",
+  contract_activated: "Kontrak Diaktifkan",
+  rehire: "Diaktifkan Kembali",
 };
 
 const SOURCE_LABELS: Record<string, string> = {

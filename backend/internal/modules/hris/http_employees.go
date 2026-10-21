@@ -7,6 +7,7 @@ import (
 
 	"nuhabit/backend/internal/modules/hris/domain"
 	"nuhabit/backend/internal/platform/auth"
+	"nuhabit/backend/internal/platform/employeekeys"
 	"nuhabit/backend/internal/platform/httpx"
 	"nuhabit/backend/internal/platform/iam"
 	"nuhabit/backend/internal/platform/validate"
@@ -86,6 +87,20 @@ func parseEmployee(f *validate.Form, create bool) employeeInput {
 		in.rest = append(in.rest, namedText{p.col, text(p.col, p.max)})
 	}
 	return in
+}
+
+// keys are the identity keys the body sent (a key not sent or null is not checked).
+func (in employeeInput) keys() employeekeys.Keys {
+	k := employeekeys.Keys{NIP: in.nip.Val}
+	for _, r := range in.rest {
+		switch r.col {
+		case "ktp":
+			k.KTP = r.v.Val
+		case "npwp":
+			k.NPWP = r.v.Val
+		}
+	}
+	return k
 }
 
 // columns are the sent keys, in schema order, as column values.

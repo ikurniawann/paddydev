@@ -278,7 +278,7 @@ func TestEmployees(t *testing.T) {
 	eq(t, *c.NewDepartmentID, "d2")
 	eq(t, *c.NewSectionID, "s1")
 	eq(t, EmployeeUniqueMessage("employees_email_key"), "Email sudah terdaftar")
-	eq(t, EmployeeUniqueMessage("employees_ktp_key"), "NIK/KTP sudah terdaftar")
+	eq(t, EmployeeUniqueMessage("employees_ktp_key"), "")
 	eq(t, EmployeeUniqueMessage("lainnya"), "")
 }
 

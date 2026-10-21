@@ -364,6 +364,21 @@ export const resignEmployee = (
   body: { effective_date: string; resign_type: string; reason: string | null }
 ) => apiPost<{ data: unknown; message?: string }>(`/api/hris/employees/${id}/resign`, body);
 
+export interface RehireBody {
+  effective_date: string;
+  employment_status: string;
+  branch_id: string;
+  reactivate_login?: boolean;
+  email?: string;
+  reason?: string;
+}
+
+export const rehireEmployee = (id: string, body: RehireBody) =>
+  apiPost<{ data: { id: string; employment_status: string; join_date: string; schedule_note?: string }; message?: string }>(
+    `/api/hris/employees/${id}/rehire`,
+    body
+  );
+
 export const fetchEmailOwner = (email: string) =>
   apiGet<{ data: import("@/lib/hris/email-release").EmailOwner | null }>(
     `/api/users/email-owner?email=${encodeURIComponent(email)}`
