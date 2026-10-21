@@ -9,9 +9,10 @@ const base: OvertimeRow = {
   day_type: "regular", employee: { id: "e1", full_name: "Crew Koreksi", nip: "N01" },
 };
 
-function table(row: OvertimeRow, onDecide = vi.fn()) {
+function table(row: OvertimeRow, onDecide = vi.fn(), isHrd = true) {
   return (
-    <OvertimeTable rows={[row]} loading={false} decidingId={null} onDecide={onDecide} canCorrect={false} onCorrect={vi.fn()} />
+    <OvertimeTable rows={[row]} loading={false} decidingId={null} onDecide={onDecide} canCorrect={false}
+      isHrd={isHrd} onCorrect={vi.fn()} />
   );
 }
 
@@ -38,5 +39,20 @@ describe("OvertimeTable — jenis hari mengikuti nilai server", () => {
     fireEvent.change(screen.getByLabelText("Jenis hari"), { target: { value: "rest_day" } });
     fireEvent.click(screen.getByRole("button", { name: "Setujui" }));
     expect(onDecide).toHaveBeenCalledWith("o1", "approve", "rest_day");
+  });
+
+  it("bukan HRD: tanpa pilihan jenis hari; Setujui tidak mengirim jenis (server mengabaikannya)", () => {
+    const onDecide = vi.fn();
+    render(table({ ...base, day_type: "rest_day" }, onDecide, false));
+    expect(screen.queryByLabelText("Jenis hari")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Setujui" }));
+    expect(onDecide).toHaveBeenCalledWith("o1", "approve", undefined);
+    fireEvent.click(screen.getByRole("button", { name: "Tolak" }));
+    expect(onDecide).toHaveBeenLastCalledWith("o1", "reject");
+  });
+
+  it("HRD: pilihan jenis hari tampil", () => {
+    render(table(base, vi.fn(), true));
+    expect(screen.getByLabelText("Jenis hari")).toBeTruthy();
   });
 });

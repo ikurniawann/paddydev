@@ -19,10 +19,12 @@ interface OvertimeTableProps {
   decidingId: string | null;
   onDecide: (id: string, action: OvertimeDecisionAction, dayType?: OvertimeDayType) => void;
   canCorrect: boolean;
+  /** HRD (super_admin/admin/hrd): hanya HRD yang boleh mengganti jenis hari saat Setujui (R11); server mengabaikannya untuk selain HRD. */
+  isHrd: boolean;
   onCorrect: (row: OvertimeRow) => void;
 }
 
-export function OvertimeTable({ rows, loading, decidingId, onDecide, canCorrect, onCorrect }: OvertimeTableProps) {
+export function OvertimeTable({ rows, loading, decidingId, onDecide, canCorrect, isHrd, onCorrect }: OvertimeTableProps) {
   return (
     <div className="overflow-x-auto rounded-xl border border-gray-200/70 bg-white shadow-sm">
       <table className="w-full text-sm">
@@ -59,6 +61,7 @@ export function OvertimeTable({ rows, loading, decidingId, onDecide, canCorrect,
                 deciding={decidingId === row.id}
                 onDecide={onDecide}
                 canCorrect={canCorrect}
+                isHrd={isHrd}
                 onCorrect={onCorrect}
               />
             ))
@@ -74,10 +77,11 @@ interface OvertimeTableRowProps {
   deciding: boolean;
   onDecide: (id: string, action: OvertimeDecisionAction, dayType?: OvertimeDayType) => void;
   canCorrect: boolean;
+  isHrd: boolean;
   onCorrect: (row: OvertimeRow) => void;
 }
 
-function OvertimeTableRow({ row, deciding, onDecide, canCorrect, onCorrect }: OvertimeTableRowProps) {
+function OvertimeTableRow({ row, deciding, onDecide, canCorrect, isHrd, onCorrect }: OvertimeTableRowProps) {
   const badge = STATUS_BADGES[row.status] ?? STATUS_BADGES.pending;
   const pending = row.status === "pending";
   const [dayType, setDayType] = useState<OvertimeDayType>(row.day_type ?? "regular");
@@ -126,22 +130,24 @@ function OvertimeTableRow({ row, deciding, onDecide, canCorrect, onCorrect }: Ov
       <td className="px-4 py-3 text-right">
         {pending && row.source === "employee" && (
           <div className="flex justify-end gap-2">
-            <select
-              aria-label="Jenis hari"
-              value={dayType}
-              onChange={(e) => setDayType(e.target.value as OvertimeDayType)}
-              className="rounded-md border border-gray-200 px-2 text-xs"
-              disabled={deciding}
-            >
-              {OVERTIME_DAY_TYPE_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+            {isHrd && (
+              <select
+                aria-label="Jenis hari"
+                value={dayType}
+                onChange={(e) => setDayType(e.target.value as OvertimeDayType)}
+                className="rounded-md border border-gray-200 px-2 text-xs"
+                disabled={deciding}
+              >
+                {OVERTIME_DAY_TYPE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            )}
             <Button size="sm" disabled={deciding} onClick={() =>
-                // Hanya kirim jenis bila HR mengubahnya di sini; jangan menimpa koreksi/nilai server.
-                onDecide(row.id, "approve", dayType !== (row.day_type ?? "regular") ? dayType : undefined)
+                // Hanya kirim jenis bila HRD mengubahnya di sini; jangan menimpa koreksi/nilai server.
+                onDecide(row.id, "approve", isHrd && dayType !== (row.day_type ?? "regular") ? dayType : undefined)
               }>
               Setujui
             </Button>
