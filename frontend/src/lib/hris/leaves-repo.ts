@@ -14,6 +14,7 @@ import { describeLeaveDays } from "./holidays";
 import { loadHolidayIndex } from "./holidays-db";
 import { SELECTABLE_LEAVE_CODES } from "./leave-types";
 import { notifyLeaveRequestWa } from "./leave-wa";
+import { auditDateText, decisionActorName } from "./decision-audit";
 import { decidedAs } from "./overtime-rules";
 import type { WorkforceActor } from "./workforce-auth";
 import { DATE_RE, requireLinkedEmployee, unwrap } from "./workforce-route";
@@ -316,7 +317,7 @@ export async function decideLeave(actor: WorkforceActor, input: z.infer<typeof l
        SET status = $2, approved_by = $3, approved_at = now(),
            rejection_reason = $4, decided_as = $5, decided_by_name = $6
        WHERE id = $1 AND status = 'pending'`,
-      [input.leave_id, status, actor.employeeId, rejection, capacity, actor.fullName || "HRD"]
+      [input.leave_id, status, actor.employeeId, rejection, capacity, decisionActorName(actor.fullName)]
     );
     if (updated.rowCount === 0) throw ApiError.conflict("Pengajuan sudah diproses oleh orang lain");
     if (isApprove && leave.leave_type === "annual") {
@@ -330,11 +331,11 @@ export async function decideLeave(actor: WorkforceActor, input: z.infer<typeof l
       );
     }
     await recordAudit(client, {
-      actor: { id: actor.userId, name: actor.fullName ?? null },
+      actor: { id: actor.userId, name: decisionActorName(actor.fullName) },
       action: isApprove ? "leave.approve" : "leave.reject",
       entity: "hris.leaves",
       entityId: input.leave_id,
-      entityLabel: `${leave.employee?.full_name ?? ""} · ${leave.start_date} s.d. ${leave.end_date}`,
+      entityLabel: `${leave.employee?.full_name ?? ""} · ${auditDateText(leave.start_date)} s.d. ${auditDateText(leave.end_date)}`,
       before: { status: "pending" },
       after: { status, decided_as: capacity, rejection_reason: rejection },
     });

@@ -7,9 +7,11 @@
 
 import { z } from "zod";
 import { ApiError } from "@/lib/api/auth";
+import { canonicalUuid } from "@/lib/api/canonical-uuid";
 import { recordAuditAfterCommit } from "@/lib/audit";
 import { overtimeHoursFromTimes, periodBounds } from "@/lib/payroll/period";
 import { createServerPgClient } from "@/lib/pg/create-client";
+import { auditDateText, decisionActorName } from "./decision-audit";
 import { canDecideOvertime, decidedAs, OVERTIME_TOO_LATE, overtimeStartsInPast } from "./overtime-rules";
 import type { WorkforceActor } from "./workforce-auth";
 import { DATE_RE, unwrap, UUID_RE } from "./workforce-route";
@@ -99,8 +101,12 @@ export async function listOvertime(actor: WorkforceActor, q: z.infer<typeof over
 }
 
 export async function createOvertime(actor: WorkforceActor, input: z.infer<typeof overtimeCreateSchema>) {
-  const targetId =
-    !input.employee_id || input.employee_id === "me" ? actor.employeeId : input.employee_id;
+  // Id dibandingkan dalam bentuk kanonik (huruf kecil), seperti Go (P10): UUID_RE menerima huruf besar.
+  let targetId: string | null = actor.employeeId;
+  if (input.employee_id && input.employee_id !== "me") {
+    targetId = canonicalUuid(input.employee_id);
+    if (!targetId) throw ApiError.badRequest("ID karyawan tidak valid");
+  }
   if (!targetId) throw ApiError.badRequest("Akun ini tidak tertaut ke data karyawan");
 
   const isSelf = targetId === actor.employeeId;
@@ -226,7 +232,7 @@ export async function decideOvertime(actor: WorkforceActor, input: z.infer<typeo
       decided_by: actor.employeeId,
       decided_at: now,
       rejection_reason: rejection,
-      ...(capacity ? { decided_as: capacity, decided_by_name: actor.fullName || "HRD" } : {}),
+      ...(capacity ? { decided_as: capacity, decided_by_name: decisionActorName(actor.fullName) } : {}),
       updated_at: now,
     })
     .eq("id", input.overtime_id)
@@ -243,11 +249,11 @@ export async function decideOvertime(actor: WorkforceActor, input: z.infer<typeo
 
   if (capacity) {
     await recordAuditAfterCommit({
-      actor: { id: actor.userId, name: actor.fullName ?? null },
+      actor: { id: actor.userId, name: decisionActorName(actor.fullName) },
       action: input.action === "approve" ? "overtime.approve" : "overtime.reject",
       entity: "hris.overtime_requests",
       entityId: input.overtime_id,
-      entityLabel: `${overtime.employee?.full_name ?? ""} · ${overtime.date}`,
+      entityLabel: `${overtime.employee?.full_name ?? ""} · ${auditDateText(overtime.date)}`,
       before: { status: "pending" },
       after: { status, decided_as: capacity, rejection_reason: rejection },
     });

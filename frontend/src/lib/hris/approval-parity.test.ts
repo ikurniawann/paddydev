@@ -79,7 +79,7 @@ import type { WorkforceActor } from "./workforce-auth";
 
 const EMP = "00000000-0000-4000-8000-000000000001";
 const MGR = "00000000-0000-4000-8000-000000000002";
-const HRD = "00000000-0000-4000-8000-000000000003";
+const HRD = "0000000a-0000-4000-8000-00000000000b";
 const OTHER = "00000000-0000-4000-8000-000000000004";
 const LEAVE_ID = "11111111-1111-4111-8111-111111111111";
 
@@ -184,6 +184,26 @@ describe("decideLeave — Q-APV-3 (EPIC-063 R1/R2)", () => {
     expect(err.message).toBe("Hanya atasan langsung atau HRD yang bisa memproses pengajuan ini");
   });
 
+  it("label audit memakai tanggal kalender WIB YYYY-MM-DD dari Date node-pg, nama akun dipangkas", async () => {
+    tables.leaves = leave({
+      start_date: new Date("2026-11-01T17:00:00Z"), // Senin 2 Nov 00:00 WIB
+      end_date: new Date("2026-11-02T17:00:00Z"),
+    });
+    await decideLeave({ ...manager, fullName: "  Budi  " }, approve);
+    const entry = recordAudit.mock.calls[0][1];
+    expect(entry.entityLabel).toBe("Adi · 2026-11-02 s.d. 2026-11-03");
+    expect(entry.actor.name).toBe("Budi");
+    const update = txQueries.find((q) => q.sql.includes("UPDATE hris.leaves"));
+    expect(update?.params[5]).toBe("Budi");
+  });
+
+  it("nama akun kosong/spasi → HRD di kolom dan audit", async () => {
+    tables.leaves = leave();
+    await decideLeave({ ...hrd, fullName: "   " }, approve);
+    expect(recordAudit.mock.calls[0][1].actor.name).toBe("HRD");
+    expect(txQueries.find((q) => q.sql.includes("UPDATE hris.leaves"))?.params[5]).toBe("HRD");
+  });
+
   it("diputus proses lain saat transaksi berjalan → 409", async () => {
     tables.leaves = leave();
     txRowCount = 0;
@@ -217,6 +237,31 @@ describe("createOvertime — lembur sebelum dimulai (EPIC-063 R3)", () => {
     tables.overtime_requests = [];
     await createOvertime(employee, { ...base, date: "2099-01-01" });
     expect(calls.find((c) => c.op === "insert")?.payload).toMatchObject({ source: "employee", employee_id: EMP });
+  });
+
+  it("id sendiri huruf besar tetap dianggap diri sendiri: tanggal lampau → 400 (EPIC-063 R3)", async () => {
+    tables.employees = { id: HRD, is_active: true };
+    const err = await rejects(
+      createOvertime(hrd, { ...base, date: "2020-01-01", employee_id: HRD.toUpperCase() })
+    );
+    expect(err.status).toBe(400);
+    expect(err.message).toBe(OVERTIME_TOO_LATE);
+    expect(calls.some((c) => c.op === "insert")).toBe(false);
+  });
+
+  it("id sendiri huruf besar tanggal depan → source employee, bukan company", async () => {
+    tables.employees = { id: HRD, is_active: true };
+    tables.overtime_requests = [];
+    await createOvertime(hrd, { ...base, date: "2099-01-01", employee_id: HRD.toUpperCase().replaceAll("-", "") });
+    const insert = calls.find((c) => c.op === "insert");
+    expect(insert?.payload).toMatchObject({ source: "employee", employee_id: HRD });
+    expect(calls.find((c) => c.table === "employees")?.filters).toContainEqual(["eq", "id", HRD]);
+  });
+
+  it("id karyawan bukan uuid → 400 ID karyawan tidak valid", async () => {
+    const err = await rejects(createOvertime(hrd, { ...base, date: "2099-01-01", employee_id: "bukan-uuid" }));
+    expect(err.status).toBe(400);
+    expect(err.message).toBe("ID karyawan tidak valid");
   });
 
   it("HRD menugaskan karyawan lain boleh tanggal lampau (R3)", async () => {
@@ -263,6 +308,15 @@ describe("decideOvertime — kapasitas & audit (EPIC-063 R1)", () => {
       entityId: LEAVE_ID,
       after: { status: "approved", decided_as: "manager", rejection_reason: null },
     });
+  });
+
+  it("label audit lembur memakai tanggal WIB YYYY-MM-DD dari Date; nama akun dipangkas", async () => {
+    tables.overtime_requests = request({ date: new Date("2026-11-01T17:00:00Z") });
+    await decideOvertime({ ...manager, fullName: " Budi " }, approve);
+    const entry = recordAuditAfterCommit.mock.calls[0][0];
+    expect(entry.entityLabel).toBe("Adi · 2026-11-02");
+    expect(entry.actor.name).toBe("Budi");
+    expect(updateOf()?.payload).toMatchObject({ decided_by_name: "Budi" });
   });
 
   it("HRD bukan atasan: hr; reject → overtime.reject", async () => {
