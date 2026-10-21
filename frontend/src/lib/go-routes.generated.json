@@ -1991,6 +1991,11 @@
   },
   {
     "module": "hris",
+    "method": "GET",
+    "path": "/api/hris/employees/without-manager"
+  },
+  {
+    "module": "hris",
     "method": "DELETE",
     "path": "/api/hris/employees/{id}"
   },

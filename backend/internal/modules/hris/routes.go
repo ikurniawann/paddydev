@@ -21,6 +21,7 @@ func (h handlers) routes() []module.Route {
 		r("POST /api/hris/employees", h.withMenu(employeeRecordManagers, h.createEmployee)),
 		r("POST /api/hris/employees/schedule-type/bulk", h.withAction("update", employeeRecordManagers, h.bulkScheduleType)),
 		r("GET /api/hris/employees/export", h.withMenu(employeeRecordManagers, h.exportEmployees)),
+		r("GET /api/hris/employees/without-manager", h.withMenu(employeeRecordManagers, h.employeesWithoutManager)),
 		r("GET /api/hris/employees/import-template", h.withMenu(employeeRecordManagers, h.employeeImportTemplate)),
 		r("POST /api/hris/employees/import", h.withAction("update", employeeRecordManagers, h.importEmployees)),
 		r("GET /api/hris/employees/documents", handle(h.listEmployeeDocuments)),

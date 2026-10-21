@@ -102,6 +102,8 @@ type ApprovalRepo interface {
 	// TeamPendingCount sums pending leave, employee overtime and business
 	// trip requests of managerID's direct reports.
 	TeamPendingCount(ctx context.Context, managerID string) (int64, error)
+	// EmployeesWithoutManager is the reporting_to data quality report (R9).
+	EmployeesWithoutManager(ctx context.Context) ([]*Row, error)
 }
 
 // TeamApprovals is GET /api/hris/me/team-approvals: pending leave and
