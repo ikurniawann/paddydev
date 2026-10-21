@@ -257,6 +257,13 @@ func TestRehireSystemAccountWithoutLogin(t *testing.T) {
 	}
 }
 
+// rehireBranch inserts a branch fixture (rolled back with the harness
+// transaction), so the test does not depend on pre-existing branches.
+func rehireBranch(h *harness, name string) string {
+	return h.scalar(`INSERT INTO configuration.branches (company_id, name, code)
+		SELECT id, $1, 'RK'||substr(md5(random()::text),1,6) FROM configuration.companies LIMIT 1 RETURNING id::text`, name)
+}
+
 // inactiveOpenEmployee builds an inactive employee whose placement and weekly
 // pattern were never closed (soft delete / PUT is_active=false / legacy rows).
 func inactiveOpenEmployee(h *harness, branch, name, endDate string) string {
@@ -276,8 +283,8 @@ func inactiveOpenEmployee(h *harness, branch, name, endDate string) string {
 func TestRehireClosesOpenPlacementsAndPatterns(t *testing.T) {
 	h := newHarness(t)
 	hr, _ := h.staff("hrd", iam.HrisKepegawaian, false)
-	branch := h.scalar(`SELECT id::text FROM configuration.branches LIMIT 1`)
-	other := h.scalar(`SELECT id::text FROM configuration.branches WHERE id <> $1 LIMIT 1`, branch)
+	branch := rehireBranch(h, "Cabang Kembali Satu")
+	other := rehireBranch(h, "Cabang Kembali Dua")
 
 	placements := func(e string) string {
 		return h.scalar(`SELECT string_agg(start_date::text || '/' || coalesce(end_date::text, '') || '/' || is_primary, ',' ORDER BY start_date)
@@ -300,16 +307,14 @@ func TestRehireClosesOpenPlacementsAndPatterns(t *testing.T) {
 
 	// Different branch, legacy end_date set but rows left open; a future-dated
 	// placement/pattern starting on/after the effective date is dropped.
-	if other != "" {
-		diff := inactiveOpenEmployee(h, branch, "Nonaktif Cabang Lain", "2026-09-30")
-		h.exec(`UPDATE hris.employee_placements SET end_date = '2026-10-10', is_primary = true WHERE employee_id = $1`, diff)
-		expect(t, h.do(&hr, http.MethodPost, rehirePath(diff), rehireBody(other, nil)), http.StatusOK, "")
-		if got := placements(diff); got != "2025-01-10/2026-10-02/true,2026-10-03//true" {
-			t.Fatalf("placements (other branch) = %s", got)
-		}
-		if got := h.scalar(`SELECT branch_id::text FROM hris.employee_placements WHERE employee_id = $1 AND end_date IS NULL`, diff); got != other {
-			t.Fatalf("new placement branch = %s", got)
-		}
+	diff := inactiveOpenEmployee(h, branch, "Nonaktif Cabang Lain", "2026-09-30")
+	h.exec(`UPDATE hris.employee_placements SET end_date = '2026-10-10', is_primary = true WHERE employee_id = $1`, diff)
+	expect(t, h.do(&hr, http.MethodPost, rehirePath(diff), rehireBody(other, nil)), http.StatusOK, "")
+	if got := placements(diff); got != "2025-01-10/2026-10-02/true,2026-10-03//true" {
+		t.Fatalf("placements (other branch) = %s", got)
+	}
+	if got := h.scalar(`SELECT branch_id::text FROM hris.employee_placements WHERE employee_id = $1 AND end_date IS NULL`, diff); got != other {
+		t.Fatalf("new placement branch = %s", got)
 	}
 
 	// Rows starting on/after the effective date are removed.
