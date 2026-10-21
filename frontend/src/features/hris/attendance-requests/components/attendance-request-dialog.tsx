@@ -22,6 +22,8 @@ export interface AttendanceRequestPrefill {
 }
 
 const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
+/** Sama dengan `accept` pada input dan dengan yang diterima server. */
+const PHOTO_TYPES = ["image/jpeg", "image/png", "image/webp"];
 
 /**
  * ESS → Absensi → Ajukan absen manual / koreksi (EPIC-065, MOM AB-04/AB-06):
@@ -32,6 +34,7 @@ const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
 export function AttendanceRequestDialog({ prefill, onClose }: { prefill: AttendanceRequestPrefill; onClose: () => void }) {
   const [form, setForm] = useState<AttendanceRequestForm>({ ...EMPTY_ATTENDANCE_REQUEST_FORM, date: prefill.date });
   const [photo, setPhoto] = useState<{ name: string; dataUrl: string } | null>(null);
+  const [reading, setReading] = useState(false);
   const create = useCreateAttendanceRequest();
   const set =
     (key: keyof AttendanceRequestForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
@@ -41,7 +44,7 @@ export function AttendanceRequestDialog({ prefill, onClose }: { prefill: Attenda
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
-    if (!file.type.startsWith("image/")) {
+    if (!PHOTO_TYPES.includes(file.type)) {
       toast.error("Lampiran harus berupa gambar JPG/PNG/WebP");
       return;
     }
@@ -50,12 +53,23 @@ export function AttendanceRequestDialog({ prefill, onClose }: { prefill: Attenda
       return;
     }
     const reader = new FileReader();
-    reader.onloadend = () => setPhoto({ name: file.name, dataUrl: reader.result as string });
-    reader.onerror = () => toast.error("Gagal membaca foto bukti");
+    setPhoto(null);
+    setReading(true);
+    reader.onload = () => {
+      setReading(false);
+      if (typeof reader.result === "string") setPhoto({ name: file.name, dataUrl: reader.result });
+      else toast.error("Gagal membaca foto bukti");
+    };
+    reader.onerror = () => {
+      setReading(false);
+      setPhoto(null);
+      toast.error("Gagal membaca foto bukti");
+    };
     reader.readAsDataURL(file);
   }
 
   function submit() {
+    if (reading || create.isPending) return;
     const error = validateAttendanceRequestForm(form, todayWib());
     if (error) {
       toast.error(error);
@@ -71,7 +85,7 @@ export function AttendanceRequestDialog({ prefill, onClose }: { prefill: Attenda
   }
 
   return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
+    <Dialog open onOpenChange={(open) => !open && !create.isPending && onClose()}>
       <DialogContent className="max-h-[90dvh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Ajukan absen manual / koreksi</DialogTitle>
@@ -123,10 +137,10 @@ export function AttendanceRequestDialog({ prefill, onClose }: { prefill: Attenda
           )}
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="outline" disabled={create.isPending} onClick={onClose}>
             Batal
           </Button>
-          <Button disabled={create.isPending} onClick={submit}>
+          <Button disabled={create.isPending || reading} onClick={submit}>
             Kirim pengajuan
           </Button>
         </DialogFooter>
