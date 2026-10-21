@@ -137,4 +137,57 @@ func TestAttendanceGapsEligibility(t *testing.T) {
 		VALUES ($1, '2026-10-02', '2026-10-02 08:00+07', '2026-10-02 17:00+07', 'present')`, rowsID)
 	h.exec(`INSERT INTO hris.attendance (employee_id, date, clock_in, status, is_manual) VALUES ($1, '2026-10-03', '2026-10-03 08:00+07', 'late', true)`, rowsID)
 	same("row types", rows(), "2026-10-03:no_clock_out")
+
+	// Absen masuk tanpa absen pulang di luar tanggal bergabung / berakhir
+	// tetap terdaftar (hanya hari kosong yang dibatasi masa kerja).
+	_, early := worker("Crew Sebelum Gabung", "2026-10-02")
+	h.exec(`INSERT INTO hris.attendance (employee_id, date, clock_in, status)
+		SELECT id, '2026-10-01', '2026-10-01 08:00+07', 'present' FROM hris.employees WHERE full_name = 'Crew Sebelum Gabung'`)
+	same("no_clock_out before join", early(), "2026-10-01:no_clock_out", "2026-10-02:missing", "2026-10-03:missing")
+	_, late := worker("Crew Setelah Keluar", "")
+	h.exec(`UPDATE hris.employees SET end_date = '2026-10-02' WHERE full_name = 'Crew Setelah Keluar'`)
+	h.exec(`INSERT INTO hris.attendance (employee_id, date, clock_in, status)
+		SELECT id, '2026-10-03', '2026-10-03 08:00+07', 'present' FROM hris.employees WHERE full_name = 'Crew Setelah Keluar'`)
+	same("no_clock_out after end", late(), "2026-10-01:missing", "2026-10-02:missing", "2026-10-03:no_clock_out")
+}
+
+// Periode sebelumnya yang belum di-closing (closing_offset_days besar) ikut
+// jendela terbuka: jendela mulai di awal periode sebelumnya dan celah di sana
+// muncul (openAttendanceWindow).
+func TestAttendanceGapsPreviousPeriodOpen(t *testing.T) {
+	h := newHarness(t)
+	h.exec(`UPDATE hris.attendance_settings SET cutoff_day = 0, closing_offset_days = 30`)
+	// Periode September dibuat ulang dari pengaturan: masih terbuka sampai 30 Okt.
+	h.exec(`DELETE FROM hris.attendance_periods WHERE start_date <= '2026-11-30' AND end_date >= '2026-08-01'`)
+	crew, crewID := h.staff("pos", nil, true, emp{name: "Crew Periode Lalu"})
+	shift := h.scalar(`INSERT INTO hris.shifts (name, start_time, end_time, late_tolerance_minutes)
+		VALUES ('Pagi Periode Lalu', '08:00', '17:00', 10) RETURNING id::text`)
+	// Hanya Senin terjadwal: 28 Sep dan 5 Okt (hari ini, tidak dihitung).
+	h.exec(`INSERT INTO hris.employee_shifts (employee_id, day_of_week, shift_id, effective_from) VALUES ($1, 1, $2, '2026-01-01')`, crewID, shift)
+	h.exec(`INSERT INTO hris.attendance (employee_id, date, clock_in, status) VALUES ($1, '2026-09-15', '2026-09-15 08:00+07', 'present')`, crewID)
+
+	got := h.do(&crew, "GET", "/api/hris/me/attendance-gaps", nil)
+	expect(t, got, 200, "")
+	if d := got.data(); d["start"] != "2026-09-01" || d["end"] != "2026-10-04" {
+		t.Fatalf("window = %s", got.raw)
+	}
+	var seen []string
+	for _, d := range got.data()["days"].([]any) {
+		m := d.(map[string]any)
+		seen = append(seen, m["date"].(string)+":"+m["kind"].(string))
+	}
+	for _, w := range []string{"2026-09-15:no_clock_out", "2026-09-28:missing"} {
+		found := false
+		for _, s := range seen {
+			found = found || s == w
+		}
+		if !found {
+			t.Fatalf("gaps = %v, want %s among them", seen, w)
+		}
+	}
+	for _, s := range seen {
+		if s < "2026-09-01" || s >= "2026-10-05" {
+			t.Fatalf("gap outside the window: %v", seen)
+		}
+	}
 }

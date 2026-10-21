@@ -41,6 +41,7 @@ func (h handlers) routes() []module.Route {
 		r("GET /api/hris/me/placements", h.withActor(h.myPlacements)),
 		r("GET /api/hris/branches", h.withUser(h.listBranches)),
 		r("PUT /api/hris/branches/{id}/location", h.withMenu(placementManagers, h.putBranchLocation)),
+		r("PUT /api/hris/branches/{id}/min-work-hours", h.withMenu(placementManagers, h.putBranchMinWorkHours)),
 
 		// attendance (clock-in/out, export and photos: fileRoutes)
 		r("GET /api/hris/attendance", h.withActor(h.listAttendance)),

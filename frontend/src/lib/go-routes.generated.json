@@ -1851,6 +1851,11 @@
   },
   {
     "module": "hris",
+    "method": "PUT",
+    "path": "/api/hris/branches/{id}/min-work-hours"
+  },
+  {
+    "module": "hris",
     "method": "GET",
     "path": "/api/hris/business-trips"
   },
