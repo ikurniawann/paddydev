@@ -1,6 +1,6 @@
 # EPIC-058: Revisi Jenis Cuti HRIS
 
-status: review
+status: ready-for-qa
 environment: dev
 retries: 0
 
