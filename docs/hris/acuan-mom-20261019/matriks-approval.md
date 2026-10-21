@@ -10,7 +10,7 @@
 | Overtime | Atasan langsung | Wajib diajukan sebelum lembur; jenis Weekday / Weekend | EPIC-063: wajib sebelum jam mulai (WIB) untuk pengajuan sendiri; jenis Weekday/Weekend dari ESS dicek ke jadwal; atasan langsung + HR cadangan (`super_admin`/`admin`/`hrd`), audit `overtime.approve\|reject`; WA atasan saat pengajuan |
 | Koreksi Overtime | AdminHRIS | — | EPIC-063: `PATCH /api/hris/overtime/{id}`, aksi `update` menu `hris.kepegawaian.overtime`, audit `overtime.correct` |
 | Kasbon | Manager Departemen **dan** HR (akses Payroll) | Maks. 50% THP; tenor 1 dan 2 | Dua tahap (EPIC-060): Manager Departemen tersimpan (`manager_approver_id`) memutus tahap 1, lalu HR Penggajian (aksi `approve` menu Pinjaman **dan** akses Penggajian) memutus tahap 2. HR tetap boleh menolak kasbon yang masih menunggu manager |
-| Absen Manual / Koreksi Absen | HR | Termasuk request absen terlewat (internet mati) dengan keterangan karyawan | HR mengedit langsung; belum ada pengajuan dari karyawan |
+| Absen Manual / Koreksi Absen | HR | Termasuk request absen terlewat (internet mati) dengan keterangan karyawan | EPIC-065: pengajuan karyawan dari ESS → antrean HR (Absensi → Pengajuan Absensi), HRD + menu Absensi, tanpa self-approval, persetujuan menulis lewat penyesuaian HR, audit `attendance_request.*` |
 | Perjalanan Dinas | Atasan langsung (HRD cadangan & override) | Rentang ≤ 31 hari, diajukan sebelum berangkat | EPIC-062: satu tahap, `reporting_to` atau HRD; pemohon tidak boleh memutus miliknya sendiri; kuasa HRD (lihat semua, memutus cadangan, mencatat dinas karyawan langsung disetujui, membatalkan) hanya `super_admin`/`admin`/`hrd`, bukan `hiring_manager`; audit tiap keputusan |
 | Approval CEO dan GM | CEO, GM | Jenis pengajuan belum jelas (K-7) | Belum ada |
 
