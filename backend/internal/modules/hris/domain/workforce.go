@@ -159,7 +159,7 @@ func LeaveRequestWaMessage(in LeaveRequestWa) string {
 	if in.Reason != nil && JSTrim(*in.Reason) != "" {
 		lines = append(lines, "Alasan : "+JSTrim(*in.Reason))
 	}
-	lines = append(lines, "", "Mohon ditinjau di dashboard Paddy OS (Kehadiran & Cuti → Cuti & Izin).")
+	lines = append(lines, "", ApprovalWaFooter)
 	return strings.Join(lines, "\n")
 }
 
