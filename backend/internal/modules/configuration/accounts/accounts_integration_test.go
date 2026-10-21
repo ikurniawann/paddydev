@@ -685,3 +685,50 @@ func TestCreateEmployeeReleasesResignedEmail(t *testing.T) {
 	code, out, _ = e.do("POST", "/api/users", again)
 	wantError(t, code, out, 409, "Email sudah dipakai akun lain")
 }
+
+// EPIC-064: a duplicate KTP/NPWP/NIP names the existing owner, active or not.
+func TestEmployeeKeyConflictMessages(t *testing.T) {
+	e := settingsUsers(t)
+	owner := employeeBody(uniqueEmail())
+	owner["ktp"], owner["npwp"] = "3273010199000011", "12.345.678.9-012.011"
+	code, ob, _ := e.do("POST", "/api/users", owner)
+	if code != 201 {
+		t.Fatalf("owner create: %d %v", code, ob)
+	}
+	data := ob["data"].(map[string]any)
+	id, nip := data["id"].(string), data["nip"].(string)
+	if _, err := e.tx.Exec(context.Background(), `UPDATE hris.employees SET is_active = false WHERE id = $1`, id); err != nil {
+		t.Fatal(err)
+	}
+	suffix := " (NIP " + nip + ", nonaktif) — aktifkan kembali data tersebut dari halaman detail karyawan"
+
+	dupKTP := employeeBody(uniqueEmail())
+	dupKTP["ktp"] = "3273 0101 9900 0011"
+	code, body, _ := e.do("POST", "/api/users", dupKTP)
+	wantError(t, code, body, 400, "No. KTP sudah dipakai karyawan Budi Santoso"+suffix)
+
+	dupNPWP := employeeBody(uniqueEmail())
+	dupNPWP["npwp"] = "123456789012011"
+	code, body, _ = e.do("POST", "/api/users", dupNPWP)
+	wantError(t, code, body, 400, "NPWP sudah dipakai karyawan Budi Santoso"+suffix)
+
+	dupNIP := employeeBody(uniqueEmail())
+	dupNIP["nip"] = nip
+	code, body, _ = e.do("POST", "/api/users", dupNIP)
+	wantError(t, code, body, 400, "NIP sudah dipakai karyawan Budi Santoso"+suffix)
+
+	other := employeeBody(uniqueEmail())
+	code, ob, _ = e.do("POST", "/api/users", other)
+	if code != 201 {
+		t.Fatalf("other create: %d %v", code, ob)
+	}
+	otherID := ob["data"].(map[string]any)["id"].(string)
+	code, body, _ = e.do("PUT", "/api/users/"+otherID, map[string]any{"ktp": "3273010199000011"})
+	wantError(t, code, body, 400, "No. KTP sudah dipakai karyawan Budi Santoso"+suffix)
+	code, body, _ = e.do("PUT", "/api/users/"+otherID, map[string]any{"nip": nip})
+	wantError(t, code, body, 400, "NIP sudah dipakai karyawan Budi Santoso"+suffix)
+	// The owner keeping its own key is not a conflict.
+	if code, body, _ = e.do("PUT", "/api/users/"+id, map[string]any{"ktp": "3273010199000011"}); code != 200 {
+		t.Fatalf("own key: %d %v", code, body)
+	}
+}

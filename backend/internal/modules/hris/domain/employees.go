@@ -21,15 +21,11 @@ func NextAutoNip(year int, taken []string) string {
 	return ""
 }
 
-// EmployeeUniqueMessage maps a unique-violation message to a friendly one.
+// EmployeeUniqueMessage maps an email unique-violation message to a friendly
+// one. NIP, KTP and NPWP are named by employeekeys (pre-check and constraint).
 func EmployeeUniqueMessage(message string) string {
-	switch {
-	case strings.Contains(message, "nip"):
-		return "NIP sudah digunakan, silakan coba lagi atau gunakan NIP lain"
-	case strings.Contains(message, "email"):
+	if strings.Contains(message, "email") {
 		return "Email sudah terdaftar"
-	case strings.Contains(message, "ktp"):
-		return "NIK/KTP sudah terdaftar"
 	}
 	return ""
 }

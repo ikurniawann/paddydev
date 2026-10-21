@@ -10,6 +10,7 @@ import (
 
 	"nuhabit/backend/internal/modules/hris/domain"
 	"nuhabit/backend/internal/platform/database"
+	"nuhabit/backend/internal/platform/employeekeys"
 )
 
 func (s *store) querier() database.Querier { return s.db }
@@ -76,6 +77,10 @@ func (s *store) EmployeeExists(ctx context.Context, column, value string, exclud
 	var exists bool
 	err := s.db.QueryRow(ctx, sql+`)`, args...).Scan(&exists)
 	return exists, ignoreBadInput(err)
+}
+
+func (s *store) EmployeeKeyConflict(ctx context.Context, k employeekeys.Keys, excludeID string) (*employeekeys.Conflict, error) {
+	return employeekeys.Find(ctx, s.db, k, excludeID)
 }
 
 func (s *store) AutoNipsTaken(ctx context.Context, year int) ([]string, error) {
