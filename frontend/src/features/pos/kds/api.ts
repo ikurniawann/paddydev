@@ -24,10 +24,11 @@ export async function listKdsStalls(): Promise<KdsStallOption[]> {
   const res = await fetch("/api/auth/stall-options", { cache: "no-store" });
   const data = await res.json().catch(() => ({}));
   if (!res.ok || !data.success) return [];
-  return ((data.data?.stalls ?? []) as KdsStallOption[]).map(({ id, name, code }) => ({
+  return ((data.data?.stalls ?? []) as KdsStallOption[]).map(({ id, name, code, label }) => ({
     id,
     name,
     code,
+    label,
   }));
 }
 

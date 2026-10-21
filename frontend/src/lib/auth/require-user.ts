@@ -6,6 +6,7 @@ import { queryOne } from "@/lib/db";
 import { loadUserWarehouses } from "@/lib/users/user-warehouses";
 import { resolveActiveStallFromCookies } from "@/lib/auth/active-stall";
 import { getStallAccess } from "@/lib/auth/stall-access";
+import { stallDisplayName } from "@/lib/auth/stall-label";
 import { resolveRoleIds } from "@/lib/iam/get-user-menus";
 import {
   hasAnyIamMenuPrefix,
@@ -136,12 +137,14 @@ export const getUser = cache(async (): Promise<{
 
   if (canSwitchStall) {
     const allowedIds = new Set(access.stalls.map((stall) => stall.id));
-    const fallbackName = homeStall?.name ?? (access.allAccess ? "Semua Outlet" : null);
+    const fallbackName =
+      (homeStall ? stallDisplayName(access.stalls, { id: homeStall.warehouse_id, name: homeStall.name }) : null) ??
+      (access.allAccess ? "Semua Outlet" : null);
     const fallbackId = homeStall?.warehouse_id ?? null;
 
     if (resolvedStall.mode === "stall" && allowedIds.has(resolvedStall.stall.id)) {
       // Cookie valid & masih dalam penempatan / akses user.
-      warehouse_name = resolvedStall.stall.name;
+      warehouse_name = stallDisplayName(access.stalls, resolvedStall.stall);
       active_stall_id = resolvedStall.stall.id;
     } else if (resolvedStall.mode === "all" && access.allAccess) {
       // "Semua Stall" hanya bila user memang punya akses bebas.

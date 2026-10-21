@@ -63,6 +63,7 @@ import { GlobalSearch } from "./global-search";
 import { PhoneNav } from "./phone-nav";
 import Image from "next/image";
 import { signOut } from "@/lib/auth/client";
+import { stallLabel, type StallLabelSource } from "@/lib/auth/stall-label";
 
 export interface SidebarUser {
   full_name: string;
@@ -484,7 +485,7 @@ function ThemeToggle() {
   );
 }
 
-type StallOption = { id: string; name: string; code: string };
+type StallOption = StallLabelSource & { id: string; code: string };
 
 /**
  * Switcher stall di header sidebar — khusus super_admin & admin. Pilihan
@@ -492,7 +493,7 @@ type StallOption = { id: string; name: string; code: string };
  * sebagai cookie via /api/auth/active-stall lalu halaman di-reload agar
  * seluruh scope server mengikuti stall terpilih.
  */
-function StallSwitcher({
+export function StallSwitcher({
   activeStallId,
   canUseCentralCashier,
   triggerClassName,
@@ -524,10 +525,11 @@ function StallSwitcher({
       if (!res.ok) throw new Error(json.error ?? "Failed to load outlets");
       setAllAccess(json.data?.all_access !== false);
       setStalls(
-        ((json.data?.stalls ?? []) as StallOption[]).map(({ id, name, code }) => ({
+        ((json.data?.stalls ?? []) as StallOption[]).map(({ id, name, code, label }) => ({
           id,
           name,
           code,
+          label,
         }))
       );
     } catch {
@@ -611,9 +613,9 @@ function StallSwitcher({
                 </span>
                 <span
                   className="min-w-0 flex-1 truncate text-sm font-medium text-foreground"
-                  title={`${stall.name} (${stall.code})`}
+                  title={`${stallLabel(stall)} (${stall.code})`}
                 >
-                  {stall.name}
+                  {stallLabel(stall)}
                 </span>
                 {activeStallId === stall.id && (
                   <Check className="h-4 w-4 shrink-0 text-brand-text" />

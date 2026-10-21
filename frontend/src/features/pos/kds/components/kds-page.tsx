@@ -12,6 +12,7 @@ import { isPosTabletQuery } from '@/features/pos/tablet-mode';
 import { KDSOrderCard } from '@/components/pos/KDSOrderCard';
 import { KDS_ROUTES } from '../constants';
 import { QUEUE_BOARD_ROUTE } from '@/features/pos/queue-board/constants';
+import { stallLabel } from "@/lib/auth/stall-label";
 import { unlockKdsSound, useKds, useKdsStalls } from "../queries";
 
 const STATIONS = [
@@ -186,7 +187,7 @@ function KdsPageContent() {
             <option value="all">Semua outlet</option>
             {stalls.map((stall) => (
               <option key={stall.id} value={stall.id}>
-                {stall.name}
+                {stallLabel(stall)}
               </option>
             ))}
           </select>

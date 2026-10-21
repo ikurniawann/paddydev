@@ -19,8 +19,9 @@ import {
   POS_CART_STORAGE_KEY,
   posCartHasItems,
 } from "@/lib/pos/pos-sell-stall";
+import { stallLabel, type StallLabelSource } from "@/lib/auth/stall-label";
 
-type StallOption = { id: string; name: string; code: string };
+type StallOption = StallLabelSource & { id: string; code: string };
 
 /**
  * Tombol pindah stall di halaman kasir (permintaan owner 2026-08-16).
@@ -96,7 +97,7 @@ export function StallSwitchButton() {
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json.error ?? "Gagal pindah outlet");
-      toast.success(`Pindah ke ${stall?.name ?? "Semua Outlet"} — memuat ulang…`);
+      toast.success(`Pindah ke ${stall ? stallLabel(stall) : "Semua Outlet"} — memuat ulang…`);
       // Reload penuh, bukan invalidate query: katalog produk, billing, dan
       // gate stall semuanya diputuskan server per-request dari cookie.
       window.location.reload();
@@ -116,7 +117,7 @@ export function StallSwitchButton() {
       >
         <Store className="mr-2 h-4 w-4" />
         <span className="max-w-40 truncate">
-          {active ? active.name : allAccess ? "Semua Outlet" : "Pilih Outlet"}
+          {active ? stallLabel(active) : allAccess ? "Semua Outlet" : "Pilih Outlet"}
         </span>
       </Button>
 
@@ -189,7 +190,7 @@ export function StallSwitchButton() {
                       </span>
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-sm font-medium text-foreground">
-                          {stall.name}
+                          {stallLabel(stall)}
                         </span>
                         <span className="block truncate text-xs text-muted-foreground">
                           {stall.code}
