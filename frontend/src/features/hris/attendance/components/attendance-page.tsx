@@ -1,6 +1,7 @@
 "use client";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { AttendanceRequestsTab } from "@/features/hris/attendance-requests";
 import { BusinessTripsTab } from "@/features/hris/business-trips";
 import { useAuth } from "@/hooks/use-auth";
 import { canManageTrips } from "@/lib/hris/business-trips";
@@ -9,21 +10,22 @@ import { AttendanceRecapTab } from "./attendance-recap-tab";
 import { AttendancePeriodsTab } from "./attendance-periods-tab";
 
 /**
- * Halaman Absensi HRD/super admin — empat tab:
+ * Halaman Absensi HRD/super admin — lima tab:
  * - Monitoring: roster harian per shift (siapa sudah/belum absen, cuti,
  *   libur, tanpa jadwal) dari /api/hris/attendance/daily-roster.
  * - Rekap: tabel absensi per periode absensi (cut-off) + filter + export +
  *   kalender per-karyawan; HRD bisa menambah/mengoreksi absensi sebelum closing.
  * - Periode: pengaturan cut-off & closing, daftar periode, closing/buka ulang.
+ * - Pengajuan Absensi: absen manual/koreksi dari ESS (EPIC-065), HRD menyetujui/menolak.
  * - Perjalanan Dinas: pengajuan dinas karyawan (EPIC-062), HRD bisa memutus dan mencatat.
  * Absen dilakukan karyawan via ESS (/dashboard/me/absensi) dengan selfie +
  * GPS — halaman ini murni monitoring & rekap utk HRD.
  */
 export function AttendancePage() {
-  // Kuasa HR Perjalanan Dinas hanya super_admin/admin/hrd (bukan hiring_manager);
-  // server tetap menolak aksi di luar itu.
+  // Kuasa HRD (super_admin/admin/hrd; bukan hiring_manager): Perjalanan Dinas dan
+  // Pengajuan Absensi (EPIC-065). Server tetap menolak aksi di luar itu.
   const { user } = useAuth();
-  const showTrips = canManageTrips(user?.role);
+  const hrd = canManageTrips(user?.role);
   return (
     <div className="space-y-6">
       <div>
@@ -34,11 +36,12 @@ export function AttendancePage() {
       </div>
 
       <Tabs defaultValue="monitoring" className="w-full flex-col">
-        <TabsList className={`grid h-9 w-full max-w-xl ${showTrips ? "grid-cols-4" : "grid-cols-3"}`}>
+        <TabsList className={`grid h-9 w-full max-w-3xl ${hrd ? "grid-cols-5" : "grid-cols-3"}`}>
           <TabsTrigger value="monitoring">Monitoring</TabsTrigger>
           <TabsTrigger value="rekap">Rekap</TabsTrigger>
           <TabsTrigger value="periode">Periode Absensi</TabsTrigger>
-          {showTrips && <TabsTrigger value="dinas">Perjalanan Dinas</TabsTrigger>}
+          {hrd && <TabsTrigger value="pengajuan">Pengajuan Absensi</TabsTrigger>}
+          {hrd && <TabsTrigger value="dinas">Perjalanan Dinas</TabsTrigger>}
         </TabsList>
         <TabsContent value="monitoring" className="mt-4">
           <AttendanceMonitoringTab />
@@ -49,7 +52,12 @@ export function AttendancePage() {
         <TabsContent value="periode" className="mt-4">
           <AttendancePeriodsTab />
         </TabsContent>
-        {showTrips && (
+        {hrd && (
+          <TabsContent value="pengajuan" className="mt-4">
+            <AttendanceRequestsTab />
+          </TabsContent>
+        )}
+        {hrd && (
           <TabsContent value="dinas" className="mt-4">
             <BusinessTripsTab />
           </TabsContent>

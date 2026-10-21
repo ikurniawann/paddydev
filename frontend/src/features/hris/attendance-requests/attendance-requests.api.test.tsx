@@ -81,6 +81,29 @@ describe("attendance-requests mutations", () => {
     expect(spy).toHaveBeenCalledWith({ queryKey: ["hris", "nav-badges"] });
   });
 
+  it("keputusan juga menyegarkan periode absensi dan payroll (persetujuan menulis absensi)", async () => {
+    apiPost.mockResolvedValue({ data: {}, message: "ok" });
+    const { Wrap, spy } = wrapper();
+    const { result } = renderHook(() => useDecideAttendanceRequest(), { wrapper: Wrap });
+    result.current.mutate({ id: "r1", action: "approve" });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(spy).toHaveBeenCalledWith({ queryKey: attendanceQueryKeys.periodsAll() });
+    expect(spy).toHaveBeenCalledWith({ queryKey: ["hris", "payroll"] });
+  });
+
+  it("pengajuan baru dan pembatalan tidak menyegarkan periode absensi maupun payroll", async () => {
+    apiPost.mockResolvedValue({ data: {} });
+    const { Wrap, spy } = wrapper();
+    const create = renderHook(() => useCreateAttendanceRequest(), { wrapper: Wrap });
+    create.result.current.mutate({ date: "2026-10-03", clock_in: null, clock_out: "17:00", reason: "Lupa absen pulang" });
+    await waitFor(() => expect(create.result.current.isSuccess).toBe(true));
+    const cancel = renderHook(() => useCancelAttendanceRequest(), { wrapper: Wrap });
+    cancel.result.current.mutate("r1");
+    await waitFor(() => expect(cancel.result.current.isSuccess).toBe(true));
+    expect(spy).not.toHaveBeenCalledWith({ queryKey: attendanceQueryKeys.periodsAll() });
+    expect(spy).not.toHaveBeenCalledWith({ queryKey: ["hris", "payroll"] });
+  });
+
   it("pembatalan menyegarkan juga saat gagal (sudah diputus HR)", async () => {
     apiPost.mockRejectedValue(new Error("Pengajuan sudah disetujui"));
     const { Wrap, spy } = wrapper();
