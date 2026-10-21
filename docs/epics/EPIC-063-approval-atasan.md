@@ -1,6 +1,6 @@
 # EPIC-063: Paket Approval Atasan — Persetujuan Tim, Lembur Sebelum Dilaksanakan, Jenis Weekday/Weekend, Koreksi Lembur AdminHRIS
 
-status: on-progress
+status: review
 environment: dev
 retries: 0
 
@@ -35,7 +35,7 @@ Lihat `docs/superpowers/plans/2026-10-21-approval-atasan.md` (11 task):
 
 ## Acceptance Criteria
 - Atasan langsung bisa menyetujui/menolak cuti dan lembur bawahan langsungnya dari ESS → Persetujuan Tim. Keputusan menyimpan `decided_as = 'manager'`.
-- HR (peran yang sekarang `Actor.IsHR`) tetap bisa memutus pengajuan siapa pun yang bukan miliknya. Keputusannya tersimpan `decided_as = 'hr'` beserta `decided_by_name`, dan `audit.audit_log` mendapat `leave.approve|reject` / `overtime.approve|reject`.
+- HR (`Actor.IsHRD`: `super_admin`, `admin`, `hrd`; ruling C1, `hiring_manager` **bukan** cadangan HR) tetap bisa memutus pengajuan siapa pun yang bukan miliknya. Keputusannya tersimpan `decided_as = 'hr'` beserta `decided_by_name`, dan `audit.audit_log` mendapat `leave.approve|reject` / `overtime.approve|reject`.
 - Tidak ada yang memutus pengajuannya sendiri: HR menerima 403, dan karyawan dengan `reporting_to = id` sendiri juga menerima 403. Karyawan seperti itu tidak muncul di antrean timnya sendiri dan tidak menerima WA "atasan" untuk pengajuannya sendiri.
 - Pengajuan lembur milik sendiri dengan tanggal + jam mulai (WIB) sebelum menit berjalan ditolak 400 `Lembur wajib diajukan sebelum dimulai — jam mulai sudah lewat`. Penugasan HR untuk karyawan lain boleh tanggal lampau.
 - ESS memilih jenis lembur Weekday / Weekend / Libur. Bila jadwal atau hari libur menentukan jenisnya, pilihan dikunci ke saran itu dan server menolak jenis yang bertentangan. Tanpa jadwal yang berlaku, karyawan memilih sendiri (default Weekday). Tarif dan kalkulator payroll tidak berubah.
@@ -64,3 +64,38 @@ Tidak ada. Q-APV-3 dan K-13 sudah diputuskan user pada 20-10-2026. Butir turunan
 ## Automation Log
 - 2026-10-20: User menerima rekomendasi `pertanyaan-rekomendasi.md`, termasuk **Q-APV-3** (atasan langsung approver utama; HR cadangan dan tetap bisa override, dengan audit log) dan **K-13** (Weekday 1,5×, Weekend/libur 2×; ESS cukup memilih jenis, tarif tetap dari setting).
 - 2026-10-21: **Instruksi user: "lakukan paket approval atasan".** Epic dibuat dan langsung `on-progress`. Kode `main` `5035ae5` dan DB test (55499, hanya baca) diperiksa; temuan ada di Catatan. Rencana ditulis di `docs/superpowers/plans/2026-10-21-approval-atasan.md` (11 task, ruling R1–R11, tanpa pertanyaan terbuka). `status-requirement.md` AP-01..AP-04 kini menunjuk epic ini. Branch `feat/epic063-approval-atasan` dari `main` `5035ae5`.
+- 2026-10-21: **Implementasi selesai (Task 1–11), status `review`.** Subagent-driven development, satu review per task. Commit di branch `feat/epic063-approval-atasan` (dari `main` `5035ae5`; dasar kerja `853d507`):
+
+  | Task | Commit |
+  |---|---|
+  | 1 Aturan approval & lembur (domain) | `85be35e` |
+  | 2 Migrasi + keputusan cuti | `cde1a89` |
+  | 3 Lembur: sebelum dimulai, jenis, kapasitas pemutus, WA atasan | `03691b7` |
+  | 4 Koreksi lembur AdminHRIS | `da9a5c8`, fix 1 `1254f2a` |
+  | 5 Antrean Persetujuan Tim + badge (Go) | `f1cfdb5` |
+  | 6 Kualitas data `reporting_to` | `9761c20` |
+  | 7 Paritas fallback Next | `3b70825`, fix 1 `c2f81a9` |
+  | 8 Halaman ESS Persetujuan Tim | `09dddc2` |
+  | 9 Form lembur ESS + koreksi di HRIS | `6dc332f`, fix 1 `74baf7f` |
+  | 10 Kartu "tanpa atasan" + form karyawan | `2fc8ecd` |
+  | 11 Verifikasi & dokumentasi | commit docs ini |
+
+- **Ruling yang dipakai.** R1–R11 rencana berlaku seperti ditulis, dengan perubahan dari pra-flight (9 selisih) dan review:
+  - **C1 (controller)**: HR cadangan/override untuk cuti dan lembur = `Actor.IsHRD` (`super_admin`/`admin`/`hrd`), **bukan** `IsHR` (yang memuat `hiring_manager`). Mengubah R1 ("`Actor.IsHR`"); alasannya konsistensi dengan Perjalanan Dinas EPIC-062 dan mencegah jalur `decided_as = ''` yang melanggar CHECK. Live: 0 pemegang `hiring_manager`. Biaya bila salah: `hiring_manager` kehilangan cadangan HR untuk cuti/lembur.
+  - **C2**: administrasi HR atas lembur (menugaskan lembur ke karyawan lain, tanggal lampau untuk mereka, membatalkan penugasan perusahaan milik orang lain) juga `IsHRD`. Pembacaan (daftar lembur, saran jenis) tetap `IsHR` (baca, bukan keputusan).
+  - **P1** helper tes `leaveBody` memakai versi 3-argumen yang ada. **P2** C1 berlaku di semua jalur (`DecideLeave`, `CanDecideOvertime`, override `day_type` saat approve). **P3** `WorkforceActor.isHrd` di fallback Next. **P4** tes tambahan: `hiring_manager` memutus cuti/lembur → 403, HR memutus lembur sendiri → 403; teks AC dan rencana "hiring_manager tetap HR cadangan" diganti jadi "bukan cadangan HR". **P5** `lib/hris/reporting-to.ts` bebas impor server-only (pemindaian impor `"use client"`: tidak ada yang mencapai modul server lewat berkas Task 7; 5 temuan lama di ticketing tidak disentuh). **P6** tes `hris-a2-routes` memakai tanggal masa depan. **P7** badge Persetujuan Tim juga di `buildNavBadges` fallback Next. **P8** koreksi lembur menolak tanggal kalender tidak valid dengan 400. **P9** label "Hari istirahat" → "Weekend / Libur". **P10** handler memvalidasi HH:MM ketat sebelum `OvertimeStartsInPast` (yang fail-open) dan semua id dikanonikkan huruf kecil. **P11** form Manajemen User/Karyawan (satu form) tidak menawarkan diri sendiri sebagai atasan dan tidak mengirim ulang nilai diri sendiri (dikosongkan menjadi `null` saat disimpan).
+  - R11 (atasan tidak mengubah jenis saat menyetujui): HR tetap bisa mengubah jenis di tombol Setujui (perilaku lama); fix Task 9 membuat baris tabel mengikuti nilai server setelah koreksi dan hanya mengirim `day_type` bila HR mengubahnya, supaya Setujui tidak menimpa koreksi.
+  - Perubahan lain dari review: Task 4 fix 1 (koreksi memakai `periodContaining` agar penutupan periode otomatis berlaku untuk tanggal lama dan baru, snapshot `FOR UPDATE`); Task 7 fix 1 (id karyawan lembur dikanonikkan sebelum `isSelf`, label audit tanggal WIB, nama pemutus seragam); Task 8 (invalidasi antrean di `onSettled` agar baris basi hilang setelah 409).
+- **Bukti test (21-10-2026, DB test 55499 saja).**
+  - Go: `go test -p 1 ./... -count=1`: 27 test gagal, **nama identik dengan baseline** (`baseline.txt`, dibuat sebelum Task 1; tidak ada kegagalan baru; semuanya di luar HRIS approval kecuali `TestAttendancePeriodClosing` yang bergantung tanggal). `gofmt -l backend/internal` bersih. Test epic ini lulus: `TestDecideAs`, `TestOvertimeStartsInPast`, `TestOvertimeDayTypeFor`, `TestLeaveDecisionManagerFirstHRBackup`, `TestLeaveHiringManagerIsNotHRBackup`, `TestLeaveSelfManagerCannotApproveOwn`, `TestOvertimeMustBeRequestedBeforeStart`, `TestOvertimeDayTypeFollowsSchedule`, `TestOvertimeDecisionRecordsCapacityAndNotifiesManager`, `TestOvertimeCorrectionByAdminHRIS`, `TestTeamApprovalsQueueAndBadge`, `TestEmployeeCannotReportToSelf`.
+  - Frontend: `npx vitest run`: 798 berkas lulus, 2 dilewati; 5804 test lulus, 10 dilewati, 0 gagal. `npx tsc --noEmit -p .` tanpa output.
+  - Smoke API (pengganti cek browser, Go API lokal port 18463 terhadap DB test 55499, tiga akun uji SMOKE063 dihapus sesudahnya): lembur sendiri tanggal kemarin → 400 `Lembur wajib diajukan sebelum dimulai — jam mulai sudah lewat`; lembur besok diterima (`day_type = regular`); `GET /api/hris/me/team-approvals` atasan memuat cuti dan lembur bawahannya dan `GET /api/hris/nav-badges` mengembalikan `/dashboard/me/persetujuan-tim = 2`; atasan menyetujui cuti → `decided_as = manager`, `decided_by_name` terisi, audit `leave.approve`; pemohon memutus lembur sendiri → 403; tolak tanpa alasan → 400; HR menyetujui lembur → `decided_as = hr`, audit `overtime.approve`; HR `PATCH /api/hris/overtime/{id}` (jam selesai 19:00 → 20:00, 3,00 jam) → "Lembur dikoreksi", audit `overtime.correct`, alasan <5 karakter → 400, pemohon tanpa menu → 403; `GET /api/hris/employees/without-manager` HR → 200 (daftar), tanpa menu → 403.
+  - **Tidak diverifikasi**: UI di browser (form lembur ESS, kunci jenis Weekend, halaman dan badge Persetujuan Tim, dialog Koreksi, badge "Dikoreksi"/"oleh HR", kartu "tanpa atasan", pilihan atasan tanpa diri sendiri) hanya lewat vitest, belum dilihat → **QA manusia sebelum rilis**; kunci jenis Weekend/Libur terhadap jadwal diuji di Go (`TestOvertimeDayTypeFollowsSchedule`), tidak di smoke; WA ke atasan hanya dengan pengirim palsu (tidak ada gateway uji); audit log halaman UI tidak dibuka. Catatan DB test: audit log append-only, jadi 3 baris audit smoke (`leave.approve`, `overtime.approve`, `overtime.correct`, aktor SMOKE063) tetap tertinggal di DB test.
+- **Catatan minor yang diparkir** (tidak memblokir, bisa jadi follow-up kecil): kondisi balapan 409 dan beberapa percabangan (HRD yang juga atasan, `day_type` eksplisit HR, pembatalan lembur) belum punya test integrasi; `UpdateLeave` memberi `IsHR` (termasuk `hiring_manager`) hak membatalkan cuti pending siapa pun tanpa audit (pintu samping lama); laporan tanpa atasan diurutkan per alasan dengan batas 500 tanpa total; antrean Persetujuan Tim dibatasi 200 baris sedangkan badge tidak; hook keputusan Perjalanan Dinas tidak meng-invalidate badge; kegagalan muat antrean tampil sebagai kosong; `createLeave` Next tidak mengkanonikkan `employee_id`; tombol Koreksi tampil pada lembur HR sendiri (server 403).
+- **Langkah rilis** (jalankan hanya atas keputusan user; agent tidak mengubah DB live):
+  1. Backup DB live, lalu terapkan migrasi `backend/database/migrations/deltas/20261024090000_approval_atasan.sql` (setelah EPIC-062 `20261023090100`).
+  2. Jalankan `SELECT iam.sync_hris_staff_roles();` (`admin_hris` mendapat `ess.team-approvals`; role lain dengan `ess.team-shifts` sudah disalin migrasi).
+  3. Build ulang API (Go) dan web (Next).
+  4. Perbaikan `reporting_to` live (55 karyawan aktif kosong, 1 menunjuk diri sendiri) memakai kartu "tanpa atasan" yang baru, oleh HR atau atas persetujuan user. Agent tidak mengubah data live. Menyimpan form karyawan yang menunjuk diri sendiri akan mengosongkannya (P11).
+  5. QA manusia atas daftar "Tidak diverifikasi" di atas.
+- **Follow-up (di luar epic):** AP-06 (approval CEO/GM) menunggu K-7 dari Paddy. `hiring_manager` sengaja bukan cadangan HR untuk cuti/lembur (C1); bila peran rekrutmen perlu memutus, ubah di satu tempat (`Actor.IsHRD` → himpunan baru) setelah konfirmasi user. Keputusan HR atas cuti/lembur masih berbasis peran aplikasi (`IsHRD`), bukan aksi `approve` di menu daun; menyelaraskannya dengan konvensi EPIC-061 adalah perubahan hak akses tersendiri. Pengingat/eskalasi otomatis bila atasan tidak memutus dalam N hari belum ada (sekarang hanya rekap `approvalMenginap` > 2 hari ke owner). Fallback Next tidak memvalidasi jenis lembur terhadap jadwal (R10).

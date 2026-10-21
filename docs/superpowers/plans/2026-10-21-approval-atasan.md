@@ -4195,7 +4195,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ## Follow-up (di luar rencana ini)
 
 - AP-06 (approval CEO/GM) menunggu K-7 dari Paddy.
-- `hiring_manager` tetap dihitung HR cadangan untuk cuti/lembur (`Actor.IsHR`, perilaku lama), berbeda dengan Perjalanan Dinas (`IsHRD`). Konfirmasi ke user bila peran rekrutmen tidak boleh memutus.
+- `hiring_manager` **bukan** cadangan HR untuk cuti/lembur (ruling C1/P4: cadangan HR = `Actor.IsHRD`, `super_admin`/`admin`/`hrd`, sama dengan Perjalanan Dinas). Live tidak punya pemegang `hiring_manager`; konfirmasi ke user bila peran rekrutmen perlu bisa memutus.
 - Keputusan HR atas cuti/lembur masih berbasis peran aplikasi (`IsHR`), bukan aksi `approve` di menu daun; menyelaraskannya dengan konvensi EPIC-061 adalah perubahan hak akses tersendiri.
 - Pengingat/eskalasi otomatis bila atasan tidak memutus dalam N hari (sekarang hanya rekap `approvalMenginap` > 2 hari ke owner).
 - Fallback Next tidak memvalidasi jenis lembur terhadap jadwal (R10).
