@@ -102,3 +102,61 @@ func TestOvertimeAssignmentNeedsHRD(t *testing.T) {
 	}
 	expect(t, h.do(&hrd, "POST", "/api/hris/overtime", past), 200, "")
 }
+
+// Koreksi tunduk pada penguncian periode yang sama dengan absensi: periode
+// yang tanggal closing-nya lewat terkunci walau belum ada yang menekan Closing,
+// dan tanggal baru di periode closed ditolak juga.
+func TestOvertimeCorrectionHonoursLazyAndNewDateClosing(t *testing.T) {
+	h := newHarness(t)
+	admin, _ := h.staff("hrd", []string{"hris.kepegawaian.overtime"}, true, emp{name: "Admin HRIS"})
+	staff, _ := h.staff("pos", nil, true, emp{name: "Crew Closing"})
+	created := h.do(&staff, "POST", "/api/hris/overtime", otBody("2026-10-06", "17:00", "19:00"))
+	expect(t, created, 200, "")
+	path := "/api/hris/overtime/" + created.data()["id"].(string)
+
+	// Baru dibuat di periode terbuka: tanggal baru di periode closed → 409.
+	h.exec(`DELETE FROM hris.attendance_periods WHERE start_date <= '2026-11-30' AND end_date >= '2026-09-01'`)
+	h.exec(`INSERT INTO hris.attendance_periods (period_year, period_month, start_date, end_date, closing_date,
+		status, closed_at, close_mode) VALUES (2026, 11, '2026-10-21', '2026-11-20', '2026-11-21', 'closed', now(), 'manual')`)
+	expect(t, h.do(&admin, "PATCH", path, map[string]any{"date": "2026-11-10", "reason": "Pindah ke bulan depan"}), 409,
+		"Periode absensi 21-10-2026 s.d. 20-11-2026 sudah di-closing — lembur tidak bisa dikoreksi")
+
+	// Periode masih 'open' di tabel tetapi closing-nya sudah lewat (hari ini 05-10-2026) → terkunci.
+	// Penugasan HR boleh bertanggal lampau (R3), jadi dipakai untuk tanggal di periode lama.
+	_, crew := h.staff("pos", nil, true, emp{name: "Crew Periode Lama"})
+	old := otBody("2026-09-10", "17:00", "19:00")
+	old["employee_id"] = crew
+	oldRow := h.do(&admin, "POST", "/api/hris/overtime", old)
+	expect(t, oldRow, 200, "")
+	oldID := oldRow.data()["id"].(string)
+	h.exec(`DELETE FROM hris.attendance_periods WHERE start_date <= '2026-11-30' AND end_date >= '2026-08-01'`)
+	h.exec(`INSERT INTO hris.attendance_periods (period_year, period_month, start_date, end_date, closing_date, status)
+		VALUES (2026, 9, '2026-08-21', '2026-09-20', '2026-09-21', 'open')`)
+	expect(t, h.do(&admin, "PATCH", "/api/hris/overtime/"+oldID, map[string]any{"end_time": "20:00", "reason": "Koreksi periode lewat closing"}),
+		409, "Periode absensi 21-08-2026 s.d. 20-09-2026 sudah di-closing — lembur tidak bisa dikoreksi")
+	if got := h.scalar(`SELECT end_time::text FROM hris.overtime_requests WHERE id = $1`, oldID); got != "19:00:00" {
+		t.Fatalf("end_time = %s, want unchanged", got)
+	}
+}
+
+// Lembur yang sudah disetujui bisa dikoreksi tanpa mengubah statusnya; alasan wajib.
+func TestOvertimeCorrectionOfApprovedRow(t *testing.T) {
+	h := newHarness(t)
+	admin, _ := h.staff("hrd", []string{"hris.kepegawaian.overtime"}, true, emp{name: "Admin HRIS"})
+	staff, _ := h.staff("pos", nil, true, emp{name: "Crew Disetujui"})
+	created := h.do(&staff, "POST", "/api/hris/overtime", otBody("2026-10-06", "17:00", "19:00"))
+	expect(t, created, 200, "")
+	id := created.data()["id"].(string)
+	expect(t, h.do(&admin, "POST", "/api/hris/overtime/decide", map[string]any{"overtime_id": id, "action": "approve"}), 200, "")
+
+	expect(t, h.do(&admin, "PATCH", "/api/hris/overtime/"+id, map[string]any{"end_time": "21:00"}), 400, "")
+	fixed := h.do(&admin, "PATCH", "/api/hris/overtime/"+id, map[string]any{"end_time": "21:00", "reason": "Jam pulang sebenarnya"})
+	expect(t, fixed, 200, "")
+	if d := fixed.data(); d["status"] != "approved" || d["hours"] != "4.00" || d["decided_by"] == nil {
+		t.Fatalf("corrected approved = %s", fixed.raw)
+	}
+	if n := h.scalar(`SELECT count(*)::text FROM audit.audit_log WHERE action = 'overtime.correct' AND entity_id = $1
+		AND before->>'hours' = '2' AND after->>'hours' = '4'`, id); n != "1" {
+		t.Fatalf("audit = %s", n)
+	}
+}

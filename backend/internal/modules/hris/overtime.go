@@ -33,9 +33,8 @@ type OvertimeRepo interface {
 	// CorrectOvertime updates a request still in fromStatus; errNoRow when it
 	// changed meanwhile (EPIC-063 R6).
 	CorrectOvertime(ctx context.Context, id, fromStatus string, f fields) (*Row, error)
-	// ClosedPeriodOn is the closed attendance period holding date ({label}),
-	// nil when none.
-	ClosedPeriodOn(ctx context.Context, date string) (*Row, error)
+	// OvertimeForUpdate is OvertimeForDecision locking the request row.
+	OvertimeForUpdate(ctx context.Context, id string) (*Row, error)
 }
 
 type overtimeFilter struct {

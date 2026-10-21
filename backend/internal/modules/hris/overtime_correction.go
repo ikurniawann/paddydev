@@ -41,71 +41,73 @@ func (s *Service) CorrectOvertime(ctx context.Context, a *Actor, id string, in o
 			return nil, httpx.BadRequest(overtimeBadDate)
 		}
 	}
-	ot, err := s.repo.OvertimeForDecision(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	if ot == nil {
-		return nil, httpx.NotFound("Pengajuan lembur tidak ditemukan")
-	}
-	status := ot.Str("status")
-	if status != "pending" && status != "approved" {
-		return nil, httpx.BadRequest(overtimeCorrectStatus)
-	}
-	if a.EmployeeID != nil && *a.EmployeeID == ot.Str("employee_id") {
-		return nil, httpx.Forbidden(overtimeCorrectSelf)
-	}
-	was := struct{ date, start, end, dayType string }{dateText(ot, "date"), overtimeClock(ot.Str("start_time")),
-		overtimeClock(ot.Str("end_time")), ot.Str("day_type")}
-	pick := func(sent *string, cur string) string {
-		if sent != nil {
-			return *sent
-		}
-		return cur
-	}
-	date, start, end, dayType := pick(in.Date, was.date), pick(in.StartTime, was.start), pick(in.EndTime, was.end),
-		pick(in.DayType, was.dayType)
-	if date == was.date && start == was.start && end == was.end && dayType == was.dayType {
-		return nil, httpx.BadRequest("Tidak ada perubahan")
-	}
-	if start == end {
-		return nil, httpx.BadRequest("Jam mulai dan selesai tidak boleh sama")
-	}
-	hours := domain.OvertimeHoursFromTimes(start, end)
-	if hours > 12 {
-		return nil, httpx.BadRequest("Durasi lembur maksimal 12 jam")
-	}
-	if hours < 1 {
-		return nil, httpx.BadRequest("Durasi lembur minimal 1 jam")
-	}
-	if date != was.date {
-		taken, err := s.repo.OvertimeActiveOn(ctx, ot.Str("employee_id"), date)
-		if err != nil {
-			return nil, err
-		}
-		if taken {
-			return nil, httpx.BadRequest(overtimeDuplicate)
-		}
-	}
-	before := map[string]any{"date": was.date, "start_time": was.start, "end_time": was.end,
-		"day_type": was.dayType, "hours": ot.Num("hours")}
-	after := map[string]any{"date": date, "start_time": start, "end_time": end, "day_type": dayType, "hours": hours}
-	label := was.date
-	if emp := ot.Child("employee"); emp != nil {
-		label = emp.Str("full_name") + " · " + label
-	}
-	now := s.clock()
 	var row *Row
-	err = s.repo.InTx(ctx, func(r Repository) error {
-		for _, d := range []string{was.date, date} {
-			p, err := r.ClosedPeriodOn(ctx, d)
+	err := s.repo.InTx(ctx, func(r Repository) error {
+		// The snapshot is read (and locked) inside the transaction so the audited
+		// "before" cannot be stale under concurrent corrections.
+		ot, err := r.OvertimeForUpdate(ctx, id)
+		if err != nil {
+			return err
+		}
+		if ot == nil {
+			return httpx.NotFound("Pengajuan lembur tidak ditemukan")
+		}
+		status := ot.Str("status")
+		if status != "pending" && status != "approved" {
+			return httpx.BadRequest(overtimeCorrectStatus)
+		}
+		if a.EmployeeID != nil && *a.EmployeeID == ot.Str("employee_id") {
+			return httpx.Forbidden(overtimeCorrectSelf)
+		}
+		was := struct{ date, start, end, dayType string }{dateText(ot, "date"), overtimeClock(ot.Str("start_time")),
+			overtimeClock(ot.Str("end_time")), ot.Str("day_type")}
+		pick := func(sent *string, cur string) string {
+			if sent != nil {
+				return *sent
+			}
+			return cur
+		}
+		date, start, end, dayType := pick(in.Date, was.date), pick(in.StartTime, was.start), pick(in.EndTime, was.end),
+			pick(in.DayType, was.dayType)
+		if date == was.date && start == was.start && end == was.end && dayType == was.dayType {
+			return httpx.BadRequest("Tidak ada perubahan")
+		}
+		if start == end {
+			return httpx.BadRequest("Jam mulai dan selesai tidak boleh sama")
+		}
+		hours := domain.OvertimeHoursFromTimes(start, end)
+		if hours > 12 {
+			return httpx.BadRequest("Durasi lembur maksimal 12 jam")
+		}
+		if hours < 1 {
+			return httpx.BadRequest("Durasi lembur minimal 1 jam")
+		}
+		if date != was.date {
+			taken, err := r.OvertimeActiveOn(ctx, ot.Str("employee_id"), date)
 			if err != nil {
 				return err
 			}
-			if p != nil {
-				return httpx.Conflict("Periode absensi " + p.Str("label") + " sudah di-closing — lembur tidak bisa dikoreksi")
+			if taken {
+				return httpx.BadRequest(overtimeDuplicate)
 			}
 		}
+		// Same lock as attendance: a period past its closing date is closed lazily.
+		today := domain.TodayWIB(s.now())
+		for _, d := range []string{was.date, date} {
+			p, err := periodContaining(ctx, r.querier(), d, today)
+			if err != nil {
+				return err
+			}
+			if p.Closed() {
+				return httpx.Conflict("Periode absensi " + dmyDate(p.Start) + " s.d. " + dmyDate(p.End) +
+					" sudah di-closing — lembur tidak bisa dikoreksi")
+			}
+		}
+		label := was.date
+		if emp := ot.Child("employee"); emp != nil {
+			label = emp.Str("full_name") + " · " + label
+		}
+		now := s.clock()
 		var f fields
 		f.add("date", date)
 		f.add("start_time", start)
@@ -115,14 +117,16 @@ func (s *Service) CorrectOvertime(ctx context.Context, a *Actor, id string, in o
 		f.add("corrected_at", now)
 		f.add("corrected_by_name", actorName(a))
 		f.add("updated_at", now)
-		var err error
 		if row, err = r.CorrectOvertime(ctx, id, status, f); err != nil {
 			return err
 		}
 		reason := in.Reason
 		meta.ActorID, meta.ActorName = a.UserID, ptr(actorName(a))
 		meta.Action, meta.Entity, meta.EntityID, meta.EntityLabel = "overtime.correct", "hris.overtime_requests", &id, &label
-		meta.Before, meta.After, meta.Reason = before, after, &reason
+		meta.Before = map[string]any{"date": was.date, "start_time": was.start, "end_time": was.end,
+			"day_type": was.dayType, "hours": ot.Num("hours")}
+		meta.After = map[string]any{"date": date, "start_time": start, "end_time": end, "day_type": dayType, "hours": hours}
+		meta.Reason = &reason
 		return audit.Write(ctx, r.querier(), meta)
 	})
 	if database.IsUniqueViolation(err) { // the active (employee_id, date) index lost a race
@@ -137,15 +141,25 @@ func (s *Service) CorrectOvertime(ctx context.Context, a *Actor, id string, in o
 	return obj("data", row, "message", "Lembur dikoreksi"), nil
 }
 
+// dmyDate is YYYY-MM-DD as DD-MM-YYYY.
+func dmyDate(iso string) string {
+	if t, ok := domain.ParseDate(iso); ok {
+		return t.Format("02-01-2006")
+	}
+	return iso
+}
+
 func (s *store) CorrectOvertime(ctx context.Context, id, fromStatus string, f fields) (*Row, error) {
 	return updateOne(ctx, s.db, "hris.overtime_requests", f, fields{{"id", id}, {"status", fromStatus}}, "*")
 }
 
-func (s *store) ClosedPeriodOn(ctx context.Context, date string) (*Row, error) {
-	return queryRow(ctx, s.db, `SELECT to_char(start_date, 'DD-MM-YYYY') || ' s.d. ' || to_char(end_date, 'DD-MM-YYYY') AS label
-		FROM hris.attendance_periods
-		WHERE status = 'closed' AND $1::date BETWEEN start_date AND end_date
-		ORDER BY start_date LIMIT 1`, date)
+// OvertimeForUpdate is OvertimeForDecision with the row locked (FOR UPDATE
+// of the request only, not the embedded employee).
+func (s *store) OvertimeForUpdate(ctx context.Context, id string) (*Row, error) {
+	row, err := queryRow(ctx, s.db, `SELECT *, `+
+		embedOne("employee", "id, full_name, reporting_to", "hris.employees", "id = overtime_requests.employee_id")+
+		` FROM hris.overtime_requests WHERE id = $1 FOR UPDATE`, id)
+	return row, ignoreBadInput(err)
 }
 
 // PATCH /api/hris/overtime/{id} { date?, start_time?, end_time?, day_type?, reason }
