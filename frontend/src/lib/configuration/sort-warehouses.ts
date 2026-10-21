@@ -26,8 +26,11 @@ export function compareWarehouses(
   if (aStall !== null) return 1;
   if (bStall !== null) return -1;
 
-  if (aCode.toUpperCase() === "MAIN") return -1;
-  if (bCode.toUpperCase() === "MAIN") return 1;
+  // MAIN vs MAIN is a tie (0 both ways) so the comparator stays consistent;
+  // lists spanning branches hold one MAIN per branch.
+  const aMain = aCode.toUpperCase() === "MAIN";
+  const bMain = bCode.toUpperCase() === "MAIN";
+  if (aMain !== bMain) return aMain ? -1 : 1;
 
   return aCode.localeCompare(bCode, undefined, { numeric: true, sensitivity: "base" })
     || aName.localeCompare(bName, undefined, { numeric: true, sensitivity: "base" });
