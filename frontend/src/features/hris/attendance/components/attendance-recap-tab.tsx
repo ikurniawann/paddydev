@@ -20,6 +20,7 @@ import { formatDate, formatTime } from "@/lib/format";
 import { todayWib } from "@/lib/hris/attendance-period";
 import { GeofenceBadge } from "./geofence-badge";
 import { SelfiePhotoDialog } from "./selfie-photo-dialog";
+import { ShortHoursBadge } from "./short-hours-badge";
 import { AttendancePeriodBanner } from "./attendance-period-banner";
 import { AttendanceAdjustDialog, STATUS_OPTIONS } from "./attendance-adjust-dialog";
 import { AdjustmentBadge, DeleteAttendanceDialog } from "./attendance-adjustment-history";
@@ -400,6 +401,7 @@ export function AttendanceRecapTab() {
                             </Badge>
                           )}
                           <AdjustmentBadge row={row} />
+                          <ShortHoursBadge isShort={row.is_short_hours} minHours={row.min_work_hours} />
                         </div>
                       </td>
                       <td className="p-3">

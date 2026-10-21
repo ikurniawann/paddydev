@@ -44,6 +44,10 @@ export interface RosterAttendance {
   clock_out_distance_m: number | null;
   /** Keterangan karyawan (wajib bila di luar area) */
   notes: string | null;
+  /** Kurang jam / pulang lebih cepat (EPIC-065 AB-05); opsional karena fallback Next tidak mengisinya */
+  is_short_hours?: boolean;
+  /** Jam minimum cabang saat dilabel (jam); Go roster mengirim angka */
+  min_work_hours?: string | number | null;
 }
 
 export interface RosterEmployee {
@@ -120,6 +124,10 @@ export interface AttendanceListRow {
   clock_in_distance_m?: number | null;
   clock_out_geofence?: GeofenceStatus | null;
   clock_out_distance_m?: number | null;
+  /** Kurang jam / pulang lebih cepat (EPIC-065 AB-05) */
+  is_short_hours?: boolean;
+  /** numeric(4,2) sebagai string, jam minimum cabang saat dilabel */
+  min_work_hours?: string | number | null;
   branch: { id: string; code: string; name: string } | null;
   shift: { id: string; name: string } | null;
   employee: {
@@ -151,6 +159,9 @@ export interface CalendarAttendance {
   work_hours: number | null;
   status: string;
   is_late: boolean;
+  /** Kurang jam / pulang lebih cepat (EPIC-065 AB-05) */
+  is_short_hours?: boolean;
+  min_work_hours?: string | number | null;
 }
 
 /** Baris pola jadwal + detail shift dari /api/hris/attendance/schedule. */

@@ -9,6 +9,7 @@ import type {
   PlacementOverviewRow,
   PlacementPayload,
   SavedBranchLocation,
+  SavedBranchMinWorkHours,
   StoreBranch,
 } from "./types";
 
@@ -18,6 +19,10 @@ export const fetchStoreBranches = () =>
 /** PUT penuh: kirim selalu ketiga kunci (kunci yang hilang disimpan sebagai null). */
 export const saveBranchLocation = (id: string, payload: BranchLocationPayload) =>
   apiPut<{ data: SavedBranchLocation }>(`/api/hris/branches/${id}/location`, payload);
+
+/** PUT penuh: null = tanpa aturan jam minimum (EPIC-065 AB-05). */
+export const saveBranchMinWorkHours = (id: string, payload: { min_work_hours: number | null }) =>
+  apiPut<{ data: SavedBranchMinWorkHours; message?: string }>(`/api/hris/branches/${id}/min-work-hours`, payload);
 
 export const fetchEmployeePlacements = (employeeId: string) =>
   apiGet<{ data: Placement[] }>(`/api/hris/employees/${employeeId}/placements`).then((res) => res.data ?? []);
