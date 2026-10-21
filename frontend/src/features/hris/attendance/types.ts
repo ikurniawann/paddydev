@@ -186,6 +186,8 @@ export interface AttendancePeriodStats {
   unvalidated: number;
   adjusted: number;
   late: number;
+  /** Pengajuan absensi karyawan yang belum diputus HR di rentang periode. */
+  pending_requests?: number;
 }
 
 export interface AttendancePeriodEvent {

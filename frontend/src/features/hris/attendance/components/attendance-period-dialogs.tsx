@@ -82,12 +82,24 @@ export function ClosePeriodDialog({
             <Stat label="Tanpa jam pulang" value={stats?.without_clock_out} warn={(stats?.without_clock_out ?? 0) > 0} />
             <Stat label="Belum divalidasi" value={stats?.unvalidated} />
             <Stat label="Disesuaikan manual" value={stats?.adjusted} />
+            <Stat
+              label="Pengajuan absensi menunggu"
+              value={stats?.pending_requests ?? 0}
+              warn={(stats?.pending_requests ?? 0) > 0}
+            />
           </div>
           {(stats?.without_clock_out ?? 0) > 0 && (
             <p className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
               Ada {stats?.without_clock_out} absensi tanpa jam pulang — jam kerjanya tidak terhitung. Lengkapi dulu
               lewat Rekap bila perlu.
+            </p>
+          )}
+          {(stats?.pending_requests ?? 0) > 0 && (
+            <p className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+              Ada {stats?.pending_requests} pengajuan absensi karyawan yang belum diputus — putuskan dulu di tab
+              Pengajuan Absensi; setelah periode ditutup pengajuan tidak bisa disetujui.
             </p>
           )}
           <p className="text-xs text-gray-500">
