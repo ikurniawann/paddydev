@@ -9,6 +9,7 @@ import type {
   AttendanceRow,
   EmployeeDocumentInput,
   EmployeeDocumentRow,
+  EmployeeWithoutManager,
   EmploymentHistoryRow,
   LeaveBalanceRow,
   UserDirectoryStats,
@@ -426,3 +427,6 @@ export async function downloadEmployeeImportErrors(input: { file: File; mode: "a
   a.remove();
   URL.revokeObjectURL(url);
 }
+
+export const fetchEmployeesWithoutManager = () =>
+  apiGet<{ data: EmployeeWithoutManager[] }>("/api/hris/employees/without-manager").then((res) => res.data ?? []);

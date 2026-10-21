@@ -239,6 +239,29 @@ describe("userFormFromItem", () => {
   });
 });
 
+describe("atasan = diri sendiri (EPIC-063 P11)", () => {
+  const SELF = "3f2b8c1e-4a5d-4e6f-8a9b-0c1d2e3f4a5b";
+  const OTHER = "9f2b8c1e-4a5d-4e6f-8a9b-0c1d2e3f4a5b";
+  const item = (reportingTo: string | null) =>
+    ({ id: SELF, fullName: "Retail Ops", email: "r@example.com", isActive: true, reportingTo }) as unknown as Parameters<
+      typeof userFormFromItem
+    >[0];
+
+  it("nilai lama atasan = diri sendiri tidak diisikan ke form, jadi tidak dikirim ulang", () => {
+    for (const stale of [SELF, SELF.toUpperCase(), SELF.replaceAll("-", "")]) {
+      const form = userFormFromItem(item(stale));
+      expect(form.reporting_to).toBe("");
+      expect(buildUserPayload(form, true).reporting_to).toBeNull();
+    }
+  });
+
+  it("atasan lain tetap diisikan dan dikirim", () => {
+    const form = userFormFromItem(item(OTHER));
+    expect(form.reporting_to).toBe(OTHER);
+    expect(buildUserPayload(form, true).reporting_to).toBe(OTHER);
+  });
+});
+
 describe("tipe jadwal", () => {
   it("default Shift dan wajib dipilih", () => {
     expect(emptyUserForm.schedule_type).toBe("shift");

@@ -23,3 +23,22 @@ export function isSelfManager(employeeId: string, reportingTo: string | null | u
   const self = uuidDigits(employeeId);
   return self !== null && self === uuidDigits(reportingTo);
 }
+
+/** Alasan karyawan aktif masuk laporan "tanpa atasan" (GET /api/hris/employees/without-manager). */
+export type NoManagerReason = "empty" | "self" | "inactive";
+
+export const NO_MANAGER_REASON_LABELS: Record<NoManagerReason, string> = {
+  empty: "Atasan belum diisi",
+  self: "Atasan = diri sendiri",
+  inactive: "Atasan nonaktif",
+};
+
+/** Pilihan Atasan di form karyawan, tanpa karyawan yang sedang diedit (EPIC-063 R9). */
+export function managerOptions(
+  managers: readonly { id: string; full_name: string; nip: string }[],
+  selfId: string | null
+): { value: string; label: string; description: string }[] {
+  return managers
+    .filter((m) => !selfId || !isSelfManager(selfId, m.id))
+    .map((m) => ({ value: m.id, label: m.full_name, description: m.nip }));
+}

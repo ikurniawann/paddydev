@@ -19,6 +19,7 @@ import { impersonateUser } from "../api";
 import { useUserDirectoryStats, useUserList } from "../queries";
 import { EMPLOYEES_ROUTES } from "../constants";
 import { ContractExpiryBanner } from "./contract-expiry-banner";
+import { NoManagerCard } from "./no-manager-card";
 import { ResetPasswordDialog, type ResetPasswordTarget } from "./reset-password-dialog";
 import { CreateAccountDialog } from "./create-account-dialog";
 import {
@@ -164,6 +165,7 @@ export function UsersListPage({ variant = "directory" }: UsersListPageProps) {
       </div>
 
       {!isAccountsView && <ContractExpiryBanner from={NAV_FROM_EMPLOYEES} />}
+      {!isAccountsView && <NoManagerCard />}
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[

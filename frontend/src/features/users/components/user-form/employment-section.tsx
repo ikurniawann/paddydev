@@ -2,6 +2,7 @@ import { BriefcaseIcon } from "@heroicons/react/24/outline";
 import { FormFieldLabel, formComboboxClassName } from "@/components/layout/form-field";
 import { FormSectionCard } from "@/components/layout/form-section-card";
 import { Combobox } from "@/components/ui/combobox";
+import { managerOptions } from "@/lib/hris/reporting-to";
 import { SCHEDULE_TYPE_OPTIONS, scheduleTypeLabel } from "@/lib/hris/schedule-type";
 import type { UserEmployeeFormValues } from "@/lib/hris/users-form";
 import type { UserFormLookups } from "../../types";
@@ -13,9 +14,11 @@ interface EmploymentSectionProps {
   onChange: (patch: Partial<UserEmployeeFormValues>) => void;
   /** Edit: tipe jadwal hanya ditampilkan (diubah lewat dialog di detail karyawan). */
   isEdit?: boolean;
+  /** Edit: id karyawan, supaya ia tidak bisa memilih dirinya sendiri sebagai atasan (EPIC-063). */
+  employeeId?: string | null;
 }
 
-export function EmploymentSection({ form, lookups, onChange, isEdit = false }: EmploymentSectionProps) {
+export function EmploymentSection({ form, lookups, onChange, isEdit = false, employeeId = null }: EmploymentSectionProps) {
   const departments = lookups?.departments ?? [];
   const selectedDeptName = departments.find((d) => d.id === form.department_id)?.name;
   // posisi hanya dari departemen terpilih
@@ -127,11 +130,7 @@ export function EmploymentSection({ form, lookups, onChange, isEdit = false }: E
         <div>
           <FormFieldLabel>Manager</FormFieldLabel>
           <Combobox
-            options={(lookups?.managers ?? []).map((m) => ({
-              value: m.id,
-              label: m.full_name,
-              description: m.nip,
-            }))}
+            options={managerOptions(lookups?.managers ?? [], employeeId)}
             value={form.reporting_to}
             onChange={(reporting_to) => onChange({ reporting_to })}
             placeholder="Select"

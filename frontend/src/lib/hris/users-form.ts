@@ -4,6 +4,7 @@
  */
 import { APPROVAL_WORKFLOWS } from "@/lib/admin/user-management";
 import { normalizeBusinessScopePayload } from "@/lib/configuration/business-scope";
+import { isSelfManager } from "@/lib/hris/reporting-to";
 import type { ScheduleType } from "@/lib/hris/schedule-type";
 import type { UserEmployeeItem } from "@/lib/users/user-mapper";
 import type { UserRole } from "@/types";
@@ -141,7 +142,9 @@ export function userFormFromItem(detail: UserEmployeeItem): UserEmployeeFormValu
     department_id: detail.departmentId ?? "",
     section_id: detail.sectionId ?? "",
     job_title_id: detail.jobTitleId ?? "",
-    reporting_to: detail.reportingTo ?? "",
+    // Atasan = diri sendiri (data lama) tidak dimunculkan dan tidak dikirim ulang: server menolaknya
+    // (EPIC-063), dan pilihan Atasan memang tidak lagi memuat karyawan itu sendiri.
+    reporting_to: isSelfManager(detail.id, detail.reportingTo) ? "" : (detail.reportingTo ?? ""),
     bank_name: detail.bankName ?? "",
     bank_account: detail.bankAccount ?? "",
     bpjs_tk: detail.bpjsTk ?? "",
