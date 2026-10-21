@@ -1,6 +1,6 @@
 # EPIC-061: Role & Hak Akses HRIS — Hak Hapus, Akses per Akun, AdminHRIS (RA-01..03)
 
-status: review
+status: ready-for-qa
 environment: dev
 retries: 0
 

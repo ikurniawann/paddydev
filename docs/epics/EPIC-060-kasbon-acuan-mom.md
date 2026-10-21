@@ -1,6 +1,6 @@
 # EPIC-060: Kasbon Sesuai Acuan MOM 19-10-2026
 
-status: review
+status: ready-for-qa
 environment: dev
 retries: 0
 

@@ -1,6 +1,6 @@
 # EPIC-062: Paket Absensi — Geofence Cabang & Perjalanan Dinas
 
-status: review
+status: ready-for-qa
 environment: dev
 retries: 0
 
