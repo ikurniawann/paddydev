@@ -89,7 +89,6 @@ func parseEmployee(f *validate.Form, create bool) employeeInput {
 	return in
 }
 
-// columns are the sent keys, in schema order, as column values.
 // keys are the identity keys the body sent (a key not sent or null is not checked).
 func (in employeeInput) keys() employeekeys.Keys {
 	k := employeekeys.Keys{NIP: in.nip.Val}
@@ -104,6 +103,7 @@ func (in employeeInput) keys() employeekeys.Keys {
 	return k
 }
 
+// columns are the sent keys, in schema order, as column values.
 func (in employeeInput) columns() fields {
 	var f fields
 	addStr := func(col string, v opt[string]) {

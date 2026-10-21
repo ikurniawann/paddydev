@@ -96,6 +96,10 @@ func (s *Service) RehireEmployee(ctx context.Context, actor *auth.User, id strin
 		} else if !branchOK {
 			return httpx.BadRequest("Cabang tidak ditemukan")
 		}
+		var branchName string
+		if err := q.QueryRow(ctx, `SELECT name FROM configuration.branches WHERE id = $1`, in.BranchID).Scan(&branchName); err != nil {
+			return err
+		}
 		newEmail, err := rehireEmail(ctx, q, id, email, userID != nil, in.Email)
 		if err != nil {
 			return err
@@ -117,6 +121,12 @@ func (s *Service) RehireEmployee(ctx context.Context, actor *auth.User, id strin
 		if _, err := q.Exec(ctx, `UPDATE hris.employees SET is_active = true, end_date = NULL, employment_status = $2,
 			join_date = $3::date, is_access_app = $4, email = COALESCE($5, email), updated_at = now() WHERE id = $1`,
 			id, in.EmploymentStatus, in.EffectiveDate, restoreLogin, newEmail); err != nil {
+			return err
+		}
+		// Karyawan yang dinonaktifkan tanpa resign (hapus lunak, PUT is_active=false,
+		// data impor) bisa masih punya penempatan/pola terbuka: tutup seperti resign
+		// supaya penempatan utama baru tidak bentrok.
+		if err := closeOpenRowsFrom(ctx, q, id, in.EffectiveDate); err != nil {
 			return err
 		}
 		if _, err := q.Exec(ctx, `INSERT INTO hris.employee_placements (employee_id, branch_id, is_primary, start_date, notes, created_by)
@@ -144,7 +154,7 @@ func (s *Service) RehireEmployee(ctx context.Context, actor *auth.User, id strin
 		}
 		before := map[string]any{"is_active": false, "employment_status": status, "join_date": join, "end_date": end}
 		after := map[string]any{"is_active": true, "employment_status": in.EmploymentStatus, "join_date": in.EffectiveDate,
-			"branch_id": in.BranchID, "reactivate_login": restoreLogin, "reason": in.Reason}
+			"branch_id": in.BranchID, "branch": branchName, "reactivate_login": restoreLogin, "reason": in.Reason}
 		if newEmail != nil {
 			before["email"], after["email"] = email, *newEmail
 		}
@@ -158,6 +168,23 @@ func (s *Service) RehireEmployee(ctx context.Context, actor *auth.User, id strin
 		return nil
 	})
 	return out, err
+}
+
+// closeOpenRowsFrom mirrors resign for the new employment period starting at
+// eff: placements and weekly patterns starting on/after eff are dropped, those
+// still open or ending on/after eff end the day before.
+func closeOpenRowsFrom(ctx context.Context, q database.Querier, id, eff string) error {
+	for _, sql := range []string{
+		`DELETE FROM hris.employee_placements WHERE employee_id = $1 AND start_date >= $2::date`,
+		`UPDATE hris.employee_placements SET end_date = $2::date - 1 WHERE employee_id = $1 AND (end_date IS NULL OR end_date >= $2::date)`,
+		`DELETE FROM hris.employee_shifts WHERE employee_id = $1 AND effective_from >= $2::date`,
+		`UPDATE hris.employee_shifts SET effective_to = $2::date - 1 WHERE employee_id = $1 AND (effective_to IS NULL OR effective_to >= $2::date)`,
+	} {
+		if _, err := q.Exec(ctx, sql, id, eff); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // rehireEmail applies ruling R7: an email may only be set for an employee

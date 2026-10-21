@@ -57,6 +57,7 @@ func TestRehireEmployee(t *testing.T) {
 	hr, _ := h.staff("hrd", iam.HrisKepegawaian, false)
 	nobody, _ := h.staff("pos", nil, false)
 	branch := h.scalar(`SELECT id::text FROM configuration.branches LIMIT 1`)
+	branchName := h.scalar(`SELECT name FROM configuration.branches WHERE id = $1`, branch)
 	e := resignedEmployee(t, h, &hr, branch, &login.UserID, emp{name: "Rina Kembali", join: "2025-01-10"})
 	path := rehirePath(e)
 
@@ -132,8 +133,8 @@ func TestRehireEmployee(t *testing.T) {
 		"rehire|resigned|contract|2026-10-03|Kembali bekerja|Tanggal masuk sebelumnya: 10/01/2025" {
 		t.Fatalf("history = %s", got)
 	}
-	if got := h.scalar(`SELECT concat_ws('|', (before::jsonb)->>'join_date', (before::jsonb)->>'is_active', (after::jsonb)->>'join_date', (after::jsonb)->>'branch_id')
-		FROM audit.audit_log WHERE entity_id = $1 AND action = 'employee.rehire'`, e); got != "2025-01-10|false|2026-10-03|"+branch {
+	if got := h.scalar(`SELECT concat_ws('|', (before::jsonb)->>'join_date', (before::jsonb)->>'is_active', (after::jsonb)->>'join_date', (after::jsonb)->>'branch_id', (after::jsonb)->>'branch')
+		FROM audit.audit_log WHERE entity_id = $1 AND action = 'employee.rehire'`, e); got != "2025-01-10|false|2026-10-03|"+branch+"|"+branchName {
 		t.Fatalf("audit = %s", got)
 	}
 	// Sudah aktif sekarang.
@@ -253,5 +254,88 @@ func TestRehireSystemAccountWithoutLogin(t *testing.T) {
 	}
 	if got := loginState(h, adminLogin.UserID); got != "false|inactive|1" {
 		t.Fatalf("login must stay blocked and inactive, got %s", got)
+	}
+}
+
+// inactiveOpenEmployee builds an inactive employee whose placement and weekly
+// pattern were never closed (soft delete / PUT is_active=false / legacy rows).
+func inactiveOpenEmployee(h *harness, branch, name, endDate string) string {
+	e := h.employee(emp{name: name, join: "2025-01-10", inactive: true})
+	if endDate != "" {
+		h.exec(`UPDATE hris.employees SET end_date = $2::date WHERE id = $1`, e, endDate)
+	}
+	h.exec(`INSERT INTO hris.employee_placements (employee_id, branch_id, is_primary, start_date) VALUES ($1, $2, true, '2025-01-10')`, e, branch)
+	def := h.scalar(`SELECT id::text FROM hris.shifts WHERE code = 'DEF'`)
+	h.exec(`INSERT INTO hris.employee_shifts (employee_id, day_of_week, shift_id, effective_from) VALUES ($1, 1, $2, '2025-01-10')`, e, def)
+	return e
+}
+
+// TestRehireClosesOpenPlacementsAndPatterns: an inactive employee whose
+// placement/weekly pattern was never closed is reactivated like a resigned one
+// — old rows end the day before the effective date, no overlap.
+func TestRehireClosesOpenPlacementsAndPatterns(t *testing.T) {
+	h := newHarness(t)
+	hr, _ := h.staff("hrd", iam.HrisKepegawaian, false)
+	branch := h.scalar(`SELECT id::text FROM configuration.branches LIMIT 1`)
+	other := h.scalar(`SELECT id::text FROM configuration.branches WHERE id <> $1 LIMIT 1`, branch)
+
+	placements := func(e string) string {
+		return h.scalar(`SELECT string_agg(start_date::text || '/' || coalesce(end_date::text, '') || '/' || is_primary, ',' ORDER BY start_date)
+			FROM hris.employee_placements WHERE employee_id = $1`, e)
+	}
+	patterns := func(e string) string {
+		return h.scalar(`SELECT string_agg(effective_from::text || '/' || coalesce(effective_to::text, ''), ',' ORDER BY effective_from)
+			FROM hris.employee_shifts WHERE employee_id = $1`, e)
+	}
+
+	// Same branch, no end_date (PUT is_active=false), open placement + open pattern.
+	same := inactiveOpenEmployee(h, branch, "Nonaktif Cabang Sama", "")
+	expect(t, h.do(&hr, http.MethodPost, rehirePath(same), rehireBody(branch, nil)), http.StatusOK, "")
+	if got := placements(same); got != "2025-01-10/2026-10-02/true,2026-10-03//true" {
+		t.Fatalf("placements = %s", got)
+	}
+	if got := patterns(same); got != "2025-01-10/2026-10-02" {
+		t.Fatalf("patterns = %s", got)
+	}
+
+	// Different branch, legacy end_date set but rows left open; a future-dated
+	// placement/pattern starting on/after the effective date is dropped.
+	if other != "" {
+		diff := inactiveOpenEmployee(h, branch, "Nonaktif Cabang Lain", "2026-09-30")
+		h.exec(`UPDATE hris.employee_placements SET end_date = '2026-10-10', is_primary = true WHERE employee_id = $1`, diff)
+		expect(t, h.do(&hr, http.MethodPost, rehirePath(diff), rehireBody(other, nil)), http.StatusOK, "")
+		if got := placements(diff); got != "2025-01-10/2026-10-02/true,2026-10-03//true" {
+			t.Fatalf("placements (other branch) = %s", got)
+		}
+		if got := h.scalar(`SELECT branch_id::text FROM hris.employee_placements WHERE employee_id = $1 AND end_date IS NULL`, diff); got != other {
+			t.Fatalf("new placement branch = %s", got)
+		}
+	}
+
+	// Rows starting on/after the effective date are removed.
+	fut := inactiveOpenEmployee(h, branch, "Nonaktif Baris Mendatang", "")
+	h.exec(`UPDATE hris.employee_placements SET end_date = '2026-06-30' WHERE employee_id = $1`, fut)
+	h.exec(`INSERT INTO hris.employee_placements (employee_id, branch_id, is_primary, start_date) VALUES ($1, $2, true, '2026-10-04')`, fut, branch)
+	h.exec(`UPDATE hris.employee_shifts SET effective_to = '2026-06-30' WHERE employee_id = $1`, fut)
+	h.exec(`INSERT INTO hris.employee_shifts (employee_id, day_of_week, shift_id, effective_from)
+		SELECT $1, 2, shift_id, '2026-10-04' FROM hris.employee_shifts WHERE employee_id = $1 LIMIT 1`, fut)
+	expect(t, h.do(&hr, http.MethodPost, rehirePath(fut), rehireBody(branch, nil)), http.StatusOK, "")
+	if got := placements(fut); got != "2025-01-10/2026-06-30/true,2026-10-03//true" {
+		t.Fatalf("placements (future) = %s", got)
+	}
+	if got := patterns(fut); got != "2025-01-10/2026-06-30" {
+		t.Fatalf("patterns (future) = %s", got)
+	}
+
+	// Non-Shift: the old open pattern ends the day before, then the fresh NS pattern applies.
+	ns := inactiveOpenEmployee(h, branch, "Nonaktif NS", "")
+	h.exec(`UPDATE hris.employees SET schedule_type = 'non_shift' WHERE id = $1`, ns)
+	expect(t, h.do(&hr, http.MethodPost, rehirePath(ns), rehireBody(branch, nil)), http.StatusOK, "")
+	if got := h.scalar(`SELECT count(*)::text FROM hris.employee_shifts es JOIN hris.shifts s ON s.id = es.shift_id
+		WHERE es.employee_id = $1 AND s.code = 'NS' AND es.effective_from = $2::date AND es.effective_to IS NULL`, ns, rehireToday); got != "5" {
+		t.Fatalf("NS pattern rows = %s", got)
+	}
+	if got := h.scalar(`SELECT count(*)::text FROM hris.employee_shifts WHERE employee_id = $1 AND effective_from = '2025-01-10' AND effective_to = '2026-10-02'`, ns); got != "1" {
+		t.Fatalf("old pattern must end the day before the effective date, got %s", got)
 	}
 }
