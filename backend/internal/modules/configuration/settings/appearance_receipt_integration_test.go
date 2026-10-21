@@ -88,7 +88,7 @@ func TestReceipt(t *testing.T) {
 	r := e.do(&admin, "GET", "/api/settings/receipt", nil)
 	expect(t, r, 200, "")
 	if !strings.HasPrefix(r.Raw, `{"success":true,"data":[],"stalls":[`) ||
-		!strings.Contains(r.Raw, `{"id":"`+whID+`","name":"AAA Go Stall","branch_id":"`+branchID+`"}`) {
+		!strings.Contains(r.Raw, `{"id":"`+whID+`","name":"AAA Go Stall","branch_id":"`+branchID+`","branch_name":"`) {
 		t.Fatalf("GET %s", r.Raw)
 	}
 
@@ -114,4 +114,48 @@ func TestReceipt(t *testing.T) {
 	}
 	expect(t, e.do(&admin, "PUT", "/api/settings/receipt", map[string]any{"warehouse_id": "nope", "branch_id": branchID}), 400,
 		`{"success":false,"error":"Format data tidak valid"}`)
+}
+
+// The receipt scope select lists warehouses of every branch; each branch owns
+// a "Main Storage", so the rows name their branch.
+func TestReceiptStallLabels(t *testing.T) {
+	admin := staff(t, "settings.business")
+	e := newEnv(t)
+	sfx := testutil.RandomHex(4)
+	holding := e.text(`INSERT INTO configuration.holdings (name, code) VALUES ('H '||$1, 'H'||$1) RETURNING id::text`, sfx)
+	company := e.text(`INSERT INTO configuration.companies (holding_id, name, code) VALUES ($1, 'C '||$2, 'C'||$2) RETURNING id::text`, holding, sfx)
+	// Inserted Zeta first so the order cannot be insertion order.
+	zeta := e.text(`INSERT INTO configuration.branches (company_id, name, code) VALUES ($1, 'Zeta '||$2, 'Z'||$2) RETURNING id::text`, company, sfx)
+	alpha := e.text(`INSERT INTO configuration.branches (company_id, name, code) VALUES ($1, 'Alpha '||$2, 'A'||$2) RETURNING id::text`, company, sfx)
+	stallZ := e.text(`INSERT INTO configuration.warehouses (branch_id, name, code) VALUES ($1, 'Stall 1', 'STALL-01') RETURNING id::text`, zeta)
+	mainA := e.text(`SELECT id::text FROM configuration.warehouses WHERE branch_id = $1 AND code = 'MAIN'`, alpha)
+	mainZ := e.text(`SELECT id::text FROM configuration.warehouses WHERE branch_id = $1 AND code = 'MAIN'`, zeta)
+
+	r := e.do(&admin, "GET", "/api/settings/receipt", nil)
+	expect(t, r, 200, "")
+	var body struct {
+		Stalls []struct {
+			ID         string `json:"id"`
+			BranchID   string `json:"branch_id"`
+			BranchName string `json:"branch_name"`
+			Label      string `json:"label"`
+		} `json:"stalls"`
+	}
+	if err := json.Unmarshal([]byte(r.Raw), &body); err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, st := range body.Stalls {
+		if st.BranchID == alpha || st.BranchID == zeta {
+			got = append(got, st.ID+"|"+st.BranchName+"|"+st.Label)
+		}
+	}
+	want := []string{
+		mainA + "|Alpha " + sfx + "|Main Storage — Alpha " + sfx,
+		mainZ + "|Zeta " + sfx + "|Main Storage — Zeta " + sfx,
+		stallZ + "|Zeta " + sfx + "|Stall 1 — Zeta " + sfx,
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("stalls:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { stallLabel } from "@/lib/auth/stall-label";
 import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -73,7 +74,7 @@ export function StockCardPage() {
     { value: "all", label: STALL_LABELS.allBranchTotal },
     ...(warehousesQuery.data ?? []).map((warehouse) => ({
       value: warehouse.id,
-      label: warehouse.name,
+      label: stallLabel(warehouse),
       description: warehouse.code,
     })),
   ];

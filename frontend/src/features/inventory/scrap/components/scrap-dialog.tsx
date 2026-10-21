@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { stallLabel } from "@/lib/auth/stall-label";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -165,7 +166,7 @@ export function ScrapDialog({
                   <Combobox
                     options={(warehouses.data ?? []).map((w) => ({
                       value: w.id,
-                      label: w.name,
+                      label: stallLabel(w),
                       description: w.code,
                     }))}
                     value={warehouseId}

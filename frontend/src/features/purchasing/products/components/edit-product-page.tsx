@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { stallLabel } from "@/lib/auth/stall-label";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -82,7 +83,7 @@ function EditProductForm({ productId, data }: EditProductFormProps) {
   );
   const stallOptions = (warehousesQuery.data ?? []).map((w) => ({
     value: w.id,
-    label: w.name,
+    label: stallLabel(w),
     description: w.code,
   }));
 

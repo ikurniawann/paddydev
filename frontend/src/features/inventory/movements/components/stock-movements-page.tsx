@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { stallLabel } from "@/lib/auth/stall-label";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { ArrowDownLeft, ArrowUpRight, Download, RotateCcw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -124,7 +125,7 @@ export function StockMovementsPage() {
         <Combobox
           options={(warehouses.data ?? []).map((w) => ({
             value: w.id,
-            label: w.name,
+            label: stallLabel(w),
             description: w.code,
           }))}
           value={filters.warehouse_id}

@@ -1,4 +1,5 @@
 import type { ProductSalesReport } from "@/lib/pos/reports/types";
+import { stallLabel } from "@/lib/auth/stall-label";
 import { formatReportStallLabel } from "@/lib/pos/reports/transaction-labels";
 
 export type PosReportSheet = { name: string; rows: Array<Array<string | number>> };
@@ -14,7 +15,7 @@ function stallFilterLabel(report: ProductSalesReport) {
   const id = report.filters.warehouse_id;
   if (!id) return "Semua outlet";
   const stall = report.stall_options.find((row) => row.id === id);
-  return stall ? `${stall.name} (${stall.code})` : id;
+  return stall ? `${stallLabel(stall)} (${stall.code})` : id;
 }
 
 export function buildProductSalesExportSheets(

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { stallLabel } from "@/lib/auth/stall-label";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Boxes, PackageCheck, Receipt } from "lucide-react";
 import { toast } from "sonner";
@@ -100,7 +101,7 @@ function GeneralReceiveForm({ po, warehouses }: { po: GeneralPODetail; warehouse
               Gudang Penerimaan <span className="text-red-500">*</span>
             </label>
             <Combobox
-              options={warehouses.map((w) => ({ value: w.id, label: w.code ? `${w.name} (${w.code})` : w.name }))}
+              options={warehouses.map((w) => ({ value: w.id, label: w.code ? `${stallLabel(w)} (${w.code})` : stallLabel(w) }))}
               value={warehouseId}
               onChange={setWarehouseChoice}
               placeholder="Pilih gudang..."

@@ -6,6 +6,7 @@ import {
   resolveWarehouseCompanyFilter,
   type UserScope,
 } from "@/lib/api/scope";
+import { withBranchLabels } from "@/lib/auth/stall-label";
 import type { DbClient } from "@/lib/pg/types";
 
 export const warehouseListQuerySchema = z.object({
@@ -39,5 +40,22 @@ export async function listWarehouses(
 
   const { data, error } = await query.order("name", { ascending: true });
   if (error) throw error;
-  return data ?? [];
+  const warehouses = (data ?? []) as Array<{
+    name: string;
+    branch_id: string;
+    is_default?: boolean | null;
+  }>;
+  if (warehouses.length === 0) return [];
+
+  // Tiap branch punya "Main Storage" sendiri: sertakan nama branch + label
+  // ("<nama> — <branch>" bila daftar melintasi branch) agar baris bisa dibedakan.
+  const { data: branchRows, error: namesError } = await db
+    .from("branches", "configuration")
+    .select("id, name")
+    .in("id", [...new Set(warehouses.map((warehouse) => warehouse.branch_id))]);
+  if (namesError) throw namesError;
+  const branchNames = new Map(
+    ((branchRows ?? []) as Array<{ id: string; name: string }>).map((branch) => [branch.id, branch.name])
+  );
+  return withBranchLabels(warehouses, branchNames);
 }

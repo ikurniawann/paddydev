@@ -4,8 +4,9 @@ import { useEffect, useState } from "react";
 import { BuildingStorefrontIcon } from "@heroicons/react/24/outline";
 import { Loader2 } from "lucide-react";
 import { useConfirmAndSwitchStall, useCanUseCentralCashier } from "@/components/pos/confirm-stall-switch-dialog";
+import { stallLabel, type StallLabelSource } from "@/lib/auth/stall-label";
 
-type StallOption = { id: string; name: string; code: string };
+type StallOption = StallLabelSource & { id: string; code: string };
 
 function isAllStallMode(reason: string): boolean {
   return reason === "all" || reason === "all_stalls";
@@ -49,10 +50,11 @@ export function CashierStallGate({ reason }: { reason: string }) {
         }
         if (cancelled) return;
         setStalls(
-          ((json.data?.stalls ?? []) as StallOption[]).map(({ id, name, code }) => ({
+          ((json.data?.stalls ?? []) as StallOption[]).map(({ id, name, code, label }) => ({
             id,
             name,
             code,
+            label,
           }))
         );
       } catch (error) {
@@ -121,7 +123,7 @@ export function CashierStallGate({ reason }: { reason: string }) {
                         </span>
                         <span className="min-w-0 flex-1">
                           <span className="block truncate text-sm font-medium text-foreground">
-                            {stall.name}
+                            {stallLabel(stall)}
                           </span>
                           <span className="block truncate text-xs text-muted-foreground">
                             {stall.code}

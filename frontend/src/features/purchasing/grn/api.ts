@@ -117,7 +117,7 @@ export async function listGrnDeliveries(moduleType?: PurchasingModuleType): Prom
   return asArray<GrnDeliveryApiRow>(json?.data).map(mapGrnDelivery);
 }
 
-export type Warehouse = { id: string; name: string; code: string };
+export type Warehouse = { id: string; name: string; code: string; branch_name?: string; label?: string };
 
 export async function listWarehouses(branchId?: string | null): Promise<Warehouse[]> {
   const query = branchId ? `?branch_id=${encodeURIComponent(branchId)}` : "";

@@ -1,4 +1,5 @@
 import { formatNumber } from "@/lib/format";
+import { stallLabel } from "@/lib/auth/stall-label";
 import { sortWarehouses } from "@/lib/configuration/sort-warehouses";
 import {
   isMainStorageCode,
@@ -18,11 +19,49 @@ export type TransferLine = {
   qty_transfer_input: string;
 };
 
+const isMainStorage = (w: WarehouseOption) =>
+  isMainStorageCode(w.code) || w.is_default;
+
+function branchOf(w: { branch_id?: string }) {
+  return w.branch_id ?? "";
+}
+
+/** true bila daftar outlet berasal dari lebih dari satu branch (super admin). */
+export function warehousesSpanBranches(warehouses: WarehouseOption[]) {
+  return warehouses.some((w) => branchOf(w) !== branchOf(warehouses[0]));
+}
+
+/**
+ * Main Storage yang dikunci untuk transfer. Satu branch: Main Storage-nya,
+ * seperti sebelumnya. Lintas branch: hanya Main Storage branch yang sama
+ * dengan stall terpilih (server menolak lintas branch); tanpa stall terpilih
+ * tidak ada yang dikunci.
+ */
+export function mainStorageFor(
+  warehouses: WarehouseOption[],
+  branchId: string | null,
+): WarehouseOption | null {
+  const mains = sortWarehouses(warehouses).filter(isMainStorage);
+  if (!warehousesSpanBranches(warehouses)) return mains[0] ?? null;
+  if (!branchId) return null;
+  return mains.find((w) => branchOf(w) === branchId) ?? null;
+}
+
+/** Stall kandidat yang satu branch dengan asal (lintas branch); selain itu semua. */
+export function stallsInSameBranch(
+  stalls: WarehouseOption[],
+  sourceId: string,
+  all: WarehouseOption[],
+) {
+  if (!sourceId || !warehousesSpanBranches(all)) return stalls;
+  const source = all.find((w) => w.id === sourceId);
+  return source ? stalls.filter((w) => branchOf(w) === branchOf(source)) : stalls;
+}
+
 /** Main Storage (kode main atau default) + daftar stall, terurut. */
 export function partitionWarehouses(warehouses: WarehouseOption[]) {
   const sorted = sortWarehouses(warehouses);
-  const main =
-    sorted.find((w) => isMainStorageCode(w.code) || w.is_default) ?? null;
+  const main = mainStorageFor(warehouses, null);
   const stalls = sorted.filter((w) => isStallCode(w.code));
   return { main, stalls, sorted };
 }
@@ -30,7 +69,7 @@ export function partitionWarehouses(warehouses: WarehouseOption[]) {
 export function toComboboxOptions(items: WarehouseOption[]) {
   return items.map((w) => ({
     value: w.id,
-    label: w.name,
+    label: stallLabel(w),
     description: w.code,
   }));
 }

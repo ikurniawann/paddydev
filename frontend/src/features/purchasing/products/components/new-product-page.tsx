@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { defaultWarehouseId } from "../default-warehouse";
+import { stallLabel } from "@/lib/auth/stall-label";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -59,7 +61,7 @@ export function NewProductPage() {
   const [formData, setFormData] = useState<ProductFormData>(EMPTY_PRODUCT_FORM);
   const stallOptions = (warehousesQuery.data ?? []).map((w) => ({
     value: w.id,
-    label: w.name,
+    label: stallLabel(w),
     description: w.code,
   }));
   const [bomItems, setBomItems] = useState<BOMFormItem[]>([]);
@@ -70,10 +72,10 @@ export function NewProductPage() {
     }
   }, [formDataQuery.isError, formDataQuery.error]);
 
-  // Gudang bawaan dipakai selama user belum memilih sendiri.
+  // Gudang bawaan dipakai selama user belum memilih sendiri; lintas branch tidak
+  // ada bawaan (wajib dipilih, divalidasi saat submit).
   const warehouses = warehousesQuery.data ?? [];
-  const defaultWarehouseId = (warehouses.find((w) => w.is_default) ?? warehouses[0])?.id ?? "";
-  const warehouseId = formData.warehouse_id || defaultWarehouseId;
+  const warehouseId = formData.warehouse_id || defaultWarehouseId(warehouses);
   const effectiveForm = { ...formData, warehouse_id: warehouseId };
 
   const addBOMItem = () => {

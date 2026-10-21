@@ -248,8 +248,9 @@ func (posOpsDirectory) Branches(ctx context.Context, q database.Querier, ids []s
 }
 
 func (posOpsStalls) BranchByName(ctx context.Context, q database.Querier, branchID *string) ([]domain.Stall, error) {
-	return scanPosOpsStalls(q.Query(ctx, `SELECT id::text, name, code, branch_id::text, is_default
-		FROM configuration.warehouses
-		WHERE is_active = true AND ($1::text IS NULL OR branch_id = $1::text::uuid)
-		ORDER BY name ASC`, branchID))
+	return scanPosOpsStalls(q.Query(ctx, `SELECT w.id::text, w.name, w.code, w.branch_id::text, w.is_default, COALESCE(b.name, '')
+		FROM configuration.warehouses w
+		LEFT JOIN configuration.branches b ON b.id = w.branch_id
+		WHERE w.is_active = true AND ($1::text IS NULL OR w.branch_id = $1::text::uuid)
+		ORDER BY w.name ASC`, branchID))
 }

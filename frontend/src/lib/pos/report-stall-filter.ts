@@ -3,6 +3,41 @@ import type { UserScope } from "@/lib/api/scope";
 import { loadUserWarehouses } from "@/lib/users/user-warehouses";
 import { loadCentralCashierGate } from "@/lib/pos/pos-sell-stall-server";
 import { firstDayOfMonthWib, todayWib } from "@/lib/pos/report-dates";
+import { withBranchLabels } from "@/lib/auth/stall-label";
+
+type RawStall = {
+  id: string;
+  code: string;
+  name: string;
+  branch_id: string;
+  is_default: boolean;
+};
+
+/** Urut per branch + beri branch_name/label dengan aturan yang sama di semua daftar outlet. */
+function toStallOptions(
+  stalls: RawStall[],
+  branchNames: ReadonlyMap<string, string>
+): ReportStallOption[] {
+  return withBranchLabels(stalls, branchNames).map(
+    ({ id, code, name, branch_id, branch_name, label }) => ({
+      id,
+      code,
+      name,
+      branch_id,
+      branch_name,
+      label,
+    })
+  );
+}
+
+async function loadBranchNames(branchIds: string[]): Promise<Map<string, string>> {
+  if (branchIds.length === 0) return new Map();
+  const rows = await query<{ id: string; name: string }>(
+    `SELECT id, name FROM configuration.branches WHERE id = ANY($1::uuid[])`,
+    [[...new Set(branchIds)]]
+  );
+  return new Map(rows.map((row) => [row.id, row.name]));
+}
 
 /** Kasir pusat jual lintas stall — laporan tidak boleh terkunci ke 1 assignment. */
 export function shouldExpandReportStallsToBranch(input: {
@@ -16,6 +51,10 @@ export type ReportStallOption = {
   id: string;
   code: string;
   name: string;
+  branch_id: string;
+  branch_name: string;
+  /** "<nama> — <branch>" bila picker melintasi branch, selain itu = nama. */
+  label: string;
 };
 
 export type ReportStallFilter = {
@@ -54,13 +93,17 @@ export async function resolveReportStallFilter(
 
   // !scope sudah tercakup expandToBranch; ditulis eksplisit supaya scope ter-narrow di bawah.
   if (!scope || expandToBranch) {
-    const stalls = await query<ReportStallOption>(
-      `SELECT id, code, name
+    const rawStalls = await query<RawStall>(
+      `SELECT id, code, name, branch_id, is_default
        FROM configuration.warehouses
        WHERE is_active = true
          AND ($1::uuid IS NULL OR branch_id = $1)
        ORDER BY name ASC`,
       [scope?.branchId ?? null]
+    );
+    const stalls = toStallOptions(
+      rawStalls,
+      await loadBranchNames(rawStalls.map((row) => row.branch_id))
     );
 
     if (requested) {
@@ -85,11 +128,16 @@ export async function resolveReportStallFilter(
   }
 
   const assigned = await loadUserWarehouses(scope.userId);
-  const stallOptions = assigned.map((row) => ({
-    id: row.warehouse_id,
-    code: row.code,
-    name: row.name,
-  }));
+  const stallOptions = toStallOptions(
+    assigned.map((row) => ({
+      id: row.warehouse_id,
+      code: row.code,
+      name: row.name,
+      branch_id: row.branch_id,
+      is_default: row.is_default,
+    })),
+    await loadBranchNames(assigned.map((row) => row.branch_id))
+  );
 
   if (stallOptions.length === 0) {
     return {

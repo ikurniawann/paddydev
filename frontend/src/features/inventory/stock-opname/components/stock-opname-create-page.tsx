@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { stallLabel } from "@/lib/auth/stall-label";
 import { useRouter } from "next/navigation";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -163,7 +164,7 @@ function StockOpnameEditor({ detail }: { detail?: StockOpnameDetail }) {
 
   const warehouseOptions = (warehousesQuery.data || []).map((w) => ({
     value: w.id,
-    label: w.name,
+    label: stallLabel(w),
     description: w.code,
   }));
 

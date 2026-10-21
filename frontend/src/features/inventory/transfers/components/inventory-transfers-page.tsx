@@ -15,7 +15,10 @@ import { useTransferSourceStock, useTransferWarehouses } from "../queries";
 import { stockTransferQueryKeys } from "../query-keys";
 import {
   linesToTransfer,
+  mainStorageFor,
   partitionWarehouses,
+  stallsInSameBranch,
+  warehousesSpanBranches,
   resolveTransferQty,
   toComboboxOptions,
   transferInputError,
@@ -45,11 +48,26 @@ export function InventoryTransfersPage() {
   const [submitting, setSubmitting] = useState(false);
 
   const warehousesQuery = useTransferWarehouses();
-  const { main, stalls } = useMemo(
-    () => partitionWarehouses(warehousesQuery.data || []),
+  const warehouses = useMemo(
+    () => warehousesQuery.data || [],
     [warehousesQuery.data],
   );
+  const { stalls } = useMemo(() => partitionWarehouses(warehouses), [warehouses]);
+  const spansBranches = warehousesSpanBranches(warehouses);
   // Main Storage terkunci sebagai asal (main_to_stall) atau tujuan (stall_to_main).
+  // Lintas branch: Main Storage milik branch stall yang dipilih (server menolak
+  // transfer lintas branch); sebelum stall dipilih belum ada yang terkunci.
+  const chosenStallBranch =
+    (transferKind === "main_to_stall"
+      ? warehouses.find((w) => w.id === pickedDestId)
+      : transferKind === "stall_to_main"
+        ? warehouses.find((w) => w.id === pickedSourceId)
+        : undefined
+    )?.branch_id ?? null;
+  const main = useMemo(
+    () => mainStorageFor(warehouses, chosenStallBranch),
+    [warehouses, chosenStallBranch],
+  );
   const sourceWarehouseId =
     transferKind === "main_to_stall" ? (main?.id ?? "") : pickedSourceId;
   const destWarehouseId =
@@ -82,13 +100,15 @@ export function InventoryTransfersPage() {
       return toComboboxOptions([main]);
     }
     if (transferKind === "main_to_stall" || transferKind === "stall_to_stall") {
-      const available = stalls.filter(
-        (stall) => stall.id !== sourceWarehouseId,
-      );
+      const available = stallsInSameBranch(
+        stalls,
+        transferKind === "stall_to_stall" ? sourceWarehouseId : "",
+        warehouses,
+      ).filter((stall) => stall.id !== sourceWarehouseId);
       return toComboboxOptions(available);
     }
     return [];
-  }, [transferKind, main, stalls, sourceWarehouseId]);
+  }, [transferKind, main, stalls, sourceWarehouseId, warehouses]);
 
   const selectedSource = sourceOptions.find(
     (w) => w.value === sourceWarehouseId,
@@ -137,13 +157,18 @@ export function InventoryTransfersPage() {
   const handleSourceChange = (value: string) => {
     setSourceWarehouseId(value);
     resetLines();
-    if (transferKind === "stall_to_stall" && value === destWarehouseId) {
-      setDestWarehouseId("");
+    if (transferKind === "stall_to_stall") {
+      const sameBranch = stallsInSameBranch(stalls, value, warehouses).some(
+        (stall) => stall.id === destWarehouseId,
+      );
+      if (value === destWarehouseId || !sameBranch) setDestWarehouseId("");
     }
   };
 
   const handleDestChange = (value: string) => {
     setDestWarehouseId(value);
+    // Lintas branch: memilih tujuan lain mengganti Main Storage asal (stok lain).
+    if (transferKind === "main_to_stall" && spansBranches) resetLines();
   };
 
   const handleLineChange = (key: string, value: string) => {
@@ -281,7 +306,9 @@ export function InventoryTransfersPage() {
                 placeholder={
                   warehousesQuery.isLoading
                     ? "Memuat outlet..."
-                    : "Pilih outlet asal"
+                    : transferKind === "main_to_stall" && spansBranches
+                      ? "Pilih outlet tujuan dulu"
+                      : "Pilih outlet asal"
                 }
                 disabled={sourceDisabled}
                 className="w-full! h-9 border-gray-200/80 text-sm"
@@ -299,7 +326,9 @@ export function InventoryTransfersPage() {
                 placeholder={
                   warehousesQuery.isLoading
                     ? "Memuat outlet..."
-                    : "Pilih outlet tujuan"
+                    : transferKind === "stall_to_main" && spansBranches
+                      ? "Pilih outlet asal dulu"
+                      : "Pilih outlet tujuan"
                 }
                 disabled={destDisabled}
                 className="w-full! h-9 border-gray-200/80 text-sm"

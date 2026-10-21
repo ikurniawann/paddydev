@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { stallLabel } from "@/lib/auth/stall-label";
 import Link from "next/link";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -85,7 +86,7 @@ export function ProductionInHouseReportPage() {
     { value: "all", label: STALL_LABELS.allBranchTotal },
     ...(warehousesQuery.data ?? []).map((warehouse) => ({
       value: warehouse.id,
-      label: `${warehouse.code} — ${warehouse.name}`,
+      label: `${warehouse.code} — ${stallLabel(warehouse)}`,
     })),
   ];
 

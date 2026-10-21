@@ -1,8 +1,23 @@
 import { NextResponse } from "next/server";
 import { ApiError, requireApiUser } from "@/lib/api/auth";
 import { getApiUserScope } from "@/lib/api/scope";
-import { getStallAccess } from "@/lib/auth/stall-access";
+import { findStallOption, getStallAccess, sortStallsByBranch } from "@/lib/auth/stall-access";
+import type { StallOption } from "@/lib/auth/stall-access";
+import { formatStallLabel, stallsSpanBranches } from "@/lib/auth/stall-label";
 import { resolveActiveStallFromCookies } from "@/lib/auth/active-stall";
+import { sortWarehouses } from "@/lib/configuration/sort-warehouses";
+
+/** Bentuk outlet di respons: field lama + branch dan label tampilan. */
+function stallView(stall: StallOption, withBranch: boolean) {
+  return {
+    id: stall.id,
+    name: stall.name,
+    code: stall.code,
+    branch_id: stall.branch_id,
+    branch_name: stall.branch_name,
+    label: formatStallLabel(stall, withBranch),
+  };
+}
 
 /**
  * Daftar stall yang boleh dipilih user di switcher / kasir gate.
@@ -11,6 +26,10 @@ import { resolveActiveStallFromCookies } from "@/lib/auth/active-stall";
  * Semua user login boleh membaca stall AKTIF-nya (dipakai struk POS untuk
  * mencetak asal stall); daftar pilihan hanya dikirim bila user memang boleh
  * pindah (can_switch) — POST /api/auth/active-stall tetap penjaga izinnya.
+ *
+ * Tiap branch punya "Main Storage" sendiri, jadi `label` memuat nama branch
+ * ("<nama> — <branch>") bila daftar melintasi beberapa branch; selain itu = nama.
+ * Urutan daftar: nama branch, lalu Main Storage, lalu urutan stall biasa.
  */
 export async function GET() {
   try {
@@ -22,21 +41,28 @@ export async function GET() {
       user.role === "admin" ||
       access.allAccess ||
       access.stalls.length > 1;
+    const stalls = sortStallsByBranch(access.stalls);
+    const listSpans = stallsSpanBranches(stalls);
 
     // Stall aktif ikut dikirim supaya tombol switcher di kasir bisa
     // menandai posisi sekarang tanpa endpoint tambahan. Cookie kosong =
     // mengikuti penempatan (stall pertama), "all" = Semua Stall.
     const resolved = await resolveActiveStallFromCookies();
+    // Stall dari cookie bisa di luar daftar (akses penuh lintas branch):
+    // ambil branch-nya, dan hitung label bersama daftar.
+    const resolvedOption =
+      resolved.mode === "stall" ? await findStallOption(resolved.stall.id) : null;
     // Fallback cookie unset: user akses penuh = "Semua Stall" (selaras
-    // resolvePosSellScope); user biasa mengikuti penempatan pertamanya.
-    const active =
-      resolved.mode === "stall"
-        ? { id: resolved.stall.id, name: resolved.stall.name, code: resolved.stall.code }
-        : resolved.mode === "all" || access.allAccess
-          ? null
-          : access.stalls[0]
-            ? { id: access.stalls[0].id, name: access.stalls[0].name, code: access.stalls[0].code }
-            : null;
+    // resolvePosSellScope); user biasa mengikuti penempatan pertamanya
+    // (Main Storage dulu, bukan urutan branch).
+    const placementDefault = sortWarehouses(access.stalls)[0];
+    const active = resolvedOption
+      ? stallView(resolvedOption, stallsSpanBranches([resolvedOption, ...stalls]))
+      : resolved.mode === "all" || access.allAccess
+        ? null
+        : placementDefault
+          ? stallView(placementDefault, listSpans)
+          : null;
 
     return NextResponse.json({
       success: true,
@@ -44,9 +70,7 @@ export async function GET() {
         all_access: access.allAccess,
         can_switch: canSwitch,
         active,
-        stalls: canSwitch
-          ? access.stalls.map(({ id, name, code }) => ({ id, name, code }))
-          : [],
+        stalls: canSwitch ? stalls.map((stall) => stallView(stall, listSpans)) : [],
       },
     });
   } catch (error) {

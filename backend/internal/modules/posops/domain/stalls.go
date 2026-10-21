@@ -26,6 +26,9 @@ type Stall struct {
 	Code      string
 	BranchID  *string
 	IsDefault bool
+	// BranchName is the owning branch's name ("" when unknown); every branch
+	// has its own "Main Storage", so pickers that mix branches show it.
+	BranchName string
 }
 
 // SellStall is resolvePosSellStall's result: WarehouseID when OK, else a

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { stallLabel } from "@/lib/auth/stall-label";
 import { Loader2, ReceiptText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -175,7 +176,7 @@ export function ReceiptSettingsCard() {
                 <option value={GLOBAL_SCOPE}>Global (semua outlet)</option>
                 {stalls.map((stall) => (
                   <option key={stall.id} value={stall.id}>
-                    {stall.name}
+                    {stallLabel(stall)}
                   </option>
                 ))}
               </select>

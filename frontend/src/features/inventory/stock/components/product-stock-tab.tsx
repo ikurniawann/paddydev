@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useMemo, useState } from "react";
+import { stallLabel } from "@/lib/auth/stall-label";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -87,7 +88,7 @@ export function ProductStockTab() {
       { value: "all", label: STALL_LABELS.allBranchTotal },
       ...warehouses.map((w) => ({
         value: w.id,
-        label: w.name,
+        label: stallLabel(w),
         description: w.code,
       })),
     ],

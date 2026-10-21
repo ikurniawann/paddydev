@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { stallLabel } from "@/lib/auth/stall-label";
 import { getPosSession } from "@/lib/api/auth";
 import { getApiUserScope } from "@/lib/api/scope";
 import { resolveBrandName } from "@/lib/branding-server";
@@ -55,15 +56,18 @@ export async function GET(request: NextRequest) {
     if (!res.ok || !json?.success || !json.data) {
       return NextResponse.json({ success: false, error: json?.error || "Gagal memuat data laporan" }, { status: res.ok ? 500 : res.status });
     }
-    const data = json.data as { filters?: { warehouse_id?: string | null }; stall_options?: Array<{ id: string; name: string }> };
-    const stallLabel = data.filters?.warehouse_id
-      ? data.stall_options?.find((s) => s.id === data.filters?.warehouse_id)?.name ?? "Outlet terpilih"
+    const data = json.data as { filters?: { warehouse_id?: string | null }; stall_options?: Array<{ id: string; name: string; label?: string }> };
+    const selectedStallLabel = data.filters?.warehouse_id
+      ? (() => {
+          const stall = data.stall_options?.find((s) => s.id === data.filters?.warehouse_id);
+          return stall ? stallLabel(stall) : "Outlet terpilih";
+        })()
       : "Semua outlet";
 
     const scope = await getApiUserScope();
     const companyName = await resolveBrandName(scope?.companyId);
     const wb = await buildReportWorkbook(key, json.data, {
-      companyName, stallLabel, generatedAt: new Date(),
+      companyName, stallLabel: selectedStallLabel, generatedAt: new Date(),
     });
     const buffer = await workbookBuffer(wb);
     const filename = `${REPORT_EXPORTS[key].label.toLowerCase().replace(/\s+/g, "-")}_${dateFrom}_${dateTo}.xlsx`;

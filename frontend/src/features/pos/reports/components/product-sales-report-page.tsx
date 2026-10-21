@@ -17,6 +17,7 @@ import { formatReportStallLabel } from "@/lib/pos/reports/transaction-labels";
 import { ReportExportActions, ReportPrintStyles } from "./report-export-actions";
 import { stallFilterValue } from "../utils/stall-filter";
 import { formatNumber, formatRupiah } from "@/lib/format";
+import { stallLabel } from "@/lib/auth/stall-label";
 
 const formatQty = (value: number) => formatNumber(value, 2);
 
@@ -69,12 +70,15 @@ export function ProductSalesReportPage() {
     }
   }
 
-  const stallLabel = stallLocked
+  const selectedStallLabel = stallLocked
     ? stallOptions[0]
-      ? `${stallOptions[0].name} (${stallOptions[0].code})`
+      ? `${stallLabel(stallOptions[0])} (${stallOptions[0].code})`
       : "Outlet"
     : warehouseId
-      ? stallOptions.find((row) => row.id === warehouseId)?.name || "Outlet"
+      ? (() => {
+          const row = stallOptions.find((o) => o.id === warehouseId);
+          return row ? stallLabel(row) : "Outlet";
+        })()
       : "Semua outlet";
 
   return (
@@ -98,7 +102,7 @@ export function ProductSalesReportPage() {
         <div className="hidden print:block">
           <h1 className="text-lg font-bold">Laporan Penjualan Produk</h1>
           <p className="text-sm text-muted-foreground">
-            Periode {applied.date_from} s/d {applied.date_to} · {stallLabel}
+            Periode {applied.date_from} s/d {applied.date_to} · {selectedStallLabel}
           </p>
         </div>
 
@@ -136,7 +140,7 @@ export function ProductSalesReportPage() {
                 {!stallLocked ? <option value="">Semua outlet</option> : null}
                 {stallOptions.map((stall) => (
                   <option key={stall.id} value={stall.id}>
-                    {stall.name} ({stall.code})
+                    {stallLabel(stall)} ({stall.code})
                   </option>
                 ))}
               </select>

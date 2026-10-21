@@ -54,6 +54,7 @@ import { firstDayOfMonthWib, todayWib } from "@/lib/pos/report-dates";
 import { ReportExportActions, ReportPrintStyles } from "./report-export-actions";
 import { stallFilterValue } from "../utils/stall-filter";
 import { formatDateTime, formatNumber, formatRupiah, formatRupiahCompact } from "@/lib/format";
+import { stallLabel } from "@/lib/auth/stall-label";
 
 const formatQty = (value: number) => formatNumber(value, 2);
 
@@ -107,12 +108,15 @@ export function TransactionReportPage() {
     }
   }
 
-  const stallLabel = stallLocked
+  const selectedStallLabel = stallLocked
     ? stallOptions[0]
-      ? `${stallOptions[0].name} (${stallOptions[0].code})`
+      ? `${stallLabel(stallOptions[0])} (${stallOptions[0].code})`
       : "Outlet"
     : warehouseId
-      ? stallOptions.find((row) => row.id === warehouseId)?.name || "Outlet"
+      ? (() => {
+          const row = stallOptions.find((o) => o.id === warehouseId);
+          return row ? stallLabel(row) : "Outlet";
+        })()
       : "Semua outlet";
 
   async function openItemDetail(row: TransactionReportRow) {
@@ -157,7 +161,7 @@ export function TransactionReportPage() {
         <div className="hidden print:block">
           <h1 className="text-lg font-bold">Laporan Transaksi POS</h1>
           <p className="text-sm text-muted-foreground">
-            Periode {applied.date_from} s/d {applied.date_to} · {stallLabel}
+            Periode {applied.date_from} s/d {applied.date_to} · {selectedStallLabel}
           </p>
         </div>
 
@@ -195,7 +199,7 @@ export function TransactionReportPage() {
                 {!stallLocked ? <option value="">Semua outlet</option> : null}
                 {stallOptions.map((stall) => (
                   <option key={stall.id} value={stall.id}>
-                    {stall.name} ({stall.code})
+                    {stallLabel(stall)} ({stall.code})
                   </option>
                 ))}
               </select>

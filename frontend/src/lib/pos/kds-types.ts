@@ -42,6 +42,8 @@ export interface KdsStallOption {
   id: string;
   name: string;
   code: string;
+  /** "<nama> — <branch>" bila daftar melintasi branch (dari stall-options). */
+  label?: string;
 }
 
 export interface KdsListParams {

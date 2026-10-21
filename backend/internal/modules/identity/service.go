@@ -446,13 +446,27 @@ func (s *Service) Scope(r *http.Request) (*ScopeView, error) {
 // ── active stall ─────────────────────────────────────────────────────────
 
 // StallView is a stall in the stall responses.
+//
+// BranchID, BranchName and Label are only filled by stall-options (additive;
+// the active-stall POST keeps its original three fields). Label is Name, or
+// "<Name> — <BranchName>" when the list it belongs to mixes branches.
 type StallView struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
-	Code string `json:"code"`
+	ID         string `json:"id"`
+	Name       string `json:"name"`
+	Code       string `json:"code"`
+	BranchID   string `json:"branch_id,omitempty"`
+	BranchName string `json:"branch_name,omitempty"`
+	Label      string `json:"label,omitempty"`
 }
 
 func viewOf(s domain.Stall) *StallView { return &StallView{ID: s.ID, Name: s.Name, Code: s.Code} }
+
+// labelledView is viewOf plus the branch and the display label.
+func labelledView(s domain.Stall, withBranch bool) *StallView {
+	v := viewOf(s)
+	v.BranchID, v.BranchName, v.Label = s.BranchID, s.BranchName, domain.StallLabel(s, withBranch)
+	return v
+}
 
 // stallAccess loads the caller's switcher access within their branch.
 func (s *Service) stallAccess(ctx context.Context, user *auth.User) (domain.StallAccess, *scope.Scope, error) {
@@ -543,17 +557,22 @@ func (s *Service) GetStallOptions(ctx context.Context, user *auth.User, cookie s
 		}
 	}
 	out := &StallOptions{AllAccess: access.AllAccess, CanSwitch: canSwitch, Stalls: []*StallView{}}
+	// Labels carry the branch when the list mixes branches. An active stall
+	// resolved from the cookie alone may sit outside that list (full access
+	// across branches), so it counts too.
+	listSpans := domain.SpansBranches(access.Stalls)
 	switch {
 	case resolved != nil:
-		out.Active = viewOf(*resolved)
+		out.Active = labelledView(*resolved, domain.SpansBranches(append([]domain.Stall{*resolved}, access.Stalls...)))
 	case cookie == stall.All || access.AllAccess:
 		// "Semua Stall": explicit, or the unset fallback of full-access users.
 	case len(access.Stalls) > 0:
-		out.Active = viewOf(access.Stalls[0])
+		// The placement default (Main Storage first), not the branch-ordered list head.
+		out.Active = labelledView(domain.SortStalls(access.Stalls)[0], listSpans)
 	}
 	if canSwitch {
 		for _, st := range access.Stalls {
-			out.Stalls = append(out.Stalls, viewOf(st))
+			out.Stalls = append(out.Stalls, labelledView(st, listSpans))
 		}
 	}
 	return out, nil

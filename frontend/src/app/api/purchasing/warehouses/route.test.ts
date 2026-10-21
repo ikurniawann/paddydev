@@ -61,15 +61,54 @@ describe("/api/purchasing/warehouses", () => {
     expect(await res.json()).toEqual({ success: true, data: [] });
   });
 
-  it("company dengan cabang → filter branch_id IN", async () => {
+  it("company dengan cabang → filter branch_id IN, baris diberi branch_name + label", async () => {
     state.fake = createFakeDb({
-      branches: [{ data: [{ id: "branch-1" }], error: null }],
-      warehouses: [{ data: [{ id: "w-1", name: "Stall A" }], error: null }],
+      branches: [
+        { data: [{ id: "branch-1" }], error: null },
+        { data: [{ id: "branch-1", name: "Alpha" }], error: null },
+      ],
+      warehouses: [{ data: [{ id: "w-1", name: "Stall A", branch_id: "branch-1" }], error: null }],
     });
     const { GET } = await import("./route");
     const res = await GET(jsonRequest("http://localhost/api/purchasing/warehouses"));
-    expect(await res.json()).toEqual({ success: true, data: [{ id: "w-1", name: "Stall A" }] });
+    expect(await res.json()).toEqual({
+      success: true,
+      data: [{ id: "w-1", name: "Stall A", branch_id: "branch-1", branch_name: "Alpha", label: "Stall A" }],
+    });
     const warehouseCall = state.fake!.calls.find((c) => c.table === "warehouses");
     expect(warehouseCall?.filters).toContainEqual(["in", "branch_id", ["branch-1"]]);
+  });
+
+  it("lintas cabang → label memuat nama branch, urut per branch, Main Storage dulu", async () => {
+    state.fake = createFakeDb({
+      branches: [
+        { data: [{ id: "b-z" }, { id: "b-a" }], error: null },
+        {
+          data: [
+            { id: "b-z", name: "Zeta" },
+            { id: "b-a", name: "Alpha" },
+          ],
+          error: null,
+        },
+      ],
+      warehouses: [
+        {
+          data: [
+            { id: "z-s", name: "Stall 1", branch_id: "b-z", is_default: false },
+            { id: "z-m", name: "Main Storage", branch_id: "b-z", is_default: true },
+            { id: "a-m", name: "Main Storage", branch_id: "b-a", is_default: true },
+          ],
+          error: null,
+        },
+      ],
+    });
+    const { GET } = await import("./route");
+    const { data } = await (await GET(jsonRequest("http://localhost/api/purchasing/warehouses"))).json();
+    expect(data.map((w: { id: string; label: string }) => [w.id, w.label])).toEqual([
+      ["a-m", "Main Storage — Alpha"],
+      ["z-m", "Main Storage — Zeta"],
+      ["z-s", "Stall 1 — Zeta"],
+    ]);
+    expect(data[0]).toMatchObject({ branch_id: "b-a", branch_name: "Alpha", name: "Main Storage" });
   });
 });
