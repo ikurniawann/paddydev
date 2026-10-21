@@ -2,6 +2,7 @@ package hris
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 
@@ -9,6 +10,7 @@ import (
 
 	contracts "nuhabit/backend/internal/contracts/hris"
 	"nuhabit/backend/internal/modules/hris/domain"
+	"nuhabit/backend/internal/platform/audit"
 	"nuhabit/backend/internal/platform/httpx"
 	"nuhabit/backend/internal/platform/outbox"
 )
@@ -34,7 +36,9 @@ type LeaveRepo interface {
 	CancelLeave(ctx context.Context, id string, refund *quotaMove) error
 	UpdateLeave(ctx context.Context, id string, f fields) (*Row, error)
 	DeleteLeave(ctx context.Context, id string) error
-	DecideLeave(ctx context.Context, id, status string, approverID, rejection *string, credit *quotaMove) error
+	// DecideLeave writes the verdict of a pending request; errNoRow when it
+	// is no longer pending (decided meanwhile).
+	DecideLeave(ctx context.Context, id string, v leaveVerdict, credit *quotaMove) error
 	LeavesForExport(ctx context.Context, f leaveFilter) ([]*Row, error)
 	LeaveBalance(ctx context.Context, employeeID string, year int) (*Row, error)
 	EmployeeJoinDate(ctx context.Context, id string) (*string, bool, error)
@@ -62,6 +66,13 @@ type quotaMove struct {
 	EmployeeID string
 	Year       int
 	Days       string // numeric text of total_days
+}
+
+// leaveVerdict is what DecideLeave writes (EPIC-063 R1).
+type leaveVerdict struct {
+	Status                string
+	ApproverID, Rejection *string
+	DecidedAs, DecidedBy  string
 }
 
 // leaveFilter is the list/export query.
@@ -376,10 +387,12 @@ type leaveDecision struct {
 	Rejection       *string
 }
 
-// DecideLeave is decideLeave: HR or the direct manager approves or rejects a
-// pending request; approving annual leave consumes the quota in the same
+// DecideLeave is decideLeave with the EPIC-063 rules (Q-APV-3): the direct
+// manager decides first, HR is the backup and may override, nobody decides
+// their own request; the capacity and the decider's name are stored and
+// audited. Approving annual leave consumes the quota in the same
 // transaction. The response carries a wa.me link for the approver.
-func (s *Service) DecideLeave(ctx context.Context, a *Actor, in leaveDecision) (*Row, error) {
+func (s *Service) DecideLeave(ctx context.Context, a *Actor, in leaveDecision, meta audit.Entry) (*Row, error) {
 	leave, err := s.repo.LeaveForDecision(ctx, in.LeaveID)
 	if err != nil {
 		return nil, err
@@ -388,9 +401,15 @@ func (s *Service) DecideLeave(ctx context.Context, a *Actor, in leaveDecision) (
 		return nil, httpx.NotFound("Leave request not found")
 	}
 	emp := leave.Child("employee")
-	isManager := a.EmployeeID != nil && emp != nil && emp.Str("reporting_to") == *a.EmployeeID
-	if !a.IsHR && !isManager {
-		return nil, httpx.Forbidden("Forbidden: hanya HRD/admin atau atasan langsung yang bisa memproses")
+	var reportingTo *string
+	if emp != nil {
+		reportingTo = emp.StrPtr("reporting_to")
+	}
+	// Ruling C1: the HR backup is the HRD set (IsHRD), not IsHR.
+	decidedAs, refusal := domain.DecideAs(domain.Approver{EmployeeID: a.EmployeeID, IsHR: a.IsHRD},
+		leave.Str("employee_id"), reportingTo, "cuti")
+	if decidedAs == "" {
+		return nil, httpx.Forbidden(refusal)
 	}
 	if status := leave.Str("status"); status != "pending" {
 		return nil, httpx.BadRequest("Leave request already "+status, obj("current_status", status))
@@ -407,9 +426,23 @@ func (s *Service) DecideLeave(ctx context.Context, a *Actor, in leaveDecision) (
 			credit = &quotaMove{EmployeeID: leave.Str("employee_id"), Year: dateYear(leave, "start_date"), Days: leave.Str("total_days")}
 		}
 	}
-	if err := s.repo.InTx(ctx, func(r Repository) error {
-		return r.DecideLeave(ctx, in.LeaveID, status, a.EmployeeID, rejection, credit)
-	}); err != nil {
+	verdict := leaveVerdict{Status: status, ApproverID: a.EmployeeID, Rejection: rejection,
+		DecidedAs: decidedAs, DecidedBy: actorName(a)}
+	label := dateText(leave, "start_date") + " s.d. " + dateText(leave, "end_date")
+	if emp != nil {
+		label = emp.Str("full_name") + " · " + label
+	}
+	err = s.repo.InTx(ctx, func(r Repository) error {
+		if err := r.DecideLeave(ctx, in.LeaveID, verdict, credit); err != nil {
+			return err
+		}
+		return auditDecision(ctx, r.querier(), a, "leave."+in.Action, "hris.leaves", in.LeaveID, label,
+			map[string]any{"status": status, "decided_as": decidedAs, "rejection_reason": rejection}, meta)
+	})
+	if errors.Is(err, errNoRow) {
+		return nil, httpx.Conflict(decisionRace)
+	}
+	if err != nil {
 		return nil, err
 	}
 	data, err := s.repo.LeaveDecided(ctx, in.LeaveID)

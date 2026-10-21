@@ -154,16 +154,21 @@ func (s *store) DeleteLeave(ctx context.Context, id string) error {
 
 // DecideLeave records the decision and consumes the quota (call inside a
 // transaction).
-func (s *store) DecideLeave(ctx context.Context, id, status string, approverID, rejection *string, credit *quotaMove) error {
-	if _, err := s.db.Exec(ctx, `UPDATE hris.leaves
-		SET status = $2, approved_by = $3, approved_at = now(), rejection_reason = $4
-		WHERE id = $1 AND status = 'pending'`, id, status, approverID, rejection); err != nil {
+func (s *store) DecideLeave(ctx context.Context, id string, v leaveVerdict, credit *quotaMove) error {
+	tag, err := s.db.Exec(ctx, `UPDATE hris.leaves
+		SET status = $2, approved_by = $3, approved_at = now(), rejection_reason = $4,
+		    decided_as = $5, decided_by_name = $6
+		WHERE id = $1 AND status = 'pending'`, id, v.Status, v.ApproverID, v.Rejection, v.DecidedAs, v.DecidedBy)
+	if err != nil {
 		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return errNoRow
 	}
 	if credit == nil {
 		return nil
 	}
-	_, err := s.db.Exec(ctx, `INSERT INTO hris.leave_balances (employee_id, year, annual_leave_total, annual_leave_used)
+	_, err = s.db.Exec(ctx, `INSERT INTO hris.leave_balances (employee_id, year, annual_leave_total, annual_leave_used)
 		VALUES ($1, $2, 12, $3)
 		ON CONFLICT (employee_id, year)
 		DO UPDATE SET annual_leave_used = leave_balances.annual_leave_used + $3, updated_at = now()`,
@@ -220,7 +225,7 @@ func (s *store) ManagerContact(ctx context.Context, employeeID string) (string, 
 	var phone *string
 	err := s.db.QueryRow(ctx, `SELECT a.full_name, a.phone
 		FROM hris.employees e
-		JOIN hris.employees a ON a.id = e.reporting_to AND a.is_active = true
+		JOIN hris.employees a ON a.id = e.reporting_to AND a.is_active = true AND a.id <> e.id
 		WHERE e.id = $1`, employeeID).Scan(&name, &phone)
 	if database.IsNoRows(err) {
 		return "", nil, false, nil

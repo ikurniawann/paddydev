@@ -344,7 +344,9 @@ var overtimeSelect = `*, ` +
 	embedOne("decider", "id, full_name", "hris.employees", "id = overtime_requests.decided_by")
 
 func (s *store) SubordinateIDs(ctx context.Context, managerID string) ([]string, error) {
-	rows, err := queryRows(ctx, s.db, `SELECT id FROM hris.employees WHERE reporting_to = $1`, managerID)
+	// A reporting_to pointing at oneself (live data) is not a direct report
+	// (EPIC-063 R2): the manager's queues never hold their own requests.
+	rows, err := queryRows(ctx, s.db, `SELECT id FROM hris.employees WHERE reporting_to = $1 AND id <> $1`, managerID)
 	if err != nil {
 		return nil, ignoreBadInput(err)
 	}
