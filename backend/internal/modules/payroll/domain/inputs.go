@@ -138,13 +138,28 @@ func BuildInputRange(emp Employee, salary Salary, rec WorkforceRecords, loans []
 			merged = clipped
 		}
 	}
+	// Jadwal yang baru berlaku di tengah periode (mis. jadwal NS ditetapkan 20 Okt,
+	// atau jadwal karyawan baru sejak tanggal masuk) diukur seolah pola pertamanya
+	// berlaku sejak awal periode: tanggal sebelumnya bukan hari libur, hanya belum
+	// berjadwal. Tanpa ini pembagi hanya menghitung hari sejak jadwal mulai,
+	// padahal hari hadir sebelumnya ikut dikali tunjangan per hari.
+	if first := earliestScheduleFrom(periodSchedule); first > start {
+		extended := make([]ShiftRow, len(periodSchedule))
+		for i, r := range periodSchedule {
+			if r.EffectiveFrom == first {
+				r.EffectiveFrom = start
+			}
+			extended[i] = r
+		}
+		periodSchedule = extended
+	}
 	hasContract := len(merged) > 0
 	partial := hasContract && !(len(merged) == 1 && merged[0].Start == start && merged[0].End == end)
 
 	scheduled, hasSchedule := ScheduledDays(periodSchedule, start, end)
 	coveredScheduled, coveredCalendar := 0, 0
 	for _, r := range merged {
-		n, _ := ScheduledDays(schedule, r.Start, r.End)
+		n, _ := ScheduledDays(periodSchedule, r.Start, r.End)
 		coveredScheduled += n
 		coveredCalendar += len(EachDate(r.Start, r.End))
 	}
@@ -232,7 +247,7 @@ func BuildInputRange(emp Employee, salary Salary, rec WorkforceRecords, loans []
 		}
 		from, to := max(*s, start), min(*e, end)
 		for _, d := range EachDate(from, to) {
-			if !IsWorkDate(d, schedule, holidays) || (partial && !inCoverage(d)) {
+			if !IsWorkDate(d, periodSchedule, holidays) || (partial && !inCoverage(d)) {
 				continue
 			}
 			// Hanya unpaid/personal/sick/maternity yang memotong; leader dan

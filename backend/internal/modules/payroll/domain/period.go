@@ -298,3 +298,14 @@ func ServiceOverOneYear(joinDate, periodEnd string) bool {
 	}
 	return join.AddDate(1, 0, 0).Before(end)
 }
+
+// earliestScheduleFrom is the earliest effective_from of the rows ("" without rows).
+func earliestScheduleFrom(rows []ShiftRow) string {
+	first := ""
+	for _, r := range rows {
+		if first == "" || r.EffectiveFrom < first {
+			first = r.EffectiveFrom
+		}
+	}
+	return first
+}

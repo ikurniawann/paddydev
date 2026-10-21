@@ -6,7 +6,7 @@
 
 ## Istilah
 
-- **Hari Kerja Terjadwal**: jumlah hari kerja menurut jadwal karyawan dalam periode 21 → 20 (skema 5 hari ≈ 23, 6 hari ≈ 24; K-10/K-12 diputuskan: pembagi = hari terjadwal karyawan itu, tanpa field skema baru).
+- **Hari Kerja Terjadwal**: jumlah hari kerja menurut jadwal karyawan dalam periode 21 → 20 (skema 5 hari ≈ 23, 6 hari ≈ 24; K-10/K-12 diputuskan: pembagi = hari terjadwal karyawan itu, tanpa field skema baru). Jadwal yang baru berlaku di tengah periode (jadwal pertama, mis. ditetapkan 20 Okt atau sejak tanggal masuk) dihitung seolah polanya berlaku sejak awal periode — pembagi, hari kerja, faktor cakupan kontrak, dan hari kerja cuti memakai pola itu.
 - **Hari Kerja Aktif yang Dibayar**: hari hadir ditambah hari cuti yang *Full Paid* (Cuti Tahunan, Menikah, Duka, Izin Leader, dsb.).
 - **Hari Kerja Efektif**: hari benar-benar hadir.
 - **THP untuk "1 hari THP"** = 4 komponen: Gaji Pokok + Tunj. Makan + Tunj. Transport + Tunj. Jabatan (MOM §2.6.1 dan Daftar Istilah).
