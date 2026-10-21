@@ -23,6 +23,11 @@ const DONE: Record<TeamRequestKind, Record<TeamDecision, string>> = {
   overtime: { approve: "Lembur disetujui", reject: "Lembur ditolak" },
 };
 
+/** Lampiran cuti disajikan privat di /api/hris/leaves/attachment/<path> (atasan langsung boleh membacanya). */
+function leaveAttachmentHref(path: string) {
+  return `/api/hris/leaves/attachment/${path.split("/").map(encodeURIComponent).join("/")}`;
+}
+
 const NOUN: Record<TeamRequestKind, string> = { leave: "cuti", overtime: "lembur" };
 
 interface Rejecting {
@@ -41,8 +46,10 @@ interface Rejecting {
 export function EssPersetujuanTimPage() {
   const { data: me, isLoading } = useEssMe();
   const queue = useTeamApprovals();
-  const trips = useBusinessTrips({ scope: "approvals", status: "pending" }).data ?? [];
-  const loans = useTeamLoanApprovals().data ?? [];
+  const tripsQuery = useBusinessTrips({ scope: "approvals", status: "pending" });
+  const loansQuery = useTeamLoanApprovals();
+  const trips = tripsQuery.data ?? [];
+  const loans = loansQuery.data ?? [];
   const decide = useDecideTeamRequest();
   const [rejecting, setRejecting] = useState<Rejecting | null>(null);
   const [open, setOpen] = useState(false);
@@ -96,6 +103,10 @@ export function EssPersetujuanTimPage() {
 
   const leaves = queue.data?.leaves ?? [];
   const overtime = queue.data?.overtime ?? [];
+  // The empty state only shows once every queue loaded successfully and is empty;
+  // a failed load must not read as "nothing to approve".
+  const loadFailed = queue.isError || tripsQuery.isError || loansQuery.isError;
+  const loading = queue.isLoading || tripsQuery.isLoading || loansQuery.isLoading;
   const empty = leaves.length + overtime.length + trips.length + loans.length === 0;
 
   return (
@@ -107,7 +118,13 @@ export function EssPersetujuanTimPage() {
         </p>
       </div>
 
-      {empty && !queue.isLoading && (
+      {loadFailed && (
+        <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 shadow-sm">
+          Gagal memuat antrean persetujuan. Coba muat ulang.
+        </div>
+      )}
+
+      {empty && !loading && !loadFailed && (
         <div className="rounded-xl border border-gray-200/70 bg-white p-6 text-center text-sm text-gray-500 shadow-sm">
           Tidak ada pengajuan tim yang menunggu persetujuan Anda.
         </div>
@@ -131,7 +148,20 @@ export function EssPersetujuanTimPage() {
                     {Number(row.total_days)} hari) · {row.reason || "—"}
                   </p>
                 </div>
-                {actions("leave", row.id, row.employee.full_name)}
+                <div className="flex shrink-0 flex-wrap items-center gap-3">
+                  {row.attachment_url && (
+                    <a
+                      href={leaveAttachmentHref(row.attachment_url)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label={`Lihat lampiran cuti ${row.employee.full_name}`}
+                      className="text-xs font-medium text-pink-600 hover:underline"
+                    >
+                      Lihat lampiran
+                    </a>
+                  )}
+                  {actions("leave", row.id, row.employee.full_name)}
+                </div>
               </li>
             ))}
           </ul>
