@@ -176,3 +176,67 @@ func TestOvertimeStartTimeStrictAndStaleDecision(t *testing.T) {
 	expect(t, h.do(&boss, "POST", "/api/hris/overtime/decide", map[string]any{"overtime_id": id, "action": "approve"}), 400,
 		"Pengajuan sudah rejected")
 }
+
+// Final review: the HR day_type override applies to employee requests only,
+// and a real change is audited (rest_day pays 2× vs 1.5×).
+func TestOvertimeHRDayTypeOverrideScopeAndAudit(t *testing.T) {
+	h := newHarness(t)
+	hr, hrID := h.staff("hrd", []string{menuKepegawaian}, true, emp{name: "HRD Penerima"})
+	hr2, _ := h.staff("hrd", []string{menuKepegawaian}, true, emp{name: "HRD Penugas"})
+	staff, _ := h.staff("pos", nil, true, emp{name: "Crew Jenis"})
+	decide := func(s *testutil.Staff, id string, extra map[string]any) {
+		t.Helper()
+		body := map[string]any{"overtime_id": id, "action": "approve"}
+		for k, v := range extra {
+			body[k] = v
+		}
+		expect(t, h.do(s, "POST", "/api/hris/overtime/decide", body), 200, "")
+	}
+	diff := func(id, side string) string {
+		t.Helper()
+		return h.scalar(`SELECT COALESCE(`+side+`->>'day_type', '-') FROM audit.audit_log
+			WHERE entity = 'hris.overtime_requests' AND action = 'overtime.approve' AND entity_id = $1`, id)
+	}
+
+	// (a) HRD confirming a company assignment for themself keeps the stored type.
+	assign := otBody("2026-10-06", "17:00", "19:00")
+	assign["employee_id"] = hrID
+	assign["day_type"] = "regular"
+	assigned := h.do(&hr2, "POST", "/api/hris/overtime", assign)
+	expect(t, assigned, 200, "")
+	selfID := assigned.data()["id"].(string)
+	decide(&hr, selfID, map[string]any{"day_type": "rest_day"})
+	if got := h.scalar(`SELECT day_type::text FROM hris.overtime_requests WHERE id = $1`, selfID); got != "regular" {
+		t.Fatalf("HRD changed own assignment day_type to %s", got)
+	}
+	if got := h.scalar(`SELECT status::text FROM hris.overtime_requests WHERE id = $1`, selfID); got != "approved" {
+		t.Fatalf("status = %s", got)
+	}
+
+	// (b) HR changes an employee request's type: stored + audited before/after.
+	changed := h.do(&staff, "POST", "/api/hris/overtime", otBody("2026-10-06", "17:00", "19:00"))
+	expect(t, changed, 200, "")
+	changedID := changed.data()["id"].(string)
+	decide(&hr, changedID, map[string]any{"day_type": "rest_day"})
+	if got := h.scalar(`SELECT day_type::text FROM hris.overtime_requests WHERE id = $1`, changedID); got != "rest_day" {
+		t.Fatalf("stored day_type = %s", got)
+	}
+	if b, a := diff(changedID, "before"), diff(changedID, "after"); b != "regular" || a != "rest_day" {
+		t.Fatalf("audit day_type before=%s after=%s", b, a)
+	}
+
+	// (c) unchanged (or omitted) type leaves day_type out of the audit diff.
+	same := h.do(&staff, "POST", "/api/hris/overtime", otBody("2026-10-07", "17:00", "19:00"))
+	expect(t, same, 200, "")
+	sameID := same.data()["id"].(string)
+	decide(&hr, sameID, map[string]any{"day_type": "regular"})
+	omitted := h.do(&staff, "POST", "/api/hris/overtime", otBody("2026-10-08", "17:00", "19:00"))
+	expect(t, omitted, 200, "")
+	omittedID := omitted.data()["id"].(string)
+	decide(&hr, omittedID, nil)
+	for _, id := range []string{sameID, omittedID} {
+		if b, a := diff(id, "before"), diff(id, "after"); b != "-" || a != "-" {
+			t.Fatalf("unchanged type leaked into audit: before=%s after=%s", b, a)
+		}
+	}
+}

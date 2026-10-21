@@ -256,10 +256,18 @@ func (s *Service) DecideOvertime(ctx context.Context, a *Actor, id, action strin
 	} else {
 		f.add("rejection_reason", nil)
 	}
-	// HR may set the day type (rest day = tarif libur) while approving (R11).
+	// HR may set the day type (rest day = tarif libur) while approving an
+	// employee request (R11); never on a company assignment, where the target
+	// (possibly an HRD) only confirms and must not change their own pay rate.
+	// A real change is audited as before/after day_type.
 	// Ruling C1/P2: HR here is the HRD set (IsHRD), never IsHR.
-	if action == "approve" && a.IsHRD && dayType != nil {
+	auditBefore, auditAfter := map[string]any(nil), map[string]any{}
+	if action == "approve" && a.IsHRD && dayType != nil && ot.Str("source") == "employee" {
 		f.add("day_type", *dayType)
+		if stored := ot.Str("day_type"); stored != *dayType {
+			auditBefore = map[string]any{"day_type": stored}
+			auditAfter["day_type"] = *dayType
+		}
 	}
 	decidedAs := ""
 	if ot.Str("source") == "employee" && action != "cancel" {
@@ -283,8 +291,9 @@ func (s *Service) DecideOvertime(ctx context.Context, a *Actor, id, action strin
 		if emp != nil {
 			label = emp.Str("full_name") + " · " + label
 		}
+		auditAfter["status"], auditAfter["decided_as"], auditAfter["rejection_reason"] = status, decidedAs, rejection
 		return auditDecision(ctx, r.querier(), a, "overtime."+action, "hris.overtime_requests", id, label,
-			map[string]any{"status": status, "decided_as": decidedAs, "rejection_reason": rejection}, meta)
+			auditBefore, auditAfter, meta)
 	})
 	if errors.Is(err, errNoRow) {
 		return nil, httpx.Conflict(decisionRace)

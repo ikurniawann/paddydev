@@ -407,7 +407,7 @@ func (s *Service) DecideLeave(ctx context.Context, a *Actor, in leaveDecision, m
 		if err := r.DecideLeave(ctx, in.LeaveID, verdict, credit); err != nil {
 			return err
 		}
-		return auditDecision(ctx, r.querier(), a, "leave."+in.Action, "hris.leaves", in.LeaveID, label,
+		return auditDecision(ctx, r.querier(), a, "leave."+in.Action, "hris.leaves", in.LeaveID, label, nil,
 			map[string]any{"status": status, "decided_as": decidedAs, "rejection_reason": rejection}, meta)
 	})
 	if errors.Is(err, errNoRow) {
