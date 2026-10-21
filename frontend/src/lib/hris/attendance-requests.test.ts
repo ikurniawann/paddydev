@@ -1,0 +1,57 @@
+import { describe, expect, it } from "vitest";
+import {
+  attendanceRequestClocks,
+  canDecideAttendanceRequests,
+  gapHint,
+  toAttendanceRequestPayload,
+  validateAttendanceRequestForm,
+} from "./attendance-requests";
+
+const valid = { date: "2026-10-02", clock_in: "08:00", clock_out: "", reason: "Internet toko mati" };
+
+describe("validateAttendanceRequestForm (pesan sama dengan server)", () => {
+  it.each([
+    [{ ...valid, date: "" }, "Tanggal wajib diisi"],
+    [{ ...valid, date: "2026-10-06" }, "Tanggal pengajuan tidak boleh di masa depan"],
+    [{ ...valid, reason: "  Lupa " }, "Keterangan wajib diisi (minimal 5 karakter)"],
+    [{ ...valid, clock_in: "" }, "Isi jam masuk dan/atau jam pulang yang diajukan"],
+    [valid, ""],
+    [{ ...valid, date: "2026-10-05" }, ""],
+  ])("%o → %s", (form, msg) => {
+    expect(validateAttendanceRequestForm(form, "2026-10-05")).toBe(msg);
+  });
+
+  it("keterangan dihitung per code point seperti rune Go, bukan unit UTF-16", () => {
+    // 4 emoji = 8 unit UTF-16 tetapi 4 rune → kurang dari 5
+    expect(validateAttendanceRequestForm({ ...valid, reason: "😀😀😀😀" }, "2026-10-05")).toBe(
+      "Keterangan wajib diisi (minimal 5 karakter)"
+    );
+    expect(validateAttendanceRequestForm({ ...valid, reason: "😀😀😀😀😀" }, "2026-10-05")).toBe("");
+  });
+});
+
+describe("toAttendanceRequestPayload", () => {
+  it("jam kosong menjadi null, keterangan dipangkas, foto hanya bila ada", () => {
+    expect(toAttendanceRequestPayload({ ...valid, reason: "  Internet toko mati  " })).toEqual({
+      date: "2026-10-02",
+      clock_in: "08:00",
+      clock_out: null,
+      reason: "Internet toko mati",
+    });
+    expect(toAttendanceRequestPayload(valid, "data:image/png;base64,AA").photo).toBe("data:image/png;base64,AA");
+  });
+});
+
+describe("label & hak", () => {
+  it("hanya HRD (super_admin/admin/hrd) yang memutus", () => {
+    expect(["super_admin", "admin", "hrd"].map(canDecideAttendanceRequests)).toEqual([true, true, true]);
+    expect([canDecideAttendanceRequests("hiring_manager"), canDecideAttendanceRequests(null)]).toEqual([false, false]);
+  });
+
+  it("ringkasan jam dan petunjuk absen terlewat", () => {
+    expect(attendanceRequestClocks({ clock_in: "08:00", clock_out: "17:00" })).toBe("Masuk 08:00 · Pulang 17:00");
+    expect(attendanceRequestClocks({ clock_in: null, clock_out: "17:00" })).toBe("Pulang 17:00");
+    expect(gapHint("no_clock_out", "08:05")).toBe("Tercatat masuk 08:05 tanpa absen pulang — isi jam pulang yang benar.");
+    expect(gapHint("missing", null)).toBe("Tidak ada absen tercatat — isi jam masuk dan jam pulang yang benar.");
+  });
+});
