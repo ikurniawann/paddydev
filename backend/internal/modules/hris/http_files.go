@@ -4,6 +4,7 @@ import (
 	"errors"
 	"mime"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -139,8 +140,22 @@ func (h handlers) uploadLeaveAttachment(w http.ResponseWriter, r *http.Request, 
 }
 
 // GET /api/hris/leaves/attachment/leave-attachments/<employeeId>/<file>
+// The employee's direct manager reads it too: Persetujuan Tim links the file
+// from the queue (EPIC-063). A reporting_to pointing at oneself grants nothing.
 func (h handlers) leaveAttachment(w http.ResponseWriter, r *http.Request, a *Actor) error {
-	return h.ownedFile(w, r, a, "/api/hris/leaves/attachment/", "leave-attachments")
+	const prefix, folder = "/api/hris/leaves/attachment/", "leave-attachments"
+	if !a.IsHR && a.EmployeeID != nil {
+		if segments := privateSegments(r, prefix, folder, 3); segments != nil && segments[1] != *a.EmployeeID {
+			reports, err := h.svc.repo.SubordinateIDs(r.Context(), *a.EmployeeID)
+			if err != nil {
+				return err
+			}
+			if slices.Contains(reports, segments[1]) {
+				return h.svc.servePrivate(w, strings.Join(segments, "/"), "")
+			}
+		}
+	}
+	return h.ownedFile(w, r, a, prefix, folder)
 }
 
 // ownedFile serves <folder>/<employeeId>/<file>…: HR reads all, others only
