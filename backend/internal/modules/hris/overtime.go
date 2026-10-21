@@ -30,6 +30,12 @@ type OvertimeRepo interface {
 	InsertOvertime(ctx context.Context, f fields) (*Row, error)
 	OvertimeForDecision(ctx context.Context, id string) (*Row, error)
 	DecideOvertime(ctx context.Context, id string, f fields) (*Row, error)
+	// CorrectOvertime updates a request still in fromStatus; errNoRow when it
+	// changed meanwhile (EPIC-063 R6).
+	CorrectOvertime(ctx context.Context, id, fromStatus string, f fields) (*Row, error)
+	// ClosedPeriodOn is the closed attendance period holding date ({label}),
+	// nil when none.
+	ClosedPeriodOn(ctx context.Context, date string) (*Row, error)
 }
 
 type overtimeFilter struct {
@@ -124,7 +130,8 @@ func (s *Service) CreateOvertime(ctx context.Context, a *Actor, in overtimeInput
 		return nil, httpx.BadRequest("Akun ini tidak tertaut ke data karyawan")
 	}
 	isSelf := a.EmployeeID != nil && *targetID == *a.EmployeeID
-	if !isSelf && !a.IsHR {
+	// HR administration of overtime is the HRD set (ruling C2), like its decisions.
+	if !isSelf && !a.IsHRD {
 		return nil, httpx.Forbidden("Hanya HRD yang bisa membuat penugasan lembur untuk karyawan lain")
 	}
 	// The start time is checked strictly as HH:MM (a DB-style HH:MM:SS is

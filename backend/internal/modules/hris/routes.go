@@ -85,6 +85,7 @@ func (h handlers) routes() []module.Route {
 		r("POST /api/hris/overtime", h.withActor(h.createOvertime)),
 		r("POST /api/hris/overtime/decide", h.withActor(h.decideOvertime)),
 		r("GET /api/hris/overtime/day-type", h.withActor(h.overtimeDayTypeHint)),
+		r("PATCH /api/hris/overtime/{id}", h.withAction("update", overtimeManagers, h.correctOvertime)),
 		// business trips (Perjalanan Dinas, EPIC-062)
 		r("GET /api/hris/business-trips", h.withActor(h.listTrips)),
 		r("POST /api/hris/business-trips", h.withActor(h.createTrip)),

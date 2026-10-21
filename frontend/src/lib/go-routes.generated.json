@@ -2430,6 +2430,11 @@
     "path": "/api/hris/overtime/decide"
   },
   {
+    "module": "hris",
+    "method": "PATCH",
+    "path": "/api/hris/overtime/{id}"
+  },
+  {
     "module": "payroll",
     "method": "GET",
     "path": "/api/hris/payroll"
