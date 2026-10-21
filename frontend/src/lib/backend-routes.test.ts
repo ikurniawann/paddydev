@@ -204,7 +204,9 @@ describe("Go route manifest", () => {
       // Hak Akses HRIS (EPIC-061): hanya di Go, tanpa fallback Next.
       "/api/hris/access",
       // Perjalanan Dinas (EPIC-062).
-      "/api/hris/business-trips"];
+      "/api/hris/business-trips",
+      // Paket Approval atasan (EPIC-063): hanya di Go, tanpa fallback Next.
+      "/api/hris/overtime/day-type"];
     const goNative = (p: string) =>
       goNativePrefixes.some((n) => p === n || p.startsWith(`${n}/`));
     const missing = switched

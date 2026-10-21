@@ -6,12 +6,16 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
 
+	contracts "nuhabit/backend/internal/contracts/hris"
 	"nuhabit/backend/internal/modules/hris/domain"
+	"nuhabit/backend/internal/platform/audit"
 	"nuhabit/backend/internal/platform/database"
 	"nuhabit/backend/internal/platform/httpx"
+	"nuhabit/backend/internal/platform/validate"
 )
 
 // Overtime requests (lib/hris/overtime-repo) and the shift master
@@ -36,6 +40,9 @@ type overtimeFilter struct {
 }
 
 const overtimeDuplicate = "Sudah ada pengajuan lembur pending/approved di tanggal tersebut"
+
+// overtimeTooLate is MOM AP-02's refusal (EPIC-063 R3).
+const overtimeTooLate = "Lembur wajib diajukan sebelum dimulai — jam mulai sudah lewat"
 
 // overtimeQuery is overtimeListQuerySchema.
 type overtimeQuery struct{ Status, Month, Year, EmployeeID, Scope *string }
@@ -85,19 +92,33 @@ func (s *Service) ListOvertime(ctx context.Context, a *Actor, q overtimeQuery) (
 type overtimeInput struct {
 	EmployeeID                       *string
 	Date, StartTime, EndTime, Reason string
-	DayType                          *string // regular | rest_day (EPIC-055); nil = regular
+	DayType                          *string // regular (Weekday) | rest_day (Weekend / Libur), K-13; nil = saran jadwal
 }
 
 // overtimeDayTypes: rest_day = hari istirahat mingguan, dibayar tarif libur.
 var overtimeDayTypes = []string{"regular", "rest_day"}
 
-// CreateOvertime: a request for oneself ("employee", decided by HR or the
-// manager) or an HR assignment for someone else ("company", confirmed by
-// the employee).
+// overtimeClock trims a DB-style HH:MM:SS down to HH:MM.
+func overtimeClock(v string) string {
+	if len(v) == 8 && v[5] == ':' {
+		return v[:5]
+	}
+	return v
+}
+
+// CreateOvertime: a request for oneself ("employee", decided by the direct
+// manager or HR) or an HR assignment for someone else ("company", confirmed
+// by the employee). One's own request must come before the overtime starts
+// (AP-02) and its type must match the schedule (K-13); it notifies the
+// direct manager through the outbox (EPIC-063).
 func (s *Service) CreateOvertime(ctx context.Context, a *Actor, in overtimeInput) (*Row, error) {
 	targetID := a.EmployeeID
 	if in.EmployeeID != nil && *in.EmployeeID != "" && *in.EmployeeID != "me" {
-		targetID = in.EmployeeID
+		canonical, ok := validate.CanonicalUUID(*in.EmployeeID) // ids compare as canonical lowercase (P10)
+		if !ok {
+			return nil, httpx.BadRequest("ID karyawan tidak valid")
+		}
+		targetID = &canonical
 	}
 	if targetID == nil {
 		return nil, httpx.BadRequest("Akun ini tidak tertaut ke data karyawan")
@@ -105,6 +126,16 @@ func (s *Service) CreateOvertime(ctx context.Context, a *Actor, in overtimeInput
 	isSelf := a.EmployeeID != nil && *targetID == *a.EmployeeID
 	if !isSelf && !a.IsHR {
 		return nil, httpx.Forbidden("Hanya HRD yang bisa membuat penugasan lembur untuk karyawan lain")
+	}
+	// The start time is checked strictly as HH:MM (a DB-style HH:MM:SS is
+	// trimmed) because OvertimeStartsInPast is fail-open on unparsable input (P10).
+	in.StartTime, in.EndTime = overtimeClock(in.StartTime), overtimeClock(in.EndTime)
+	if _, err := time.Parse(domain.DateLayout, in.Date); err != nil || !overtimeTimeRe.MatchString(in.StartTime) ||
+		!overtimeTimeRe.MatchString(in.EndTime) {
+		return nil, httpx.BadRequest("Tanggal atau jam lembur tidak valid")
+	}
+	if isSelf && domain.OvertimeStartsInPast(in.Date, in.StartTime, s.now()) {
+		return nil, httpx.BadRequest(overtimeTooLate)
 	}
 	target, err := s.repo.OvertimeTarget(ctx, *targetID)
 	if err != nil {
@@ -130,6 +161,10 @@ func (s *Service) CreateOvertime(ctx context.Context, a *Actor, in overtimeInput
 	if hours < 1 {
 		return nil, httpx.BadRequest("Durasi lembur minimal 1 jam")
 	}
+	dayType, err := s.overtimeDayType(ctx, *targetID, in.Date, in.DayType, !isSelf)
+	if err != nil {
+		return nil, err
+	}
 	source := "company"
 	if isSelf {
 		source = "employee"
@@ -143,11 +178,20 @@ func (s *Service) CreateOvertime(ctx context.Context, a *Actor, in overtimeInput
 	f.add("source", source)
 	f.add("status", "pending")
 	f.add("reason", in.Reason)
-	if in.DayType != nil && a.IsHR { // rest day = tarif libur: hanya HR yang menetapkan
-		f.add("day_type", *in.DayType)
-	}
+	f.add("day_type", dayType)
 	f.add("requested_by", a.EmployeeID)
-	row, err := s.repo.InsertOvertime(ctx, f)
+	var row *Row
+	err = s.repo.InTx(ctx, func(r Repository) error {
+		var err error
+		if row, err = r.InsertOvertime(ctx, f); err != nil || source != "employee" {
+			return err
+		}
+		reason := in.Reason
+		return r.Publish(ctx, TopicOvertimeRequested, *targetID, contracts.OvertimeRequested{
+			OvertimeID: row.Str("id"), EmployeeID: *targetID, EmployeeName: target.Str("full_name"),
+			Date: in.Date, StartTime: in.StartTime, EndTime: in.EndTime, Hours: hours, DayType: dayType, Reason: &reason,
+		})
+	})
 	if database.IsUniqueViolation(err) { // the active (employee_id, date) index lost a race
 		return nil, httpx.BadRequest(overtimeDuplicate)
 	}
@@ -167,8 +211,10 @@ var (
 )
 
 // DecideOvertime approves, rejects or cancels a pending request (rules in
-// domain.CanDecideOvertime); the update is guarded on status = pending.
-func (s *Service) DecideOvertime(ctx context.Context, a *Actor, id, action string, rejection *string, dayType ...*string) (*Row, error) {
+// domain.CanDecideOvertime); the update is guarded on status = pending. An
+// employee request's approval or rejection stores the decider's capacity
+// (direct manager or HR, Q-APV-3) and is audited (EPIC-063 R1).
+func (s *Service) DecideOvertime(ctx context.Context, a *Actor, id, action string, rejection, dayType *string, meta audit.Entry) (*Row, error) {
 	ot, err := s.repo.OvertimeForDecision(ctx, id)
 	if err != nil {
 		return nil, err
@@ -180,10 +226,11 @@ func (s *Service) DecideOvertime(ctx context.Context, a *Actor, id, action strin
 		return nil, httpx.BadRequest("Pengajuan sudah "+status, obj("current_status", status))
 	}
 	var reportingTo *string
-	if emp := ot.Child("employee"); emp != nil {
+	emp := ot.Child("employee")
+	if emp != nil {
 		reportingTo = emp.StrPtr("reporting_to")
 	}
-	allowed, reason := domain.CanDecideOvertime(domain.OvertimeActor{EmployeeID: a.EmployeeID, IsHR: a.IsHR},
+	allowed, reason := domain.CanDecideOvertime(domain.OvertimeActor{EmployeeID: a.EmployeeID, IsHR: a.IsHRD},
 		domain.OvertimeRequest{EmployeeID: ot.Str("employee_id"), RequestedBy: ot.StrPtr("requested_by"),
 			Source: ot.Str("source"), ReportingTo: reportingTo}, action)
 	if !allowed {
@@ -203,14 +250,38 @@ func (s *Service) DecideOvertime(ctx context.Context, a *Actor, id, action strin
 	} else {
 		f.add("rejection_reason", nil)
 	}
-	// HR may set the day type (rest day = tarif libur) while approving.
-	if action == "approve" && a.IsHR && len(dayType) > 0 && dayType[0] != nil {
-		f.add("day_type", *dayType[0])
+	// HR may set the day type (rest day = tarif libur) while approving (R11).
+	// Ruling C1/P2: HR here is the HRD set (IsHRD), never IsHR.
+	if action == "approve" && a.IsHRD && dayType != nil {
+		f.add("day_type", *dayType)
+	}
+	decidedAs := ""
+	if ot.Str("source") == "employee" && action != "cancel" {
+		var refusal string
+		decidedAs, refusal = domain.DecideAs(domain.Approver{EmployeeID: a.EmployeeID, IsHR: a.IsHRD},
+			ot.Str("employee_id"), reportingTo, "lembur")
+		if decidedAs == "" { // never store '' (the CHECK would 500)
+			return nil, httpx.Forbidden(refusal)
+		}
+		f.add("decided_as", decidedAs)
+		f.add("decided_by_name", actorName(a))
 	}
 	f.add("updated_at", now)
-	row, err := s.repo.DecideOvertime(ctx, id, f)
+	var row *Row
+	err = s.repo.InTx(ctx, func(r Repository) error {
+		var err error
+		if row, err = r.DecideOvertime(ctx, id, f); err != nil || decidedAs == "" {
+			return err
+		}
+		label := dateText(ot, "date")
+		if emp != nil {
+			label = emp.Str("full_name") + " · " + label
+		}
+		return auditDecision(ctx, r.querier(), a, "overtime."+action, "hris.overtime_requests", id, label,
+			map[string]any{"status": status, "decided_as": decidedAs, "rejection_reason": rejection}, meta)
+	})
 	if errors.Is(err, errNoRow) {
-		return nil, httpx.Conflict("Pengajuan sudah diproses oleh orang lain")
+		return nil, httpx.Conflict(decisionRace)
 	}
 	if err != nil {
 		return nil, err

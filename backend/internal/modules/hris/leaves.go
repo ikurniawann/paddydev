@@ -22,6 +22,9 @@ import (
 // TopicLeaveRequested is re-exported for the module constructor.
 const TopicLeaveRequested = contracts.TopicLeaveRequested
 
+// TopicOvertimeRequested is re-exported for the module constructor (EPIC-063).
+const TopicOvertimeRequested = contracts.TopicOvertimeRequested
+
 // LeaveRepo is the leave storage.
 type LeaveRepo interface {
 	LeavePage(ctx context.Context, f leaveFilter, page, limit int) ([]*Row, int64, error)
@@ -241,44 +244,12 @@ func (s *Service) notifyLeaveRequest(ctx context.Context, tx pgx.Tx, e outbox.Ev
 		s.log.ErrorContext(ctx, "[wa-cuti] bad payload", "event", e.ID, "error", err)
 		return nil
 	}
-	if s.whatsapp == nil {
-		return nil
-	}
-	repo := &store{db: tx}
-	name, phone, found, err := repo.ManagerContact(ctx, p.EmployeeID)
-	if err != nil {
-		return err
-	}
-	if !found {
-		s.log.WarnContext(ctx, "[wa-cuti] tidak punya atasan tercatat — notifikasi dilewati", "employee", p.EmployeeName)
-		return nil
-	}
-	target := domain.NormalizeWaPhone(phone)
-	if target == "" {
-		s.log.WarnContext(ctx, "[wa-cuti] nomor WA atasan kosong/tidak valid — notifikasi dilewati", "manager", name)
-		return nil
-	}
-	message := domain.LeaveRequestWaMessage(domain.LeaveRequestWa{
-		EmployeeName: p.EmployeeName, LeaveType: p.LeaveType, StartDate: p.StartDate, EndDate: p.EndDate,
-		TotalDays: p.TotalDays, Reason: p.Reason, ApproverName: &name,
+	return s.notifyManager(ctx, tx, "cuti", "leave:"+p.LeaveID, p.EmployeeID, p.EmployeeName, func(approver string) string {
+		return domain.LeaveRequestWaMessage(domain.LeaveRequestWa{
+			EmployeeName: p.EmployeeName, LeaveType: p.LeaveType, StartDate: p.StartDate, EndDate: p.EndDate,
+			TotalDays: p.TotalDays, Reason: p.Reason, ApproverName: &approver,
+		})
 	})
-	dedup := "leave:" + p.LeaveID
-	if len(dedup) > 160 {
-		dedup = dedup[:160]
-	}
-	claimID, claimed, err := s.whatsapp.Claim(ctx, tx, "cuti", dedup, message, []string{target})
-	if err != nil || !claimed {
-		return err
-	}
-	if !s.whatsapp.Configured(ctx) {
-		s.log.WarnContext(ctx, "[wa-cuti] gateway belum dikonfigurasi — notifikasi dilewati")
-		return s.whatsapp.Release(ctx, tx, claimID)
-	}
-	if sent, timedOut, reason := s.whatsapp.SendText(ctx, target, message); !sent && !timedOut {
-		s.log.ErrorContext(ctx, "[wa-cuti] gagal kirim", "target", target, "reason", reason)
-		return s.whatsapp.Release(ctx, tx, claimID)
-	}
-	return nil
 }
 
 // Leave is getLeave: HR, the owner, or the direct manager.

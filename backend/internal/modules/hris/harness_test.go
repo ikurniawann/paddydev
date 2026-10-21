@@ -40,6 +40,7 @@ func newHarness(t *testing.T) *harness {
 		WhatsApp: wa, HolidayCalendar: fakeCalendar{}}
 	svc := NewService(newStore(tx), ports, deps.Log, deps.Now)
 	deps.Events.Subscribe(TopicLeaveRequested, "hris.leave-request-whatsapp", svc.notifyLeaveRequest)
+	deps.Events.Subscribe(TopicOvertimeRequested, "hris.overtime-request-whatsapp", svc.notifyOvertimeRequest)
 	if err := deps.Events.Register(context.Background(), tx); err != nil {
 		t.Fatal(err)
 	}

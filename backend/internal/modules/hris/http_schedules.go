@@ -177,7 +177,7 @@ func (h handlers) decideOvertime(w http.ResponseWriter, r *http.Request, a *Acto
 	if err := formErr(f, message); err != nil {
 		return err
 	}
-	out, err := h.svc.DecideOvertime(r.Context(), a, *id, *action, rejection, dayType)
+	out, err := h.svc.DecideOvertime(r.Context(), a, *id, *action, rejection, dayType, auditMeta(r))
 	if err != nil {
 		return err
 	}
