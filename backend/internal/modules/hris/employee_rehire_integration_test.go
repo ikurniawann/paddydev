@@ -2,6 +2,7 @@ package hris
 
 import (
 	"net/http"
+	"strings"
 	"testing"
 
 	"nuhabit/backend/internal/platform/iam"
@@ -170,6 +171,9 @@ func TestRehireOptions(t *testing.T) {
 	taken := h.scalar(`SELECT email FROM hris.employees WHERE id = $1`, withLogin)
 	expect(t, h.do(&hr, http.MethodPost, rehirePath(noLogin), rehireBody(branch, map[string]any{"email": taken})),
 		http.StatusBadRequest, "Email sudah digunakan")
+	// Email dibandingkan tanpa membedakan huruf besar/kecil.
+	expect(t, h.do(&hr, http.MethodPost, rehirePath(noLogin), rehireBody(branch, map[string]any{"email": strings.ToUpper(taken)})),
+		http.StatusBadRequest, "Email sudah digunakan")
 	authEmail := h.scalar(`SELECT email FROM auth.users WHERE id = $1`, login.UserID)
 	expect(t, h.do(&hr, http.MethodPost, rehirePath(noLogin), rehireBody(branch, map[string]any{"email": authEmail})),
 		http.StatusBadRequest, "Email sudah digunakan")
@@ -182,6 +186,12 @@ func TestRehireOptions(t *testing.T) {
 	if got := h.scalar(`SELECT email || '|' || coalesce(user_id::text, '-') || '|' || is_access_app FROM hris.employees WHERE id = $1`, noLogin); got != fresh+"|-|false" {
 		t.Fatalf("employee = %s", got)
 	}
+
+	// Nonaktif tanpa tanggal keluar: tanggal efektif harus setelah tanggal masuk lama.
+	noEnd := h.employee(emp{name: "Tanpa Tanggal Keluar", join: "2026-09-20", inactive: true})
+	expect(t, h.do(&hr, http.MethodPost, rehirePath(noEnd), rehireBody(branch, map[string]any{"effective_date": "2026-09-20"})),
+		http.StatusBadRequest, "Tanggal efektif harus setelah tanggal masuk sebelumnya (20/09/2026)")
+	expect(t, h.do(&hr, http.MethodPost, rehirePath(noEnd), rehireBody(branch, map[string]any{"effective_date": "2026-09-21"})), http.StatusOK, "")
 
 	// 9. Non-Shift: pola tetap mulai max(tanggal efektif, hari ini).
 	ns := resignedEmployee(t, h, &hr, branch, nil, emp{name: "Karyawan NS"})
@@ -222,5 +232,26 @@ func TestRehireSystemAccountNeedsSuperAdmin(t *testing.T) {
 	expect(t, h.do(&caller, http.MethodPost, rehirePath(e), rehireBody(branch, nil)), http.StatusOK, "")
 	if got := loginState(h, adminLogin.UserID); got != "true|active|1" {
 		t.Fatalf("login after super_admin rehire = %s", got)
+	}
+}
+
+// TestRehireSystemAccountWithoutLogin: HR may rehire a system-account holder
+// when the login stays blocked (the guard only applies to restoring it).
+func TestRehireSystemAccountWithoutLogin(t *testing.T) {
+	testutil.RequireSeededIAM(t, testutil.IAMBaseline{GrantedRoles: []string{"super_admin"}, Menus: iam.HrisKepegawaian})
+	adminLogin := testutil.CreateStaff(t, testutil.StaffOptions{Role: "admin"})
+	h := newHarness(t)
+	hr, _ := h.staff("hrd", iam.HrisKepegawaian, false)
+	branch := h.scalar(`SELECT id::text FROM configuration.branches LIMIT 1`)
+	e := resignedEmployee(t, h, &hr, branch, &adminLogin.UserID, emp{name: "Admin Tanpa Login"})
+	h.exec(`UPDATE auth.users SET banned_until = now() + interval '100 years' WHERE id = $1`, adminLogin.UserID)
+	h.exec(`UPDATE configuration.users SET status = 'inactive' WHERE id = $1`, adminLogin.UserID)
+
+	expect(t, h.do(&hr, http.MethodPost, rehirePath(e), rehireBody(branch, map[string]any{"reactivate_login": false})), http.StatusOK, "")
+	if got := h.scalar(`SELECT is_active || '|' || is_access_app FROM hris.employees WHERE id = $1`, e); got != "true|false" {
+		t.Fatalf("employee = %s", got)
+	}
+	if got := loginState(h, adminLogin.UserID); got != "false|inactive|1" {
+		t.Fatalf("login must stay blocked and inactive, got %s", got)
 	}
 }

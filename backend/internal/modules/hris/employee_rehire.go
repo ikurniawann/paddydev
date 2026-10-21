@@ -2,17 +2,13 @@ package hris
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"strings"
-
-	"github.com/jackc/pgx/v5/pgconn"
 
 	"nuhabit/backend/internal/modules/hris/domain"
 	"nuhabit/backend/internal/platform/auth"
 	"nuhabit/backend/internal/platform/database"
 	"nuhabit/backend/internal/platform/httpx"
-	"nuhabit/backend/internal/platform/permaudit"
 	"nuhabit/backend/internal/platform/validate"
 )
 
@@ -22,8 +18,7 @@ import (
 // asked — the login account. It is the inverse of ResignEmployee.
 
 const (
-	msgRehireSystemAccount = "Akun Super Admin/Admin hanya bisa diaktifkan kembali oleh Super Admin"
-	msgRehireShiftNote     = "Atur jadwal shift karyawan ini di Jadwal Kerja"
+	msgRehireShiftNote = "Atur jadwal shift karyawan ini di Jadwal Kerja"
 )
 
 type rehireInput struct {
@@ -87,16 +82,18 @@ func (s *Service) RehireEmployee(ctx context.Context, actor *auth.User, id strin
 		if end != nil && in.EffectiveDate <= *end {
 			return httpx.BadRequest("Tanggal efektif harus setelah tanggal keluar (" + domain.FormatDateID(*end) + ")")
 		}
+		// Nonaktif tanpa tanggal keluar (tidak lewat resign): pakai tanggal masuk lama.
+		if end == nil && in.EffectiveDate <= join {
+			return httpx.BadRequest("Tanggal efektif harus setelah tanggal masuk sebelumnya (" + domain.FormatDateID(join) + ")")
+		}
 		if ok, err := rehireStatusAllowed(ctx, q, in.EmploymentStatus); err != nil {
 			return err
 		} else if !ok {
 			return httpx.BadRequest("Status kepegawaian tidak valid untuk karyawan aktif")
 		}
-		var branchOK bool
-		if err := q.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM configuration.branches WHERE id = $1::uuid)`, in.BranchID).Scan(&branchOK); err != nil {
+		if branchOK, err := r.BranchExists(ctx, in.BranchID); err != nil {
 			return err
-		}
-		if !branchOK {
+		} else if !branchOK {
 			return httpx.BadRequest("Cabang tidak ditemukan")
 		}
 		newEmail, err := rehireEmail(ctx, q, id, email, userID != nil, in.Email)
@@ -105,7 +102,7 @@ func (s *Service) RehireEmployee(ctx context.Context, actor *auth.User, id strin
 		}
 		restoreLogin := userID != nil && in.ReactivateLogin
 		if restoreLogin {
-			if err := guardRehireSystemAccount(ctx, q, *userID, superAdmin); err != nil {
+			if err := guardSystemReactivation(ctx, q, *userID, msgSystemReactivation, superAdmin); err != nil {
 				return err
 			}
 		}
@@ -120,10 +117,6 @@ func (s *Service) RehireEmployee(ctx context.Context, actor *auth.User, id strin
 		if _, err := q.Exec(ctx, `UPDATE hris.employees SET is_active = true, end_date = NULL, employment_status = $2,
 			join_date = $3::date, is_access_app = $4, email = COALESCE($5, email), updated_at = now() WHERE id = $1`,
 			id, in.EmploymentStatus, in.EffectiveDate, restoreLogin, newEmail); err != nil {
-			var pg *pgconn.PgError
-			if errors.As(err, &pg) && pg.Code == "23505" {
-				return httpx.BadRequest("Email sudah digunakan")
-			}
 			return err
 		}
 		if _, err := q.Exec(ctx, `INSERT INTO hris.employee_placements (employee_id, branch_id, is_primary, start_date, notes, created_by)
@@ -181,7 +174,7 @@ func rehireEmail(ctx context.Context, q database.Querier, id, current string, ha
 		return nil, nil
 	}
 	var taken bool
-	if err := q.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM hris.employees WHERE email = $1 AND id <> $2)
+	if err := q.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM hris.employees WHERE lower(email) = lower($1) AND id <> $2)
 		OR EXISTS (SELECT 1 FROM auth.users WHERE lower(email) = lower($1))`, *want, id).Scan(&taken); err != nil {
 		return nil, err
 	}
@@ -189,22 +182,6 @@ func rehireEmail(ctx context.Context, q database.Querier, id, current string, ha
 		return nil, httpx.BadRequest("Email sudah digunakan")
 	}
 	return want, nil
-}
-
-// guardRehireSystemAccount: a login holding a system role (super_admin/admin,
-// app or IAM role) is restored by an IAM super_admin only (R6).
-func guardRehireSystemAccount(ctx context.Context, q database.Querier, userID string, superAdmin func(context.Context) (bool, error)) error {
-	held, err := permaudit.HoldsSystemRole(ctx, q, userID)
-	if err != nil || !held {
-		return err
-	}
-	if superAdmin != nil {
-		ok, err := superAdmin(ctx)
-		if err != nil || ok {
-			return err
-		}
-	}
-	return httpx.Forbidden(msgRehireSystemAccount)
 }
 
 func (h handlers) rehireEmployee(w http.ResponseWriter, r *http.Request, u *auth.User) error {
