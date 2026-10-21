@@ -5,3 +5,4 @@ export * from "./queries";
 export * from "./mutations";
 export { EssPerjalananDinasPage } from "./components/perjalanan-dinas-page";
 export { BusinessTripsTab } from "./components/business-trips-tab";
+export { TeamTripApprovals } from "./components/team-trip-approvals";
