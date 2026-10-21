@@ -11,6 +11,7 @@ import (
 
 	"nuhabit/backend/internal/modules/posops/domain"
 	"nuhabit/backend/internal/platform/scope"
+	"nuhabit/backend/internal/platform/stalllabel"
 )
 
 // POS reports (app/api/pos/reports). Sales rows come from the Sales port;
@@ -18,10 +19,23 @@ import (
 
 /* ── Stall filter (lib/pos/report-stall-filter.ts) ───────────────────── */
 
+// BranchID, BranchName and Label are additive: Label is Name, or
+// "<Name> — <BranchName>" when the picker mixes branches (stalllabel).
 type stallOption struct {
-	ID   string `json:"id"`
-	Code string `json:"code"`
-	Name string `json:"name"`
+	ID         string `json:"id"`
+	Code       string `json:"code"`
+	Name       string `json:"name"`
+	BranchID   string `json:"branch_id"`
+	BranchName string `json:"branch_name"`
+	Label      string `json:"label"`
+}
+
+// display is what an export prints for the outlet: the label, else the name.
+func (o stallOption) display() string {
+	if o.Label != "" {
+		return o.Label
+	}
+	return o.Name
 }
 
 // reportStalls is resolveReportStallFilter's result.
@@ -88,10 +102,24 @@ func (s *Service) reportStallFilter(ctx context.Context, userID, requestedID str
 	return reportStalls{WarehouseIDs: ids, Options: options}, nil
 }
 
+func stallBranchID(st domain.Stall) string {
+	if st.BranchID == nil {
+		return ""
+	}
+	return *st.BranchID
+}
+
+// stallOptions orders the picker by branch (Main Storage first within a
+// branch) and labels every row by the one rule of stalllabel.
 func stallOptions(stalls []domain.Stall) []stallOption {
-	out := make([]stallOption, len(stalls))
-	for i, st := range stalls {
-		out[i] = stallOption{ID: st.ID, Code: st.Code, Name: st.Name}
+	sorted := stalllabel.SortByBranch(stalls, func(st domain.Stall) stalllabel.Key {
+		return stalllabel.Key{BranchName: st.BranchName, BranchID: stallBranchID(st), IsDefault: st.IsDefault}
+	}, nil)
+	withBranch := stalllabel.Spans(sorted, stallBranchID)
+	out := make([]stallOption, len(sorted))
+	for i, st := range sorted {
+		out[i] = stallOption{ID: st.ID, Code: st.Code, Name: st.Name, BranchID: stallBranchID(st), BranchName: st.BranchName,
+			Label: stalllabel.Label(st.Name, st.BranchName, withBranch)}
 	}
 	return out
 }

@@ -42,7 +42,7 @@ func (h stallReportHead) stallFilterLabel() string {
 	}
 	for _, o := range h.StallOptions {
 		if o.ID == *id {
-			return o.Name + " (" + o.Code + ")"
+			return o.display() + " (" + o.Code + ")"
 		}
 	}
 	return *id

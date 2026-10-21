@@ -40,15 +40,16 @@ func scanPosOpsStalls(rows pgx.Rows, err error) ([]domain.Stall, error) {
 	}
 	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (domain.Stall, error) {
 		var s domain.Stall
-		err := r.Scan(&s.ID, &s.Name, &s.Code, &s.BranchID, &s.IsDefault)
+		err := r.Scan(&s.ID, &s.Name, &s.Code, &s.BranchID, &s.IsDefault, &s.BranchName)
 		return s, err
 	})
 }
 
 func (posOpsStalls) Assigned(ctx context.Context, q database.Querier, userID string) ([]domain.Stall, error) {
-	stalls, err := scanPosOpsStalls(q.Query(ctx, `SELECT uw.warehouse_id::text, w.name, w.code, w.branch_id::text, w.is_default
+	stalls, err := scanPosOpsStalls(q.Query(ctx, `SELECT uw.warehouse_id::text, w.name, w.code, w.branch_id::text, w.is_default, COALESCE(b.name, '')
 		FROM configuration.user_warehouses uw
 		INNER JOIN configuration.warehouses w ON w.id = uw.warehouse_id
+		LEFT JOIN configuration.branches b ON b.id = w.branch_id
 		WHERE uw.user_id = $1::text::uuid AND uw.is_active = true AND w.is_active = true
 		ORDER BY w.is_default DESC, w.name ASC`, userID))
 	if database.IsUndefinedTable(err) {
@@ -58,8 +59,10 @@ func (posOpsStalls) Assigned(ctx context.Context, q database.Querier, userID str
 }
 
 func (posOpsStalls) Active(ctx context.Context, q database.Querier, id string) (*domain.Stall, error) {
-	stalls, err := scanPosOpsStalls(q.Query(ctx, `SELECT id::text, name, code, branch_id::text, is_default
-		FROM configuration.warehouses WHERE id = $1::uuid AND is_active = true`, id))
+	stalls, err := scanPosOpsStalls(q.Query(ctx, `SELECT w.id::text, w.name, w.code, w.branch_id::text, w.is_default, COALESCE(b.name, '')
+		FROM configuration.warehouses w
+		LEFT JOIN configuration.branches b ON b.id = w.branch_id
+		WHERE w.id = $1::uuid AND w.is_active = true`, id))
 	if err != nil || len(stalls) == 0 {
 		return nil, err
 	}
@@ -67,8 +70,9 @@ func (posOpsStalls) Active(ctx context.Context, q database.Querier, id string) (
 }
 
 func (posOpsStalls) Branch(ctx context.Context, q database.Querier, branchID *string) ([]domain.Stall, error) {
-	return scanPosOpsStalls(q.Query(ctx, `SELECT id::text, name, code, branch_id::text, is_default
+	return scanPosOpsStalls(q.Query(ctx, `SELECT w.id::text, w.name, w.code, w.branch_id::text, w.is_default, COALESCE(b.name, '')
 		FROM configuration.warehouses w
+		LEFT JOIN configuration.branches b ON b.id = w.branch_id
 		WHERE w.is_active AND ($1::uuid IS NULL OR w.branch_id = $1::uuid)`, branchID))
 }
 

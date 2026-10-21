@@ -1,7 +1,10 @@
 package posops_test
 
 import (
+	"strings"
 	"testing"
+
+	"nuhabit/backend/internal/platform/testutil"
 )
 
 // reportFixture seeds May 2031: a cash sale, a split cash+QRIS sale, a
@@ -136,4 +139,42 @@ func TestReports(t *testing.T) {
 	r = h.call("GET", "/api/pos/reports/closing?date=nope", nil, 500)
 	jsonEq(t, r.body, `{"success":false,"error":"Failed to load cashier closing report"}`)
 	_ = cash
+}
+
+// An unscoped user picks any outlet of any branch: the stall_options of a
+// report must tell the branches' "Main Storage" rows apart.
+func TestReportStallOptionsBranchLabels(t *testing.T) {
+	h := newHarness(t, nil)
+	sfx := testutil.RandomHex(4)
+	holding := h.id(`INSERT INTO configuration.holdings (name, code) VALUES ('H '||$1, 'H'||$1) RETURNING id::text`, sfx)
+	company := h.id(`INSERT INTO configuration.companies (holding_id, name, code) VALUES ($1, 'C '||$2, 'C'||$2) RETURNING id::text`, holding, sfx)
+	zeta := h.id(`INSERT INTO configuration.branches (company_id, name, code) VALUES ($1, 'Zeta '||$2, 'Z'||$2) RETURNING id::text`, company, sfx)
+	alpha := h.id(`INSERT INTO configuration.branches (company_id, name, code) VALUES ($1, 'Alpha '||$2, 'A'||$2) RETURNING id::text`, company, sfx)
+	mainA := h.id(`SELECT id::text FROM configuration.warehouses WHERE branch_id = $1 AND code = 'MAIN'`, alpha)
+	mainZ := h.id(`SELECT id::text FROM configuration.warehouses WHERE branch_id = $1 AND code = 'MAIN'`, zeta)
+	stallZ := h.id(`INSERT INTO configuration.warehouses (branch_id, name, code) VALUES ($1, 'Stall 1', 'STALL-01') RETURNING id::text`, zeta)
+
+	r := h.call("GET", "/api/pos/reports/rush-hour?date_from=2031-05-01&date_to=2031-05-31", nil, 200)
+	var got []string
+	for _, v := range list(data(r)["stall_options"]) {
+		o := obj(v)
+		if o["branch_id"] == alpha || o["branch_id"] == zeta {
+			got = append(got, o["id"].(string)+"|"+o["branch_name"].(string)+"|"+o["label"].(string))
+		}
+	}
+	want := []string{
+		mainA + "|Alpha " + sfx + "|Main Storage — Alpha " + sfx,
+		mainZ + "|Zeta " + sfx + "|Main Storage — Zeta " + sfx,
+		stallZ + "|Zeta " + sfx + "|Stall 1 — Zeta " + sfx,
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("stall_options:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+	// The existing fields stay put.
+	first := obj(list(data(r)["stall_options"])[0])
+	for _, k := range []string{"id", "code", "name"} {
+		if _, ok := first[k]; !ok {
+			t.Fatalf("missing %s in %v", k, first)
+		}
+	}
 }

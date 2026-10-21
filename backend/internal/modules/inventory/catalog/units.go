@@ -9,6 +9,7 @@ import (
 	"nuhabit/backend/internal/modules/inventory/kit"
 	"nuhabit/backend/internal/platform/httpx"
 	ps "nuhabit/backend/internal/platform/scope"
+	"nuhabit/backend/internal/platform/stalllabel"
 	"nuhabit/backend/internal/platform/validate"
 )
 
@@ -228,9 +229,9 @@ func (h *handler) listWarehouses(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	a := &kit.Args{}
-	where := `"is_active" = ` + a.Add(active)
+	where := `w."is_active" = ` + a.Add(active)
 	if b := ps.WarehouseBranchFilter(scope, branch); b != nil {
-		where += ` AND "branch_id" = ` + a.Add(*b)
+		where += ` AND w."branch_id" = ` + a.Add(*b)
 	} else if c := ps.WarehouseCompanyFilter(scope); c != nil {
 		branches, err := kit.Query(ctx, h.env.DB, `SELECT id::text AS id FROM configuration.branches WHERE company_id = $1`, *c)
 		if err != nil {
@@ -243,11 +244,23 @@ func (h *handler) listWarehouses(w http.ResponseWriter, r *http.Request) error {
 		for i, b := range branches {
 			ids[i] = b.Str("id")
 		}
-		where += ` AND "branch_id" = ANY(` + a.Add(ids) + `::uuid[])`
+		where += ` AND w."branch_id" = ANY(` + a.Add(ids) + `::uuid[])`
 	}
-	rows, err := kit.Query(ctx, h.env.DB, `SELECT * FROM configuration.warehouses WHERE `+where+` ORDER BY "name" ASC`, a.Values...)
+	rows, err := kit.Query(ctx, h.env.DB, `SELECT w.*, COALESCE(b.name, '') AS branch_name
+		FROM configuration.warehouses w
+		LEFT JOIN configuration.branches b ON b.id = w.branch_id
+		WHERE `+where+` ORDER BY w."name" ASC`, a.Values...)
 	if err != nil {
 		return err
+	}
+	// Each branch owns a "Main Storage": name the branch when the list mixes
+	// branches, and group by branch (Main Storage first) so rows read alike.
+	rows = stalllabel.SortByBranch(rows, func(r *kit.Row) stalllabel.Key {
+		return stalllabel.Key{BranchName: r.Str("branch_name"), BranchID: r.Str("branch_id"), IsDefault: r.Bool("is_default")}
+	}, nil)
+	withBranch := stalllabel.Spans(rows, func(r *kit.Row) string { return r.Str("branch_id") })
+	for _, r := range rows {
+		r.Set("label", stalllabel.Label(r.Str("name"), r.Str("branch_name"), withBranch))
 	}
 	return kit.Data(w, rows)
 }

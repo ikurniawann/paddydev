@@ -11,6 +11,8 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf16"
+
+	"nuhabit/backend/internal/platform/stalllabel"
 )
 
 // Login throttle limits: strict per account, loose per IP because many
@@ -113,37 +115,20 @@ func SortStalls(stalls []Stall) []Stall {
 // SortStallsByBranch orders stalls by branch name (then branch id), and
 // within a branch by SortStalls' rules (Main Storage first).
 func SortStallsByBranch(stalls []Stall) []Stall {
-	out := append([]Stall(nil), stalls...)
-	sort.SliceStable(out, func(i, j int) bool {
-		a, b := out[i], out[j]
-		if c := naturalCompare(a.BranchName, b.BranchName); c != 0 {
-			return c < 0
-		}
-		if a.BranchID != b.BranchID {
-			return a.BranchID < b.BranchID
-		}
-		return compareStalls(a, b) < 0
-	})
-	return out
+	return stalllabel.SortByBranch(stalls, func(s Stall) stalllabel.Key {
+		return stalllabel.Key{BranchName: s.BranchName, BranchID: s.BranchID, IsDefault: s.IsDefault}
+	}, compareStalls)
 }
 
 // SpansBranches reports whether the stalls belong to more than one branch.
 func SpansBranches(stalls []Stall) bool {
-	for _, s := range stalls[min(1, len(stalls)):] {
-		if s.BranchID != stalls[0].BranchID {
-			return true
-		}
-	}
-	return false
+	return stalllabel.Spans(stalls, func(s Stall) string { return s.BranchID })
 }
 
 // StallLabel is the text a switcher shows for a stall: the plain name, or
 // "<name> — <branch name>" when the list it sits in mixes branches.
 func StallLabel(s Stall, withBranch bool) string {
-	if !withBranch || strings.TrimSpace(s.BranchName) == "" {
-		return s.Name
-	}
-	return s.Name + " — " + s.BranchName
+	return stalllabel.Label(s.Name, s.BranchName, withBranch)
 }
 
 var stallCode = regexp.MustCompile(`^STALL-0*(\d+)$`)
@@ -180,53 +165,10 @@ func compareStalls(a, b Stall) int {
 	if strings.EqualFold(b.Code, "MAIN") {
 		return 1
 	}
-	if c := naturalCompare(a.Code, b.Code); c != 0 {
+	if c := stalllabel.NaturalCompare(a.Code, b.Code); c != 0 {
 		return c
 	}
-	return naturalCompare(a.Name, b.Name)
-}
-
-// naturalCompare approximates localeCompare(a, b, undefined, {numeric: true,
-// sensitivity: "base"}) for the ASCII codes and names stalls use.
-func naturalCompare(a, b string) int {
-	a, b = strings.ToLower(a), strings.ToLower(b)
-	for a != "" && b != "" {
-		da, db := leadingDigits(a), leadingDigits(b)
-		if da != "" && db != "" {
-			na, _ := strconv.Atoi(da)
-			nb, _ := strconv.Atoi(db)
-			if na != nb {
-				if na < nb {
-					return -1
-				}
-				return 1
-			}
-			a, b = a[len(da):], b[len(db):]
-			continue
-		}
-		if a[0] != b[0] {
-			if a[0] < b[0] {
-				return -1
-			}
-			return 1
-		}
-		a, b = a[1:], b[1:]
-	}
-	switch {
-	case a == "" && b == "":
-		return 0
-	case a == "":
-		return -1
-	}
-	return 1
-}
-
-func leadingDigits(s string) string {
-	i := 0
-	for i < len(s) && s[i] >= '0' && s[i] <= '9' {
-		i++
-	}
-	return s[:i]
+	return stalllabel.NaturalCompare(a.Name, b.Name)
 }
 
 // jsTrim is String.prototype.trim.

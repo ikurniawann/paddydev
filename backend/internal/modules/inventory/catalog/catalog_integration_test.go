@@ -10,6 +10,7 @@ import (
 	"nuhabit/backend/internal/modules/inventory/kit"
 	"nuhabit/backend/internal/modules/inventory/kit/kittest"
 	"nuhabit/backend/internal/platform/database"
+	"nuhabit/backend/internal/platform/testutil"
 )
 
 // Integration tests on TEST_DATABASE_URL in one rolled-back transaction.
@@ -231,5 +232,65 @@ func TestProductsAndBom(t *testing.T) {
 	out = e.Call("DELETE", "/api/purchasing/products/"+pid, nil, http.StatusOK)
 	if out["message"] != "Produk berhasil dihapus" || len(e.pos.synced) != 1 {
 		t.Fatalf("delete %v synced %v", out, e.pos.synced)
+	}
+}
+
+// Every branch owns a "Main Storage": a list that spans branches must name
+// the branch, a single-branch list keeps the plain names.
+func TestWarehousesBranchLabels(t *testing.T) {
+	e := setup(t)
+	type wh struct{ ID, Name, Code, BranchID, BranchName, Label string }
+	list := func() []wh {
+		t.Helper()
+		out := e.Call("GET", "/api/purchasing/warehouses", nil, http.StatusOK)
+		var rows []wh
+		for _, v := range out["data"].([]any) {
+			m := obj(v)
+			rows = append(rows, wh{m["id"].(string), m["name"].(string), m["code"].(string),
+				m["branch_id"].(string), m["branch_name"].(string), m["label"].(string)})
+		}
+		return rows
+	}
+
+	var branchName string
+	e.Scalar(&branchName, `SELECT name FROM configuration.branches WHERE id = $1`, e.org.BranchID)
+	e.ScopeStaff("branch", e.org)
+	got := list()
+	want := []wh{
+		{e.org.MainID, "Main Storage", "MAIN", e.org.BranchID, branchName, "Main Storage"},
+		{e.org.Stall1ID, "Stall 1", "STALL-01", e.org.BranchID, branchName, "Stall 1"},
+		{e.org.Stall2ID, "Stall 2", "STALL-02", e.org.BranchID, branchName, "Stall 2"},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("single branch: %+v", got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("single branch %d: got %+v want %+v", i, got[i], want[i])
+		}
+	}
+
+	// A sibling branch that sorts before the first one; its Main Storage
+	// comes from the same trigger.
+	otherBranch := e.ID(`INSERT INTO configuration.branches (company_id, name, code) VALUES ($1, 'A '||$2, 'A'||$2) RETURNING id::text`,
+		e.org.CompanyID, testutil.RandomHex(4))
+	otherMain := e.ID(`SELECT id::text FROM configuration.warehouses WHERE branch_id = $1 AND code = 'MAIN'`, otherBranch)
+	var otherName string
+	e.Scalar(&otherName, `SELECT name FROM configuration.branches WHERE id = $1`, otherBranch)
+	e.ScopeStaff("company", e.org)
+	got = list()
+	want = []wh{
+		{otherMain, "Main Storage", "MAIN", otherBranch, otherName, "Main Storage — " + otherName},
+		{e.org.MainID, "Main Storage", "MAIN", e.org.BranchID, branchName, "Main Storage — " + branchName},
+		{e.org.Stall1ID, "Stall 1", "STALL-01", e.org.BranchID, branchName, "Stall 1 — " + branchName},
+		{e.org.Stall2ID, "Stall 2", "STALL-02", e.org.BranchID, branchName, "Stall 2 — " + branchName},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("two branches: %+v", got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("two branches %d: got %+v want %+v", i, got[i], want[i])
+		}
 	}
 }

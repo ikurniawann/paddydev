@@ -8,13 +8,19 @@ import (
 	"nuhabit/backend/internal/modules/configuration/settings/domain"
 	"nuhabit/backend/internal/platform/httpx"
 	"nuhabit/backend/internal/platform/iam"
+	"nuhabit/backend/internal/platform/stalllabel"
 )
 
 // receiptStall is one scope option for the UI (configuration.warehouses).
+//
+// Every branch owns a "Main Storage", so Label is "<name> — <branch name>"
+// when the list mixes branches (internal/platform/stalllabel).
 type receiptStall struct {
-	ID       string `json:"id"`
-	Name     string `json:"name"`
-	BranchID string `json:"branch_id"`
+	ID         string `json:"id"`
+	Name       string `json:"name"`
+	BranchID   string `json:"branch_id"`
+	BranchName string `json:"branch_name"`
+	Label      string `json:"label"`
 }
 
 type receiptList struct {
@@ -44,13 +50,33 @@ func (h *handler) getReceipt(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	rows, err := h.db.Query(r.Context(),
-		`SELECT id::text, name, branch_id::text FROM configuration.warehouses ORDER BY name ASC`)
+		`SELECT w.id::text, w.name, w.branch_id::text, COALESCE(b.name, ''), w.is_default
+		FROM configuration.warehouses w
+		LEFT JOIN configuration.branches b ON b.id = w.branch_id
+		ORDER BY w.name ASC`)
 	if err != nil {
 		return err
 	}
-	stalls, err := pgx.CollectRows(rows, pgx.RowToStructByPos[receiptStall])
+	type stallRow struct {
+		receiptStall
+		isDefault bool
+	}
+	scanned, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (stallRow, error) {
+		var s stallRow
+		err := r.Scan(&s.ID, &s.Name, &s.BranchID, &s.BranchName, &s.isDefault)
+		return s, err
+	})
 	if err != nil {
 		return err
+	}
+	scanned = stalllabel.SortByBranch(scanned, func(s stallRow) stalllabel.Key {
+		return stalllabel.Key{BranchName: s.BranchName, BranchID: s.BranchID, IsDefault: s.isDefault}
+	}, nil)
+	withBranch := stalllabel.Spans(scanned, func(s stallRow) string { return s.BranchID })
+	stalls := make([]receiptStall, len(scanned))
+	for i, s := range scanned {
+		s.Label = stalllabel.Label(s.Name, s.BranchName, withBranch)
+		stalls[i] = s.receiptStall
 	}
 	return httpx.JSON(w, http.StatusOK, receiptList{Success: true, Data: data, Stalls: orEmpty(stalls)})
 }

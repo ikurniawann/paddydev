@@ -77,7 +77,7 @@ func stallLabel(selected *string, options []stallOption) string {
 	}
 	for _, o := range options {
 		if o.ID == *selected {
-			return o.Name
+			return o.display()
 		}
 	}
 	return "Outlet terpilih"

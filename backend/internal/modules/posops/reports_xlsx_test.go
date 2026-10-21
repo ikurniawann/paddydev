@@ -179,7 +179,8 @@ func TestProductSalesAndTransactionReports(t *testing.T) {
 	if !slices.Equal(names, []string{"Ringkasan", "Per Outlet", "Top Produk", "Harian", "Transaksi"}) {
 		t.Fatalf("sheets = %v", names)
 	}
-	cells(t, sheet("Ringkasan"), 2, "Outlet", "Stall GT (STALL-GT"+strings.TrimPrefix(kode, "GT-")+")")
+	// The picker mixes branches, so the outlet is named with its branch.
+	cells(t, sheet("Ringkasan"), 2, "Outlet", "Stall GT — B GT"+strings.TrimPrefix(kode, "GT-")+" (STALL-GT"+strings.TrimPrefix(kode, "GT-")+")")
 	m = sheet("Transaksi")
 	cells(t, m, 0, "Order", "Checkout", "Waktu", "Outlet", "Metode", "Subtotal", "Diskon", "Pajak", "Total",
 		"Service", "ARK", "Pembayaran", "Asal", "Comp")
@@ -297,7 +298,7 @@ func TestReportExport(t *testing.T) {
 	// A stall filter names the stall.
 	_, sheet := h.workbook(h.download("/api/pos/reports/export?report=voids"+month+"&warehouse_id="+stall, 200),
 		"void_2031-05-01_2031-05-31.xlsx", true)
-	cells(t, sheet("Void"), 2, "Outlet: Stall GT")
+	cells(t, sheet("Void"), 2, "Outlet: Stall GT — B GT"+strings.TrimPrefix(kode, "GT-"))
 }
 
 func TestRushHourExport(t *testing.T) {
