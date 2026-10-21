@@ -21,7 +21,7 @@ Lihat `docs/superpowers/plans/2026-10-21-absensi-lanjutan.md` (10 task):
 2. Migrasi + pengajuan karyawan (buat, daftar sendiri, batal, lampiran, notifikasi HR).
 3. Antrean & keputusan HR lewat jalur penyesuaian yang sama + badge (Go).
 4. Absen terlewat di periode terbuka (Go).
-5. Jam kerja minimum per cabang + label kurang jam + notifikasi (migrasi + Go).
+5. Jam kerja minimum per cabang + label kurang jam (migrasi + Go).
 6. Lib & lapisan data frontend (pengajuan, absen terlewat, kurang jam).
 7. ESS → Absensi: absen terlewat, form pengajuan, status pengajuan.
 8. HRIS → Absensi → tab Pengajuan Absensi + paritas badge Next.
@@ -90,3 +90,14 @@ Tidak ada. K-9 dan Q-AB-1 sudah diputuskan user pada 20-10-2026. Butir turunan y
   - Task 8: toast dari `mutate()` bisa hilang bila dua baris diputus cepat berurutan; tombol pengajuan sendiri berkedip saat `useEssMe` memuat; tab belum diuji di tingkat komponen untuk 409/toast.
   - Task 9: titik oranye di kalender ESS layar sempit belum ada di legenda (label teks hanya di layar lebar); mutasi `useSaveBranchMinWorkHours` belum diuji invalidasinya; dialog menampilkan `8.5` sedangkan daftar `8,5`; badge terpotong, bukan elipsis.
 - 2026-10-21: **Tindak lanjut di luar epic:** AB-07 (rules keterlambatan) menunggu TnC; ringkasan harian absen terlewat untuk HR (R1 sengaja tidak membuatnya; sumber datanya sama, `AttendanceGaps` per karyawan); pengajuan oleh HR atas nama karyawan tidak dibuat (HR memakai penyesuaian langsung yang ada); keputusan HR masih berbasis peran aplikasi (`IsHRD`) + menu `read`, bukan aksi `approve` di menu daun, menyelaraskannya dengan konvensi EPIC-061 adalah perubahan hak akses tersendiri (sama dengan catatan EPIC-063); export Rekap belum memuat kolom label kurang jam. Status epic diubah `on-progress` → `review`.
+- 2026-10-21: **Review akhir (seluruh branch, 13 commit):** verdict Ready to merge, tanpa temuan Critical/Important. Dua temuan minor dinaikkan menjadi perbaikan dan sudah diterapkan:
+  1. Pengajuan absensi yang masih menunggu kini dihitung di ringkasan periode (`pending_requests` pada `stats` dan `close_summary`, termasuk auto-close). Dialog closing menampilkan statistik "Pengajuan absensi menunggu" + peringatan, dan kartu periode menampilkan "{n} pengajuan absensi menunggu", supaya HR memutusnya sebelum periode ditutup (setelah closing pengajuan tidak bisa disetujui dan upah hari itu mengikuti baris lama). Tes: `TestAttendancePeriodPendingRequests` (Go) dan `attendance-period-dialogs.test.tsx`.
+  2. Redaksi dokumen diluruskan sesuai ruling C1: notifikasi < 7 jam tidak berubah, `min_work_hours` hanya menentukan label "kurang jam" (baris Tugas 5 epic ini dan Q-AB-1 di `pertanyaan-rekomendasi.md`: "R7–R8 (R9 dibatalkan)").
+  Minor yang ditunda (tidak memblokir rilis):
+  - (a) Pengecekan ulang saat persetujuan memaksa "Tolak" bila jam yang diajukan sudah tercatat; karyawan menerima "ditolak" padahal absensinya benar.
+  - (b) Tombol Setujui tidak punya dialog konfirmasi.
+  - (c) Shift lintas tengah malam yang masih berjalan tercantum sebagai "Belum absen pulang".
+  - (d) Tanggal di form ESS tanpa batas bawah; pesan periode ditutup ditujukan ke HR.
+  - (e) Antrean HR dibatasi `LIMIT 200` tanpa paging (hanya riwayat "Semua status" yang terpotong).
+  - (f) Grid tab HR sempit di layar < 500px.
+  - (g) Label "kurang jam" mengabaikan cuti sebagian yang disetujui / Izin pulang awal (keputusan produk).
