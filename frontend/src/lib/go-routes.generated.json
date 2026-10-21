@@ -1761,6 +1761,21 @@
   },
   {
     "module": "hris",
+    "method": "POST",
+    "path": "/api/hris/attendance-requests"
+  },
+  {
+    "module": "hris",
+    "method": "GET",
+    "path": "/api/hris/attendance-requests/attachment/{path...}"
+  },
+  {
+    "module": "hris",
+    "method": "POST",
+    "path": "/api/hris/attendance-requests/{id}/cancel"
+  },
+  {
+    "module": "hris",
     "method": "GET",
     "path": "/api/hris/attendance-settings"
   },
@@ -2348,6 +2363,11 @@
     "module": "hris",
     "method": "GET",
     "path": "/api/hris/me"
+  },
+  {
+    "module": "hris",
+    "method": "GET",
+    "path": "/api/hris/me/attendance-requests"
   },
   {
     "module": "hris",

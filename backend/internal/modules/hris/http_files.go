@@ -32,6 +32,7 @@ func (h handlers) fileRoutes() []module.Route {
 		r("GET /api/hris/attendance/photo/{path...}", h.withActor(h.attendancePhoto)),
 		r("POST /api/hris/leaves/attachment", h.withActor(h.uploadLeaveAttachment)),
 		r("GET /api/hris/leaves/attachment/{path...}", h.withActor(h.leaveAttachment)),
+		r("GET /api/hris/attendance-requests/attachment/{path...}", h.withActor(h.attendanceRequestAttachment)),
 		r("POST /api/hris/announcements/cover", h.withMenu(kepegawaian, h.uploadCover)),
 		r("GET /api/hris/announcements/cover/{path...}", h.withActor(h.coverFile)),
 		r("GET /api/hris/contracts/{id}/document", h.withMenu(kepegawaian, h.contractDocument)),
@@ -161,11 +162,17 @@ func (h handlers) leaveAttachment(w http.ResponseWriter, r *http.Request, a *Act
 // ownedFile serves <folder>/<employeeId>/<file>…: HR reads all, others only
 // files under their own employee id.
 func (h handlers) ownedFile(w http.ResponseWriter, r *http.Request, a *Actor, prefix, folder string) error {
+	return h.ownedFileFor(w, r, a, a.IsHR, prefix, folder)
+}
+
+// ownedFileFor is ownedFile with the reading staff chosen by the caller
+// (IsHR, or the narrower IsHRD).
+func (h handlers) ownedFileFor(w http.ResponseWriter, r *http.Request, a *Actor, staff bool, prefix, folder string) error {
 	segments := privateSegments(r, prefix, folder, 3)
 	if segments == nil {
 		return httpx.BadRequest("Path tidak valid")
 	}
-	if !a.IsHR && (a.EmployeeID == nil || *a.EmployeeID != segments[1]) {
+	if !staff && (a.EmployeeID == nil || *a.EmployeeID != segments[1]) {
 		return httpx.Forbidden("Forbidden")
 	}
 	return h.svc.servePrivate(w, strings.Join(segments, "/"), "")

@@ -91,6 +91,10 @@ func (h handlers) routes() []module.Route {
 		r("GET /api/hris/business-trips", h.withActor(h.listTrips)),
 		r("POST /api/hris/business-trips", h.withActor(h.createTrip)),
 		r("POST /api/hris/business-trips/{id}/decide", h.withActor(h.decideTrip)),
+		// attendance requests (EPIC-065): the employee asks, HR decides;
+		// the attachment read is in fileRoutes
+		r("POST /api/hris/attendance-requests", h.withActor(h.createAttendanceRequest)),
+		r("POST /api/hris/attendance-requests/{id}/cancel", h.withActor(h.cancelAttendanceRequest)),
 
 		// holidays
 		r("GET /api/hris/holidays", h.withUser(h.listHolidays)),
@@ -122,6 +126,7 @@ func (h handlers) routes() []module.Route {
 		r("GET /api/hris/me/beranda", h.withActor(h.beranda)),
 		r("GET /api/hris/me/team", h.withActor(h.team)),
 		r("GET /api/hris/me/team-approvals", h.withActor(h.teamApprovals)),
+		r("GET /api/hris/me/attendance-requests", h.withActor(h.myAttendanceRequests)),
 
 		// announcements (cover upload and files: fileRoutes)
 		r("GET /api/hris/announcements", h.withMenu(kepegawaian, h.listAnnouncements)),
