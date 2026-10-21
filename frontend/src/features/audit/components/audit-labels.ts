@@ -15,6 +15,7 @@ export const ACTION_LABELS: Record<string, string> = {
   "employee.create": "Karyawan ditambahkan",
   "employee.update": "Data karyawan diubah",
   "employee.resign": "Karyawan resign",
+  "employee.rehire": "Karyawan diaktifkan kembali",
   "employee.email_released": "Email karyawan dilepas",
   "employee.schedule_type": "Tipe jadwal diubah",
   "employee.import": "Karyawan diubah lewat import",

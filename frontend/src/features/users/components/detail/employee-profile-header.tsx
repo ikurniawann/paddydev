@@ -29,6 +29,8 @@ interface EmployeeProfileHeaderProps {
   onChangeScheduleType?: () => void;
   /** HR: buka dialog Resign (hanya karyawan aktif). */
   onResign?: () => void;
+  /** HR: buka dialog Aktifkan kembali (hanya karyawan nonaktif). */
+  onRehire?: () => void;
 }
 
 export function EmployeeProfileHeader({
@@ -38,6 +40,7 @@ export function EmployeeProfileHeader({
   onResetPassword,
   onChangeScheduleType,
   onResign,
+  onRehire,
 }: EmployeeProfileHeaderProps) {
   const router = useRouter();
 
@@ -113,6 +116,11 @@ export function EmployeeProfileHeader({
                 {employee.employment_status === "terminated" ? "Diberhentikan" : "Resign"}
                 {employee.end_date ? ` · ${formatDate(employee.end_date)}` : ""}
               </Badge>
+            ) : null}
+            {onRehire && !employee.is_active ? (
+              <Button variant="outline" size="sm" onClick={onRehire}>
+                Aktifkan kembali
+              </Button>
             ) : null}
             {onChangeScheduleType && employee.is_active ? (
               <Button variant="outline" size="sm" onClick={onChangeScheduleType}>

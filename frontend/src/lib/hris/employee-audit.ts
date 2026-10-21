@@ -4,6 +4,7 @@ const ACTIONS: Record<string, string> = {
   "employee.create": "Karyawan ditambahkan",
   "employee.update": "Data diubah",
   "employee.resign": "Resign",
+  "employee.rehire": "Diaktifkan kembali",
   "employee.email_released": "Email dilepas",
   "employee.schedule_type": "Tipe jadwal diubah",
   "employee.import": "Diubah lewat import",
@@ -21,8 +22,8 @@ const FIELDS: Record<string, string> = {
   bpjs_tk: "No. BPJS Ketenagakerjaan", bpjs_kesehatan: "No. BPJS Kesehatan",
   emergency_contact_name: "Kontak Darurat (Nama)", emergency_contact_phone: "Kontak Darurat (No. HP)",
   emergency_contact_relationship: "Kontak Darurat (Hubungan)", notes: "Catatan",
-  effective_from: "Berlaku Mulai", resign_type: "Jenis", reason: "Alasan", branch: "Cabang",
-  from: "Dari", to: "Sampai", days: "Jumlah Hari", released_to: "Dipindah ke Karyawan Baru",
+  effective_from: "Berlaku Mulai", resign_type: "Jenis", reason: "Alasan", branch: "Cabang", branch_id: "Cabang Penempatan",
+  reactivate_login: "Akun Login Diaktifkan", from: "Dari", to: "Sampai", days: "Jumlah Hari", released_to: "Dipindah ke Karyawan Baru",
 };
 
 const STATUS: Record<string, string> = {

@@ -15,6 +15,11 @@ const HISTORY_TYPE_LABELS: Record<string, string> = {
   demotion: "Demotion",
   status_change: "Status Change",
   salary_change: "Salary Change",
+  resign: "Resign",
+  terminated: "Diberhentikan",
+  end_of_contract: "Kontrak Berakhir",
+  contract_activated: "Kontrak Diaktifkan",
+  rehire: "Diaktifkan Kembali",
 };
 
 const HISTORY_COLORS: Record<string, string> = {
@@ -24,6 +29,11 @@ const HISTORY_COLORS: Record<string, string> = {
   demotion: "bg-orange-100 text-orange-700",
   status_change: "bg-yellow-100 text-yellow-700",
   salary_change: "bg-teal-100 text-teal-700",
+  resign: "bg-red-100 text-red-700",
+  terminated: "bg-red-100 text-red-700",
+  end_of_contract: "bg-orange-100 text-orange-700",
+  contract_activated: "bg-blue-100 text-blue-700",
+  rehire: "bg-green-100 text-green-700",
 };
 
 function Change({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
