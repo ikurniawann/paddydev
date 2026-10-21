@@ -28,6 +28,18 @@ describe("validateAttendanceRequestForm (pesan sama dengan server)", () => {
     );
     expect(validateAttendanceRequestForm({ ...valid, reason: "😀😀😀😀😀" }, "2026-10-05")).toBe("");
   });
+
+  it("keterangan maksimal 1000 karakter (hitungan UTF-16 seperti server), dihitung setelah dipangkas", () => {
+    const max = "a".repeat(1000);
+    expect(validateAttendanceRequestForm({ ...valid, reason: ` ${max} ` }, "2026-10-05")).toBe("");
+    expect(validateAttendanceRequestForm({ ...valid, reason: `${max}a` }, "2026-10-05")).toBe(
+      "Keterangan maksimal 1000 karakter"
+    );
+    // 501 emoji = 501 rune tetapi 1002 unit UTF-16 → server menolak
+    expect(validateAttendanceRequestForm({ ...valid, reason: "😀".repeat(501) }, "2026-10-05")).toBe(
+      "Keterangan maksimal 1000 karakter"
+    );
+  });
 });
 
 describe("toAttendanceRequestPayload", () => {

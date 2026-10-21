@@ -50,6 +50,8 @@ export function validateAttendanceRequestForm(form: AttendanceRequestForm, today
   if (!form.date) return "Tanggal wajib diisi";
   if (form.date > today) return "Tanggal pengajuan tidak boleh di masa depan";
   if (runeCount(form.reason.trim()) < 5) return "Keterangan wajib diisi (minimal 5 karakter)";
+  // Server: validate.StrOpts{Max: 1000} menghitung unit UTF-16 (String.length), bukan rune.
+  if (form.reason.trim().length > 1000) return "Keterangan maksimal 1000 karakter";
   if (!form.clock_in && !form.clock_out) return "Isi jam masuk dan/atau jam pulang yang diajukan";
   return "";
 }
