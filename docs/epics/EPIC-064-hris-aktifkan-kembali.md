@@ -1,6 +1,6 @@
 # EPIC-064: Aktifkan Kembali Karyawan & Pesan Duplikat Jelas
 
-status: review
+status: ready-for-qa
 environment: dev
 retries: 0
 
@@ -37,3 +37,11 @@ Lihat `docs/superpowers/plans/2026-10-21-hris-aktifkan-kembali.md` (Task 1–4).
     - Task 3: (nama cabang di audit sudah diperbaiki, lihat perbaikan final) daftar status hanya baris master; belum ada test untuk default `reactivate_login` true dan gate `isHR`; `onDone` hanya me-refetch detail.
     - Dari rencana: saran otomatis "aktifkan kembali" di jalur "Tambah karyawan" Manajemen User (lookup pemilik KTP saat input); membuat akun login untuk karyawan aktif yang belum punya login dari halaman detail.
     - Dari final review: fallback Next (`employees-repo.ts`) dan Excel import masih memakai teks lama (bukan format R9); jalur update memblokir edit baris legacy yang KTP-nya hanya beda format; setelah rehire HR perlu membuat kontrak/gaji baru (belum otomatis); merge PR #10 diperkirakan konflik di `accounts_integration_test.go`, `docs/epics/README.md`, `frontend/src/lib/backend-routes.test.ts` (konflik bergaya append, gabungkan kedua sisi).
+- 2026-10-21 17:58 WIB: **DEPLOY LIVE bersama EPIC-063 + EPIC-064.**
+  - PR [ikurniawann/paddydev#10](https://github.com/ikurniawann/paddydev/pull/10) (EPIC-063) dan [#11](https://github.com/ikurniawann/paddydev/pull/11) (EPIC-064) di-merge ke main (`d57ece4`, `92a9a2c`). CI keduanya hanya gagal di `TestOrderAlerts` dan `TestResendingSameRoleKeepsIamRoles` (baseline main); Unit test, Lint, dan Audit dependensi lulus.
+  - Backup `~/Desktop/paddydev-backups/paddydev-db-before-epic063-064-deploy-20261021-175506.dump` (6,5 MB, 442 tabel).
+  - `tools/deploy-paddydev.sh`: migrasi `20261024090000_approval_atasan.sql` diterapkan (EPIC-064 tanpa migrasi); verify skema 10.600 objek, 0 hilang / 0 berbeda / 0 hanya di DB. Container web & API `local-20261021-175513` sehat (rollback: image `local-20261021-071158`, tag `paddydev:previous` / `paddydev-api:previous`).
+  - `SELECT iam.sync_hris_staff_roles();`: grant admin_hris 57→58, hris_manager 57→58, hris_non_payroll 52→53, hris_non_rekrutmen_kpi 40→41, employee 13→14. Menu `ess.team-approvals` dipegang admin, admin_hris, employee, hris_manager, hris_non_payroll, hris_non_rekrutmen_kpi, marketing, sales, spa_frontdesk, spa_therapist, super_admin.
+  - Cek pasca-deploy (tanpa login): `/api/ready`, `/login`, dan domain publik 200. `/api/hris/me/team-approvals`, `/api/hris/employees/without-manager`, `POST …/employees/{id}/rehire`, `PATCH /api/hris/overtime/{id}`, dan `/api/hris/overtime/day-type` menjawab 401 tanpa sesi. Log API & web 10 menit pertama tanpa error.
+  - Data live `reporting_to` saat deploy: 342 karyawan aktif, 22 tanpa atasan, 2 menunjuk diri sendiri. Perbaikan oleh HR memakai kartu "Tanpa atasan" di halaman Karyawan.
+  - QA manusia: halaman ESS Persetujuan Tim + badge, form lembur ESS (Weekday/Weekend, tolak jam lewat), koreksi lembur HRIS, kartu Tanpa atasan, tombol & dialog Aktifkan kembali, pesan bentrok KTP/NPWP/NIP.
