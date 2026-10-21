@@ -94,6 +94,8 @@ func (h handlers) routes() []module.Route {
 		// attendance requests (EPIC-065): the employee asks, HR decides;
 		// the attachment read is in fileRoutes
 		r("POST /api/hris/attendance-requests", h.withActor(h.createAttendanceRequest)),
+		r("GET /api/hris/attendance-requests", h.withMenu(attendanceManagers, h.listAttendanceRequests)),
+		r("POST /api/hris/attendance-requests/{id}/decide", h.withMenu(attendanceManagers, h.decideAttendanceRequest)),
 		r("POST /api/hris/attendance-requests/{id}/cancel", h.withActor(h.cancelAttendanceRequest)),
 
 		// holidays

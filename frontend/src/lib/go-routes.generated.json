@@ -1761,6 +1761,11 @@
   },
   {
     "module": "hris",
+    "method": "GET",
+    "path": "/api/hris/attendance-requests"
+  },
+  {
+    "module": "hris",
     "method": "POST",
     "path": "/api/hris/attendance-requests"
   },
@@ -1773,6 +1778,11 @@
     "module": "hris",
     "method": "POST",
     "path": "/api/hris/attendance-requests/{id}/cancel"
+  },
+  {
+    "module": "hris",
+    "method": "POST",
+    "path": "/api/hris/attendance-requests/{id}/decide"
   },
   {
     "module": "hris",

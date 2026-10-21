@@ -5,10 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 
 	"nuhabit/backend/internal/modules/hris/domain"
 	"nuhabit/backend/internal/platform/audit"
+	"nuhabit/backend/internal/platform/auth"
 	"nuhabit/backend/internal/platform/database"
 	"nuhabit/backend/internal/platform/httpx"
 	"nuhabit/backend/internal/platform/validate"
@@ -33,6 +35,10 @@ type AttendanceRequestRepo interface {
 	// NotifyHR is public.notify_hrd: the in-app notification the HR
 	// accounts (app role hrd) already get for attendance events (R6).
 	NotifyHR(ctx context.Context, kind, title, message, link string) error
+	// PendingAttendanceRequestCount is the HR Absensi badge.
+	PendingAttendanceRequestCount(ctx context.Context) (int64, error)
+	// NotifyEmployee is public.notify_user on the employee's login account.
+	NotifyEmployee(ctx context.Context, employeeID, kind, title, message, link string) error
 }
 
 type attendanceRequestFilter struct {
@@ -76,17 +82,7 @@ func (s *Service) CreateAttendanceRequest(ctx context.Context, a *Actor, in atte
 	if err != nil {
 		return nil, err
 	}
-	check := domain.AttendanceRequestInput{Date: in.Date, ClockIn: in.ClockIn, ClockOut: in.ClockOut, Reason: in.Reason,
-		HasRow: recorded != nil}
-	if recorded != nil {
-		if t, found := recorded.Time("clock_in"); found {
-			check.RecordedIn = &t
-		}
-		if t, found := recorded.Time("clock_out"); found {
-			check.RecordedOut = &t
-		}
-	}
-	kind, msg := domain.CheckAttendanceRequest(check, s.now())
+	kind, msg := domain.CheckAttendanceRequest(requestCheck(in, recorded), s.now())
 	if msg != "" {
 		return nil, httpx.BadRequest(msg)
 	}
@@ -139,6 +135,22 @@ func (s *Service) CreateAttendanceRequest(ctx context.Context, a *Actor, in atte
 	return obj("data", row, "message", "Pengajuan absensi terkirim — menunggu persetujuan HR"), nil
 }
 
+// requestCheck is the request as CheckAttendanceRequest reads it against the
+// attendance row recorded on its date (nil: none).
+func requestCheck(in attendanceRequestInput, recorded *Row) domain.AttendanceRequestInput {
+	check := domain.AttendanceRequestInput{Date: in.Date, ClockIn: in.ClockIn, ClockOut: in.ClockOut, Reason: in.Reason,
+		HasRow: recorded != nil}
+	if recorded != nil {
+		if t, found := recorded.Time("clock_in"); found {
+			check.RecordedIn = &t
+		}
+		if t, found := recorded.Time("clock_out"); found {
+			check.RecordedOut = &t
+		}
+	}
+	return check
+}
+
 // MyAttendanceRequests is the actor's own requests (ESS).
 func (s *Service) MyAttendanceRequests(ctx context.Context, a *Actor) ([]*Row, error) {
 	if a.EmployeeID == nil {
@@ -180,6 +192,146 @@ func (s *Service) CancelAttendanceRequest(ctx context.Context, a *Actor, id stri
 		return nil, err
 	}
 	return obj("data", row, "message", "Pengajuan absensi dibatalkan"), nil
+}
+
+// attendanceManagers hold the HR Absensi menu: the request queue and its
+// decisions, together with Actor.IsHRD (R2).
+var attendanceManagers = []string{"hris.workforce.attendance"}
+
+const notHRD = "Hanya HRD yang bisa memproses pengajuan absensi"
+
+// ListAttendanceRequests is the HR queue (R2): every employee's requests.
+func (s *Service) ListAttendanceRequests(ctx context.Context, a *Actor, status, employeeID string) ([]*Row, error) {
+	if !a.IsHRD {
+		return nil, httpx.Forbidden(notHRD)
+	}
+	return s.repo.AttendanceRequestList(ctx, attendanceRequestFilter{EmployeeID: employeeID, Status: status})
+}
+
+// DecideAttendanceRequest approves or rejects a pending request (R2/R3).
+// Approval writes the attendance through the functions HR's direct
+// adjustment uses (reason, adjustment log, audit, closed-period lock) and
+// records the decision, its audit row and the employee's notification in
+// that transaction.
+func (s *Service) DecideAttendanceRequest(ctx context.Context, a *Actor, id, action string, rejection *string,
+	meta audit.Entry) (*Row, error) {
+	if !a.IsHRD {
+		return nil, httpx.Forbidden(notHRD)
+	}
+	req, err := s.repo.AttendanceRequestByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if req == nil {
+		return nil, httpx.NotFound("Pengajuan absensi tidak ditemukan")
+	}
+	if a.EmployeeID != nil && req.Str("employee_id") == *a.EmployeeID {
+		return nil, httpx.Forbidden("Tidak bisa memutuskan pengajuan absensi sendiri")
+	}
+	if err := requirePendingRequest(req); err != nil {
+		return nil, err
+	}
+	var decided *Row
+	record := func(r Repository, status string, attendanceID, reason *string) error {
+		var err error
+		decided, err = s.recordAttendanceDecision(ctx, r, a, req, status, attendanceID, reason, meta)
+		return err
+	}
+	message := "Pengajuan absensi disetujui — absensi diperbarui"
+	if action == "reject" {
+		reason := domain.JSTrim(strOr(rejection))
+		if reason == "" {
+			return nil, httpx.BadRequest("Alasan penolakan wajib diisi")
+		}
+		message = "Pengajuan absensi ditolak"
+		err = s.repo.InTx(ctx, func(r Repository) error { return record(r, "rejected", nil, &reason) })
+	} else {
+		err = s.approveAttendanceRequest(ctx, a, req, meta, func(r Repository, att *Row) error {
+			return record(r, "approved", ptr(att.Str("id")), nil)
+		})
+	}
+	if errors.Is(err, errNoRow) {
+		return nil, httpx.Conflict(decisionRace)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if decided == nil {
+		return nil, errors.New("attendance request decision was not recorded")
+	}
+	return obj("data", decided, "message", message), nil
+}
+
+// approveAttendanceRequest writes the requested times: a new row when the
+// date has none at decision time, otherwise a correction of the row (the
+// employee may have clocked in after asking; R3). The request is checked
+// again against the row as it is now.
+func (s *Service) approveAttendanceRequest(ctx context.Context, a *Actor, req *Row, meta audit.Entry,
+	also func(Repository, *Row) error) error {
+	recorded, err := s.repo.RecordedAttendance(ctx, req.Str("employee_id"), req.Str("date"))
+	if err != nil {
+		return err
+	}
+	if _, msg := domain.CheckAttendanceRequest(requestCheck(attendanceRequestInput{Date: req.Str("date"),
+		ClockIn: req.StrPtr("clock_in"), ClockOut: req.StrPtr("clock_out"), Reason: req.Str("reason")}, recorded), s.now()); msg != "" {
+		return httpx.BadRequest(msg)
+	}
+	in := requestAdjustment(req, recorded)
+	if recorded == nil {
+		_, err = s.createManualAttendance(ctx, a, in, meta, also)
+		return err
+	}
+	_, err = s.adjustAttendance(ctx, a, recorded.Str("id"), in, nil, false, meta, also)
+	return err
+}
+
+// requestAdjustment is the HR adjustment an approved request makes (R5):
+// only the requested clock times change, a day HR had marked absent becomes
+// present, and a new row notes that it came from a request.
+func requestAdjustment(req, recorded *Row) adjustment {
+	in := adjustment{EmployeeID: req.Str("employee_id"), Date: req.Str("date"),
+		Reason: "Pengajuan karyawan: " + req.Str("reason")}
+	if v := req.StrPtr("clock_in"); v != nil {
+		in.ClockIn = opt[string]{Val: v, Sent: true}
+	}
+	if v := req.StrPtr("clock_out"); v != nil {
+		in.ClockOut = opt[string]{Val: v, Sent: true}
+	}
+	switch {
+	case recorded == nil:
+		in.Notes = opt[string]{Val: ptr("Absen manual dari pengajuan karyawan"), Sent: true}
+	case recorded.Str("status") == "absent":
+		in.Status = opt[string]{Val: ptr("present"), Sent: true}
+	}
+	return in
+}
+
+// recordAttendanceDecision moves the request out of pending on r, with its
+// audit row (LA-01, R11) and the employee's in-app notification (R6).
+func (s *Service) recordAttendanceDecision(ctx context.Context, r Repository, a *Actor, req *Row, status string,
+	attendanceID, rejection *string, meta audit.Entry) (*Row, error) {
+	var f fields
+	f.add("status", status)
+	f.add("decided_by", a.EmployeeID)
+	f.add("decided_by_name", actorName(a))
+	f.add("decided_at", s.clock())
+	f.add("attendance_id", attendanceID)
+	f.add("rejection_reason", rejection)
+	row, err := r.SetAttendanceRequestStatus(ctx, req.Str("id"), "pending", f)
+	if err != nil {
+		return nil, err
+	}
+	action := "attendance_request.approve"
+	if status == "rejected" {
+		action = "attendance_request.reject"
+	}
+	after := map[string]any{"status": status, "kind": req.Str("kind"), "attendance_id": attendanceID, "rejection_reason": rejection}
+	if err := auditDecision(ctx, r.querier(), a, action, "hris.attendance_requests", req.Str("id"),
+		attendanceRequestLabel(req), nil, after, meta); err != nil {
+		return nil, err
+	}
+	title, message := domain.AttendanceDecisionNotice(status, req.Str("date"), rejection)
+	return row, r.NotifyEmployee(ctx, req.Str("employee_id"), "status_change", title, message, essAttendanceHref)
 }
 
 // requirePendingRequest: only a pending request is cancelled or decided.
@@ -264,6 +416,16 @@ func (s *store) NotifyHR(ctx context.Context, kind, title, message, link string)
 	return err
 }
 
+func (s *store) PendingAttendanceRequestCount(ctx context.Context) (int64, error) {
+	return countRows(ctx, s.db, `SELECT count(*) FROM hris.attendance_requests WHERE status = 'pending'`)
+}
+
+func (s *store) NotifyEmployee(ctx context.Context, employeeID, kind, title, message, link string) error {
+	_, err := s.db.Exec(ctx, `SELECT public.notify_user(e.user_id, $2, $3, $4, $5)
+		FROM hris.employees e WHERE e.id = $1`, employeeID, title, message, kind, link)
+	return err
+}
+
 /* ── HTTP ────────────────────────────────────────────────────────────── */
 
 // requestID canonicalises a path id (lower-case UUID) before any lookup.
@@ -330,4 +492,57 @@ func (h handlers) cancelAttendanceRequest(w http.ResponseWriter, r *http.Request
 // list or decide requests either).
 func (h handlers) attendanceRequestAttachment(w http.ResponseWriter, r *http.Request, a *Actor) error {
 	return h.ownedFileFor(w, r, a, a.IsHRD, "/api/hris/attendance-requests/attachment/", attendanceRequestFolder)
+}
+
+// GET /api/hris/attendance-requests?status=&employee_id= (HR queue)
+func (h handlers) listAttendanceRequests(w http.ResponseWriter, r *http.Request, u *auth.User) error {
+	q := r.URL.Query()
+	status := q.Get("status")
+	if status != "" && !slices.Contains(attendanceRequestStatuses, status) {
+		return httpx.BadRequest("Status tidak valid")
+	}
+	employeeID := ""
+	if raw := q.Get("employee_id"); raw != "" {
+		id, valid := validate.CanonicalUUID(raw)
+		if !valid {
+			return httpx.BadRequest("ID karyawan tidak valid")
+		}
+		employeeID = id
+	}
+	a, err := h.svc.Actor(r.Context(), u)
+	if err != nil {
+		return err
+	}
+	rows, err := h.svc.ListAttendanceRequests(r.Context(), a, status, employeeID)
+	if err != nil {
+		return err
+	}
+	return ok(w, dataOf(rows))
+}
+
+// POST /api/hris/attendance-requests/{id}/decide { action: "approve" | "reject", rejection_reason? }
+func (h handlers) decideAttendanceRequest(w http.ResponseWriter, r *http.Request, u *auth.User) error {
+	id, err := requestID(r.PathValue("id"))
+	if err != nil {
+		return err
+	}
+	const message = "Validation failed"
+	f, err := readForm(r, message)
+	if err != nil {
+		return err
+	}
+	action := f.Enum("action", validate.Rule{}, []string{"approve", "reject"})
+	rejection := f.Str("rejection_reason", nullish, validate.StrOpts{Max: 500})
+	if err := formErr(f, message); err != nil {
+		return err
+	}
+	a, err := h.svc.Actor(r.Context(), u)
+	if err != nil {
+		return err
+	}
+	out, err := h.svc.DecideAttendanceRequest(r.Context(), a, id, *action, rejection, auditMeta(r))
+	if err != nil {
+		return err
+	}
+	return ok(w, out)
 }

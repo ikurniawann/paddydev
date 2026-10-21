@@ -272,6 +272,14 @@ func (s *Service) logAdjustment(ctx context.Context, r Repository, a *Actor, act
 
 // CreateManualAttendance adds a missing attendance row for an employee.
 func (s *Service) CreateManualAttendance(ctx context.Context, a *Actor, in adjustment, meta audit.Entry) (*Row, error) {
+	return s.createManualAttendance(ctx, a, in, meta, nil)
+}
+
+// createManualAttendance is CreateManualAttendance with also run on the
+// same transaction after the row and its logs are written (EPIC-065 R3: an
+// approved employee request records its decision atomically with the row).
+func (s *Service) createManualAttendance(ctx context.Context, a *Actor, in adjustment, meta audit.Entry,
+	also func(Repository, *Row) error) (*Row, error) {
 	if !canManageAttendance(a) {
 		return nil, httpx.Forbidden("Hanya HRD/admin yang bisa menambah absensi manual")
 	}
@@ -345,7 +353,10 @@ func (s *Service) CreateManualAttendance(ctx context.Context, a *Actor, in adjus
 		if row, err = r.InsertAttendance(ctx, f); err != nil {
 			return periodWriteError(err)
 		}
-		return s.logAdjustment(ctx, r, a, "create", row.Str("id"), in.EmployeeID, in.Date, in.Reason, nil, row, meta)
+		if err := s.logAdjustment(ctx, r, a, "create", row.Str("id"), in.EmployeeID, in.Date, in.Reason, nil, row, meta); err != nil {
+			return err
+		}
+		return runAlso(also, r, row)
 	})
 	if err != nil {
 		return nil, err
@@ -357,6 +368,13 @@ func (s *Service) CreateManualAttendance(ctx context.Context, a *Actor, in adjus
 // role and a reason; validated=true stamps the validator as before.
 func (s *Service) AdjustAttendance(ctx context.Context, a *Actor, id string, in adjustment, validation fields,
 	validated bool, meta audit.Entry) (*Row, error) {
+	return s.adjustAttendance(ctx, a, id, in, validation, validated, meta, nil)
+}
+
+// adjustAttendance is AdjustAttendance with also run on the same transaction
+// after a data change is written and logged (EPIC-065 R3).
+func (s *Service) adjustAttendance(ctx context.Context, a *Actor, id string, in adjustment, validation fields,
+	validated bool, meta audit.Entry, also func(Repository, *Row) error) (*Row, error) {
 	current, err := s.repo.AttendanceRecord(ctx, id)
 	if err != nil || current == nil {
 		return nil, errOr(err, httpx.NotFound("Attendance not found"))
@@ -411,12 +429,23 @@ func (s *Service) AdjustAttendance(ctx context.Context, a *Actor, id string, in 
 		if !data {
 			return nil
 		}
-		return s.logAdjustment(ctx, r, a, "update", id, employeeID, date, in.Reason, current, row, meta)
+		if err := s.logAdjustment(ctx, r, a, "update", id, employeeID, date, in.Reason, current, row, meta); err != nil {
+			return err
+		}
+		return runAlso(also, r, row)
 	})
 	if err != nil {
 		return nil, err
 	}
 	return row, nil
+}
+
+// runAlso runs a caller's in-transaction hook (nil: none).
+func runAlso(also func(Repository, *Row) error, r Repository, row *Row) error {
+	if also == nil {
+		return nil
+	}
+	return also(r, row)
 }
 
 // DeleteAttendanceWithReason removes a row (logged with its last state).
