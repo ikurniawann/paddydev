@@ -7,11 +7,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { OvertimeDecisionAction } from "@/lib/hris/overtime-rules";
-import type { OvertimeDayType } from "../types";
+import type { OvertimeDayType, OvertimeRow } from "../types";
 import { countPendingEmployeeRequests, currentMonthValue } from "@/lib/hris/overtime-view";
 import { useDecideOvertime } from "../mutations";
 import { useOvertimeRequests } from "../queries";
 import { OvertimeAssignDialog } from "./overtime-assign-dialog";
+import { OvertimeCorrectionDialog } from "./overtime-correction-dialog";
 import { OvertimeTable } from "./overtime-table";
 
 /**
@@ -28,10 +29,11 @@ const STATUS_FILTER_OPTIONS = [
   { value: "cancelled", label: "Dibatalkan" },
 ];
 
-export function OvertimePage() {
+export function OvertimePage({ canCorrect = false }: { canCorrect?: boolean }) {
   const [statusFilter, setStatusFilter] = useState("all");
   const [monthFilter, setMonthFilter] = useState(currentMonthValue);
   const [assignOpen, setAssignOpen] = useState(false);
+  const [correcting, setCorrecting] = useState<OvertimeRow | null>(null);
   const { data: rows = [], isLoading } = useOvertimeRequests({ status: statusFilter, month: monthFilter });
   const decide = useDecideOvertime();
   const pendingEmployeeRequests = countPendingEmployeeRequests(rows);
@@ -94,9 +96,12 @@ export function OvertimePage() {
         loading={isLoading}
         decidingId={decide.isPending ? (decide.variables?.overtime_id ?? null) : null}
         onDecide={handleDecide}
+        canCorrect={canCorrect}
+        onCorrect={setCorrecting}
       />
 
       <OvertimeAssignDialog open={assignOpen} onOpenChange={setAssignOpen} />
+      <OvertimeCorrectionDialog row={correcting} onClose={() => setCorrecting(null)} />
     </div>
   );
 }

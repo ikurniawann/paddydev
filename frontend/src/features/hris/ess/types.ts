@@ -1,4 +1,5 @@
 import type { GeofenceStatus } from "@/lib/hris/geofence";
+import type { OvertimeDayType } from "@/lib/hris/overtime-rules";
 import type { PayslipAmounts, SlipAllocation } from "@/features/hris/payroll/types";
 
 export interface EssTodayShift {
@@ -101,6 +102,7 @@ export interface EssOvertimeRow {
   status: string;
   reason: string | null;
   rejection_reason: string | null;
+  day_type?: OvertimeDayType;
   requester?: { full_name: string } | null;
 }
 
@@ -109,6 +111,14 @@ export interface EssOvertimeForm {
   start_time: string;
   end_time: string;
   reason: string;
+  day_type: OvertimeDayType;
+}
+
+/** GET /api/hris/overtime/day-type (EPIC-063): saran jenis dari jadwal; null = jadwal tidak diketahui. */
+export interface EssOvertimeDayTypeHint {
+  date: string;
+  day_type: OvertimeDayType | null;
+  label: string | null;
 }
 
 export type EssOvertimeDecision = "approve" | "reject" | "cancel";

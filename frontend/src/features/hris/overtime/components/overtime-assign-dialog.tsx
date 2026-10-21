@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Combobox } from "@/components/ui/combobox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { OVERTIME_DAY_TYPE_OPTIONS } from "@/lib/hris/overtime-rules";
 import { EMPTY_OVERTIME_ASSIGN_FORM, validateOvertimeAssignForm } from "@/lib/hris/overtime-view";
 import { useAssignOvertime } from "../mutations";
 import { useEmployeeOptions } from "@/features/hris/shared/use-employee-options";
@@ -89,14 +90,17 @@ function OvertimeAssignBody({ onClose }: { onClose: () => void }) {
           </div>
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-gray-600">Jenis hari</label>
+          <label className="mb-1 block text-xs font-medium text-gray-600">Jenis lembur</label>
           <select
             value={form.day_type ?? "regular"}
             onChange={(e) => setForm((f) => ({ ...f, day_type: e.target.value as typeof f.day_type }))}
             className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm"
           >
-            <option value="regular">Hari kerja biasa</option>
-            <option value="rest_day">Hari istirahat mingguan (tarif libur)</option>
+            {OVERTIME_DAY_TYPE_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
           </select>
         </div>
         <div>

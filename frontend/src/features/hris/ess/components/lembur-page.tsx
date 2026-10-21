@@ -13,9 +13,17 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { todayWib } from "@/lib/dates";
 import { formatDate } from "@/lib/format";
+import {
+  OVERTIME_DAY_TYPE_OPTIONS,
+  OVERTIME_TOO_LATE,
+  overtimeDayTypeLabel,
+  overtimeStartsInPast,
+  type OvertimeDayType,
+} from "@/lib/hris/overtime-rules";
 import { splitOvertime } from "@/lib/hris/ess-view";
-import { useEssMe, useMyOvertime } from "../queries";
+import { useEssMe, useMyOvertime, useOvertimeDayType } from "../queries";
 import { useDecideOvertime, useSubmitOvertime } from "../mutations";
 import type { EssOvertimeDecision, EssOvertimeForm } from "../types";
 import { EssLoading, EssNotLinked } from "./ess-states";
@@ -38,7 +46,7 @@ function clockLabel(value: string): string {
   return value?.slice(0, 5) ?? "—";
 }
 
-const EMPTY_FORM: EssOvertimeForm = { date: "", start_time: "", end_time: "", reason: "" };
+const EMPTY_FORM: EssOvertimeForm = { date: "", start_time: "", end_time: "", reason: "", day_type: "regular" };
 
 export function EssLemburPage() {
   const { data: me, isLoading } = useEssMe();
@@ -48,6 +56,10 @@ export function EssLemburPage() {
   const [dialog, setDialog] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const decidingId = decideMutation.isPending ? decideMutation.variables?.id : null;
+  // K-13 (EPIC-063 R5): jenis dikunci ke saran jadwal bila server mengetahuinya.
+  const hint = useOvertimeDayType(form.date).data ?? null;
+  const lockedType = hint?.day_type ?? null;
+  const dayType: OvertimeDayType = lockedType ?? form.day_type;
 
   function handleSubmit() {
     if (!form.date || !form.start_time || !form.end_time) {
@@ -58,7 +70,11 @@ export function EssLemburPage() {
       toast.error("Alasan minimal 5 karakter");
       return;
     }
-    submitMutation.mutate(form, {
+    if (overtimeStartsInPast(form.date, form.start_time)) {
+      toast.error(OVERTIME_TOO_LATE);
+      return;
+    }
+    submitMutation.mutate({ ...form, day_type: dayType }, {
       onSuccess: () => {
         toast.success("Pengajuan lembur terkirim — menunggu persetujuan");
         setDialog(false);
@@ -165,6 +181,11 @@ export function EssLemburPage() {
                           Penugasan
                         </span>
                       )}
+                      {row.day_type === "rest_day" && (
+                        <span className="ml-2 rounded-full bg-violet-100 px-2 py-0.5 text-xs font-medium text-violet-700">
+                          {overtimeDayTypeLabel(row.day_type)}
+                        </span>
+                      )}
                     </p>
                     <p className="truncate text-xs text-gray-500">
                       {row.reason || "—"}
@@ -205,25 +226,29 @@ export function EssLemburPage() {
           </DialogHeader>
           <div className="space-y-3">
             <div>
-              <label className="mb-1 block text-xs font-medium text-gray-600">Tanggal</label>
+              <label htmlFor="ot-date" className="mb-1 block text-xs font-medium text-gray-600">Tanggal</label>
               <Input
+                id="ot-date"
                 type="date"
+                min={todayWib()}
                 value={form.date}
                 onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
               />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="mb-1 block text-xs font-medium text-gray-600">Jam Mulai</label>
+                <label htmlFor="ot-start" className="mb-1 block text-xs font-medium text-gray-600">Jam Mulai</label>
                 <Input
+                  id="ot-start"
                   type="time"
                   value={form.start_time}
                   onChange={(e) => setForm((f) => ({ ...f, start_time: e.target.value }))}
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs font-medium text-gray-600">Jam Selesai</label>
+                <label htmlFor="ot-end" className="mb-1 block text-xs font-medium text-gray-600">Jam Selesai</label>
                 <Input
+                  id="ot-end"
                   type="time"
                   value={form.end_time}
                   onChange={(e) => setForm((f) => ({ ...f, end_time: e.target.value }))}
@@ -231,18 +256,42 @@ export function EssLemburPage() {
               </div>
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-gray-600">
+              <label htmlFor="ot-day-type" className="mb-1 block text-xs font-medium text-gray-600">Jenis lembur</label>
+              <select
+                id="ot-day-type"
+                value={dayType}
+                disabled={lockedType !== null}
+                onChange={(e) => setForm((f) => ({ ...f, day_type: e.target.value as OvertimeDayType }))}
+                className="h-9 w-full rounded-md border border-gray-200 bg-white px-2 text-sm disabled:bg-gray-50"
+              >
+                {OVERTIME_DAY_TYPE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              {form.date && (
+                <p className="mt-1 text-xs text-gray-500">
+                  {lockedType
+                    ? `Sesuai jadwal Anda: ${overtimeDayTypeLabel(lockedType)}`
+                    : "Jadwal tanggal ini belum ada — pilih sesuai hari lemburnya"}
+                </p>
+              )}
+            </div>
+            <div>
+              <label htmlFor="ot-reason" className="mb-1 block text-xs font-medium text-gray-600">
                 Alasan / pekerjaan yang dilembur (min. 5 karakter)
               </label>
               <Input
+                id="ot-reason"
                 placeholder="cth. closing stok bulanan"
                 value={form.reason}
                 onChange={(e) => setForm((f) => ({ ...f, reason: e.target.value }))}
               />
             </div>
             <p className="rounded-lg bg-sky-50 px-3 py-2 text-xs text-sky-700">
-              Lembur yang disetujui akan dibayar sesuai jam yang terealisasi
-              (wajib absen clock-in/out pada hari tersebut).
+              Lembur wajib diajukan sebelum jam mulai. Lembur yang disetujui dibayar sesuai jam yang
+              terealisasi (wajib absen clock-in/out pada hari tersebut).
             </p>
           </div>
           <DialogFooter>

@@ -1,6 +1,6 @@
-import { apiGet, apiPost, buildListUrl } from "@/lib/api-client";
+import { apiGet, apiPatch, apiPost, buildListUrl } from "@/lib/api-client";
 import { overtimeListParams, type OvertimeAssignForm } from "@/lib/hris/overtime-view";
-import type { OvertimeDecision, OvertimeFilters, OvertimeRow } from "./types";
+import type { OvertimeCorrection, OvertimeDecision, OvertimeFilters, OvertimeRow } from "./types";
 
 export const fetchOvertime = ({ status, month }: OvertimeFilters) =>
   apiGet<{ data: OvertimeRow[] }>(
@@ -12,3 +12,6 @@ export const assignOvertime = (form: OvertimeAssignForm) =>
 
 export const decideOvertime = (decision: OvertimeDecision) =>
   apiPost<{ message?: string }>("/api/hris/overtime/decide", decision);
+
+export const correctOvertime = ({ id, ...body }: OvertimeCorrection) =>
+  apiPatch<{ message?: string; data: OvertimeRow }>(`/api/hris/overtime/${id}`, body);

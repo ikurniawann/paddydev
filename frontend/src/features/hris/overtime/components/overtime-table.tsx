@@ -1,7 +1,7 @@
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatDate } from "@/lib/format";
-import type { OvertimeDecisionAction } from "@/lib/hris/overtime-rules";
+import { OVERTIME_DAY_TYPE_OPTIONS, overtimeDayTypeLabel, type OvertimeDecisionAction } from "@/lib/hris/overtime-rules";
 import { hhmm } from "@/lib/hris/shifts-view";
 import { useState } from "react";
 import type { OvertimeDayType, OvertimeRow } from "../types";
@@ -18,9 +18,11 @@ interface OvertimeTableProps {
   loading: boolean;
   decidingId: string | null;
   onDecide: (id: string, action: OvertimeDecisionAction, dayType?: OvertimeDayType) => void;
+  canCorrect: boolean;
+  onCorrect: (row: OvertimeRow) => void;
 }
 
-export function OvertimeTable({ rows, loading, decidingId, onDecide }: OvertimeTableProps) {
+export function OvertimeTable({ rows, loading, decidingId, onDecide, canCorrect, onCorrect }: OvertimeTableProps) {
   return (
     <div className="overflow-x-auto rounded-xl border border-gray-200/70 bg-white shadow-sm">
       <table className="w-full text-sm">
@@ -56,6 +58,8 @@ export function OvertimeTable({ rows, loading, decidingId, onDecide }: OvertimeT
                 row={row}
                 deciding={decidingId === row.id}
                 onDecide={onDecide}
+                canCorrect={canCorrect}
+                onCorrect={onCorrect}
               />
             ))
           )}
@@ -69,9 +73,11 @@ interface OvertimeTableRowProps {
   row: OvertimeRow;
   deciding: boolean;
   onDecide: (id: string, action: OvertimeDecisionAction, dayType?: OvertimeDayType) => void;
+  canCorrect: boolean;
+  onCorrect: (row: OvertimeRow) => void;
 }
 
-function OvertimeTableRow({ row, deciding, onDecide }: OvertimeTableRowProps) {
+function OvertimeTableRow({ row, deciding, onDecide, canCorrect, onCorrect }: OvertimeTableRowProps) {
   const badge = STATUS_BADGES[row.status] ?? STATUS_BADGES.pending;
   const pending = row.status === "pending";
   const [dayType, setDayType] = useState<OvertimeDayType>(row.day_type ?? "regular");
@@ -82,7 +88,15 @@ function OvertimeTableRow({ row, deciding, onDecide }: OvertimeTableRowProps) {
         {formatDate(row.date, "—")}
         {row.day_type === "rest_day" && (
           <span className="ml-1 rounded-full bg-violet-100 px-2 py-0.5 text-xs font-medium text-violet-700">
-            Hari istirahat
+            {overtimeDayTypeLabel(row.day_type)}
+          </span>
+        )}
+        {row.corrected_at && (
+          <span
+            className="ml-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700"
+            title={`Dikoreksi ${row.corrected_by_name ?? "HR"}`}
+          >
+            Dikoreksi
           </span>
         )}
       </td>
@@ -107,6 +121,7 @@ function OvertimeTableRow({ row, deciding, onDecide }: OvertimeTableRowProps) {
       </td>
       <td className="px-4 py-3">
         <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${badge.className}`}>{badge.label}</span>
+        {row.decided_as === "hr" && <span className="ml-1 text-xs text-gray-500">oleh HR</span>}
       </td>
       <td className="px-4 py-3 text-right">
         {pending && row.source === "employee" && (
@@ -118,8 +133,11 @@ function OvertimeTableRow({ row, deciding, onDecide }: OvertimeTableRowProps) {
               className="rounded-md border border-gray-200 px-2 text-xs"
               disabled={deciding}
             >
-              <option value="regular">Hari biasa</option>
-              <option value="rest_day">Hari istirahat</option>
+              {OVERTIME_DAY_TYPE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
             </select>
             <Button size="sm" disabled={deciding} onClick={() => onDecide(row.id, "approve", dayType)}>
               Setujui
@@ -142,6 +160,11 @@ function OvertimeTableRow({ row, deciding, onDecide }: OvertimeTableRowProps) {
               Batalkan
             </Button>
           </div>
+        )}
+        {canCorrect && (row.status === "pending" || row.status === "approved") && (
+          <Button size="sm" variant="ghost" className="ml-2 text-xs" onClick={() => onCorrect(row)}>
+            Koreksi
+          </Button>
         )}
       </td>
     </tr>
