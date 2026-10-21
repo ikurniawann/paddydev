@@ -93,3 +93,4 @@ Ruling pengendali selama eksekusi:
 - Baris slip terpisah untuk Insentif dan Denda (sekarang tergabung di "Penghasilan Lain" / "Potongan Lain").
 - Payroll mingguan daily worker (PY-05): periode dan run baru.
 - Menjalankan skrip Task 7 dan mengubah `cutoff_day = 20` di live: keputusan user setelah pratinjau dan simulasi.
+- 2026-10-21 07:14 WIB: **Deploy live** main `5035ae5` (PR #4–#8), image `local-20261021-071158`. Backup sebelum deploy: `~/Desktop/paddydev-backups/paddydev-db-before-epic059-062-deploy-20261021-071142.dump`. 9 migrasi diterapkan (20261020150000 s.d. 20261023090100), cek skema 0 berbeda; `SELECT iam.sync_hris_staff_roles()` dijalankan (grant aktif admin_hris 57, hris_manager 57, hris_non_payroll 52, hris_non_rekrutmen_kpi 40; hak hapus daun HRIS hanya hris_manager = 18). Container sehat tanpa restart; /login, /api/ready 200. Skrip ops struktur gaji, `cutoff_day = 20`, dan `bpjs_kes_subsidy_amount` **belum** dijalankan (tetap keputusan user).
