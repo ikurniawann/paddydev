@@ -1,0 +1,762 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Manual Book ESS Karyawan</title>
+<!--
+  Manual Book ESS Karyawan Paddy HRIS — sumber PDF (lihat README.md).
+  Gambar di screens/ dibuat oleh capture.cjs; PDF dibuat oleh build-pdf.cjs.
+  Daftar isi diisi otomatis oleh build-pdf.cjs (elemen [data-toc]) dari
+  penanda "BAGIAN NN" di judul tiap bagian. Tanpa font eksternal.
+-->
+<style>
+  :root {
+    --pink: #e6007e;
+    --pink-soft: #fde7f3;
+    --ink: #2a1626;
+    --text: #2b2b33;
+    --muted: #6b6b76;
+    --line: #ece4ea;
+    --co: #ea580c;            /* warna callout = lencana di gambar */
+    --paper: #ffffff;
+    --blue-bg: #eef6ff; --blue: #1d5fa8;
+    --amber-bg: #fff6e0; --amber: #8a5a00;
+    --green-bg: #eafaf1; --green: #17733f;
+  }
+  @page { size: A4; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--paper); }
+  body {
+    font-family: "Ubuntu Sans", "Noto Sans", "DejaVu Sans", "Liberation Sans", Arial, sans-serif;
+    color: var(--text); font-size: 10.5pt; line-height: 1.45;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+  img { display: block; max-width: 100%; }
+  b, strong { color: #1d1d24; }
+
+  /* ── Sampul ─────────────────────────────────────────────── */
+  .cover {
+    width: 210mm; height: 297mm; position: relative; overflow: hidden;
+    background: linear-gradient(150deg, #ff2d98 0%, #e6007e 45%, #7b2cbf 100%);
+    color: #fff; padding: 22mm 18mm; break-after: page;
+  }
+  .cover .brand { font-size: 13pt; font-weight: 800; letter-spacing: .5px; opacity: .95; }
+  .cover .brand span { display: inline-block; background: #fff; color: var(--pink); border-radius: 3mm; padding: 1mm 3mm; margin-right: 2mm; }
+  .cover h1 { font-size: 34pt; line-height: 1.05; margin: 20mm 0 5mm; font-weight: 800; max-width: 110mm; color: #fff; }
+  .cover .sub { font-size: 13pt; max-width: 100mm; opacity: .95; }
+  .cover .ver {
+    display: inline-block; margin-top: 9mm; background: #fff; color: var(--ink);
+    font-weight: 800; font-size: 13pt; padding: 2.5mm 6mm; border-radius: 20mm;
+  }
+  .cover ul { margin: 10mm 0 0; padding: 0; list-style: none; max-width: 95mm; font-size: 11pt; }
+  .cover li { padding: 1.4mm 0 1.4mm 7mm; position: relative; }
+  .cover li::before { content: ""; position: absolute; left: 0; top: 3.4mm; width: 3mm; height: 3mm; border-radius: 50%; background: #ffd23f; }
+  .phone {
+    position: absolute; right: 16mm; top: 58mm; width: 72mm;
+    border: 3.2mm solid #1b0f19; border-radius: 10mm; background: #fbf5ee; overflow: hidden;
+    box-shadow: 0 6mm 14mm rgba(30, 0, 30, .35);
+  }
+  .phone img { width: 100%; }
+  .cover .foot { position: absolute; left: 18mm; right: 18mm; bottom: 16mm; font-size: 9pt; opacity: .9; }
+
+  /* ── Halaman isi ────────────────────────────────────────── */
+  .page-intro h2 { font-size: 20pt; margin: 0 0 4mm; color: var(--ink); }
+  .toc { list-style: none; margin: 0 0 7mm; padding: 0; }
+  .toc li { display: flex; align-items: baseline; gap: 2mm; padding: 1.6mm 0; border-bottom: 1px dotted #d9cfd6; font-size: 11pt; }
+  .toc .no { width: 8mm; height: 8mm; flex: none; border-radius: 50%; background: var(--pink-soft); color: var(--pink); font-weight: 800; font-size: 10pt; display: inline-flex; align-items: center; justify-content: center; }
+  .toc .t { flex: 1; }
+  .toc .t small { color: var(--muted); font-size: 9pt; }
+  .toc .pg { font-weight: 700; min-width: 8mm; text-align: right; }
+
+  section.bab { break-before: page; }
+  .bab-head {
+    display: flex; gap: 4mm; align-items: center; padding: 4mm 5mm; border-radius: 4mm;
+    background: linear-gradient(120deg, var(--pink-soft), #efe9ff); margin-bottom: 5mm;
+  }
+  .bab-head .num { font-size: 22pt; font-weight: 800; color: var(--pink); min-width: 13mm; text-align: center; }
+  .bab-head .kicker { font-size: 8pt; letter-spacing: 1.2px; color: var(--muted); font-weight: 700; }
+  .bab-head h2 { margin: 0; font-size: 17pt; color: var(--ink); line-height: 1.15; }
+  .bab-head p { margin: 1mm 0 0; color: #4b4b55; }
+
+  h3 { font-size: 12pt; margin: 0 0 2mm; color: var(--ink); }
+  p { margin: 0 0 2.2mm; }
+
+  /* Blok langkah: gambar di kiri, penjelasan bernomor di kanan. */
+  .blk { display: grid; grid-template-columns: 72mm 1fr; gap: 6mm; margin: 0 0 6mm; break-inside: avoid; align-items: start; }
+  .blk.wide { grid-template-columns: 92mm 1fr; }
+  .blk.full { grid-template-columns: 1fr; }
+  .shot { margin: 0; border: 1px solid var(--line); border-radius: 3mm; overflow: hidden; background: #fbf7f2; }
+  .shot img { width: 100%; max-height: 190mm; object-fit: contain; }
+  .shot + .shot { margin-top: 3mm; }
+  .cap { font-size: 8.5pt; color: var(--muted); margin-top: 1.5mm; }
+
+  ol.co { list-style: none; counter-reset: co; margin: 0 0 2mm; padding: 0; }
+  ol.co > li { counter-increment: co; position: relative; padding: 0 0 2.4mm 9mm; }
+  ol.co > li::before {
+    content: counter(co); position: absolute; left: 0; top: -.2mm; width: 6.2mm; height: 6.2mm; border-radius: 50%;
+    background: var(--co); color: #fff; font-weight: 800; font-size: 9pt; text-align: center; line-height: 6.2mm;
+  }
+  ul.dots { margin: 0 0 2mm; padding-left: 5mm; }
+  ul.dots li { margin-bottom: 1.2mm; }
+
+  .box { border-radius: 3mm; padding: 3mm 4mm; margin: 0 0 4mm; break-inside: avoid; }
+  .box > :last-child { margin-bottom: 0; }
+  .box .h { font-weight: 800; margin-bottom: 1mm; display: block; }
+  .info { background: var(--blue-bg); color: #18406e; }
+  .warn { background: var(--amber-bg); color: #5e3d00; }
+  .ok { background: var(--green-bg); color: #145c33; }
+  .info b, .warn b, .ok b { color: inherit; }
+
+  .chip { display: inline-block; border-radius: 10mm; padding: .2mm 2.4mm; font-size: 8.8pt; font-weight: 700; white-space: nowrap; }
+  .c-amber { background: #fef3c7; color: #b45309; }
+  .c-green { background: #dcfce7; color: #15803d; }
+  .c-red { background: #fee2e2; color: #b91c1c; }
+  .c-gray { background: #f1f1f4; color: #55555f; }
+  .c-indigo { background: #e0e7ff; color: #4338ca; }
+  .c-sky { background: #e0f2fe; color: #0369a1; }
+
+  table.t { width: 100%; border-collapse: collapse; margin: 0 0 4mm; font-size: 9.8pt; break-inside: avoid; }
+  table.t th, table.t td { text-align: left; vertical-align: top; padding: 1.8mm 2.4mm; border-bottom: 1px solid var(--line); }
+  table.t th { background: #f7f1f5; color: var(--ink); font-size: 9pt; }
+  table.t td:first-child { white-space: nowrap; }
+
+  .flow { display: flex; flex-wrap: wrap; align-items: center; gap: 1.5mm; margin: 1mm 0 3mm; }
+  .flow .ar { color: var(--muted); font-weight: 700; }
+
+  .faq { columns: 2; column-gap: 8mm; margin: 0; }
+  .faq > div { break-inside: avoid; padding-bottom: 2.5mm; }
+  .faq dt { font-weight: 800; color: var(--ink); }
+  .faq dd { margin: 1mm 0 0; }
+  .contact { border: 1.5px dashed #cdb9c7; border-radius: 4mm; padding: 4mm 5mm; margin-top: 5mm; break-inside: avoid; }
+  .contact .row { display: flex; gap: 3mm; margin: 3.5mm 0 0; }
+  .contact .row span { width: 42mm; flex: none; }
+  .contact .row i { flex: 1; border-bottom: 1px solid #bfaeb9; }
+  .legend { display: flex; gap: 3mm; align-items: center; }
+  .legend .dot { width: 6.2mm; height: 6.2mm; border-radius: 50%; background: var(--co); color: #fff; font-weight: 800; font-size: 9pt; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+
+  /* build-pdf.cjs: .no-cover untuk isi, .cover-only untuk sampul. */
+  body.no-cover .cover { display: none; }
+  body.cover-only > :not(.cover) { display: none; }
+  @media screen { body { max-width: 210mm; margin: 0 auto; } main { padding: 10mm 14mm; } }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════ SAMPUL ═══════════════════════ -->
+<div class="cover">
+  <div class="brand"><span>Paddy</span>HRIS · Area Karyawan</div>
+  <h1>Manual Book ESS Karyawan</h1>
+  <div class="sub">Panduan bergambar untuk karyawan toko dan kantor: absen, izin &amp; cuti, kasbon, perjalanan dinas, lembur, dan slip gaji.</div>
+  <div class="ver">Versi 2 · 21 Oktober 2026</div>
+  <ul>
+    <li>Langkah singkat bernomor</li>
+    <li>Angka oranye di gambar = nomor langkah</li>
+    <li>Bisa dibaca di HP atau dicetak A4</li>
+  </ul>
+  <div class="phone"><img src="screens/00-sampul.png" alt=""></div>
+  <div class="foot">Nama dan data pada gambar adalah contoh fiktif (Rina Lestari, Andi Pratama). Tampilan aplikasi bisa sedikit berbeda setelah pembaruan.</div>
+</div>
+
+<main>
+<!-- ═══════════════════════ DAFTAR ISI ═══════════════════════ -->
+<div class="page-intro">
+  <h2>Daftar Isi</h2>
+  <ol class="toc">
+    <li><span class="no">1</span><span class="t">Masuk ke aplikasi <small>· login, Beranda, menu</small></span><span class="pg" data-toc="01"></span></li>
+    <li><span class="no">2</span><span class="t">Absen Masuk (Clock In) <small>· shift, pilih toko, selfie</small></span><span class="pg" data-toc="02"></span></li>
+    <li><span class="no">3</span><span class="t">Di luar area toko <small>· popup dan keterangan</small></span><span class="pg" data-toc="03"></span></li>
+    <li><span class="no">4</span><span class="t">Absen Pulang (Clock Out)</span><span class="pg" data-toc="04"></span></li>
+    <li><span class="no">5</span><span class="t">Riwayat absensi <small>· kalender</small></span><span class="pg" data-toc="05"></span></li>
+    <li><span class="no">6</span><span class="t">Izin &amp; Cuti</span><span class="pg" data-toc="06"></span></li>
+    <li><span class="no">7</span><span class="t">Pinjaman &amp; Kasbon</span><span class="pg" data-toc="07"></span></li>
+    <li><span class="no">8</span><span class="t">Perjalanan Dinas</span><span class="pg" data-toc="08"></span></li>
+    <li><span class="no">9</span><span class="t">Lembur</span><span class="pg" data-toc="09"></span></li>
+    <li><span class="no">10</span><span class="t">Slip Gaji</span><span class="pg" data-toc="10"></span></li>
+    <li><span class="no">11</span><span class="t">Kalau ada masalah <small>· tanya jawab, kontak HR</small></span><span class="pg" data-toc="11"></span></li>
+  </ol>
+
+  <h3>Cara membaca panduan ini</h3>
+  <div class="legend" style="margin-bottom:3mm"><span class="dot">1</span><span>Angka oranye di gambar sama dengan nomor di teks sebelahnya. Ikuti dari nomor kecil ke besar.</span></div>
+  <div class="box info"><span class="h">Yang perlu disiapkan</span>
+    <ul class="dots">
+      <li>HP dengan kamera, GPS (lokasi), dan internet.</li>
+      <li>Email dan kata sandi akun dari HR.</li>
+      <li>Browser Chrome (Android) atau Safari (iPhone).</li>
+    </ul>
+  </div>
+  <div class="box warn"><span class="h">Penting</span>
+    Jangan berikan kata sandi ke orang lain. Absen dengan akun teman dianggap pelanggaran.
+  </div>
+</div>
+
+<!-- ═══════════════════════ 1. MASUK ═══════════════════════ -->
+<section class="bab" id="masuk">
+  <div class="bab-head"><div class="num">1</div><div><div class="kicker">BAGIAN 01</div><h2>Masuk ke aplikasi</h2><p>Masuk sekali, lalu semua menu karyawan ada di Area Karyawan.</p></div></div>
+
+  <div class="blk">
+    <figure class="shot"><img src="screens/01-login.png" alt="Halaman masuk"></figure>
+    <div>
+      <h3>Masuk (login)</h3>
+      <p>Buka alamat aplikasi Paddy dari HR di browser HP.</p>
+      <ol class="co">
+        <li>Ketik <b>email</b> akun Anda.</li>
+        <li>Ketik <b>kata sandi</b>. Ketuk ikon mata untuk melihat ketikan.</li>
+        <li>Ketuk <b>Masuk</b>. Anda langsung dibawa ke <b>Area Karyawan</b>.</li>
+      </ol>
+      <div class="box ok"><span class="h">Tips</span>Di menu browser pilih <b>Tambahkan ke Layar Utama</b>. Aplikasi jadi bisa dibuka seperti aplikasi biasa.</div>
+    </div>
+  </div>
+
+  <div class="blk">
+    <figure class="shot"><img src="screens/01-beranda.png" alt="Beranda karyawan"></figure>
+    <div>
+      <h3>Beranda</h3>
+      <p>Halaman pertama setelah masuk. Isinya ringkasan hari Anda.</p>
+      <ol class="co">
+        <li><b>Absensi Hari Ini</b>: shift, pilihan toko, tombol <b>Clock In</b> dan <b>Clock Out</b>. Lihat Bagian 2.</li>
+        <li><b>Sisa Cuti Tahunan</b> tahun ini.</li>
+        <li><b>Kehadiran</b> bulan ini dan jumlah terlambat.</li>
+        <li><b>Slip Gaji Terakhir</b> (gaji diterima).</li>
+        <li><b>Pinjaman Aktif</b>: sisa dan cicilan per bulan.</li>
+      </ol>
+      <p>Ketuk kartu mana saja untuk membuka halaman lengkapnya. Di bawahnya ada <b>Jadwal Minggu Ini</b> dan <b>Pengumuman</b>.</p>
+    </div>
+  </div>
+
+  <div class="blk">
+    <figure class="shot"><img src="screens/01-beranda-aksi.png" alt="Status pengajuan dan aksi cepat"></figure>
+    <div>
+      <h3>Status pengajuan dan Aksi Cepat</h3>
+      <ol class="co">
+        <li><b>Status Pengajuan Saya</b>: cuti, lembur, dan pinjaman terbaru beserta statusnya.</li>
+        <li><b>Aksi Cepat</b>: tombol pintas ke Absensi, Ajukan Cuti, Lembur, Pinjaman, Slip Gaji, dan Pengumuman.</li>
+      </ol>
+      <p>Arti warna status:</p>
+      <p><span class="chip c-amber">Menunggu</span> belum diputus &nbsp; <span class="chip c-green">Disetujui</span> diterima &nbsp; <span class="chip c-red">Ditolak</span> tidak diterima</p>
+    </div>
+  </div>
+
+  <div class="blk">
+    <div>
+      <figure class="shot"><img src="screens/01-bilah-bawah.png" alt="Bilah menu bawah"></figure>
+      <figure class="shot"><img src="screens/01-menu-lainnya.png" alt="Menu Lainnya"></figure>
+    </div>
+    <div>
+      <h3>Pindah menu</h3>
+      <p>Di bagian bawah layar ada bilah menu.</p>
+      <ol class="co">
+        <li><b>Area Karyawan</b>: kembali ke Beranda karyawan.</li>
+        <li><b>Lainnya</b>: membuka semua menu.</li>
+      </ol>
+      <p>Di jendela <b>Lainnya</b> (gambar bawah):</p>
+      <ol class="co">
+        <li>Kolom <b>Cari halaman</b>: ketik nama menu, mis. "dinas".</li>
+        <li>Semua menu <b>Area Karyawan</b>. <b>Perjalanan Dinas</b> hanya ada di sini (tidak ada di Aksi Cepat).</li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════ 2. ABSEN MASUK ═══════════════════════ -->
+<section class="bab" id="absen-masuk">
+  <div class="bab-head"><div class="num">2</div><div><div class="kicker">BAGIAN 02</div><h2>Absen Masuk (Clock In)</h2><p>Absen dengan foto selfie dan lokasi GPS. Bisa dari Beranda atau menu Absensi.</p></div></div>
+
+  <div class="blk">
+    <figure class="shot"><img src="screens/02-absensi.png" alt="Halaman Absensi"></figure>
+    <div>
+      <h3>Buka halaman Absensi</h3>
+      <ol class="co">
+        <li><b>Shift hari ini</b>: jam masuk, jam pulang, dan toleransi terlambat.</li>
+        <li><b>Toko tempat Anda bekerja hari ini</b>. Muncul bila Anda ditempatkan di lebih dari satu toko. Wajib dipilih.</li>
+        <li>Ketuk <b>Clock In</b>.</li>
+        <li>Foto selfie dan GPS wajib.</li>
+      </ol>
+      <div class="box info">Belum ada jadwal shift? Absen tetap bisa. Absen tercatat tanpa penilaian terlambat. Hari libur pun tetap bisa absen.</div>
+    </div>
+  </div>
+
+  <div class="blk">
+    <figure class="shot"><img src="screens/02-pilih-toko.png" alt="Pilih toko"></figure>
+    <div>
+      <h3>Pilih toko (bila ada pilihan)</h3>
+      <ol class="co">
+        <li>Ketuk kotak toko, lalu pilih toko tempat Anda <b>benar-benar</b> bekerja hari ini.</li>
+      </ol>
+      <p>Tanda <b>(utama)</b> = toko penempatan utama Anda. Bila Anda hanya punya satu toko, nama toko langsung tampil dan tidak perlu dipilih.</p>
+    </div>
+  </div>
+
+  <div class="blk">
+    <figure class="shot"><img src="screens/02-selfie.png" alt="Kamera selfie"></figure>
+    <div>
+      <h3>Ambil foto selfie</h3>
+      <p>Bila HP bertanya, ketuk <b>Izinkan</b> untuk kamera.</p>
+      <ol class="co">
+        <li>Arahkan wajah ke kamera. Pastikan wajah terlihat jelas.</li>
+        <li>Ketuk <b>Ambil Foto</b>.</li>
+      </ol>
+      <p>Ketuk <b>Batal</b> bila tidak jadi absen.</p>
+    </div>
+  </div>
+
+  <div class="blk">
+    <figure class="shot"><img src="screens/02-selfie-konfirmasi.png" alt="Konfirmasi foto"></figure>
+    <div>
+      <h3>Kirim foto</h3>
+      <ol class="co">
+        <li>Ketuk <b>Gunakan Foto Ini</b> bila foto sudah jelas.</li>
+        <li>Ketuk <b>Ulangi</b> untuk mengambil foto lagi.</li>
+      </ol>
+      <p>Setelah itu aplikasi membaca lokasi GPS. Bila HP bertanya, ketuk <b>Izinkan</b> untuk lokasi.</p>
+    </div>
+  </div>
+
+  <div class="blk">
+    <div>
+      <figure class="shot"><img src="screens/02-berhasil.png" alt="Absen masuk berhasil"></figure>
+      <figure class="shot"><img src="screens/02-notifikasi.png" alt="Notifikasi berhasil"></figure>
+    </div>
+    <div>
+      <h3>Absen masuk berhasil</h3>
+      <p>Muncul pesan <b>Clock-in berhasil</b> (gambar bawah).</p>
+      <ol class="co">
+        <li>Jam masuk dan nama toko.</li>
+        <li><span class="chip c-green">Tepat waktu</span> atau <span class="chip c-red">Terlambat … mnt</span>.</li>
+        <li>Status lokasi absen (lihat tabel).</li>
+      </ol>
+    </div>
+  </div>
+
+  <table class="t">
+    <tr><th>Status lokasi</th><th>Artinya</th></tr>
+    <tr><td><span class="chip c-green">Dalam area</span></td><td>Anda berada di dalam radius toko.</td></tr>
+    <tr><td><span class="chip c-red">Di luar area</span></td><td>Anda di luar radius toko. Wajib isi keterangan. Lihat Bagian 3.</td></tr>
+    <tr><td><span class="chip c-gray">Belum dicek</span></td><td>Lokasi tidak dinilai: lokasi toko belum diisi HR, atau GPS HP tidak terbaca. Absen <b>tetap sah</b>.</td></tr>
+    <tr><td><span class="chip c-sky">Perjalanan Dinas</span></td><td>Anda sedang dinas yang sudah disetujui. Lokasi tidak dicek. Lihat Bagian 8.</td></tr>
+  </table>
+  <div class="box warn"><span class="h">Saat ini hampir semua absen "Belum dicek"</span>
+    Lokasi toko sedang dilengkapi HR. Selama itu absen Anda tampil <span class="chip c-gray">Belum dicek</span>. Ini normal, tidak perlu lapor. Tetap nyalakan GPS dan izinkan lokasi, supaya nanti lokasi Anda bisa dicek otomatis.
+  </div>
+</section>
+
+<!-- ═══════════════════════ 3. DI LUAR AREA ═══════════════════════ -->
+<section class="bab" id="luar-area">
+  <div class="bab-head"><div class="num">3</div><div><div class="kicker">BAGIAN 03</div><h2>Di luar area toko</h2><p>Bila lokasi toko sudah diisi HR dan Anda absen jauh dari toko, muncul popup ini.</p></div></div>
+
+  <div class="blk">
+    <figure class="shot"><img src="screens/03-popup-luar-area.png" alt="Popup di luar area toko"></figure>
+    <div>
+      <h3>Popup "Anda di luar area toko"</h3>
+      <ol class="co">
+        <li>Jarak Anda dari toko dan <b>batas radius toko</b>. Contoh: ±403 m dari toko, batas 250 m.</li>
+        <li>Tulis <b>keterangan</b> kenapa Anda di luar toko. Contoh: antar pesanan pelanggan, ambil stok di gudang.</li>
+        <li>Keterangan minimal <b>5 karakter</b>.</li>
+        <li>Ketuk <b>Tetap absen</b>.</li>
+      </ol>
+      <p>Ketuk <b>Batal</b> bila Anda ternyata salah tempat. Absen belum tercatat; dekati toko lalu absen lagi.</p>
+      <div class="box info">Batas radius berbeda per toko. Bila HR tidak mengatur khusus, batasnya 100 m.</div>
+    </div>
+  </div>
+
+  <div class="blk">
+    <figure class="shot"><img src="screens/03-hasil-luar-area.png" alt="Hasil absen di luar area"></figure>
+    <div>
+      <h3>Hasilnya</h3>
+      <ol class="co">
+        <li>Absen tetap tercatat dengan status <span class="chip c-red">Di luar area · jarak</span>.</li>
+      </ol>
+      <p>HR akan meninjau keterangan Anda. Tulis keterangan yang jujur dan jelas.</p>
+      <p>Hal yang sama berlaku saat <b>Absen Pulang</b>.</p>
+      <div class="box ok"><span class="h">Supaya tidak "Di luar area"</span>
+        <ul class="dots">
+          <li>Absen saat sudah di dalam toko.</li>
+          <li>Nyalakan GPS / lokasi akurat di HP.</li>
+          <li>Tugas di luar toko seharian? Ajukan <b>Perjalanan Dinas</b> dulu (Bagian 8).</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════ 4. ABSEN PULANG ═══════════════════════ -->
+<section class="bab" id="absen-pulang">
+  <div class="bab-head"><div class="num">4</div><div><div class="kicker">BAGIAN 04</div><h2>Absen Pulang (Clock Out)</h2><p>Lakukan setiap selesai kerja. Caranya sama dengan absen masuk.</p></div></div>
+
+  <div class="blk">
+    <figure class="shot"><img src="screens/04-clock-out.png" alt="Tombol Clock Out"></figure>
+    <div>
+      <h3>Langkah</h3>
+      <ol class="co">
+        <li>Ketuk <b>Clock Out</b> (aktif setelah Anda absen masuk).</li>
+      </ol>
+      <p>Lalu ambil selfie, ketuk <b>Gunakan Foto Ini</b>, dan izinkan lokasi. Sama seperti Bagian 2.</p>
+    </div>
+  </div>
+
+  <div class="blk">
+    <figure class="shot"><img src="screens/04-selesai.png" alt="Absensi hari ini selesai"></figure>
+    <div>
+      <h3>Selesai</h3>
+      <ol class="co">
+        <li>Jam masuk dan jam pulang tercatat.</li>
+        <li>Muncul tanda <b>Absensi hari ini selesai</b>.</li>
+      </ol>
+      <p>Status lokasi pulang tampil sebagai <b>Pulang: …</b>.</p>
+    </div>
+  </div>
+
+  <div class="box warn"><span class="h">Jangan lupa absen pulang</span>
+    <ul class="dots">
+      <li><b>Lembur hanya dihitung bila Anda absen pulang.</b> Lembur dibayar sesuai jam yang benar-benar terjadi.</li>
+      <li>Lupa absen pulang? Segera hubungi atasan atau HR. Absen tidak bisa diubah sendiri.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ═══════════════════════ 5. RIWAYAT ═══════════════════════ -->
+<section class="bab" id="riwayat">
+  <div class="bab-head"><div class="num">5</div><div><div class="kicker">BAGIAN 05</div><h2>Riwayat absensi</h2><p>Kalender absensi ada di bawah halaman Absensi.</p></div></div>
+
+  <div class="blk">
+    <figure class="shot"><img src="screens/05-kalender.png" alt="Kalender absensi"></figure>
+    <div>
+      <h3>Kalender absensi</h3>
+      <ol class="co">
+        <li>Ganti bulan dengan tombol panah. <b>Hari Ini</b> kembali ke bulan berjalan.</li>
+        <li>Ketuk tanggal untuk melihat rinciannya.</li>
+        <li>Arti titik warna.</li>
+      </ol>
+      <p>Titik hijau = hadir, oranye = terlambat, ungu = ada jadwal shift, abu-abu = libur. Tanggal hari ini berwarna biru.</p>
+    </div>
+  </div>
+
+  <div class="blk">
+    <figure class="shot"><img src="screens/05-detail-hari.png" alt="Rincian satu hari"></figure>
+    <div>
+      <h3>Rincian satu hari</h3>
+      <p>Berisi jadwal shift hari itu, jam masuk – jam pulang, terlambat atau tidak, dan jumlah jam kerja.</p>
+      <p>Semua jam memakai <b>WIB</b>.</p>
+      <div class="box info">Ada data yang salah? Laporkan ke atasan atau HR. Perbaikan absen dilakukan oleh HR.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════ 6. IZIN & CUTI ═══════════════════════ -->
+<section class="bab" id="cuti">
+  <div class="bab-head"><div class="num">6</div><div><div class="kicker">BAGIAN 06</div><h2>Izin &amp; Cuti</h2><p>Ajukan izin atau cuti dari HP, lalu pantau statusnya.</p></div></div>
+
+  <div class="blk">
+    <figure class="shot"><img src="screens/06-cuti.png" alt="Halaman Izin dan Cuti"></figure>
+    <div>
+      <h3>Halaman Izin &amp; Cuti</h3>
+      <p>Buka lewat Aksi Cepat <b>Ajukan Cuti</b> atau menu <b>Izin &amp; Cuti</b>.</p>
+      <ol class="co">
+        <li>Sisa <b>cuti tahunan</b> tahun ini.</li>
+        <li>Ketuk <b>Ajukan Izin / Cuti</b>.</li>
+        <li>Status tiap pengajuan.</li>
+        <li>Bila <span class="chip c-red">Ditolak</span>, alasannya tertulis setelah <b>Alasan ditolak:</b>.</li>
+      </ol>
+      <p>Alasan panjang bisa terpotong di layar HP. Putar HP mendatar, atau tanya atasan / HR.</p>
+    </div>
+  </div>
+
+  <div class="blk">
+    <figure class="shot"><img src="screens/06-jenis.png" alt="Daftar jenis izin dan cuti"></figure>
+    <div>
+      <h3>Pilih jenis</h3>
+      <ol class="co">
+        <li>Ketuk kotak <b>Jenis</b>, lalu pilih jenis izin/cuti.</li>
+      </ol>
+      <table class="t">
+        <tr><th>Jenis</th><th>Catatan</th></tr>
+        <tr><td>Cuti Tahunan</td><td>Memotong jatah cuti tahunan (12 hari/tahun; karyawan baru dihitung sisa bulan).</td></tr>
+        <tr><td>Sakit</td><td>Sebaiknya lampirkan foto surat dokter.</td></tr>
+        <tr><td>Izin Pribadi</td><td>Maks. <b>3×/bulan</b>, per satu hari. Memotong <b>1 hari THP</b> per hari izin. Karyawan magang tidak dipotong.</td></tr>
+        <tr><td>Izin Leader</td><td>Khusus jabatan <b>Supervisor ke atas</b>. Maks. <b>1×/bulan</b>, per satu hari. Tidak memotong gaji.</td></tr>
+        <tr><td>Cuti Melahirkan</td><td></td></tr>
+        <tr><td>Cuti Ayah</td><td></td></tr>
+        <tr><td>Cuti Ibadah Haji/Umrah</td><td></td></tr>
+        <tr><td>Cuti Menikah</td><td></td></tr>
+        <tr><td>Cuti Duka</td><td></td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="blk">
+    <figure class="shot"><img src="screens/06-form-cuti.png" alt="Form pengajuan cuti"></figure>
+    <div>
+      <h3>Isi form</h3>
+      <ol class="co">
+        <li><b>Jenis</b> izin/cuti.</li>
+        <li>Tanggal <b>Mulai</b>.</li>
+        <li>Tanggal <b>Selesai</b>.</li>
+        <li><b>Alasan</b>, minimal 10 karakter.</li>
+        <li><b>Lampiran</b> (boleh kosong): foto surat dokter dsb., maks. 5 MB.</li>
+        <li><b>Memotong jatah … hari</b>: perkiraan jatah yang terpakai.</li>
+        <li>Ketuk <b>Kirim Pengajuan</b>.</li>
+      </ol>
+      <div class="box info">Sabtu, Minggu, dan tanggal merah <b>tidak</b> memotong jatah. Cuti bersama tetap memotong. Contoh di gambar: Jumat s.d. Senin = 4 hari kalender, jatah terpotong 2 hari.</div>
+    </div>
+  </div>
+
+  <div class="blk">
+    <figure class="shot"><img src="screens/06-form-izin-pribadi.png" alt="Form Izin Pribadi"></figure>
+    <div>
+      <h3>Izin Pribadi</h3>
+      <ol class="co">
+        <li>Pilih <b>Izin Pribadi</b>.</li>
+        <li>Tanggal <b>Selesai</b> otomatis sama dengan tanggal mulai (izin per satu hari).</li>
+        <li>Sisa kuota bulan itu dan efeknya ke gaji.</li>
+      </ol>
+      <p>Perlu 2 hari? Ajukan dua kali, satu per hari. Bila kuota habis, sistem menolak pengajuan.</p>
+    </div>
+  </div>
+
+  <div class="blk">
+    <figure class="shot"><img src="screens/06-izin-leader.png" alt="Izin Leader untuk Supervisor ke atas"></figure>
+    <div>
+      <h3>Izin Leader (Supervisor ke atas)</h3>
+      <ol class="co">
+        <li><b>Izin Leader</b> hanya muncul di daftar bila jabatan Anda Supervisor ke atas.</li>
+      </ol>
+      <p>Kuota 1 hari per bulan, per satu hari, tidak memotong gaji. Gambar ini dari akun atasan contoh (Andi, Store Manager).</p>
+    </div>
+  </div>
+
+  <h3>Status pengajuan</h3>
+  <table class="t">
+    <tr><th>Status</th><th>Artinya</th></tr>
+    <tr><td><span class="chip c-amber">Menunggu</span></td><td>Belum diputus atasan langsung / HR.</td></tr>
+    <tr><td><span class="chip c-green">Disetujui</span></td><td>Izin/cuti diterima.</td></tr>
+    <tr><td><span class="chip c-red">Ditolak</span></td><td>Tidak diterima. Baca alasannya. Boleh ajukan ulang dengan perbaikan.</td></tr>
+    <tr><td><span class="chip c-gray">Dibatalkan</span></td><td>Pengajuan dibatalkan. Minta HR bila perlu membatalkan cuti yang sudah disetujui.</td></tr>
+  </table>
+</section>
+
+<!-- ═══════════════════════ 7. PINJAMAN & KASBON ═══════════════════════ -->
+<section class="bab" id="pinjaman">
+  <div class="bab-head"><div class="num">7</div><div><div class="kicker">BAGIAN 07</div><h2>Pinjaman &amp; Kasbon</h2><p>Ajukan kasbon (potong gaji 1–2 bulan) atau pinjaman, lalu pantau cicilannya.</p></div></div>
+
+  <div class="blk">
+    <figure class="shot"><img src="screens/07-pinjaman.png" alt="Halaman Pinjaman"></figure>
+    <div>
+      <h3>Halaman Pinjaman</h3>
+      <ol class="co">
+        <li>Ketuk <b>Ajukan Pinjaman</b>.</li>
+        <li>Pengajuan yang masih <span class="chip c-amber">Menunggu</span>.</li>
+        <li>Kasbon <span class="chip c-green">Berjalan</span>: sudah dibayar, sisa, dan garis kemajuan cicilan.</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="blk">
+    <figure class="shot"><img src="screens/07-form-kasbon.png" alt="Form kasbon"></figure>
+    <div>
+      <h3>Isi form</h3>
+      <ol class="co">
+        <li><b>Jenis</b>: Kasbon (Salary Advance) atau Pinjaman.</li>
+        <li><b>Jumlah</b> dalam rupiah, tanpa titik.</li>
+        <li><b>Tenor</b>: kasbon 1 bulan, atau 2 bulan (50% / 50%).</li>
+        <li><b>Perkiraan cicilan</b> per bulan, tanpa bunga.</li>
+        <li>Ketuk <b>Kirim Pengajuan</b>.</li>
+      </ol>
+      <p>Isi juga <b>Keperluan</b>. Cicilan otomatis dipotong dari gaji setelah disetujui.</p>
+    </div>
+  </div>
+
+  <table class="t">
+    <tr><th>Aturan kasbon</th><th></th></tr>
+    <tr><td>Jumlah maksimal</td><td><b>50% THP</b> (gaji pokok + tunjangan transport, makan, dan jabatan).</td></tr>
+    <tr><td>Tenor</td><td>1 bulan, atau 2 bulan (dipotong 50% / 50%).</td></tr>
+    <tr><td>Tidak bisa mengajukan</td><td>Karyawan berstatus <b>Probation</b>, <b>Freelance</b>, atau <b>Magang</b>.</td></tr>
+    <tr><td>Pinjaman aktif</td><td>Jumlah pinjaman aktif per orang dibatasi aturan HR.</td></tr>
+  </table>
+  <p>Untuk <b>Pinjaman</b> (bukan kasbon), cicilan per bulan dibatasi persentase gaji pokok sesuai aturan HR. Bila melewati batas, sistem menampilkan pesan dan pengajuan tidak terkirim.</p>
+
+  <h3>Alur status kasbon</h3>
+  <div class="flow"><span class="chip c-amber">Menunggu</span><span class="ar">→</span><span class="chip c-indigo">Disetujui Manager</span><span class="ar">→</span><span class="chip c-green">Berjalan</span><span class="ar">→</span><span class="chip c-sky">Lunas</span></div>
+  <ul class="dots">
+    <li><b>Menunggu</b>: menunggu persetujuan atasan level <b>Manager ke atas</b> di jalur atasan Anda. Bila tidak ada, langsung ke HR.</li>
+    <li><b>Disetujui Manager</b>: tinggal persetujuan HR.</li>
+    <li><b>Berjalan</b>: disetujui HR; cicilan dipotong dari gaji.</li>
+    <li><b>Lunas</b>: cicilan selesai. <span class="chip c-red">Ditolak</span> bisa terjadi di tahap mana pun; alasannya tampil di bawah pengajuan.</li>
+  </ul>
+
+  <div class="blk">
+    <figure class="shot"><img src="screens/07-persetujuan-tim.png" alt="Persetujuan Kasbon Tim"></figure>
+    <div>
+      <h3>Untuk atasan: Persetujuan Kasbon Tim</h3>
+      <p>Atasan level Manager ke atas melihat kotak ini di halaman Pinjaman. Gambar dari akun contoh Andi (Store Manager).</p>
+      <ol class="co">
+        <li>Nama karyawan, jumlah, tenor, dan keperluan.</li>
+        <li><b>Setujui</b>: diteruskan ke HR.</li>
+        <li><b>Tolak</b>: kasbon tidak diproses.</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="blk">
+    <figure class="shot"><img src="screens/07-disetujui-manager.png" alt="Status Disetujui Manager"></figure>
+    <div>
+      <h3>Yang dilihat karyawan</h3>
+      <ol class="co">
+        <li>Setelah atasan menyetujui, status berubah menjadi <span class="chip c-indigo">Disetujui Manager</span>. Tunggu persetujuan HR.</li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════ 8. PERJALANAN DINAS ═══════════════════════ -->
+<section class="bab" id="perjalanan-dinas">
+  <div class="bab-head"><div class="num">8</div><div><div class="kicker">BAGIAN 08</div><h2>Perjalanan Dinas</h2><p>Untuk tugas di luar toko. Selama dinas disetujui, absen tidak dicek radius toko.</p></div></div>
+
+  <div class="blk">
+    <figure class="shot"><img src="screens/08-dinas.png" alt="Halaman Perjalanan Dinas"></figure>
+    <div>
+      <h3>Halaman Perjalanan Dinas</h3>
+      <p>Buka lewat <b>Lainnya → Perjalanan Dinas</b>.</p>
+      <ol class="co">
+        <li>Ketuk <b>Ajukan</b>.</li>
+        <li>Pengajuan <span class="chip c-amber">Menunggu</span>. Ketuk <b>Batalkan</b> bila tidak jadi.</li>
+        <li>Dinas <span class="chip c-green">Disetujui</span>.</li>
+      </ol>
+      <div class="box ok"><span class="h">Efek dinas yang disetujui</span>
+        Pada tanggal dinas, absen tetap wajib (selfie + GPS), tetapi <b>tidak dicek radius toko</b>. Status lokasi tampil <span class="chip c-sky">Perjalanan Dinas</span>, jadi tidak muncul popup "di luar area".
+      </div>
+    </div>
+  </div>
+
+  <div class="blk">
+    <figure class="shot"><img src="screens/08-form-dinas.png" alt="Form Perjalanan Dinas"></figure>
+    <div>
+      <h3>Isi form</h3>
+      <ol class="co">
+        <li><b>Tanggal mulai</b> (paling cepat hari ini).</li>
+        <li><b>Tanggal selesai</b>. Maksimal 31 hari per pengajuan.</li>
+        <li>Jumlah hari dinas.</li>
+        <li><b>Tujuan</b>, minimal 3 karakter.</li>
+        <li><b>Keperluan</b>, minimal 5 karakter.</li>
+        <li>Ketuk <b>Kirim pengajuan</b>.</li>
+      </ol>
+      <p>Ajukan <b>sebelum</b> berangkat, supaya disetujui sebelum Anda absen di lokasi dinas.</p>
+    </div>
+  </div>
+
+  <div class="blk">
+    <figure class="shot"><img src="screens/08-persetujuan-tim.png" alt="Persetujuan Perjalanan Dinas Tim"></figure>
+    <div>
+      <h3>Untuk atasan langsung</h3>
+      <p>Atasan langsung melihat kotak <b>Persetujuan Perjalanan Dinas Tim</b> di halaman yang sama.</p>
+      <ol class="co">
+        <li>Nama, tanggal, tujuan, dan keperluan.</li>
+        <li><b>Setujui</b>.</li>
+        <li><b>Tolak</b>: wajib menulis alasan.</li>
+      </ol>
+    </div>
+  </div>
+
+</section>
+
+<!-- ═══════════════════════ 9. LEMBUR ═══════════════════════ -->
+<section class="bab" id="lembur">
+  <div class="bab-head"><div class="num">9</div><div><div class="kicker">BAGIAN 09</div><h2>Lembur</h2><p>Ajukan lembur, atau konfirmasi penugasan lembur dari perusahaan.</p></div></div>
+
+  <div class="blk">
+    <figure class="shot"><img src="screens/09-lembur.png" alt="Halaman Lembur"></figure>
+    <div>
+      <h3>Halaman Lembur</h3>
+      <ol class="co">
+        <li>Ketuk <b>Ajukan Lembur</b>.</li>
+        <li><b>Penugasan dari perusahaan</b>: ketuk <b>Konfirmasi</b> bila bersedia, atau <b>Tolak</b> dengan alasan.</li>
+        <li><b>Riwayat Lembur</b> dan statusnya.</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="blk">
+    <figure class="shot"><img src="screens/09-form-lembur.png" alt="Form Ajukan Lembur"></figure>
+    <div>
+      <h3>Isi form</h3>
+      <ol class="co">
+        <li><b>Tanggal</b> lembur.</li>
+        <li><b>Jam mulai</b>.</li>
+        <li><b>Jam selesai</b>. Lembur 1 sampai 12 jam.</li>
+        <li><b>Alasan</b> / pekerjaan, minimal 5 karakter.</li>
+        <li>Lembur dibayar sesuai jam yang terjadi. <b>Wajib absen masuk dan pulang</b> hari itu.</li>
+      </ol>
+      <p>Lalu ketuk <b>Kirim Pengajuan</b>. Pengajuan diputus atasan langsung atau HR. Yang masih <b>Menunggu</b> bisa Anda batalkan.</p>
+      <div class="box warn">Aturan persetujuan lembur bisa diperbarui. Ikuti informasi terbaru dari HR.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════ 10. SLIP GAJI ═══════════════════════ -->
+<section class="bab" id="slip-gaji">
+  <div class="bab-head"><div class="num">10</div><div><div class="kicker">BAGIAN 10</div><h2>Slip Gaji</h2><p>Slip muncul setelah gaji periode itu dibayarkan.</p></div></div>
+
+  <div class="blk">
+    <figure class="shot"><img src="screens/10-slip-gaji.png" alt="Daftar slip gaji"></figure>
+    <div>
+      <h3>Lihat slip</h3>
+      <p>Buka Aksi Cepat <b>Slip Gaji</b>.</p>
+      <ol class="co">
+        <li>Ketuk kartu bulan yang ingin dilihat. Angka besar = gaji diterima (take home pay).</li>
+      </ol>
+      <p>Belum ada slip? Artinya gaji periode itu belum dibayarkan.</p>
+    </div>
+  </div>
+
+  <div class="blk">
+    <figure class="shot"><img src="screens/10-slip-rincian.png" alt="Rincian slip gaji"></figure>
+    <div>
+      <h3>Rincian slip</h3>
+      <p>Berisi penghasilan, potongan (BPJS, cicilan pinjaman, dll.), gaji diterima, dan kehadiran.</p>
+      <ol class="co">
+        <li>Ketuk <b>Unduh PDF</b> untuk menyimpan slip.</li>
+      </ol>
+      <div class="box info">Slip gaji bersifat rahasia. Jangan dibagikan. Ada pertanyaan? Hubungi HR.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════ 11. MASALAH / FAQ ═══════════════════════ -->
+<section class="bab" id="masalah">
+  <div class="bab-head"><div class="num">11</div><div><div class="kicker">BAGIAN 11</div><h2>Kalau ada masalah</h2><p>Tanya jawab singkat. Belum terjawab? Hubungi HR.</p></div></div>
+
+  <div class="blk">
+    <figure class="shot"><img src="screens/11-gagal-masuk.png" alt="Pesan gagal masuk"></figure>
+    <div>
+      <h3>Tidak bisa masuk</h3>
+      <ol class="co">
+        <li>Pesan <b>Invalid login credentials</b> = email atau kata sandi salah.</li>
+      </ol>
+      <p>Periksa huruf besar/kecil dan spasi. Ketuk ikon mata untuk melihat kata sandi.</p>
+      <p>Muncul <b>Terlalu banyak percobaan masuk</b>? Tunggu beberapa menit, lalu coba lagi.</p>
+      <p>Lupa kata sandi? Minta HR mengatur ulang.</p>
+    </div>
+  </div>
+
+  <dl class="faq">
+    <div><dt>Kamera tidak muncul saat absen.</dt><dd>Izinkan kamera untuk browser di pengaturan HP, lalu muat ulang halaman. Tutup aplikasi lain yang memakai kamera.</dd></div>
+    <div><dt>Status lokasi selalu "Belum dicek".</dt><dd>Normal selama lokasi toko belum diisi HR. Tetap nyalakan GPS dan izinkan lokasi.</dd></div>
+    <div><dt>Muncul popup "di luar area", padahal saya di toko.</dt><dd>GPS kurang akurat. Keluar ke dekat pintu/jendela, tunggu sebentar, lalu ulangi. Bila tetap muncul, isi keterangan yang jujur dan beri tahu atasan.</dd></div>
+    <div><dt>Tombol Clock In tidak bisa ditekan.</dt><dd>Pilih toko dulu (bila ada pilihan toko). Bila sudah absen masuk hari ini, tombol memang mati.</dd></div>
+    <div><dt>Lupa absen masuk atau pulang.</dt><dd>Laporkan ke atasan atau HR hari itu juga. Perbaikan absen dilakukan HR.</dd></div>
+    <div><dt>Izin Leader tidak ada di daftar.</dt><dd>Izin Leader khusus jabatan Supervisor ke atas. Bila jabatan Anda sudah sesuai, minta HR memeriksa data jabatan.</dd></div>
+    <div><dt>Pengajuan ditolak sistem dengan pesan merah.</dt><dd>Baca pesannya. Contoh: kuota habis, tanggal bertabrakan dengan pengajuan lain, atau kasbon melebihi 50% THP.</dd></div>
+    <div><dt>Data saya (nama, jabatan, toko) salah.</dt><dd>Hubungi HR. Data karyawan hanya bisa diubah HR.</dd></div>
+  </dl>
+
+  <div class="contact">
+    <h3>Kontak HR</h3>
+    <div class="row"><span>Nama</span><i></i></div>
+    <div class="row"><span>WhatsApp / telepon</span><i></i></div>
+    <div class="row"><span>Email</span><i></i></div>
+    <div class="row"><span>Alamat aplikasi</span><i></i></div>
+    <div class="row"><span>Jam layanan</span><i></i></div>
+  </div>
+</section>
+</main>
+</body>
+</html>
