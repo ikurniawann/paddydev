@@ -54,6 +54,9 @@ export type ReceiptStallOption = {
   id: string;
   name: string;
   branch_id: string | null;
+  branch_name?: string;
+  /** "<nama> — <branch>" bila daftar melintasi branch (tampilkan lewat stallLabel). */
+  label?: string;
 };
 export type ReceiptSettingsData = {
   data: PosReceiptSettings[];

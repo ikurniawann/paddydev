@@ -116,6 +116,10 @@ export interface ReportStallOption {
   id: string;
   code: string;
   name: string;
+  branch_id?: string;
+  branch_name?: string;
+  /** "<nama> — <branch>" bila picker melintasi branch (tampilkan lewat stallLabel). */
+  label?: string;
 }
 
 export interface TransactionReportParams {

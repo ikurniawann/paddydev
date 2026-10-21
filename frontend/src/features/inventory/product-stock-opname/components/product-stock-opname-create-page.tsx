@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { stallLabel } from "@/lib/auth/stall-label";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -137,7 +138,7 @@ function ProductStockOpnameEditor({
 
   const warehouseOptions = (warehousesQuery.data || []).map((w) => ({
     value: w.id,
-    label: w.name,
+    label: stallLabel(w),
     description: w.code,
   }));
   const selectedWarehouse = warehouseOptions.find(

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { stallLabel } from "@/lib/auth/stall-label";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -59,7 +60,7 @@ export function NewProductPage() {
   const [formData, setFormData] = useState<ProductFormData>(EMPTY_PRODUCT_FORM);
   const stallOptions = (warehousesQuery.data ?? []).map((w) => ({
     value: w.id,
-    label: w.name,
+    label: stallLabel(w),
     description: w.code,
   }));
   const [bomItems, setBomItems] = useState<BOMFormItem[]>([]);

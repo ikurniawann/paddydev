@@ -1,4 +1,5 @@
 import { formatNumber } from "@/lib/format";
+import { stallLabel } from "@/lib/auth/stall-label";
 import { sortWarehouses } from "@/lib/configuration/sort-warehouses";
 import {
   isMainStorageCode,
@@ -30,7 +31,7 @@ export function partitionWarehouses(warehouses: WarehouseOption[]) {
 export function toComboboxOptions(items: WarehouseOption[]) {
   return items.map((w) => ({
     value: w.id,
-    label: w.name,
+    label: stallLabel(w),
     description: w.code,
   }));
 }

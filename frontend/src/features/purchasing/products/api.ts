@@ -86,6 +86,8 @@ export interface ProductWarehouseOption {
   name: string;
   code: string;
   is_default?: boolean;
+  branch_name?: string;
+  label?: string;
 }
 
 export async function listProductWarehouses(): Promise<ProductWarehouseOption[]> {

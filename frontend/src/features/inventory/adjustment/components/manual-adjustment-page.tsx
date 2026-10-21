@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { stallLabel } from "@/lib/auth/stall-label";
 import { MagnifyingGlassIcon } from "@heroicons/react/24/outline";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -45,7 +46,7 @@ export function ManualAdjustmentPage() {
 
   const warehouseOptions = (warehousesQuery.data || []).map((w) => ({
     value: w.id,
-    label: w.name,
+    label: stallLabel(w),
     description: w.code,
   }));
   const selectedWarehouse = warehouseOptions.find(

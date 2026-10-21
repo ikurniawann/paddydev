@@ -52,8 +52,8 @@ export async function GET(request: NextRequest) {
     const report = buildRushHourReport(points);
 
     const stallLabel = stallFilter.selectedWarehouseId
-      ? stallFilter.stallOptions.find((s) => s.id === stallFilter.selectedWarehouseId)?.name ??
-        "Outlet terpilih"
+      ? (stallFilter.stallOptions.find((s) => s.id === stallFilter.selectedWarehouseId)?.label ??
+        "Outlet terpilih")
       : "Semua outlet";
 
     const buffer = await buildRushHourXlsx(report, {

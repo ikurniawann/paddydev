@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  toComboboxOptions,
   transferInputError,
   transferProgress,
   type TransferLine,
@@ -65,5 +66,20 @@ describe("transferProgress", () => {
       toTransfer: 1,
       total: 3,
     });
+  });
+});
+
+describe("toComboboxOptions", () => {
+  it("memakai label (nama + branch) bila ada, selain itu nama", () => {
+    const base = { code: "MAIN", is_default: true };
+    expect(
+      toComboboxOptions([
+        { id: "a", name: "Main Storage", label: "Main Storage — Alpha", ...base },
+        { id: "b", name: "Stall 1", ...base },
+      ]),
+    ).toEqual([
+      { value: "a", label: "Main Storage — Alpha", description: "MAIN" },
+      { value: "b", label: "Stall 1", description: "MAIN" },
+    ]);
   });
 });

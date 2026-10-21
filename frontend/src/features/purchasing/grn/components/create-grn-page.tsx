@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { stallLabel } from "@/lib/auth/stall-label";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ClipboardCheck, Loader2Icon, TruckIcon } from "lucide-react";
 import { toast } from "sonner";
@@ -165,7 +166,7 @@ export function CreateGrnPage({ moduleType = "raw_material" }: { moduleType?: Pu
                     <Combobox
                       options={warehouses.map((warehouse) => ({
                         value: warehouse.id,
-                        label: warehouse.name,
+                        label: stallLabel(warehouse),
                         description: warehouse.code,
                       }))}
                       value={warehouseId}

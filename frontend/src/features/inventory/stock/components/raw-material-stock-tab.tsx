@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { stallLabel } from "@/lib/auth/stall-label";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -102,7 +103,7 @@ export function RawMaterialStockTab() {
       { value: "all", label: "Semua Outlet (Total Cabang)" },
       ...warehouses.map((w) => ({
         value: w.id,
-        label: w.name,
+        label: stallLabel(w),
         description: w.code,
       })),
     ],
@@ -111,7 +112,8 @@ export function RawMaterialStockTab() {
 
   const selectedWarehouseLabel = useMemo(() => {
     if (warehouseFilter === "all") return "Semua Outlet (Total Cabang)";
-    return warehouses.find((w) => w.id === warehouseFilter)?.name || "Outlet";
+    const selected = warehouses.find((w) => w.id === warehouseFilter);
+    return selected ? stallLabel(selected) : "Outlet";
   }, [warehouseFilter, warehouses]);
 
   const listQuery = useRawMaterialStock({

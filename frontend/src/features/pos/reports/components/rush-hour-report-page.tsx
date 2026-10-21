@@ -31,6 +31,7 @@ import { useRushHourReport } from "../queries";
 import { firstDayOfMonthWib, todayWib } from "@/lib/pos/report-dates";
 import { stallFilterValue } from "../utils/stall-filter";
 import { formatNumber, formatRupiah } from "@/lib/format";
+import { stallLabel } from "@/lib/auth/stall-label";
 
 function heatClass(intensity: number) {
   if (intensity <= 0) return "bg-muted/40 text-muted-foreground";
@@ -159,7 +160,7 @@ export function RushHourReportPage() {
                 {!stallLocked ? <option value="">Semua outlet</option> : null}
                 {stallOptions.map((stall) => (
                   <option key={stall.id} value={stall.id}>
-                    {stall.name} ({stall.code})
+                    {stallLabel(stall)} ({stall.code})
                   </option>
                 ))}
               </select>

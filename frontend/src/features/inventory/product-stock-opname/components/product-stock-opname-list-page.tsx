@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { stallLabel } from "@/lib/auth/stall-label";
 import Link from "next/link";
 import {
   ArrowPathIcon,
@@ -54,7 +55,7 @@ export function ProductStockOpnameListPage() {
     { value: "", label: `All ${STALL_LABELS.plural}` },
     ...(warehousesQuery.data ?? []).map((w) => ({
       value: w.id,
-      label: w.name,
+      label: stallLabel(w),
       description: w.code,
     })),
   ];

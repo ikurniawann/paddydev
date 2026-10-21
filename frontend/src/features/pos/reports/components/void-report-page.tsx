@@ -29,6 +29,7 @@ import {
 import { loadOrderTransactionDetail } from "../utils/load-order-detail";
 import { stallFilterValue } from "../utils/stall-filter";
 import { formatDateTime, formatRupiah } from "@/lib/format";
+import { stallLabel } from "@/lib/auth/stall-label";
 
 export function VoidReportPage() {
   const [dateFrom, setDateFrom] = useState(firstDayOfMonthWib);
@@ -143,7 +144,7 @@ export function VoidReportPage() {
                 {!stallLocked ? <option value="">Semua outlet</option> : null}
                 {stallOptions.map((stall) => (
                   <option key={stall.id} value={stall.id}>
-                    {stall.name} ({stall.code})
+                    {stallLabel(stall)} ({stall.code})
                   </option>
                 ))}
               </select>

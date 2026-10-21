@@ -45,3 +45,40 @@ export function stallDisplayName(
   const match = accessible.find((row) => row.id === stall.id);
   return match ? formatStallLabel(match, stallsSpanBranches(accessible)) : stall.name;
 }
+
+const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
+
+/** Urutan cabang: nama branch (natural, tak peduli huruf besar), lalu id branch. */
+export function compareStallBranch(
+  a: Pick<StallBranchSource, "branch_id" | "branch_name">,
+  b: Pick<StallBranchSource, "branch_id" | "branch_name">
+): number {
+  return (
+    collator.compare(a.branch_name, b.branch_name) ||
+    (a.branch_id < b.branch_id ? -1 : a.branch_id > b.branch_id ? 1 : 0)
+  );
+}
+
+/**
+ * Untuk daftar outlet dari endpoint mana pun: isi `branch_name` dari peta
+ * id→nama branch, urutkan per branch (Main Storage / default dulu, selebihnya
+ * urutan asal), dan beri `label` dengan aturan yang sama dengan
+ * /api/auth/stall-options. Field lama dipertahankan.
+ */
+export function withBranchLabels<
+  T extends { name: string; branch_id: string; is_default?: boolean | null },
+>(
+  rows: ReadonlyArray<T>,
+  branchNames: ReadonlyMap<string, string>
+): Array<T & { branch_name: string; label: string }> {
+  const named = rows.map((row) => ({
+    ...row,
+    branch_name: branchNames.get(row.branch_id) ?? "",
+  }));
+  named.sort(
+    (a, b) =>
+      compareStallBranch(a, b) || Number(b.is_default === true) - Number(a.is_default === true)
+  );
+  const withBranch = stallsSpanBranches(named);
+  return named.map((row) => ({ ...row, label: formatStallLabel(row, withBranch) }));
+}

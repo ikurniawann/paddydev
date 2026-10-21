@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireIamMenuPrefix } from "@/lib/api/auth";
 import { apiHandler } from "@/lib/api/handler";
 import { IAM } from "@/lib/iam/prefixes";
+import { withBranchLabels } from "@/lib/auth/stall-label";
 import { createPgClient } from "@/lib/pg/create-client";
 import { loadPosReceiptSettingsRows, normalizeReceiptSettings } from "@/lib/pos/receipt-settings";
 import { parseReceiptScopeInput, upsertReceiptScope } from "@/lib/settings/receipt-scope";
@@ -18,13 +19,23 @@ export const GET = apiHandler(async () => {
   // bergantung pada permission endpoint warehouse milik modul lain.
   const { data: stalls, error } = await db
     .from("warehouses")
-    .select("id, name, branch_id")
+    .select("id, name, branch_id, is_default")
     .order("name", { ascending: true });
   if (error) throw error;
+  // Tiap branch punya "Main Storage" sendiri: beri nama branch + label.
+  const { data: branches, error: branchError } = await db.from("branches").select("id, name");
+  if (branchError) throw branchError;
+  const branchNames = new Map(
+    ((branches ?? []) as Array<{ id: string; name: string }>).map((branch) => [branch.id, branch.name])
+  );
+  const options = withBranchLabels(
+    (stalls ?? []) as Array<{ id: string; name: string; branch_id: string; is_default: boolean | null }>,
+    branchNames
+  ).map(({ id, name, branch_id, branch_name, label }) => ({ id, name, branch_id, branch_name, label }));
   return NextResponse.json({
     success: true,
     data: rows.map((row) => normalizeReceiptSettings(row)),
-    stalls: stalls ?? [],
+    stalls: options,
   });
 }, "GET /api/settings/receipt");
 

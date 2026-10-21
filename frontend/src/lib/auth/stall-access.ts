@@ -1,5 +1,6 @@
 import { query, queryOne } from "@/lib/db";
 import { compareWarehouses, sortWarehouses } from "@/lib/configuration/sort-warehouses";
+import { compareStallBranch } from "@/lib/auth/stall-label";
 import { computeStallAllAccess } from "@/lib/users/stall-assignment";
 
 export interface StallOption {
@@ -12,16 +13,9 @@ export interface StallOption {
   branch_name: string;
 }
 
-const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
-
 /** Urut per nama branch, lalu Main Storage dulu dan urutan stall biasa. */
 export function sortStallsByBranch<T extends StallOption>(stalls: T[]): T[] {
-  return [...stalls].sort(
-    (a, b) =>
-      collator.compare(a.branch_name, b.branch_name) ||
-      (a.branch_id < b.branch_id ? -1 : a.branch_id > b.branch_id ? 1 : 0) ||
-      compareWarehouses(a, b)
-  );
+  return [...stalls].sort((a, b) => compareStallBranch(a, b) || compareWarehouses(a, b));
 }
 
 const STALL_COLUMNS = `w.id, w.name, w.code, w.is_default, w.branch_id, COALESCE(b.name, '') AS branch_name`;

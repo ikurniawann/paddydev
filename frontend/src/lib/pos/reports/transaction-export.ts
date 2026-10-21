@@ -1,4 +1,5 @@
 import type { TransactionReport, TransactionReportRow } from "@/lib/pos/reports/types";
+import { stallLabel } from "@/lib/auth/stall-label";
 import {
   formatCompTypeLabel,
   formatPaymentMethodLabel,
@@ -20,7 +21,7 @@ function stallFilterLabel(report: TransactionReport) {
   const id = report.filters.warehouse_id;
   if (!id) return "Semua outlet";
   const stall = report.stall_options.find((row) => row.id === id);
-  return stall ? `${stall.name} (${stall.code})` : id;
+  return stall ? `${stallLabel(stall)} (${stall.code})` : id;
 }
 
 function methodLabel(row: TransactionReportRow) {

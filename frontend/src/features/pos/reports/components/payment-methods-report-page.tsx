@@ -22,6 +22,7 @@ import { usePaymentMethodsReport } from "../queries";
 import type { PaymentMethodsReportGranularity } from "@/lib/pos/reports/types";
 import { stallFilterValue } from "../utils/stall-filter";
 import { formatRupiah, formatRupiahCompact } from "@/lib/format";
+import { stallLabel } from "@/lib/auth/stall-label";
 
 const GRANULARITY_OPTIONS: Array<{
   value: PaymentMethodsReportGranularity;
@@ -134,7 +135,7 @@ export function PaymentMethodsReportPage() {
                 {!stallLocked ? <option value="">Semua outlet</option> : null}
                 {stallOptions.map((stall) => (
                   <option key={stall.id} value={stall.id}>
-                    {stall.name} ({stall.code})
+                    {stallLabel(stall)} ({stall.code})
                   </option>
                 ))}
               </select>

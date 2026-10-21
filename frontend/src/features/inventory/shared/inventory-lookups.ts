@@ -4,7 +4,14 @@ import { useQuery } from "@tanstack/react-query";
 
 /** Data pilihan bersama halaman inventori (gudang, bahan baku). */
 
-export type WarehouseLookup = { id: string; name: string; code: string };
+export type WarehouseLookup = {
+  id: string;
+  name: string;
+  code: string;
+  branch_name?: string;
+  /** "<nama> — <branch>" bila daftar melintasi branch (tampilkan lewat stallLabel). */
+  label?: string;
+};
 export type MaterialLookup = {
   id: string;
   kode: string;

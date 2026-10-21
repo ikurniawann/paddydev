@@ -128,7 +128,7 @@ export async function listProductStockOpnamePreview(
 }
 
 export async function listProductStockOpnameWarehouses(): Promise<
-  { id: string; name: string; code: string }[]
+  { id: string; name: string; code: string; branch_name?: string; label?: string }[]
 > {
   const res = await fetch("/api/purchasing/warehouses");
   const json = await res.json();
