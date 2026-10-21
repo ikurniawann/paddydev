@@ -76,8 +76,8 @@ const REASON = "?reason=Data%20ganda%20sistem";
 const ID = "00000000-0000-0000-0000-000000000001";
 const OTHER = "00000000-0000-0000-0000-000000000002";
 const HR_USER = { id: "u-hr", full_name: "HRD", role: "hrd", brand_id: null };
-const staff = { userId: "u-1", role: "employee", employeeId: ID, isHr: false };
-const hr = { userId: "u-hr", role: "hrd", employeeId: OTHER, isHr: true };
+const staff = { userId: "u-1", role: "employee", employeeId: ID, isHr: false, isHrd: false };
+const hr = { userId: "u-hr", role: "hrd", employeeId: OTHER, isHr: true, isHrd: true };
 
 function req(method: string, body?: unknown, search = "") {
   const url = `http://x/api${search}`;
@@ -342,7 +342,8 @@ describe("logbook", () => {
 });
 
 describe("lembur", () => {
-  const body = { date: "2026-06-01", start_time: "18:00", end_time: "20:00", reason: "Stock opname" };
+  // Tanggal depan: pengajuan sendiri tidak boleh lampau (EPIC-063 R3), jadi tes lain tetap menjangkau aturannya.
+  const body = { date: "2099-06-01", start_time: "18:00", end_time: "20:00", reason: "Stock opname" };
 
   it("non-HR menugaskan orang lain → 403", async () => {
     const { POST } = await import("@/app/api/hris/overtime/route");

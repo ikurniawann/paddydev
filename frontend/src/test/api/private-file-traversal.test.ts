@@ -41,6 +41,7 @@ beforeEach(() => {
     role: "employee",
     employeeId: "emp-me",
     isHr: false,
+    isHrd: false,
   });
   requireIamMenuPrefix.mockReset().mockResolvedValue({ id: "hr-1", role: "hrd" });
 });

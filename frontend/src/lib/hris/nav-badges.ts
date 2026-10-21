@@ -35,6 +35,9 @@ export const ESS_HREFS = {
 
 export const ANNOUNCEMENTS_HREF = "/dashboard/me/pengumuman";
 
+/** Menu ESS Persetujuan Tim (EPIC-063 R7): antrean atasan langsung. */
+export const TEAM_APPROVALS_HREF = "/dashboard/me/persetujuan-tim";
+
 export type EssModule = keyof typeof ESS_HREFS;
 
 export const ESS_MODULES = Object.keys(ESS_HREFS) as EssModule[];
@@ -97,6 +100,27 @@ async function countPendingApprovals(): Promise<Record<EssModule, number>> {
 }
 
 /**
+ * Badge Persetujuan Tim (sama dengan Go teamPendingTotal): cuti + lembur
+ * karyawan + perjalanan dinas pending bawahan langsung + kasbon `pending`
+ * yang menunjuk aktor sebagai atasan. reporting_to yang menunjuk diri
+ * sendiri bukan bawahan (R2).
+ */
+async function countTeamPending(managerId: string): Promise<number> {
+  const member = (alias: string) =>
+    `JOIN hris.employees m ON m.id = ${alias}.employee_id AND m.reporting_to = $1 AND m.id <> $1`;
+  return countOne(
+    `SELECT (
+        (SELECT count(*) FROM hris.leaves l ${member("l")} WHERE l.status = 'pending')
+      + (SELECT count(*) FROM hris.overtime_requests o ${member("o")}
+          WHERE o.status = 'pending' AND o.source = 'employee')
+      + (SELECT count(*) FROM hris.business_trips t ${member("t")} WHERE t.status = 'pending')
+      + (SELECT count(*) FROM hris.loans WHERE status = 'pending' AND manager_approver_id = $1)
+    ) AS total`,
+    [managerId]
+  );
+}
+
+/**
  * Pengajuan milik karyawan yang berubah sejak terakhir ia membuka halamannya.
  *
  * Pengajuan yang masih 'pending' sengaja dikecualikan: karyawan sendiri yang
@@ -141,14 +165,16 @@ export async function buildNavBadges(actor: WorkforceActor): Promise<Record<stri
   }
 
   if (actor.employeeId) {
-    const [updates, announcements] = await Promise.all([
+    const [updates, announcements, team] = await Promise.all([
       countEssUpdates(actor.employeeId),
       countUnreadAnnouncements(actor.employeeId),
+      countTeamPending(actor.employeeId),
     ]);
     for (const essModule of ESS_MODULES) {
       badges[ESS_HREFS[essModule]] = updates[essModule];
     }
     badges[ANNOUNCEMENTS_HREF] = announcements;
+    badges[TEAM_APPROVALS_HREF] = team;
   }
 
   return badges;

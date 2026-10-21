@@ -1,6 +1,6 @@
-import type { OvertimeDecisionAction } from "@/lib/hris/overtime-rules";
+import type { OvertimeDayType, OvertimeDecisionAction } from "@/lib/hris/overtime-rules";
 
-export type OvertimeDayType = "regular" | "rest_day";
+export type { OvertimeDayType };
 
 export interface OvertimeRow {
   id: string;

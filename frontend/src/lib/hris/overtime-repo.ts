@@ -7,9 +7,10 @@
 
 import { z } from "zod";
 import { ApiError } from "@/lib/api/auth";
+import { recordAuditAfterCommit } from "@/lib/audit";
 import { overtimeHoursFromTimes, periodBounds } from "@/lib/payroll/period";
 import { createServerPgClient } from "@/lib/pg/create-client";
-import { canDecideOvertime } from "./overtime-rules";
+import { canDecideOvertime, decidedAs, OVERTIME_TOO_LATE, overtimeStartsInPast } from "./overtime-rules";
 import type { WorkforceActor } from "./workforce-auth";
 import { DATE_RE, unwrap, UUID_RE } from "./workforce-route";
 
@@ -74,7 +75,8 @@ export async function listOvertime(actor: WorkforceActor, q: z.infer<typeof over
     const { data: subordinates } = await db
       .from("employees")
       .select("id")
-      .eq("reporting_to", actor.employeeId);
+      .eq("reporting_to", actor.employeeId)
+      .neq("id", actor.employeeId); // reporting_to = diri sendiri bukan bawahan (EPIC-063 R2)
     const ids = ((subordinates ?? []) as { id: string }[]).map((row) => row.id);
     if (ids.length === 0) return [];
     query = query.in("employee_id", ids).eq("source", "employee");
@@ -102,8 +104,14 @@ export async function createOvertime(actor: WorkforceActor, input: z.infer<typeo
   if (!targetId) throw ApiError.badRequest("Akun ini tidak tertaut ke data karyawan");
 
   const isSelf = targetId === actor.employeeId;
-  if (!isSelf && !actor.isHr) {
+  // Administrasi lembur = himpunan HRD (ruling C2), sama dengan keputusannya.
+  if (!isSelf && !actor.isHrd) {
     throw ApiError.forbidden("Hanya HRD yang bisa membuat penugasan lembur untuk karyawan lain");
+  }
+
+  // MOM AP-02 (EPIC-063 R3): pengajuan sendiri sebelum lembur dimulai.
+  if (isSelf && overtimeStartsInPast(input.date, input.start_time)) {
+    throw ApiError.badRequest(OVERTIME_TOO_LATE);
   }
 
   const db = await createServerPgClient();
@@ -184,7 +192,7 @@ export async function decideOvertime(actor: WorkforceActor, input: z.infer<typeo
   }
 
   const decision = canDecideOvertime(
-    { employeeId: actor.employeeId, isHr: actor.isHr },
+    { employeeId: actor.employeeId, isHr: actor.isHrd },
     {
       employee_id: overtime.employee_id,
       requested_by: overtime.requested_by,
@@ -200,6 +208,16 @@ export async function decideOvertime(actor: WorkforceActor, input: z.infer<typeo
   }
 
   const status = DECISION_STATUS[input.action];
+  // Kapasitas hanya untuk keputusan atas pengajuan karyawan (Q-APV-3); sudah lolos canDecideOvertime.
+  const capacity =
+    overtime.source === "employee" && input.action !== "cancel"
+      ? decidedAs(
+          { employeeId: actor.employeeId, isHr: actor.isHrd },
+          overtime.employee_id,
+          overtime.employee?.reporting_to ?? null
+        )
+      : null;
+  const rejection = input.action === "reject" ? (input.rejection_reason ?? null) : null;
   const now = new Date().toISOString();
   const { data, error } = await db
     .from("overtime_requests")
@@ -207,7 +225,8 @@ export async function decideOvertime(actor: WorkforceActor, input: z.infer<typeo
       status,
       decided_by: actor.employeeId,
       decided_at: now,
-      rejection_reason: input.action === "reject" ? (input.rejection_reason ?? null) : null,
+      rejection_reason: rejection,
+      ...(capacity ? { decided_as: capacity, decided_by_name: actor.fullName || "HRD" } : {}),
       updated_at: now,
     })
     .eq("id", input.overtime_id)
@@ -222,5 +241,16 @@ export async function decideOvertime(actor: WorkforceActor, input: z.infer<typeo
   if (error?.code === "PGRST116") throw ApiError.conflict("Pengajuan sudah diproses oleh orang lain");
   unwrap({ data, error });
 
+  if (capacity) {
+    await recordAuditAfterCommit({
+      actor: { id: actor.userId, name: actor.fullName ?? null },
+      action: input.action === "approve" ? "overtime.approve" : "overtime.reject",
+      entity: "hris.overtime_requests",
+      entityId: input.overtime_id,
+      entityLabel: `${overtime.employee?.full_name ?? ""} · ${overtime.date}`,
+      before: { status: "pending" },
+      after: { status, decided_as: capacity, rejection_reason: rejection },
+    });
+  }
   return { data, message: DECISION_MESSAGE[status] };
 }
