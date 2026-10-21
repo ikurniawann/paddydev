@@ -79,3 +79,59 @@ func TestSortStalls(t *testing.T) {
 		t.Fatalf("got %v, want %s", ids, want)
 	}
 }
+
+func stallIDs(stalls []Stall) string {
+	var ids []string
+	for _, s := range stalls {
+		ids = append(ids, s.ID)
+	}
+	return strings.Join(ids, " ")
+}
+
+func TestSortStallsByBranch(t *testing.T) {
+	got := SortStallsByBranch([]Stall{
+		{ID: "b-s2", Code: "STALL-02", BranchID: "2", BranchName: "Bandung"},
+		{ID: "a-s1", Code: "STALL-01", BranchID: "1", BranchName: "alpha"},
+		{ID: "b-main", Code: "MAIN", IsDefault: true, BranchID: "2", BranchName: "Bandung"},
+		{ID: "a-main", Code: "MAIN", IsDefault: true, BranchID: "1", BranchName: "alpha"},
+		{ID: "c-main", Code: "MAIN", IsDefault: true, BranchID: "3", BranchName: "Cirebon"},
+		{ID: "b-s1", Code: "STALL-01", BranchID: "2", BranchName: "Bandung"},
+	})
+	// Branch name (case-insensitive), then Main Storage, then stall order.
+	if want := "a-main a-s1 b-main b-s1 b-s2 c-main"; stallIDs(got) != want {
+		t.Fatalf("got %s, want %s", stallIDs(got), want)
+	}
+	// Same-name branches stay grouped by branch id.
+	got = SortStallsByBranch([]Stall{
+		{ID: "x2", Code: "MAIN", IsDefault: true, BranchID: "2", BranchName: "Dup"},
+		{ID: "x1s", Code: "STALL-01", BranchID: "1", BranchName: "Dup"},
+		{ID: "x1", Code: "MAIN", IsDefault: true, BranchID: "1", BranchName: "Dup"},
+	})
+	if want := "x1 x1s x2"; stallIDs(got) != want {
+		t.Fatalf("dup names: got %s, want %s", stallIDs(got), want)
+	}
+}
+
+func TestStallLabels(t *testing.T) {
+	one := []Stall{
+		{ID: "1", Name: "Main Storage", BranchID: "a", BranchName: "Alpha"},
+		{ID: "2", Name: "Stall 1", BranchID: "a", BranchName: "Alpha"},
+	}
+	two := append(append([]Stall(nil), one...), Stall{ID: "3", Name: "Main Storage", BranchID: "b", BranchName: "Beta"})
+	if SpansBranches(nil) || SpansBranches(one) || !SpansBranches(two) {
+		t.Fatal("SpansBranches")
+	}
+	if got := StallLabel(one[0], SpansBranches(one)); got != "Main Storage" {
+		t.Fatalf("single branch: %q", got)
+	}
+	if got := StallLabel(two[0], SpansBranches(two)); got != "Main Storage — Alpha" {
+		t.Fatalf("multi branch: %q", got)
+	}
+	if got := StallLabel(two[2], true); got != "Main Storage — Beta" {
+		t.Fatalf("multi branch: %q", got)
+	}
+	// No branch name known: never a dangling separator.
+	if got := StallLabel(Stall{Name: "Kiosk"}, true); got != "Kiosk" {
+		t.Fatalf("no branch name: %q", got)
+	}
+}

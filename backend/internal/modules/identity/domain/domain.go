@@ -61,6 +61,10 @@ type Stall struct {
 	Name      string
 	Code      string
 	IsDefault bool
+	// BranchID and BranchName say which branch the warehouse sits in; every
+	// branch has its own "Main Storage", so the name alone is ambiguous.
+	BranchID   string
+	BranchName string
 }
 
 // StallAccess is getStallAccess's result.
@@ -104,6 +108,42 @@ func SortStalls(stalls []Stall) []Stall {
 	out := append([]Stall(nil), stalls...)
 	sort.SliceStable(out, func(i, j int) bool { return compareStalls(out[i], out[j]) < 0 })
 	return out
+}
+
+// SortStallsByBranch orders stalls by branch name (then branch id), and
+// within a branch by SortStalls' rules (Main Storage first).
+func SortStallsByBranch(stalls []Stall) []Stall {
+	out := append([]Stall(nil), stalls...)
+	sort.SliceStable(out, func(i, j int) bool {
+		a, b := out[i], out[j]
+		if c := naturalCompare(a.BranchName, b.BranchName); c != 0 {
+			return c < 0
+		}
+		if a.BranchID != b.BranchID {
+			return a.BranchID < b.BranchID
+		}
+		return compareStalls(a, b) < 0
+	})
+	return out
+}
+
+// SpansBranches reports whether the stalls belong to more than one branch.
+func SpansBranches(stalls []Stall) bool {
+	for _, s := range stalls[min(1, len(stalls)):] {
+		if s.BranchID != stalls[0].BranchID {
+			return true
+		}
+	}
+	return false
+}
+
+// StallLabel is the text a switcher shows for a stall: the plain name, or
+// "<name> — <branch name>" when the list it sits in mixes branches.
+func StallLabel(s Stall, withBranch bool) string {
+	if !withBranch || strings.TrimSpace(s.BranchName) == "" {
+		return s.Name
+	}
+	return s.Name + " — " + s.BranchName
 }
 
 var stallCode = regexp.MustCompile(`^STALL-0*(\d+)$`)
