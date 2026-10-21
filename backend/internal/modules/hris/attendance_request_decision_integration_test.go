@@ -160,3 +160,48 @@ func TestAttendanceRequestDecision(t *testing.T) {
 	expect(t, decide(&hr, "ffffffff-ffff-ffff-ffff-ffffffffffff", "approve", ""), 404, "Pengajuan absensi tidak ditemukan")
 	expect(t, decide(&hr, rejected, "batal", ""), 400, "")
 }
+
+// Persetujuan memeriksa ulang pengajuan terhadap baris absensi saat ini, dan
+// pelanggaran unik saat menulis (dua HR bersamaan, karyawan absen saat
+// disetujui) menjadi 409, bukan 500.
+func TestAttendanceRequestDecisionRaces(t *testing.T) {
+	h := newHarness(t)
+	h.exec(`UPDATE hris.attendance_settings SET cutoff_day = 0, closing_offset_days = 3`)
+	hr, _ := h.staff("hrd", []string{"hris.workforce.attendance"}, true, emp{name: "HR Balapan"})
+	crew, crewID := h.staff("pos", nil, true, emp{name: "Crew Balapan"})
+	const url = "/api/hris/attendance-requests"
+	file := func(date, in, out, reason string) string {
+		t.Helper()
+		c := h.do(&crew, "POST", url, attReqBody(date, in, out, reason))
+		expect(t, c, 201, "")
+		return c.data()["id"].(string)
+	}
+	approve := func(id string) call {
+		return h.do(&hr, "POST", url+"/"+id+"/decide", map[string]any{"action": "approve"})
+	}
+	status := func(id string) string {
+		return h.scalar(`SELECT status FROM hris.attendance_requests WHERE id = $1`, id)
+	}
+
+	// Karyawan sempat absen persis seperti yang diajukan: tidak ada yang berubah.
+	same := file("2026-10-02", "08:00", "17:00", "Absen masuk gagal terkirim")
+	h.exec(`INSERT INTO hris.attendance (employee_id, date, clock_in, clock_out, status)
+		VALUES ($1, '2026-10-02', '2026-10-02 08:00+07', '2026-10-02 17:00+07', 'present')`, crewID)
+	expect(t, approve(same), 400, "Jam yang diajukan sama dengan absensi tercatat")
+	if s := status(same); s != "pending" {
+		t.Fatalf("status after identical re-check = %s", s)
+	}
+	if n := h.scalar(`SELECT count(*)::text FROM hris.attendance_adjustments WHERE employee_id = $1`, crewID); n != "0" {
+		t.Fatalf("adjustments = %s", n)
+	}
+
+	// Pelanggaran unik saat menulis absensi: 409 dengan pesan balapan, tetap menunggu.
+	raced := file("2026-10-03", "08:00", "17:00", "Internet toko mati seharian")
+	h.exec(`CREATE FUNCTION pg_temp.raise_unique() RETURNS trigger LANGUAGE plpgsql AS $$
+		BEGIN RAISE EXCEPTION 'duplicate key value' USING ERRCODE = '23505'; END $$`)
+	h.exec(`CREATE TRIGGER zz_raise_unique BEFORE INSERT ON hris.attendance FOR EACH ROW EXECUTE FUNCTION pg_temp.raise_unique()`)
+	expect(t, approve(raced), 409, "Pengajuan sudah diproses oleh orang lain")
+	if s := status(raced); s != "pending" {
+		t.Fatalf("status after unique violation = %s", s)
+	}
+}

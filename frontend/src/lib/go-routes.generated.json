@@ -2377,6 +2377,11 @@
   {
     "module": "hris",
     "method": "GET",
+    "path": "/api/hris/me/attendance-gaps"
+  },
+  {
+    "module": "hris",
+    "method": "GET",
     "path": "/api/hris/me/attendance-requests"
   },
   {

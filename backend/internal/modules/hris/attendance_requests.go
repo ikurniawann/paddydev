@@ -250,7 +250,9 @@ func (s *Service) DecideAttendanceRequest(ctx context.Context, a *Actor, id, act
 			return record(r, "approved", ptr(att.Str("id")), nil)
 		})
 	}
-	if errors.Is(err, errNoRow) {
+	// Another approver (or the employee clocking in) got there first: the
+	// request row, or the attendance row, is already written.
+	if errors.Is(err, errNoRow) || database.IsUniqueViolation(err) {
 		return nil, httpx.Conflict(decisionRace)
 	}
 	if err != nil {
