@@ -54,7 +54,7 @@ export function OvertimeTable({ rows, loading, decidingId, onDecide, canCorrect,
           ) : (
             rows.map((row) => (
               <OvertimeTableRow
-                key={row.id}
+                key={`${row.id}:${row.day_type ?? "regular"}`}
                 row={row}
                 deciding={decidingId === row.id}
                 onDecide={onDecide}
@@ -139,7 +139,10 @@ function OvertimeTableRow({ row, deciding, onDecide, canCorrect, onCorrect }: Ov
                 </option>
               ))}
             </select>
-            <Button size="sm" disabled={deciding} onClick={() => onDecide(row.id, "approve", dayType)}>
+            <Button size="sm" disabled={deciding} onClick={() =>
+                // Hanya kirim jenis bila HR mengubahnya di sini; jangan menimpa koreksi/nilai server.
+                onDecide(row.id, "approve", dayType !== (row.day_type ?? "regular") ? dayType : undefined)
+              }>
               Setujui
             </Button>
             <Button size="sm" variant="outline" disabled={deciding} onClick={() => onDecide(row.id, "reject")}>
