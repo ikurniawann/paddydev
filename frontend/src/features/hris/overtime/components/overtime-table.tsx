@@ -89,9 +89,13 @@ interface OvertimeTableRowProps {
 function OvertimeTableRow({ row, deciding, onDecide, canCorrect, isHrd, onCorrect }: OvertimeTableRowProps) {
   const badge = STATUS_BADGES[row.status] ?? STATUS_BADGES.pending;
   const pending = row.status === "pending";
-  // Koreksi jam lembur karyawan yang punya atasan langsung adalah hak atasan (EPIC-066).
+  // Koreksi jam lembur karyawan yang punya atasan langsung (aktif) adalah hak atasan (EPIC-066);
+  // atasan nonaktif dihitung tanpa atasan (EPIC-063 R9).
   const managerOwnsCorrection =
-    row.source === "employee" && !!row.employee?.reporting_to && row.employee.reporting_to !== row.employee_id;
+    row.source === "employee" &&
+    !!row.employee?.reporting_to &&
+    row.employee.reporting_to !== row.employee_id &&
+    row.employee.reporting_to_active === true;
   const [dayType, setDayType] = useState<OvertimeDayType>(row.day_type ?? "regular");
   return (
     <tr className="border-b last:border-0 hover:bg-gray-50/60">

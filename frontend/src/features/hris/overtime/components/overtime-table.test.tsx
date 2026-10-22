@@ -65,8 +65,12 @@ describe("OvertimeTable — istirahat, dokumentasi, koreksi (EPIC-066)", () => {
       "/api/hris/overtime/attachment/overtime-attachments/e1/1-aaaaaaaaaaaaaaaa.pdf");
   });
   it("tombol Koreksi disembunyikan untuk lembur karyawan yang punya atasan langsung", () => {
-    render(table({ ...base, employee: { ...base.employee!, reporting_to: "m1" } }, vi.fn(), true, true));
+    render(table({ ...base, employee: { ...base.employee!, reporting_to: "m1", reporting_to_active: true } }, vi.fn(), true, true));
     expect(screen.queryByRole("button", { name: "Koreksi" })).toBeNull();
+  });
+  it("tombol Koreksi tampil bila atasan langsung nonaktif (EPIC-063 R9)", () => {
+    render(table({ ...base, employee: { ...base.employee!, reporting_to: "m1", reporting_to_active: false } }, vi.fn(), true, true));
+    expect(screen.getByRole("button", { name: "Koreksi" })).toBeTruthy();
   });
   it("tombol Koreksi tetap ada tanpa atasan, atau bila atasan = diri sendiri, atau sumber perusahaan", () => {
     const { unmount } = render(table({ ...base, employee: { ...base.employee!, reporting_to: null } }, vi.fn(), true, true));

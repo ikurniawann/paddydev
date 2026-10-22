@@ -23,7 +23,14 @@ export interface OvertimeRow {
   decided_by_name?: string | null;
   corrected_at?: string | null;
   corrected_by_name?: string | null;
-  employee?: { id: string; full_name: string; nip: string | null; reporting_to?: string | null } | null;
+  employee?: {
+    id: string;
+    full_name: string;
+    nip: string | null;
+    reporting_to?: string | null;
+    /** Atasan langsung aktif; null tanpa atasan. Atasan nonaktif = tanpa atasan (EPIC-063 R9). */
+    reporting_to_active?: boolean | null;
+  } | null;
   requester?: { full_name: string } | null;
   decider?: { full_name: string } | null;
 }
@@ -47,6 +54,8 @@ export interface OvertimeCorrection {
   date: string;
   start_time: string;
   end_time: string;
+  /** EPIC-066: dikirim hanya bila diubah. */
+  break_minutes?: number;
   day_type: OvertimeDayType;
   reason: string;
 }

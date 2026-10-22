@@ -10,8 +10,15 @@ import {
 } from "@/lib/hris/overtime-rules";
 import { uploadOvertimeAttachment } from "../api";
 
+interface OvertimeAttachmentsFieldProps {
+  value: string[];
+  onChange: (paths: string[]) => void;
+  /** Dipanggil saat unggahan mulai/selesai agar form tidak dikirim selagi mengunggah. */
+  onBusyChange?: (busy: boolean) => void;
+}
+
 /** Dokumentasi lembur (EPIC-066): 1–3 file PDF/JPG/PNG/WebP ≤ 5 MB, diunggah satu per satu. */
-export function OvertimeAttachmentsField({ value, onChange }: { value: string[]; onChange: (paths: string[]) => void }) {
+export function OvertimeAttachmentsField({ value, onChange, onBusyChange }: OvertimeAttachmentsFieldProps) {
   const input = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -28,6 +35,7 @@ export function OvertimeAttachmentsField({ value, onChange }: { value: string[];
       return;
     }
     setBusy(true);
+    onBusyChange?.(true);
     try {
       const paths: string[] = [];
       for (const f of picked) paths.push(await uploadOvertimeAttachment(f));
@@ -36,6 +44,7 @@ export function OvertimeAttachmentsField({ value, onChange }: { value: string[];
       setError(e instanceof Error ? e.message : "Gagal mengunggah dokumentasi");
     } finally {
       setBusy(false);
+      onBusyChange?.(false);
       if (input.current) input.current.value = "";
     }
   }

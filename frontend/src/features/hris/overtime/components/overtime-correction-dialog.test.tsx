@@ -50,4 +50,23 @@ describe("OvertimeCorrectionDialog — AP-04", () => {
     expect(toastSuccess).toHaveBeenCalledWith("Lembur dikoreksi");
     expect(onClose).toHaveBeenCalled();
   });
+
+  it("istirahat terisi dari baris dan dikirim hanya bila diubah (EPIC-066)", () => {
+    render(<OvertimeCorrectionDialog row={{ ...row, break_minutes: 30 }} onClose={vi.fn()} />);
+    const brk = screen.getByLabelText("Istirahat (menit)") as HTMLInputElement;
+    expect(brk.value).toBe("30");
+    fireEvent.change(brk, { target: { value: "60" } });
+    fireEvent.change(screen.getByLabelText("Alasan koreksi"), { target: { value: "Sesuai absensi" } });
+    fireEvent.click(screen.getByRole("button", { name: "Simpan koreksi" }));
+    expect(correct).toHaveBeenCalledWith(expect.objectContaining({ id: "o1", break_minutes: 60 }), expect.anything());
+  });
+
+  it("menolak istirahat di luar 0–720 menit", () => {
+    render(<OvertimeCorrectionDialog row={row} onClose={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText("Istirahat (menit)"), { target: { value: "721" } });
+    fireEvent.change(screen.getByLabelText("Alasan koreksi"), { target: { value: "Sesuai absensi" } });
+    fireEvent.click(screen.getByRole("button", { name: "Simpan koreksi" }));
+    expect(toastError).toHaveBeenCalledWith("Istirahat 0–720 menit");
+    expect(correct).not.toHaveBeenCalled();
+  });
 });

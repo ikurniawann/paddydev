@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { ClockIcon, PaperAirplaneIcon, BellAlertIcon } from "@heroicons/react/24/outline";
 import { Loader2 } from "lucide-react";
@@ -65,6 +65,11 @@ export function EssLemburPage() {
   const decideMutation = useDecideOvertime();
   const [dialog, setDialog] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
+  // Generasi form (EPIC-066): unggahan yang selesai setelah form direset tidak
+  // ditambahkan ke form baru; Kirim nonaktif selama dokumentasi diunggah.
+  const generation = useRef(0);
+  const [formGeneration, setFormGeneration] = useState(0);
+  const [uploading, setUploading] = useState(false);
   const decidingId = decideMutation.isPending ? decideMutation.variables?.id : null;
   // K-13 (EPIC-063 R5): jenis dikunci ke saran jadwal bila server mengetahuinya.
   const hint = useOvertimeDayType(form.date).data ?? null;
@@ -72,6 +77,7 @@ export function EssLemburPage() {
   const dayType: OvertimeDayType = lockedType ?? form.day_type;
 
   function handleSubmit() {
+    if (uploading) return;
     if (!form.date || !form.start_time || !form.end_time) {
       toast.error("Tanggal dan jam lembur wajib diisi");
       return;
@@ -98,6 +104,9 @@ export function EssLemburPage() {
         toast.success("Lembur terkirim — menunggu persetujuan atasan");
         setDialog(false);
         setForm(EMPTY_FORM);
+        generation.current += 1;
+        setFormGeneration(generation.current);
+        setUploading(false);
       },
       onError: (error) => toast.error(error.message || "Gagal mengirim lembur"),
     });
@@ -285,7 +294,13 @@ export function EssLemburPage() {
                 {paidOvertimeHours(form.start_time, form.end_time, Number(form.break_minutes || 0)).toLocaleString("id-ID")} jam dibayar
               </p>
             )}
-            <OvertimeAttachmentsField value={form.attachments} onChange={(attachments) => setForm((f) => ({ ...f, attachments }))} />
+            <OvertimeAttachmentsField
+              value={form.attachments}
+              onChange={(attachments) => {
+                if (formGeneration === generation.current) setForm((f) => ({ ...f, attachments }));
+              }}
+              onBusyChange={setUploading}
+            />
             <div>
               <label htmlFor="ot-day-type" className="mb-1 block text-xs font-medium text-gray-600">Jenis lembur</label>
               <select
@@ -329,7 +344,7 @@ export function EssLemburPage() {
             <Button variant="outline" onClick={() => setDialog(false)}>
               Batal
             </Button>
-            <Button onClick={handleSubmit} disabled={submitMutation.isPending}>
+            <Button onClick={handleSubmit} disabled={submitMutation.isPending || uploading}>
               {submitMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Kirim"}
             </Button>
           </DialogFooter>

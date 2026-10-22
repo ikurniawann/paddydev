@@ -1,5 +1,5 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { EssOvertimeDayTypeHint } from "../types";
 
 const submit = vi.fn();
@@ -16,11 +16,13 @@ vi.mock("../mutations", () => ({
   useSubmitOvertime: () => ({ mutate: submit, isPending: false }),
   useDecideOvertime: () => ({ mutate: vi.fn(), isPending: false, variables: undefined }),
 }));
-vi.mock("../api", () => ({
-  uploadOvertimeAttachment: vi.fn().mockResolvedValue("overtime-attachments/e1/1-abcdefabcdefabcd.pdf"),
-}));
+const upload = vi.fn();
+vi.mock("../api", () => ({ uploadOvertimeAttachment: (f: File) => upload(f) }));
 
 import { EssLemburPage } from "./lembur-page";
+
+const PATH = "overtime-attachments/e1/1-abcdefabcdefabcd.pdf";
+beforeEach(() => upload.mockResolvedValue(PATH));
 
 function fill(date: string) {
   fireEvent.click(screen.getByRole("button", { name: /Input Lembur/ }));
@@ -38,6 +40,7 @@ async function attach() {
 afterEach(() => {
   cleanup();
   submit.mockReset();
+  upload.mockReset();
   toastError.mockReset();
   hint = null;
   vi.useRealTimers();
@@ -89,6 +92,42 @@ describe("ESS Input Lembur (EPIC-066)", () => {
       }),
       expect.anything()
     );
+  });
+
+  it("Kirim nonaktif selama dokumentasi diunggah", async () => {
+    let finish: (path: string) => void = () => {};
+    upload.mockImplementation(() => new Promise<string>((resolve) => { finish = resolve; }));
+    render(<EssLemburPage />);
+    fill("2020-01-06");
+    const file = new File(["x"], "bukti.pdf", { type: "application/pdf" });
+    fireEvent.change(screen.getByLabelText("Pilih file dokumentasi lembur"), { target: { files: [file] } });
+    const kirim = screen.getByRole("button", { name: "Kirim" }) as HTMLButtonElement;
+    await waitFor(() => expect(kirim.disabled).toBe(true));
+    fireEvent.click(kirim);
+    expect(submit).not.toHaveBeenCalled();
+    finish(PATH);
+    await screen.findByText(/Dokumentasi 1 \(PDF\)/);
+    expect((screen.getByRole("button", { name: "Kirim" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("unggahan yang selesai setelah form dikirim tidak masuk ke form baru", async () => {
+    let finish: (path: string) => void = () => {};
+    let sent: { onSuccess: () => void } | undefined;
+    submit.mockImplementation((_v, opts) => { sent = opts; });
+    render(<EssLemburPage />);
+    fill("2020-01-06");
+    await attach();
+    fireEvent.click(screen.getByRole("button", { name: "Kirim" }));
+    expect(submit).toHaveBeenCalledTimes(1);
+    // Unggahan kedua dimulai saat pengiriman masih berjalan, selesai setelah form direset.
+    upload.mockImplementation(() => new Promise<string>((resolve) => { finish = resolve; }));
+    const file = new File(["x"], "kedua.pdf", { type: "application/pdf" });
+    fireEvent.change(screen.getByLabelText("Pilih file dokumentasi lembur"), { target: { files: [file] } });
+    act(() => sent!.onSuccess());
+    await act(async () => finish("overtime-attachments/e1/2-abcdefabcdefabcd.pdf"));
+    fireEvent.click(screen.getByRole("button", { name: /Input Lembur/ }));
+    expect(screen.queryByText(/Dokumentasi \d \(PDF\)/)).toBeNull();
+    expect((screen.getByRole("button", { name: "Kirim" }) as HTMLButtonElement).disabled).toBe(false);
   });
 
   it("dokumentasi dapat dihapus", async () => {
