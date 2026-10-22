@@ -12,31 +12,9 @@ func otBody(date, start, end string) map[string]any {
 	return map[string]any{"date": date, "start_time": start, "end_time": end, "reason": "Closing stok bulanan"}
 }
 
-// MOM AP-02 (EPIC-063 R3). fixedNow = Senin 05-10-2026 10:00 WIB.
-func TestOvertimeMustBeRequestedBeforeStart(t *testing.T) {
-	h := newHarness(t)
-	hr, _ := h.staff("hrd", []string{menuKepegawaian}, true)
-	staff, own := h.staff("pos", nil, true)
-	const late = "Lembur wajib diajukan sebelum dimulai — jam mulai sudah lewat"
-
-	expect(t, h.do(&staff, "POST", "/api/hris/overtime", otBody("2026-10-04", "18:00", "20:00")), 400, late)
-	expect(t, h.do(&staff, "POST", "/api/hris/overtime", otBody("2026-10-05", "09:00", "11:00")), 400, late)
-	expect(t, h.do(&staff, "POST", "/api/hris/overtime", otBody("2026-10-05", "10:00", "12:00")), 200, "")
-	// HR juga tidak boleh mengajukan lembur lampau untuk dirinya sendiri…
-	expect(t, h.do(&hr, "POST", "/api/hris/overtime", otBody("2026-10-04", "18:00", "20:00")), 400, late)
-	// …tetapi boleh mencatat penugasan lampau untuk karyawan lain (R3).
-	assign := otBody("2026-10-02", "18:00", "20:00")
-	assign["employee_id"] = own
-	assigned := h.do(&hr, "POST", "/api/hris/overtime", assign)
-	expect(t, assigned, 200, "")
-	if assigned.data()["source"] != "company" {
-		t.Fatalf("assignment = %s", assigned.raw)
-	}
-}
-
 // K-13 (EPIC-063 R5): jenis dari ESS dicek ke jadwal dan hari libur.
 func TestOvertimeDayTypeFollowsSchedule(t *testing.T) {
-	h := newHarness(t)
+	h, _ := newFileHarness(t)
 	staff, own := h.staff("pos", nil, true)
 	free, freeID := h.staff("pos", nil, true) // tanpa jadwal
 	shift := h.scalar(`INSERT INTO hris.shifts (name, start_time, end_time) VALUES ('Pagi Lembur', '08:00', '16:00') RETURNING id::text`)
@@ -65,15 +43,15 @@ func TestOvertimeDayTypeFollowsSchedule(t *testing.T) {
 	expect(t, h.do(&staff, "GET", "/api/hris/overtime/day-type?date=2026-10-12&employee_id="+freeID, nil), 403,
 		"Insufficient permissions")
 
-	wrong := otBody("2026-10-12", "17:00", "19:00")
+	wrong := h.otSelfBody(&staff, "2026-10-05", "06:00", "08:00") // Senin ber-shift, sudah selesai
 	wrong["day_type"] = "rest_day"
 	expect(t, h.do(&staff, "POST", "/api/hris/overtime", wrong), 400, "Jenis lembur tanggal ini Weekday sesuai jadwal Anda")
-	sunday := h.do(&staff, "POST", "/api/hris/overtime", otBody("2026-10-11", "09:00", "12:00"))
+	sunday := h.do(&staff, "POST", "/api/hris/overtime", h.otSelfBody(&staff, "2026-10-04", "09:00", "12:00"))
 	expect(t, sunday, 200, "")
 	if sunday.data()["day_type"] != "rest_day" {
 		t.Fatalf("tanpa jenis memakai saran jadwal: %s", sunday.raw)
 	}
-	chosen := otBody("2026-10-12", "17:00", "19:00")
+	chosen := h.otSelfBody(&free, "2026-10-05", "06:00", "08:00")
 	chosen["day_type"] = "rest_day"
 	freeRow := h.do(&free, "POST", "/api/hris/overtime", chosen)
 	expect(t, freeRow, 200, "")
@@ -84,7 +62,7 @@ func TestOvertimeDayTypeFollowsSchedule(t *testing.T) {
 
 // Q-APV-3 (R1) + WA atasan saat pengajuan lembur (R8).
 func TestOvertimeDecisionRecordsCapacityAndNotifiesManager(t *testing.T) {
-	h := newHarness(t)
+	h, _ := newFileHarness(t)
 	hr, _ := h.staff("hrd", []string{menuKepegawaian}, true)
 	boss, bossID := h.staff("pos", nil, true, emp{name: "Atasan Lembur", phone: "0812 3456 7000"})
 	staff, own := h.staff("pos", nil, true, emp{name: "Crew Lembur", boss: &bossID})
@@ -95,12 +73,12 @@ func TestOvertimeDecisionRecordsCapacityAndNotifiesManager(t *testing.T) {
 		}
 	}
 
-	first := h.do(&staff, "POST", "/api/hris/overtime", otBody("2026-10-06", "17:00", "19:30"))
+	first := h.do(&staff, "POST", "/api/hris/overtime", h.otSelfBody(&staff, "2026-10-01", "17:00", "19:30"))
 	expect(t, first, 200, "")
 	dispatch()
 	if len(h.wa.sent) != 1 || !strings.HasPrefix(h.wa.sent[0], "6281234567000|Paddy OS — Pengajuan Lembur") ||
 		!strings.Contains(h.wa.sent[0], "Kepada: Atasan Lembur") ||
-		!strings.Contains(h.wa.sent[0], "Sel, 06 Okt 2026, 17:00–19:30 (2,5 jam, Weekday)") ||
+		!strings.Contains(h.wa.sent[0], "Kam, 01 Okt 2026, 17:00–19:30 (2,5 jam, Weekday)") ||
 		!strings.Contains(h.wa.sent[0], "Area Karyawan → Persetujuan Tim") {
 		t.Fatalf("whatsapp = %v", h.wa.sent)
 	}
@@ -119,7 +97,7 @@ func TestOvertimeDecisionRecordsCapacityAndNotifiesManager(t *testing.T) {
 	if d := byBoss.data(); d["decided_as"] != "manager" || d["decided_by_name"] == nil {
 		t.Fatalf("manager approve = %s", byBoss.raw)
 	}
-	second := h.do(&staff, "POST", "/api/hris/overtime", otBody("2026-10-07", "17:00", "19:00"))
+	second := h.do(&staff, "POST", "/api/hris/overtime", h.otSelfBody(&staff, "2026-10-02", "17:00", "19:00"))
 	expect(t, second, 200, "")
 	secondID := second.data()["id"].(string)
 	byHR := h.do(&hr, "POST", "/api/hris/overtime/decide", map[string]any{"overtime_id": secondID, "action": "approve"})
@@ -136,18 +114,18 @@ func TestOvertimeDecisionRecordsCapacityAndNotifiesManager(t *testing.T) {
 // Ruling C1/P4: HR tidak memutus lembur miliknya sendiri; hiring_manager yang
 // bukan atasan bukan cadangan HR untuk lembur.
 func TestOvertimeSelfAndHiringManagerCannotDecide(t *testing.T) {
-	h := newHarness(t)
+	h, _ := newFileHarness(t)
 	hr, _ := h.staff("hrd", []string{menuKepegawaian}, true, emp{name: "HRD Lembur"})
 	hm, _ := h.staff("hiring_manager", []string{menuWorkforce}, true, emp{name: "Manajer Rekrutmen"})
 	_, bossID := h.staff("pos", nil, true, emp{name: "Atasan Lembur"})
 	staff, _ := h.staff("pos", nil, true, emp{name: "Crew Lembur", boss: &bossID})
 
-	mine := h.do(&hr, "POST", "/api/hris/overtime", otBody("2026-10-06", "17:00", "19:00"))
+	mine := h.do(&hr, "POST", "/api/hris/overtime", h.otSelfBody(&hr, "2026-10-01", "17:00", "19:00"))
 	expect(t, mine, 200, "")
 	expect(t, h.do(&hr, "POST", "/api/hris/overtime/decide",
 		map[string]any{"overtime_id": mine.data()["id"], "action": "approve"}), 403, "Tidak bisa memutuskan pengajuan lembur sendiri")
 
-	req := h.do(&staff, "POST", "/api/hris/overtime", otBody("2026-10-06", "17:00", "19:00"))
+	req := h.do(&staff, "POST", "/api/hris/overtime", h.otSelfBody(&staff, "2026-10-01", "17:00", "19:00"))
 	expect(t, req, 200, "")
 	id := req.data()["id"].(string)
 	expect(t, h.do(&hm, "POST", "/api/hris/overtime/decide", map[string]any{"overtime_id": id, "action": "approve"}), 403,
@@ -159,7 +137,7 @@ func TestOvertimeSelfAndHiringManagerCannotDecide(t *testing.T) {
 
 // P10: jam mulai diperiksa ketat HH:MM sebelum aturan "sebelum dimulai".
 func TestOvertimeStartTimeStrictAndStaleDecision(t *testing.T) {
-	h := newHarness(t)
+	h, _ := newFileHarness(t)
 	hr, _ := h.staff("hrd", []string{menuKepegawaian}, true)
 	boss, bossID := h.staff("pos", nil, true)
 	staff, _ := h.staff("pos", nil, true, emp{boss: &bossID})
@@ -167,7 +145,7 @@ func TestOvertimeStartTimeStrictAndStaleDecision(t *testing.T) {
 	bad := otBody("2026-10-04", "9:00", "11:00")
 	expect(t, h.do(&staff, "POST", "/api/hris/overtime", bad), 400, "Validation failed")
 
-	req := h.do(&staff, "POST", "/api/hris/overtime", otBody("2026-10-06", "17:00", "19:00"))
+	req := h.do(&staff, "POST", "/api/hris/overtime", h.otSelfBody(&staff, "2026-10-01", "17:00", "19:00"))
 	expect(t, req, 200, "")
 	id := req.data()["id"].(string)
 	expect(t, h.do(&hr, "POST", "/api/hris/overtime/decide",
@@ -180,7 +158,7 @@ func TestOvertimeStartTimeStrictAndStaleDecision(t *testing.T) {
 // Final review: the HR day_type override applies to employee requests only,
 // and a real change is audited (rest_day pays 2× vs 1.5×).
 func TestOvertimeHRDayTypeOverrideScopeAndAudit(t *testing.T) {
-	h := newHarness(t)
+	h, _ := newFileHarness(t)
 	hr, hrID := h.staff("hrd", []string{menuKepegawaian}, true, emp{name: "HRD Penerima"})
 	hr2, _ := h.staff("hrd", []string{menuKepegawaian}, true, emp{name: "HRD Penugas"})
 	staff, _ := h.staff("pos", nil, true, emp{name: "Crew Jenis"})
@@ -214,7 +192,7 @@ func TestOvertimeHRDayTypeOverrideScopeAndAudit(t *testing.T) {
 	}
 
 	// (b) HR changes an employee request's type: stored + audited before/after.
-	changed := h.do(&staff, "POST", "/api/hris/overtime", otBody("2026-10-06", "17:00", "19:00"))
+	changed := h.do(&staff, "POST", "/api/hris/overtime", h.otSelfBody(&staff, "2026-10-01", "17:00", "19:00"))
 	expect(t, changed, 200, "")
 	changedID := changed.data()["id"].(string)
 	decide(&hr, changedID, map[string]any{"day_type": "rest_day"})
@@ -226,11 +204,11 @@ func TestOvertimeHRDayTypeOverrideScopeAndAudit(t *testing.T) {
 	}
 
 	// (c) unchanged (or omitted) type leaves day_type out of the audit diff.
-	same := h.do(&staff, "POST", "/api/hris/overtime", otBody("2026-10-07", "17:00", "19:00"))
+	same := h.do(&staff, "POST", "/api/hris/overtime", h.otSelfBody(&staff, "2026-10-02", "17:00", "19:00"))
 	expect(t, same, 200, "")
 	sameID := same.data()["id"].(string)
 	decide(&hr, sameID, map[string]any{"day_type": "regular"})
-	omitted := h.do(&staff, "POST", "/api/hris/overtime", otBody("2026-10-08", "17:00", "19:00"))
+	omitted := h.do(&staff, "POST", "/api/hris/overtime", h.otSelfBody(&staff, "2026-10-05", "06:00", "08:00"))
 	expect(t, omitted, 200, "")
 	omittedID := omitted.data()["id"].(string)
 	decide(&hr, omittedID, nil)

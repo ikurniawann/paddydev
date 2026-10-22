@@ -103,6 +103,8 @@ export interface EssOvertimeRow {
   reason: string | null;
   rejection_reason: string | null;
   day_type?: OvertimeDayType;
+  break_minutes: number;
+  attachments: string[];
   requester?: { full_name: string } | null;
 }
 
@@ -110,8 +112,10 @@ export interface EssOvertimeForm {
   date: string;
   start_time: string;
   end_time: string;
+  break_minutes: string;
   reason: string;
   day_type: OvertimeDayType;
+  attachments: string[];
 }
 
 /** GET /api/hris/overtime/day-type (EPIC-063): saran jenis dari jadwal; null = jadwal tidak diketahui. */

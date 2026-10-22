@@ -152,7 +152,11 @@ func (h handlers) createOvertime(w http.ResponseWriter, r *http.Request, a *Acto
 	in.Date = strOr(f.Str("date", validate.Rule{}, validate.StrOpts{Check: regexOf(domain.DateRe)}))
 	in.StartTime = strOr(f.Str("start_time", validate.Rule{}, validate.StrOpts{Check: regexOf(overtimeTimeRe)}))
 	in.EndTime = strOr(f.Str("end_time", validate.Rule{}, validate.StrOpts{Check: regexOf(overtimeTimeRe)}))
-	in.Reason = strOr(f.Str("reason", validate.Rule{}, validate.StrOpts{Trim: true, Check: minLen(5, "Alasan minimal 5 karakter")}))
+	in.Reason = strOr(f.Str("reason", optional, validate.StrOpts{Trim: true}))
+	if b := f.Int("break_minutes", optional, validate.NumOpts{Min: validate.Bound(0), Max: validate.Bound(720)}); b != nil {
+		in.BreakMinutes = *b
+	}
+	in.Attachments = f.Strings("attachments", optional, maxOvertimeAttachments+1, validate.StrOpts{})
 	in.DayType = f.Enum("day_type", optional, overtimeDayTypes)
 	if err := formErr(f, message); err != nil {
 		return err
@@ -174,10 +178,14 @@ func (h handlers) decideOvertime(w http.ResponseWriter, r *http.Request, a *Acto
 	action := f.Enum("action", validate.Rule{}, []string{"approve", "reject", "cancel"})
 	rejection := f.Str("rejection_reason", optional, validate.StrOpts{})
 	dayType := f.Enum("day_type", optional, overtimeDayTypes)
+	var times overtimeTimes
+	times.Start = f.Str("start_time", optional, validate.StrOpts{Check: regexOf(overtimeTimeRe)})
+	times.End = f.Str("end_time", optional, validate.StrOpts{Check: regexOf(overtimeTimeRe)})
+	times.Break = f.Int("break_minutes", optional, validate.NumOpts{Min: validate.Bound(0), Max: validate.Bound(720)})
 	if err := formErr(f, message); err != nil {
 		return err
 	}
-	out, err := h.svc.DecideOvertime(r.Context(), a, *id, *action, rejection, dayType, auditMeta(r))
+	out, err := h.svc.DecideOvertime(r.Context(), a, *id, *action, rejection, dayType, times, auditMeta(r))
 	if err != nil {
 		return err
 	}

@@ -9,14 +9,15 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { formatDate } from "@/lib/format";
 import { leaveTypeLabel } from "@/lib/hris/leave-types";
-import { overtimeDayTypeLabel } from "@/lib/hris/overtime-rules";
+import { overtimeDayTypeLabel, overtimeTimeChanges } from "@/lib/hris/overtime-rules";
 import { hhmm } from "@/lib/hris/shifts-view";
 import { TeamTripApprovals, useBusinessTrips } from "@/features/hris/business-trips";
 import { EssLoading, EssNotLinked } from "@/features/hris/ess/components/ess-states";
 import { useEssMe, useTeamLoanApprovals } from "@/features/hris/ess/queries";
 import { useDecideTeamRequest } from "../mutations";
 import { useTeamApprovals } from "../queries";
-import type { TeamDecision, TeamRequestKind } from "../types";
+import type { TeamDecision, TeamOvertimeRequest, TeamRequestKind } from "../types";
+import { OvertimeApproveDialog, type OvertimeApproveTimes } from "./overtime-approve-dialog";
 
 const DONE: Record<TeamRequestKind, Record<TeamDecision, string>> = {
   leave: { approve: "Cuti disetujui", reject: "Cuti ditolak" },
@@ -54,11 +55,18 @@ export function EssPersetujuanTimPage() {
   const [rejecting, setRejecting] = useState<Rejecting | null>(null);
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState("");
+  const [approving, setApproving] = useState<TeamOvertimeRequest | null>(null);
   const busyId = decide.isPending ? decide.variables?.id : null;
 
-  function run(kind: TeamRequestKind, id: string, action: TeamDecision, rejectionReason?: string) {
+  function run(
+    kind: TeamRequestKind,
+    id: string,
+    action: TeamDecision,
+    rejectionReason?: string,
+    times?: Partial<OvertimeApproveTimes>
+  ) {
     decide.mutate(
-      { kind, id, action, rejectionReason },
+      { kind, id, action, rejectionReason, times },
       {
         onSuccess: () => toast.success(DONE[kind][action]),
         onError: (e) => toast.error(e.message || "Gagal memproses"),
@@ -83,11 +91,18 @@ export function EssPersetujuanTimPage() {
     run(rejecting.kind, rejecting.id, "reject", text);
   }
 
-  function actions(kind: TeamRequestKind, id: string, name: string) {
+  // Setujui lembur membuka dialog koreksi; hanya kolom yang berubah dikirim (server
+  // memeriksa kewenangan koreksi sebelum membandingkan).
+  function approveOvertime(row: TeamOvertimeRequest, times: OvertimeApproveTimes) {
+    setApproving(null);
+    run("overtime", row.id, "approve", undefined, overtimeTimeChanges(row, times));
+  }
+
+  function actions(kind: TeamRequestKind, id: string, name: string, onApprove?: () => void) {
     return (
       <div className="flex shrink-0 gap-2">
         <Button size="sm" aria-label={`Setujui ${NOUN[kind]} ${name}`} disabled={busyId === id}
-          onClick={() => run(kind, id, "approve")}>
+          onClick={onApprove ?? (() => run(kind, id, "approve"))}>
           Setujui
         </Button>
         <Button size="sm" variant="outline" aria-label={`Tolak ${NOUN[kind]} ${name}`} disabled={busyId === id}
@@ -182,10 +197,11 @@ export function EssPersetujuanTimPage() {
                   </p>
                   <p className="truncate text-xs text-gray-600">
                     {hhmm(row.start_time)}–{hhmm(row.end_time)} ({String(Number(row.hours)).replace(".", ",")} jam) ·{" "}
-                    {overtimeDayTypeLabel(row.day_type)} · {row.reason || "—"}
+                    {overtimeDayTypeLabel(row.day_type)} · istirahat {row.break_minutes ?? 0} menit ·{" "}
+                    {row.attachments?.length ?? 0} dokumentasi · {row.reason || "—"}
                   </p>
                 </div>
-                {actions("overtime", row.id, row.employee.full_name)}
+                {actions("overtime", row.id, row.employee.full_name, () => setApproving(row))}
               </li>
             ))}
           </ul>
@@ -204,6 +220,24 @@ export function EssPersetujuanTimPage() {
           </span>
           <span className="font-medium">Buka Pinjaman →</span>
         </Link>
+      )}
+
+      {approving && (
+        <OvertimeApproveDialog
+          key={approving.id}
+          row={{
+            id: approving.id,
+            date: approving.date,
+            start_time: approving.start_time,
+            end_time: approving.end_time,
+            break_minutes: approving.break_minutes ?? 0,
+            attachments: approving.attachments ?? [],
+            employee_name: approving.employee.full_name,
+          }}
+          open
+          onOpenChange={(o) => !o && setApproving(null)}
+          onApprove={(times) => approveOvertime(approving, times)}
+        />
       )}
 
       <ConfirmDialog

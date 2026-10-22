@@ -206,6 +206,9 @@ func TestOrderAlerts(t *testing.T) {
 	fresh.Getenv = func(string) string { return "" }
 	e.ports.WhatsApp = fresh
 	e.exec(`UPDATE configuration.telegram_subscribers SET status = 'active' WHERE chat_id = 222`)
+	// The unofficial gateway only messages numbers that chatted before
+	// (whatsapp.KnownContact); a migrations-only DB (CI) has no such row.
+	e.exec(`INSERT INTO crm.wa_messages (direction, phone, body) VALUES ('in', '6281234567890', 'halo')`)
 	expect(t, post(map[string]any{"action": "test", "chat_id": 1}), 200,
 		`{"success":true,"data":{"result":{"wa":{"sent":1,"failed":0,"skippedNoPhone":0},"telegram":{"sent":2,"failed":1}}}}`)
 	if got := wa.last(); got.header.Get("x-gateway-token") != "gw" || !strings.Contains(got.body, `"target":"6281234567890"`) ||

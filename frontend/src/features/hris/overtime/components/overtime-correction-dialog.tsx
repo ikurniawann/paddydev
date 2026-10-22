@@ -18,8 +18,9 @@ interface OvertimeCorrectionDialogProps {
 }
 
 /**
- * Koreksi lembur oleh AdminHRIS (MOM AP-04, EPIC-063 R6): tanggal, jam, dan
- * jenis; jam dihitung ulang server, alasan wajib dan tercatat di audit log.
+ * Koreksi lembur oleh AdminHRIS (MOM AP-04, EPIC-063 R6): tanggal, jam,
+ * istirahat (EPIC-066), dan jenis; jam dihitung ulang server, alasan wajib dan
+ * tercatat di audit log.
  */
 export function OvertimeCorrectionDialog({ row, onClose }: OvertimeCorrectionDialogProps) {
   return (
@@ -34,6 +35,8 @@ function CorrectionForm({ row, onClose }: { row: OvertimeRow; onClose: () => voi
   const [date, setDate] = useState(row.date.slice(0, 10));
   const [start, setStart] = useState(hhmm(row.start_time, ""));
   const [end, setEnd] = useState(hhmm(row.end_time, ""));
+  const storedBreak = Number(row.break_minutes ?? 0);
+  const [breakMinutes, setBreakMinutes] = useState(String(storedBreak));
   const [dayType, setDayType] = useState<OvertimeDayType>(row.day_type ?? "regular");
   const [reason, setReason] = useState("");
 
@@ -43,8 +46,21 @@ function CorrectionForm({ row, onClose }: { row: OvertimeRow; onClose: () => voi
       toast.error("Alasan koreksi minimal 5 karakter");
       return;
     }
+    const brk = Number(breakMinutes || 0);
+    if (!Number.isInteger(brk) || brk < 0 || brk > 720) {
+      toast.error("Istirahat 0–720 menit");
+      return;
+    }
     correct.mutate(
-      { id: row.id, date, start_time: start, end_time: end, day_type: dayType, reason: text },
+      {
+        id: row.id,
+        date,
+        start_time: start,
+        end_time: end,
+        ...(brk !== storedBreak && { break_minutes: brk }),
+        day_type: dayType,
+        reason: text,
+      },
       {
         onSuccess: (res) => {
           toast.success(res.message || "Lembur dikoreksi");
@@ -74,6 +90,11 @@ function CorrectionForm({ row, onClose }: { row: OvertimeRow; onClose: () => voi
             <label htmlFor="otc-end" className="mb-1 block text-xs font-medium text-gray-600">Jam Selesai</label>
             <Input id="otc-end" type="time" value={end} onChange={(e) => setEnd(e.target.value)} />
           </div>
+        </div>
+        <div>
+          <label htmlFor="otc-break" className="mb-1 block text-xs font-medium text-gray-600">Istirahat (menit)</label>
+          <Input id="otc-break" type="number" min={0} max={720} step={5} value={breakMinutes}
+            onChange={(e) => setBreakMinutes(e.target.value)} />
         </div>
         <div>
           <label htmlFor="otc-day-type" className="mb-1 block text-xs font-medium text-gray-600">Jenis lembur</label>

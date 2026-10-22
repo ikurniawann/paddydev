@@ -9,9 +9,9 @@ const base: OvertimeRow = {
   day_type: "regular", employee: { id: "e1", full_name: "Crew Koreksi", nip: "N01" },
 };
 
-function table(row: OvertimeRow, onDecide = vi.fn(), isHrd = true) {
+function table(row: OvertimeRow, onDecide = vi.fn(), isHrd = true, canCorrect = false) {
   return (
-    <OvertimeTable rows={[row]} loading={false} decidingId={null} onDecide={onDecide} canCorrect={false}
+    <OvertimeTable rows={[row]} loading={false} decidingId={null} onDecide={onDecide} canCorrect={canCorrect}
       isHrd={isHrd} onCorrect={vi.fn()} />
   );
 }
@@ -56,3 +56,31 @@ describe("OvertimeTable — jenis hari mengikuti nilai server", () => {
     expect(screen.getByLabelText("Jenis hari")).toBeTruthy();
   });
 });
+
+describe("OvertimeTable — istirahat, dokumentasi, koreksi (EPIC-066)", () => {
+  it("menampilkan istirahat dan tautan dokumentasi", () => {
+    render(table({ ...base, break_minutes: 30, attachments: ["overtime-attachments/e1/1-aaaaaaaaaaaaaaaa.pdf"] }));
+    expect(screen.getByText(/istirahat 30 menit/)).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Dokumentasi 1" }).getAttribute("href")).toBe(
+      "/api/hris/overtime/attachment/overtime-attachments/e1/1-aaaaaaaaaaaaaaaa.pdf");
+  });
+  it("tombol Koreksi disembunyikan untuk lembur karyawan yang punya atasan langsung", () => {
+    render(table({ ...base, employee: { ...base.employee!, reporting_to: "m1", reporting_to_active: true } }, vi.fn(), true, true));
+    expect(screen.queryByRole("button", { name: "Koreksi" })).toBeNull();
+  });
+  it("tombol Koreksi tampil bila atasan langsung nonaktif (EPIC-063 R9)", () => {
+    render(table({ ...base, employee: { ...base.employee!, reporting_to: "m1", reporting_to_active: false } }, vi.fn(), true, true));
+    expect(screen.getByRole("button", { name: "Koreksi" })).toBeTruthy();
+  });
+  it("tombol Koreksi tetap ada tanpa atasan, atau bila atasan = diri sendiri, atau sumber perusahaan", () => {
+    const { unmount } = render(table({ ...base, employee: { ...base.employee!, reporting_to: null } }, vi.fn(), true, true));
+    expect(screen.getByRole("button", { name: "Koreksi" })).toBeTruthy();
+    unmount();
+    const r2 = render(table({ ...base, employee: { ...base.employee!, reporting_to: "e1" } }, vi.fn(), true, true));
+    expect(screen.getByRole("button", { name: "Koreksi" })).toBeTruthy();
+    r2.unmount();
+    render(table({ ...base, source: "company", employee: { ...base.employee!, reporting_to: "m1" } }, vi.fn(), true, true));
+    expect(screen.getByRole("button", { name: "Koreksi" })).toBeTruthy();
+  });
+});
+

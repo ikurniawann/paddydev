@@ -28,11 +28,12 @@ const (
 // overtimeCorrection is the PATCH body; nil fields keep their value.
 type overtimeCorrection struct {
 	Date, StartTime, EndTime, DayType *string
+	BreakMinutes                      *int // EPIC-066: istirahat dikurangkan dari jam dibayar
 	Reason                            string
 }
 
-// CorrectOvertime fixes the date, times or type of someone else's pending or
-// approved request. The status stays; hours are recomputed; a date inside a
+// CorrectOvertime fixes the date, times, break or type of someone else's
+// pending or approved request. The status stays; hours are recomputed; a date inside a
 // closed attendance period (old or new) is refused; before/after and the
 // reason are audited in the same transaction.
 func (s *Service) CorrectOvertime(ctx context.Context, a *Actor, id string, in overtimeCorrection, meta audit.Entry) (*Row, error) {
@@ -59,8 +60,18 @@ func (s *Service) CorrectOvertime(ctx context.Context, a *Actor, id string, in o
 		if a.EmployeeID != nil && *a.EmployeeID == ot.Str("employee_id") {
 			return httpx.Forbidden(overtimeCorrectSelf)
 		}
-		was := struct{ date, start, end, dayType string }{dateText(ot, "date"), overtimeClock(ot.Str("start_time")),
-			overtimeClock(ot.Str("end_time")), ot.Str("day_type")}
+		if ot.Str("source") == "employee" {
+			reportingTo, managerActive := overtimeManager(ot.Child("employee"))
+			if allowed, msg := domain.CanCorrectOvertimeTimes(a.EmployeeID, a.IsHRD, ot.Str("employee_id"), reportingTo,
+				managerActive); !allowed {
+				return httpx.Forbidden(msg)
+			}
+		}
+		was := struct {
+			date, start, end, dayType string
+			brk                       int
+		}{dateText(ot, "date"), overtimeClock(ot.Str("start_time")), overtimeClock(ot.Str("end_time")),
+			ot.Str("day_type"), int(ot.Num("break_minutes"))}
 		pick := func(sent *string, cur string) string {
 			if sent != nil {
 				return *sent
@@ -69,16 +80,20 @@ func (s *Service) CorrectOvertime(ctx context.Context, a *Actor, id string, in o
 		}
 		date, start, end, dayType := pick(in.Date, was.date), pick(in.StartTime, was.start), pick(in.EndTime, was.end),
 			pick(in.DayType, was.dayType)
-		if date == was.date && start == was.start && end == was.end && dayType == was.dayType {
+		brk := was.brk
+		if in.BreakMinutes != nil {
+			brk = *in.BreakMinutes
+		}
+		if date == was.date && start == was.start && end == was.end && dayType == was.dayType && brk == was.brk {
 			return httpx.BadRequest("Tidak ada perubahan")
 		}
 		if start == end {
 			return httpx.BadRequest("Jam mulai dan selesai tidak boleh sama")
 		}
-		hours := domain.OvertimeHoursFromTimes(start, end)
-		if hours > 12 {
+		if domain.OvertimeGrossMinutes(start, end) > 12*60 {
 			return httpx.BadRequest("Durasi lembur maksimal 12 jam")
 		}
+		hours := domain.PaidOvertimeHours(start, end, brk)
 		if hours < 1 {
 			return httpx.BadRequest("Durasi lembur minimal 1 jam")
 		}
@@ -112,6 +127,7 @@ func (s *Service) CorrectOvertime(ctx context.Context, a *Actor, id string, in o
 		f.add("date", date)
 		f.add("start_time", start)
 		f.add("end_time", end)
+		f.add("break_minutes", brk)
 		f.add("hours", hours)
 		f.add("day_type", dayType)
 		f.add("corrected_at", now)
@@ -124,8 +140,9 @@ func (s *Service) CorrectOvertime(ctx context.Context, a *Actor, id string, in o
 		meta.ActorID, meta.ActorName = a.UserID, ptr(actorName(a))
 		meta.Action, meta.Entity, meta.EntityID, meta.EntityLabel = "overtime.correct", "hris.overtime_requests", &id, &label
 		meta.Before = map[string]any{"date": was.date, "start_time": was.start, "end_time": was.end,
-			"day_type": was.dayType, "hours": ot.Num("hours")}
-		meta.After = map[string]any{"date": date, "start_time": start, "end_time": end, "day_type": dayType, "hours": hours}
+			"break_minutes": was.brk, "day_type": was.dayType, "hours": ot.Num("hours")}
+		meta.After = map[string]any{"date": date, "start_time": start, "end_time": end, "break_minutes": brk,
+			"day_type": dayType, "hours": hours}
 		meta.Reason = &reason
 		return audit.Write(ctx, r.querier(), meta)
 	})
@@ -157,12 +174,12 @@ func (s *store) CorrectOvertime(ctx context.Context, id, fromStatus string, f fi
 // of the request only, not the embedded employee).
 func (s *store) OvertimeForUpdate(ctx context.Context, id string) (*Row, error) {
 	row, err := queryRow(ctx, s.db, `SELECT *, `+
-		embedOne("employee", "id, full_name, reporting_to", "hris.employees", "id = overtime_requests.employee_id")+
-		` FROM hris.overtime_requests WHERE id = $1 FOR UPDATE`, id)
+		embedOne("employee", "id, full_name, reporting_to, "+managerActiveCol, "hris.employees",
+			"id = overtime_requests.employee_id")+` FROM hris.overtime_requests WHERE id = $1 FOR UPDATE`, id)
 	return row, ignoreBadInput(err)
 }
 
-// PATCH /api/hris/overtime/{id} { date?, start_time?, end_time?, day_type?, reason }
+// PATCH /api/hris/overtime/{id} { date?, start_time?, end_time?, break_minutes?, day_type?, reason }
 func (h handlers) correctOvertime(w http.ResponseWriter, r *http.Request, u *auth.User) error {
 	id, err := requireUUID(r.PathValue("id"), "ID lembur tidak valid")
 	if err != nil {
@@ -177,6 +194,8 @@ func (h handlers) correctOvertime(w http.ResponseWriter, r *http.Request, u *aut
 		StartTime: f.Str("start_time", optional, validate.StrOpts{Check: regexOf(overtimeTimeRe)}),
 		EndTime:   f.Str("end_time", optional, validate.StrOpts{Check: regexOf(overtimeTimeRe)}),
 		DayType:   f.Enum("day_type", optional, overtimeDayTypes),
+		BreakMinutes: f.Int("break_minutes", optional,
+			validate.NumOpts{Min: validate.Bound(0), Max: validate.Bound(720)}),
 		Reason: strOr(f.Str("reason", validate.Rule{}, validate.StrOpts{Trim: true, Max: 500,
 			Check: minLen(5, "Alasan koreksi minimal 5 karakter")})),
 	}

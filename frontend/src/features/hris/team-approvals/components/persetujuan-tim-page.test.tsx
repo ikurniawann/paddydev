@@ -38,7 +38,8 @@ const leave: TeamLeaveRequest = {
 };
 const overtime: TeamOvertimeRequest = {
   id: "o1", employee_id: "e2", date: "2026-10-06", start_time: "17:00:00", end_time: "19:30:00", hours: "2.50",
-  day_type: "rest_day", reason: "Stock opname", created_at: "2026-10-05T00:00:00Z",
+  day_type: "rest_day", break_minutes: 0, attachments: ["overtime-attachments/e2/1-aaaaaaaaaaaaaaaa.pdf"],
+  reason: "Stock opname", created_at: "2026-10-05T00:00:00Z",
   employee: { id: "e2", full_name: "Anggota B", nip: "N02" },
 };
 
@@ -66,6 +67,33 @@ describe("EssPersetujuanTimPage", () => {
       expect.anything()
     );
     expect(toastSuccess).toHaveBeenCalledWith("Cuti disetujui");
+  });
+
+  it("lembur: ringkasan menampilkan istirahat & dokumentasi; Setujui tanpa perubahan tidak mengirim jam (EPIC-066)", () => {
+    queue = { leaves: [], overtime: [overtime] };
+    decide.mockImplementation((_v, opts) => opts.onSuccess());
+    render(<EssPersetujuanTimPage />);
+    expect(screen.getByText(/istirahat 0 menit · 1 dokumentasi/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Setujui lembur Anggota B" }));
+    expect(decide).not.toHaveBeenCalled(); // membuka dialog dulu
+    fireEvent.click(screen.getByRole("button", { name: "Setujui" }));
+    expect(decide).toHaveBeenCalledWith(
+      { kind: "overtime", id: "o1", action: "approve", times: undefined },
+      expect.anything()
+    );
+    expect(toastSuccess).toHaveBeenCalledWith("Lembur disetujui");
+  });
+
+  it("lembur: hanya mengirim kolom yang berbeda dari nilai tersimpan (ubah jam selesai saja)", () => {
+    queue = { leaves: [], overtime: [overtime] };
+    render(<EssPersetujuanTimPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Setujui lembur Anggota B" }));
+    fireEvent.change(screen.getByLabelText("Jam Selesai"), { target: { value: "19:00" } });
+    fireEvent.click(screen.getByRole("button", { name: "Setujui" }));
+    expect(decide).toHaveBeenCalledWith(
+      { kind: "overtime", id: "o1", action: "approve", times: { end_time: "19:00" } },
+      expect.anything()
+    );
   });
 
   it("menolak lembur wajib alasan lewat dialog", () => {
