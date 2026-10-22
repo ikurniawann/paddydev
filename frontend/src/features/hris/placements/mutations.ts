@@ -1,9 +1,10 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { attendanceQueryKeys } from "@/features/hris/attendance/query-keys";
 import { withDeleteReason } from "@/lib/hris/delete-reason";
 import type { BranchLocationPayload } from "@/lib/hris/geofence";
-import { bulkPlacement, createPlacement, deletePlacement, saveBranchLocation, updatePlacement } from "./api";
+import { bulkPlacement, createPlacement, deletePlacement, saveBranchLocation, saveBranchMinWorkHours, updatePlacement } from "./api";
 import { placementQueryKeys } from "./query-keys";
 import type { BulkPlacementPayload, PlacementPayload } from "./types";
 
@@ -43,5 +44,19 @@ export function useSaveBranchLocation() {
   return useMutation({
     mutationFn: ({ id, payload }: { id: string; payload: BranchLocationPayload }) => saveBranchLocation(id, payload),
     onSuccess,
+  });
+}
+
+export function useSaveBranchMinWorkHours() {
+  const qc = useQueryClient();
+  const invalidatePlacements = useInvalidatePlacements();
+  return useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: { min_work_hours: number | null } }) =>
+      saveBranchMinWorkHours(id, payload),
+    onSuccess: () => {
+      void invalidatePlacements();
+      // Label kurang jam di absensi periode terbuka ikut berubah.
+      void qc.invalidateQueries({ queryKey: attendanceQueryKeys.all });
+    },
   });
 }

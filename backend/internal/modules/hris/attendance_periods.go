@@ -167,14 +167,18 @@ func materializePeriod(ctx context.Context, q database.Querier, s domain.PeriodS
 
 // periodSummarySQL counts the attendance of a period for the closing
 // summary: employees, rows, rows without clock-out, unvalidated and
-// manually adjusted rows.
+// manually adjusted rows, plus the attendance requests still pending (they
+// cannot be approved once the period is closed). $1 and $2 may occur more
+// than once; autoClosePeriod renumbers every occurrence.
 const periodSummarySQL = `SELECT json_build_object(
 	'employees', count(DISTINCT a.employee_id),
 	'rows', count(a.id),
 	'without_clock_out', count(a.id) FILTER (WHERE a.clock_in IS NOT NULL AND a.clock_out IS NULL),
 	'unvalidated', count(a.id) FILTER (WHERE a.validated_at IS NULL),
 	'adjusted', count(a.id) FILTER (WHERE a.is_manual OR a.adjusted_at IS NOT NULL),
-	'late', count(a.id) FILTER (WHERE a.is_late))
+	'late', count(a.id) FILTER (WHERE a.is_late),
+	'pending_requests', (SELECT count(*) FROM hris.attendance_requests q
+	                      WHERE q.status = 'pending' AND q.date BETWEEN $1::date AND $2::date))
 	FROM hris.attendance a WHERE a.date BETWEEN $1::date AND $2::date`
 
 // autoClosePeriod marks an open period whose closing date passed as closed
@@ -182,7 +186,7 @@ const periodSummarySQL = `SELECT json_build_object(
 // its event and audit row, in one statement.
 func autoClosePeriod(ctx context.Context, q database.Querier, p *AttendancePeriod, today string) (*AttendancePeriod, error) {
 	label := p.Name() + " (" + p.Label() + ")"
-	_, err := q.Exec(ctx, `WITH summary AS (`+strings.Replace(strings.Replace(periodSummarySQL, "$1", "$3", 1), "$2", "$4", 1)+`),
+	_, err := q.Exec(ctx, `WITH summary AS (`+strings.ReplaceAll(strings.ReplaceAll(periodSummarySQL, "$1", "$3"), "$2", "$4")+`),
 		upd AS (
 		  UPDATE hris.attendance_periods SET status = 'closed', range_frozen = true,
 		         closed_at = ((closing_date + 1)::timestamp AT TIME ZONE 'Asia/Jakarta'),

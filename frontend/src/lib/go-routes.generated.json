@@ -1762,6 +1762,31 @@
   {
     "module": "hris",
     "method": "GET",
+    "path": "/api/hris/attendance-requests"
+  },
+  {
+    "module": "hris",
+    "method": "POST",
+    "path": "/api/hris/attendance-requests"
+  },
+  {
+    "module": "hris",
+    "method": "GET",
+    "path": "/api/hris/attendance-requests/attachment/{path...}"
+  },
+  {
+    "module": "hris",
+    "method": "POST",
+    "path": "/api/hris/attendance-requests/{id}/cancel"
+  },
+  {
+    "module": "hris",
+    "method": "POST",
+    "path": "/api/hris/attendance-requests/{id}/decide"
+  },
+  {
+    "module": "hris",
+    "method": "GET",
     "path": "/api/hris/attendance-settings"
   },
   {
@@ -1823,6 +1848,11 @@
     "module": "hris",
     "method": "PUT",
     "path": "/api/hris/branches/{id}/location"
+  },
+  {
+    "module": "hris",
+    "method": "PUT",
+    "path": "/api/hris/branches/{id}/min-work-hours"
   },
   {
     "module": "hris",
@@ -2348,6 +2378,16 @@
     "module": "hris",
     "method": "GET",
     "path": "/api/hris/me"
+  },
+  {
+    "module": "hris",
+    "method": "GET",
+    "path": "/api/hris/me/attendance-gaps"
+  },
+  {
+    "module": "hris",
+    "method": "GET",
+    "path": "/api/hris/me/attendance-requests"
   },
   {
     "module": "hris",

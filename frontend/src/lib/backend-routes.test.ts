@@ -208,7 +208,9 @@ describe("Go route manifest", () => {
       // Paket Approval atasan (EPIC-063): hanya di Go, tanpa fallback Next.
       "/api/hris/overtime/day-type", "/api/hris/overtime/{id}", "/api/hris/me/team-approvals", "/api/hris/employees/without-manager",
       // Aktifkan kembali karyawan (EPIC-064).
-      "/api/hris/employees/{id}/rehire"];
+      "/api/hris/employees/{id}/rehire",
+      // Pengajuan absen manual/koreksi (EPIC-065): hanya di Go, tanpa fallback Next.
+      "/api/hris/attendance-requests", "/api/hris/me/attendance-requests", "/api/hris/me/attendance-gaps"];
     const goNative = (p: string) =>
       goNativePrefixes.some((n) => p === n || p.startsWith(`${n}/`));
     const missing = switched

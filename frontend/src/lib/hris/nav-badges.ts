@@ -38,6 +38,9 @@ export const ANNOUNCEMENTS_HREF = "/dashboard/me/pengumuman";
 /** Menu ESS Persetujuan Tim (EPIC-063 R7): antrean atasan langsung. */
 export const TEAM_APPROVALS_HREF = "/dashboard/me/persetujuan-tim";
 
+/** Menu HR Absensi: pengajuan absen manual/koreksi menunggu HRD (EPIC-065, sama dengan Go). */
+export const ATTENDANCE_REQUESTS_HREF = "/dashboard/hris/attendance";
+
 export type EssModule = keyof typeof ESS_HREFS;
 
 export const ESS_MODULES = Object.keys(ESS_HREFS) as EssModule[];
@@ -162,6 +165,15 @@ export async function buildNavBadges(actor: WorkforceActor): Promise<Record<stri
     for (const essModule of ESS_MODULES) {
       badges[APPROVAL_HREFS[essModule]] = pending[essModule];
     }
+  }
+
+  // Hanya HRD (super_admin/admin/hrd) yang memutus pengajuan absensi (EPIC-065 R2).
+  // Sama dengan Go PendingAttendanceRequestCount: semua pengajuan pending, termasuk milik HRD sendiri.
+  if (actor.isHrd) {
+    badges[ATTENDANCE_REQUESTS_HREF] = await countOne(
+      `SELECT count(*) AS total FROM hris.attendance_requests WHERE status = 'pending'`,
+      []
+    );
   }
 
   if (actor.employeeId) {

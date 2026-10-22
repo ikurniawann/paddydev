@@ -121,9 +121,12 @@ func buildRoster(rows []*Row, date, today string, isPublicHoliday bool, now time
 		}
 		var attendance, leave any
 		if row.Get("attendance_id") != nil {
-			var hours any
+			var hours, minHours any
 			if wh := row.Str("work_hours"); wh != "" {
 				hours = domain.JSNumber(wh)
+			}
+			if mh := row.Str("min_work_hours"); mh != "" {
+				minHours = domain.JSNumber(mh)
 			}
 			attendance = obj("id", row.Get("attendance_id"), "clock_in", row.Get("clock_in"), "clock_out", row.Get("clock_out"),
 				"work_hours", hours, "is_late", row.Bool("is_late"), "late_minutes", int64(row.Num("late_minutes")),
@@ -131,7 +134,8 @@ func buildRoster(rows []*Row, date, today string, isPublicHoliday bool, now time
 				"shift_id", row.Get("attendance_shift_id"),
 				"clock_in_geofence", row.Get("clock_in_geofence"), "clock_in_distance_m", row.Get("clock_in_distance_m"),
 				"clock_out_geofence", row.Get("clock_out_geofence"), "clock_out_distance_m", row.Get("clock_out_distance_m"),
-				"notes", row.Get("attendance_notes"))
+				"notes", row.Get("attendance_notes"),
+				"is_short_hours", row.Bool("is_short_hours"), "min_work_hours", minHours)
 		}
 		if row.Get("leave_id") != nil {
 			leave = obj("id", row.Get("leave_id"), "leave_type", row.Get("leave_type"))

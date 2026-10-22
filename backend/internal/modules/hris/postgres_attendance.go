@@ -11,7 +11,8 @@ var attendanceListColumns = `id, employee_id, date, clock_in, clock_out,
   shift_id, scheduled_start, scheduled_end, work_hours, break_minutes,
   status, is_late, late_minutes, notes, created_at, updated_at, branch_id,
   is_overtime, overtime_hours, validated_at, is_manual, adjusted_at, adjusted_by_name, adjustment_count,
-  clock_in_geofence, clock_in_distance_m, clock_out_geofence, clock_out_distance_m, ` +
+  clock_in_geofence, clock_in_distance_m, clock_out_geofence, clock_out_distance_m,
+  min_work_hours, is_short_hours, ` +
 	embedOne("shift", "id, name", "hris.shifts", "id = attendance.shift_id") + ", " +
 	embedOne("branch", "id, code, name", "configuration.branches", "id = attendance.branch_id") + ", " +
 	embedOne("employee", "id, full_name, nip, photo_url, department_id, job_title_id", "hris.employees", "id = attendance.employee_id")
@@ -98,7 +99,7 @@ func (s *store) RosterRows(ctx context.Context, date string, dow int, superAdmin
 		       a.clock_in_photo_url, a.clock_out_photo_url,
 		       a.shift_id AS attendance_shift_id,
 		       a.clock_in_geofence, a.clock_in_distance_m, a.clock_out_geofence, a.clock_out_distance_m,
-		       a.notes AS attendance_notes,
+		       a.notes AS attendance_notes, a.min_work_hours::text AS min_work_hours, a.is_short_hours,
 		       l.id AS leave_id, l.leave_type::text
 		FROM hris.employees e
 		LEFT JOIN scheduled sc ON sc.employee_id = e.id

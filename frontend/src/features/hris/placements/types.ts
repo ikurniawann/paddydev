@@ -10,10 +10,19 @@ export interface StoreBranch {
   lng: string | null;
   /** Override radius absensi (meter); null = radius bawaan */
   geofence_radius_m: number | null;
+  /** Jam kerja minimum (EPIC-065 AB-05), numeric pg sebagai string; null/absen = tanpa aturan */
+  min_work_hours?: string | null;
 }
 
 /** Respons PUT /api/hris/branches/{id}/location: hanya kolom yang disimpan. */
 export type SavedBranchLocation = Pick<StoreBranch, "id" | "code" | "name" | "lat" | "lng" | "geofence_radius_m">;
+
+/** Respons PUT /api/hris/branches/{id}/min-work-hours. */
+export type SavedBranchMinWorkHours = Pick<StoreBranch, "id" | "code" | "name"> & {
+  min_work_hours: string | null;
+  /** Jumlah baris absensi periode terbuka yang dilabel ulang */
+  relabelled: number;
+};
 
 /** Baris hris.employee_placements beserta nama toko. */
 export interface Placement {
