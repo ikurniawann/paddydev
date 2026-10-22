@@ -2605,6 +2605,11 @@
     "path": "/api/hris/performance/reviews/{id}"
   },
   {
+    "module": "hris",
+    "method": "GET",
+    "path": "/api/hris/places"
+  },
+  {
     "module": "recruitment",
     "method": "POST",
     "path": "/api/hris/promote"

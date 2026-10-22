@@ -1,6 +1,7 @@
 import { apiDelete, apiGet, apiPatch, apiPost, apiPut, buildListUrl } from "@/lib/api-client";
 import { withReasonQuery } from "@/lib/hris/delete-reason";
 import type { BranchLocationPayload } from "@/lib/hris/geofence";
+import type { PlaceResult } from "@/lib/maps/coords";
 import type {
   BulkPlacementPayload,
   ClockPlacements,
@@ -15,6 +16,10 @@ import type {
 
 export const fetchStoreBranches = () =>
   apiGet<{ data: StoreBranch[] }>("/api/hris/branches").then((res) => res.data ?? []);
+
+/** Cari nama tempat/alamat untuk peta Lokasi Toko (OSM Nominatim lewat server). */
+export const searchPlaces = (q: string) =>
+  apiGet<{ data: PlaceResult[] }>(`/api/hris/places?q=${encodeURIComponent(q)}`).then((res) => res.data ?? []);
 
 /** PUT penuh: kirim selalu ketiga kunci (kunci yang hilang disimpan sebagai null). */
 export const saveBranchLocation = (id: string, payload: BranchLocationPayload) =>

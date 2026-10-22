@@ -40,6 +40,8 @@ type Ports struct {
 	WhatsApp WhatsAppSender
 	// HolidayCalendar fetches the public holiday ICS feed; nil uses net/http.
 	HolidayCalendar HolidayCalendar
+	// Places searches addresses for the Lokasi Toko map; nil uses Nominatim.
+	Places PlaceSearch
 	// Company reads the company profile printed on contracts and recaps.
 	Company CompanyProfile
 	// Files is the storage shared with Next; nil is STORAGE_DIR.
@@ -55,6 +57,7 @@ type Service struct {
 	directory   Directory
 	whatsapp    WhatsAppSender
 	calendar    HolidayCalendar
+	places      PlaceSearch
 	company     CompanyProfile
 	files       *storage.Store
 	limiter     *ratelimit.Limiter
@@ -89,12 +92,15 @@ func NewService(repo Repository, ports Ports, log *slog.Logger, now func() time.
 	if ports.HolidayCalendar == nil {
 		ports.HolidayCalendar = httpCalendar{client: &http.Client{Timeout: 12 * time.Second}}
 	}
+	if ports.Places == nil {
+		ports.Places = nominatimFromEnv()
+	}
 	if ports.Files == nil {
 		ports.Files = storage.FromEnv()
 	}
 	return &Service{
 		repo: repo, payroll: ports.Payroll, salary: ports.Salary, recruitment: ports.Recruitment,
-		directory: ports.Directory, whatsapp: ports.WhatsApp, calendar: ports.HolidayCalendar,
+		directory: ports.Directory, whatsapp: ports.WhatsApp, calendar: ports.HolidayCalendar, places: ports.Places,
 		company: ports.Company, files: ports.Files, limiter: ratelimit.New(repo.querier()), log: log, now: now,
 	}
 }

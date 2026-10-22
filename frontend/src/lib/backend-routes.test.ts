@@ -188,7 +188,7 @@ describe("Go route manifest", () => {
     // prefixes, so there is nothing to fall back to.
     const goNativePrefixes = ["/api/shop/wholesale", "/api/wholesale", "/api/public/site", "/api/site", "/api/public/spa", "/api/spa", "/api/reports", "/api/wa-bot", "/api/wa/meta", "/api/settings/wa-meta", "/api/purchasing/settings",
       // Payroll multi-toko (penempatan karyawan, laporan biaya gaji per toko).
-      "/api/hris/branches", "/api/hris/employee-placements", "/api/hris/me/placements",
+      "/api/hris/branches", "/api/hris/employee-placements", "/api/hris/me/placements", "/api/hris/places",
       "/api/hris/payroll/{id}/store-costs", "/api/hris/payroll/entities",
       // Closing periode absensi + penyesuaian manual HRD.
       "/api/hris/attendance-periods", "/api/hris/attendance-settings", "/api/hris/attendance-adjustments",

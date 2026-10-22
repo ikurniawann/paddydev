@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { LocationPickerField } from "@/components/maps/location-picker-field";
-import { parseLatLng, resolveRadiusM } from "@/lib/maps/coords";
+import { isShortMapsLink, parseLocationText, resolveRadiusM } from "@/lib/maps/coords";
 import {
   GEOFENCE_DEFAULT_RADIUS_M,
   toBranchLocationPayload,
@@ -15,6 +15,7 @@ import {
   type BranchLocationForm,
 } from "@/lib/hris/geofence";
 import { MIN_WORK_HOURS_ERROR, formatHours, toMinWorkHoursPayload, validateMinWorkHours } from "@/lib/hris/short-hours";
+import { searchPlaces } from "../api";
 import { useSaveBranchLocation, useSaveBranchMinWorkHours } from "../mutations";
 import type { StoreBranch } from "../types";
 
@@ -30,8 +31,9 @@ const toForm = (b: StoreBranch): BranchLocationForm => ({
 
 /**
  * HRIS → Penempatan Karyawan → Lokasi Toko (EPIC-062, R9): HR mengisi titik
- * toko lewat peta (OpenLayers + OSM) atau tempel koordinat, plus override
- * radius absensi. Toko tanpa koordinat membuat absen "Belum dicek".
+ * toko lewat peta (OpenLayers + OSM), cari nama tempat/alamat, lokasi
+ * perangkat, atau tempel koordinat/link Google Maps, plus override radius
+ * absensi. Toko tanpa koordinat membuat absen "Belum dicek".
  */
 export function BranchLocationDialog({
   open,
@@ -62,9 +64,16 @@ export function BranchLocationDialog({
 
   function applyPaste(text: string) {
     setPaste(text);
-    const point = parseLatLng(text);
+    const point = parseLocationText(text);
     if (point) setForm((f) => ({ ...f, lat: String(point.lat), lng: String(point.lng) }));
   }
+
+  const pasteHint =
+    paste.trim() === "" || parseLocationText(paste)
+      ? ""
+      : isShortMapsLink(paste)
+        ? "Link pendek tidak memuat koordinat. Buka link itu, lalu salin URL lengkap dari address bar, atau salin angka koordinatnya."
+        : "Tidak terbaca sebagai koordinat atau link Google Maps yang memuat koordinat.";
 
   function submit() {
     if (!selected) return;
@@ -142,6 +151,7 @@ export function BranchLocationDialog({
                 lng={form.lng}
                 radiusM={resolveRadiusM(Number(form.radius))}
                 onPick={(p) => setForm((f) => ({ ...f, lat: String(p.lat), lng: String(p.lng) }))}
+                onSearch={searchPlaces}
               />
               <div className="grid gap-3 sm:grid-cols-3">
                 <label className="text-xs font-medium text-gray-600">
@@ -167,8 +177,13 @@ export function BranchLocationDialog({
               </div>
               <label className="block text-xs font-medium text-gray-600">
                 Tempel dari Google Maps
-                <Input value={paste} placeholder="-6.888900, 107.596000" onChange={(e) => applyPaste(e.target.value)} />
+                <Input
+                  value={paste}
+                  placeholder="-6.888900, 107.596000 atau https://www.google.com/maps/…"
+                  onChange={(e) => applyPaste(e.target.value)}
+                />
               </label>
+              {pasteHint && <p className="text-xs text-amber-700">{pasteHint}</p>}
               <p className="text-xs text-gray-500">
                 Radius kosong = {GEOFENCE_DEFAULT_RADIUS_M} m (25–1000). Koordinat yang sama dipakai peta lokasi di
                 situs publik.

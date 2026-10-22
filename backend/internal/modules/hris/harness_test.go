@@ -37,7 +37,7 @@ func newHarness(t *testing.T) *harness {
 	tx := testutil.Tx(t)
 	wa := &fakeWhatsApp{}
 	ports := Ports{Payroll: fakePayroll{}, Salary: fakeSalary{}, Recruitment: fakeRecruitment{}, Directory: fakeDirectory{},
-		WhatsApp: wa, HolidayCalendar: fakeCalendar{}}
+		WhatsApp: wa, HolidayCalendar: fakeCalendar{}, Places: fakePlaces{}}
 	svc := NewService(newStore(tx), ports, deps.Log, deps.Now)
 	deps.Events.Subscribe(TopicLeaveRequested, "hris.leave-request-whatsapp", svc.notifyLeaveRequest)
 	deps.Events.Subscribe(TopicOvertimeRequested, "hris.overtime-request-whatsapp", svc.notifyOvertimeRequest)

@@ -42,3 +42,64 @@ export function parseLatLng(text: string): LatLngPoint | null {
 export function resolveRadiusM(radiusM: number | null | undefined): number {
   return typeof radiusM === "number" && Number.isFinite(radiusM) && radiusM > 0 ? radiusM : GEOFENCE_DEFAULT_RADIUS_M;
 }
+
+const GOOGLE_HOST = /(^|\.)google\.[a-z.]+$/;
+const PAIR = /^\s*(-?\d+(?:\.\d+)?)\s*,\s*\+?\s*(-?\d+(?:\.\d+)?)\s*$/;
+
+/** decodeURIComponent yang tidak melempar: % rusak (link sedang diketik) dibiarkan apa adanya. */
+function safeDecode(text: string): string {
+  try {
+    return decodeURIComponent(text);
+  } catch {
+    return text;
+  }
+}
+
+function usablePoint(a: string, b: string): LatLngPoint | null {
+  const point = { lat: roundCoord(Number(a)), lng: roundCoord(Number(b)) };
+  return isUsableCoord(point.lat, point.lng) ? point : null;
+}
+
+/**
+ * Titik dari link Google Maps lengkap: pin tempat (`!3d…!4d…`) lebih dulu,
+ * lalu parameter `q`/`query`/`ll`/`center`/`destination`, path `/search/` atau
+ * `/place/` berisi koordinat, terakhir pusat peta (`@lat,lng`). null bila
+ * bukan link Google Maps atau tidak memuat koordinat.
+ */
+function parseGoogleMapsLink(text: string): LatLngPoint | null {
+  let url: URL;
+  try {
+    url = new URL(text.trim());
+  } catch {
+    return null;
+  }
+  if (!GOOGLE_HOST.test(url.hostname)) return null;
+  const href = safeDecode(url.href);
+  const pin = href.match(/!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/);
+  if (pin) return usablePoint(pin[1], pin[2]);
+  for (const key of ["q", "query", "ll", "center", "destination"]) {
+    const m = (url.searchParams.get(key) ?? "").match(PAIR);
+    if (m) return usablePoint(m[1], m[2]);
+  }
+  const path = safeDecode(url.pathname).match(/\/(?:search|place)\/(-?\d+(?:\.\d+)?),\s*\+?(-?\d+(?:\.\d+)?)/);
+  if (path) return usablePoint(path[1], path[2]);
+  const center = href.match(/@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/);
+  return center ? usablePoint(center[1], center[2]) : null;
+}
+
+/** Isian tempel Lokasi Toko: koordinat polos atau link Google Maps lengkap. */
+export function parseLocationText(text: string): LatLngPoint | null {
+  return parseLatLng(text) ?? parseGoogleMapsLink(text);
+}
+
+/** Link pendek bagikan Google Maps (maps.app.goo.gl, goo.gl/maps): tidak memuat koordinat. */
+export function isShortMapsLink(text: string): boolean {
+  return /^https?:\/\/(maps\.app\.goo\.gl|goo\.gl\/maps)\//i.test(text.trim());
+}
+
+/** Hasil cari nama tempat/alamat (GET /api/hris/places). */
+export interface PlaceResult {
+  name: string;
+  lat: number;
+  lng: number;
+}
