@@ -124,3 +124,55 @@ export function decidedAs(
   if (actor.employeeId !== null && reportingTo === actor.employeeId) return "manager";
   return actor.isHr ? "hr" : null;
 }
+
+/* ── Input lembur setelah selesai (EPIC-066) ─────────────────────────── */
+
+export const OVERTIME_ATTACHMENT_ACCEPT = "application/pdf,image/jpeg,image/png,image/webp";
+export const MAX_OVERTIME_ATTACHMENTS = 3;
+export const MAX_OVERTIME_ATTACHMENT_BYTES = 5 * 1024 * 1024;
+
+function clockMinutes(s: string): number | null {
+  const m = /^(\d{2}):(\d{2})/.exec(s);
+  if (!m) return null;
+  const h = Number(m[1]);
+  const min = Number(m[2]);
+  return h <= 23 && min <= 59 ? h * 60 + min : null;
+}
+
+/** Durasi kotor (menit), lewat tengah malam bila selesai tidak setelah mulai. */
+function grossMinutes(start: string, end: string): number {
+  const s = clockMinutes(start);
+  const e = clockMinutes(end);
+  if (s === null || e === null) return 0;
+  return e <= s ? e + 1440 - s : e - s;
+}
+
+/** Akhir lembur di jam dinding WIB; null bila input tidak valid. */
+function overtimeEnd(date: string, start: string, end: string): Date | null {
+  const s = clockMinutes(start);
+  const gross = grossMinutes(start, end);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || s === null || gross === 0) return null;
+  const base = new Date(`${date}T00:00:00+07:00`);
+  return Number.isNaN(base.getTime()) ? null : new Date(base.getTime() + (s + gross) * 60_000);
+}
+
+/** Server: Lembur baru bisa diinput setelah selesai (EPIC-066). */
+export function overtimeNotFinished(date: string, start: string, end: string, now: Date = new Date()): boolean {
+  const ends = overtimeEnd(date, start, end);
+  return ends !== null && now.getTime() < ends.getTime();
+}
+
+/** "DD-MM-YYYY HH:MM" (WIB) akhir lembur, seperti pesan server. */
+export function overtimeEndLabel(date: string, start: string, end: string): string {
+  const ends = overtimeEnd(date, start, end);
+  if (!ends) return "";
+  const wibTime = new Date(ends.getTime() + 7 * 3600_000);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${pad(wibTime.getUTCDate())}-${pad(wibTime.getUTCMonth() + 1)}-${wibTime.getUTCFullYear()} ${pad(wibTime.getUTCHours())}:${pad(wibTime.getUTCMinutes())}`;
+}
+
+/** Jam dibayar = (durasi − istirahat) / 60, 2 desimal, tidak negatif. */
+export function paidOvertimeHours(start: string, end: string, breakMinutes: number): number {
+  const minutes = Math.max(0, grossMinutes(start, end) - (Number.isFinite(breakMinutes) ? breakMinutes : 0));
+  return Math.round((minutes / 60) * 100) / 100;
+}
