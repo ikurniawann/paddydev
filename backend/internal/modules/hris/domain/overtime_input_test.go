@@ -55,20 +55,23 @@ func TestCanCorrectOvertimeTimes(t *testing.T) {
 	boss, owner, hr := "boss", "owner", "hr"
 	self := owner
 	for _, c := range []struct {
-		name        string
-		actor       *string
-		isHRD       bool
-		reportingTo *string
-		want        bool
+		name          string
+		actor         *string
+		isHRD         bool
+		reportingTo   *string
+		managerActive bool
+		want          bool
 	}{
-		{"atasan langsung", &boss, false, &boss, true},
-		{"HR saat ada atasan", &hr, true, &boss, false},
-		{"HR tanpa atasan", &hr, true, nil, true},
-		{"HR saat atasan menunjuk diri sendiri", &hr, true, &self, true},
-		{"karyawan sendiri", &owner, true, nil, false},
-		{"orang lain", &hr, false, nil, false},
+		{"atasan langsung", &boss, false, &boss, true, true},
+		{"HR saat ada atasan", &hr, true, &boss, true, false},
+		{"HR tanpa atasan", &hr, true, nil, false, true},
+		{"HR saat atasan menunjuk diri sendiri", &hr, true, &self, true, true},
+		{"HR saat atasan nonaktif", &hr, true, &boss, false, true},
+		{"atasan nonaktif", &boss, false, &boss, false, false},
+		{"karyawan sendiri", &owner, true, nil, false, false},
+		{"orang lain", &hr, false, nil, false, false},
 	} {
-		got, msg := CanCorrectOvertimeTimes(c.actor, c.isHRD, owner, c.reportingTo)
+		got, msg := CanCorrectOvertimeTimes(c.actor, c.isHRD, owner, c.reportingTo, c.managerActive)
 		if got != c.want || (!got && msg == "") {
 			t.Errorf("%s = %v %q, want %v", c.name, got, msg, c.want)
 		}

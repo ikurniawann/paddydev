@@ -80,13 +80,14 @@ func PaidOvertimeHours(start, end string, breakMinutes int) float64 {
 }
 
 // CanCorrectOvertimeTimes: the direct manager corrects an employee's own
-// overtime; HRD only when the employee has no valid manager (nil or pointing
-// at themselves). Nobody corrects their own overtime.
-func CanCorrectOvertimeTimes(actor *string, isHRD bool, ownerID string, reportingTo *string) (bool, string) {
+// overtime; HRD only when the employee has no valid manager (nil, pointing
+// at themselves, or an inactive employee — EPIC-063 R9). Nobody corrects
+// their own overtime.
+func CanCorrectOvertimeTimes(actor *string, isHRD bool, ownerID string, reportingTo *string, managerActive bool) (bool, string) {
 	if samePerson(actor, &ownerID) {
 		return false, "Tidak bisa mengoreksi lembur sendiri"
 	}
-	hasManager := reportingTo != nil && *reportingTo != "" && *reportingTo != ownerID
+	hasManager := managerActive && reportingTo != nil && *reportingTo != "" && *reportingTo != ownerID
 	if hasManager && samePerson(actor, reportingTo) {
 		return true, ""
 	}

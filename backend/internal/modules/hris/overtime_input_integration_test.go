@@ -51,6 +51,10 @@ func TestOvertimeInputAfterFinished(t *testing.T) {
 	forged := map[string]any{"date": "2026-10-02", "start_time": "17:00", "end_time": "19:00",
 		"attachments": []string{"overtime-attachments/" + own + "/../../x.pdf"}}
 	expect(t, post(forged), 400, "Dokumentasi lembur tidak valid — unggah ulang filenya")
+	twice := h.otSelfBody(&staff, "2026-10-02", "17:00", "19:00")
+	same := twice["attachments"].([]string)[0]
+	twice["attachments"] = []string{same, same}
+	expect(t, post(twice), 400, "Dokumentasi lembur tidak boleh sama")
 	four := h.otSelfBody(&staff, "2026-10-02", "17:00", "19:00")
 	paths := four["attachments"].([]string)
 	four["attachments"] = []string{paths[0], paths[0], paths[0], paths[0]}

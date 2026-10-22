@@ -250,7 +250,12 @@ func (s *Service) checkOvertimeAttachments(ownerID string, paths []string) error
 		return httpx.BadRequest("Maksimal 3 dokumentasi lembur")
 	}
 	const invalid = "Dokumentasi lembur tidak valid — unggah ulang filenya"
+	seen := make(map[string]bool, len(paths))
 	for _, p := range paths {
+		if seen[p] {
+			return httpx.BadRequest("Dokumentasi lembur tidak boleh sama")
+		}
+		seen[p] = true
 		m := overtimeAttachmentRe.FindStringSubmatch(p)
 		if m == nil || m[1] != ownerID {
 			return httpx.BadRequest(invalid)
@@ -289,11 +294,8 @@ func (s *Service) DecideOvertime(ctx context.Context, a *Actor, id, action strin
 	if status := ot.Str("status"); status != "pending" {
 		return nil, httpx.BadRequest("Pengajuan sudah "+status, obj("current_status", status))
 	}
-	var reportingTo *string
 	emp := ot.Child("employee")
-	if emp != nil {
-		reportingTo = emp.StrPtr("reporting_to")
-	}
+	reportingTo, managerActive := overtimeManager(emp)
 	allowed, reason := domain.CanDecideOvertime(domain.OvertimeActor{EmployeeID: a.EmployeeID, IsHR: a.IsHRD},
 		domain.OvertimeRequest{EmployeeID: ot.Str("employee_id"), RequestedBy: ot.StrPtr("requested_by"),
 			Source: ot.Str("source"), ReportingTo: reportingTo}, action)
@@ -331,7 +333,7 @@ func (s *Service) DecideOvertime(ctx context.Context, a *Actor, id, action strin
 		if action != "approve" || ot.Str("source") != "employee" {
 			return nil, httpx.BadRequest("Koreksi jam hanya saat menyetujui input lembur karyawan")
 		}
-		if allowed, msg := domain.CanCorrectOvertimeTimes(a.EmployeeID, a.IsHRD, ot.Str("employee_id"), reportingTo); !allowed {
+		if allowed, msg := domain.CanCorrectOvertimeTimes(a.EmployeeID, a.IsHRD, ot.Str("employee_id"), reportingTo, managerActive); !allowed {
 			return nil, httpx.Forbidden(msg)
 		}
 		was := struct {
@@ -369,7 +371,7 @@ func (s *Service) DecideOvertime(ctx context.Context, a *Actor, id, action strin
 				auditBefore = map[string]any{}
 			}
 			auditBefore["start_time"], auditBefore["end_time"], auditBefore["break_minutes"] = was.start, was.end, was.brk
-			auditBefore["hours"] = ot.Get("hours")
+			auditBefore["hours"] = ot.Num("hours")
 			auditAfter["start_time"], auditAfter["end_time"], auditAfter["break_minutes"], auditAfter["hours"] = start, end, brk, hours
 		}
 	}
@@ -528,8 +530,21 @@ func (s *Service) DeleteShift(ctx context.Context, id string) (string, error) {
 
 /* ── Overtime SQL ────────────────────────────────────────────────────── */
 
+// managerActiveCol is whether the employee's direct manager is active; NULL
+// without one. An inactive manager counts as none (EPIC-063 R9, EPIC-066).
+const managerActiveCol = `(SELECT m.is_active FROM hris.employees m WHERE m.id = employees.reporting_to) AS reporting_to_active`
+
+// overtimeManager is the owner's reporting_to and whether that manager is active.
+func overtimeManager(emp *Row) (reportingTo *string, active bool) {
+	if emp == nil {
+		return nil, false
+	}
+	return emp.StrPtr("reporting_to"), emp.Bool("reporting_to_active")
+}
+
 var overtimeSelect = `*, ` +
-	embedOne("employee", "id, full_name, nip, reporting_to, "+deptName, "hris.employees", "id = overtime_requests.employee_id") + ", " +
+	embedOne("employee", "id, full_name, nip, reporting_to, "+managerActiveCol+", "+deptName, "hris.employees",
+		"id = overtime_requests.employee_id") + ", " +
 	embedOne("requester", "id, full_name", "hris.employees", "id = overtime_requests.requested_by") + ", " +
 	embedOne("decider", "id, full_name", "hris.employees", "id = overtime_requests.decided_by")
 
@@ -598,8 +613,8 @@ func (s *store) InsertOvertime(ctx context.Context, f fields) (*Row, error) {
 
 func (s *store) OvertimeForDecision(ctx context.Context, id string) (*Row, error) {
 	row, err := queryRow(ctx, s.db, `SELECT *, `+
-		embedOne("employee", "id, full_name, reporting_to", "hris.employees", "id = overtime_requests.employee_id")+
-		` FROM hris.overtime_requests WHERE id = $1`, id)
+		embedOne("employee", "id, full_name, reporting_to, "+managerActiveCol, "hris.employees",
+			"id = overtime_requests.employee_id")+` FROM hris.overtime_requests WHERE id = $1`, id)
 	return row, ignoreBadInput(err)
 }
 
