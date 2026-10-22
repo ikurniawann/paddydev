@@ -293,3 +293,58 @@ func TestLeaveOnAttendedDateNotDeducted(t *testing.T) {
 	eq(t, "PIP", r.PersonalLeaveDeduction, 0)
 	eq(t, "PIS", r.SickLeaveDeduction, 0)
 }
+
+// scheduleFrom is weekdaySchedule (Senin–Jumat) berlaku sejak from.
+func scheduleFrom(from string) []ShiftRow {
+	rows := weekdaySchedule()
+	for i := range rows {
+		rows[i].EffectiveFrom = from
+	}
+	return rows
+}
+
+// Jadwal yang baru ditetapkan di tengah periode (live: jadwal NS 103 karyawan
+// berlaku 20 Okt 2026) mengukur periode seolah polanya berlaku sejak awal
+// periode. Periode transisi 1–20 Okt 2026: Senin–Jumat = 14 hari; hadir 13 hari
+// sebelum jadwal ada. Tanpa ini pembagi = 1 (hanya 20 Okt) dan tunjangan per hari
+// menjadi nominal × 13.
+func TestScheduleStartingMidPeriodMeasuresWholePeriod(t *testing.T) {
+	emp := Employee{ID: "e", JoinDate: "2020-01-01", EmploymentStatus: "permanent"}
+	var att []AttendanceRow
+	for _, d := range []string{"01", "02", "05", "06", "07", "08", "09", "12", "13", "14", "15", "16", "20"} {
+		att = append(att, AttendanceRow{Date: "2026-10-" + d, Status: "present", HasClockOut: true})
+	}
+	rec := WorkforceRecords{Schedule: scheduleFrom("2026-10-20"), Attendance: att, Leaves: []Leave{
+		{ptr("2026-10-19"), ptr("2026-10-19"), "sick"}, // Senin sebelum jadwal ada: tetap hari kerja
+	}}
+	sal := Salary{BaseSalary: "2800000.00", WorkingDaysDivisor: "26.00", PayBasis: ptr("monthly_prorated"),
+		TransportAllowance: "700000.00", TransportMode: ptr("per_day"),
+		MealAllowance: "560000.00", MealMode: ptr("per_day")}
+	in := BuildInputRange(emp, sal, rec, nil, nil, 10, 2026, "2026-10-01", "2026-10-20", false)
+	if in.DivisorDays != 14 || in.WorkingDays != 14 {
+		t.Fatalf("pembagi = %v, hari kerja = %v, want 14 (Senin–Jumat 1–20 Okt)", in.DivisorDays, in.WorkingDays)
+	}
+	if in.AttendanceDays != 13 || in.SickLeaveDays != 1 || in.PaidDays != 14 {
+		t.Fatalf("hadir = %v (want 13), sakit = %v (want 1), dibayar = %v (want 14)", in.AttendanceDays, in.SickLeaveDays, in.PaidDays)
+	}
+	r := Calculate(in, DefaultConfig())
+	eq(t, "pokok 14/14 hari dibayar", r.BaseSalary, 2_800_000)
+	eq(t, "transport 13/14 hari hadir", r.TransportAllowance, 650_000)
+	eq(t, "makan 13/14 hari hadir", r.MealAllowance, 520_000)
+}
+
+// Karyawan baru masuk Rabu 16 Sep dengan kontrak dan jadwal sejak hari itu: gaji
+// monthly diprorata 11 dari 22 hari kerja terjadwal September, bukan sebulan penuh.
+func TestNewJoinerScheduleFromJoinDateProrated(t *testing.T) {
+	join := "2026-09-16"
+	emp := Employee{ID: "e", JoinDate: join, EmploymentStatus: "contract", IsActive: true}
+	rec := WorkforceRecords{Schedule: scheduleFrom(join), Contracts: []Contract{{ContractType: ptr("pkwt"), StartDate: &join}}}
+	in := BuildInputRange(emp, Salary{BaseSalary: "2200000.00"}, rec, nil, nil, 9, 2026, "2026-09-01", "2026-09-30", false)
+	if in.ProrateFactor == nil || Round(*in.ProrateFactor*1000) != Round(11.0/22*1000) {
+		t.Fatalf("factor = %v, want 11/22", in.ProrateFactor)
+	}
+	if in.DivisorDays != 22 {
+		t.Fatalf("pembagi = %v, want 22 (hari terjadwal seluruh periode)", in.DivisorDays)
+	}
+	eq(t, "pokok monthly × 11/22", Calculate(in, DefaultConfig()).BaseSalary, 1_100_000)
+}
