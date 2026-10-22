@@ -2472,6 +2472,16 @@
   {
     "module": "hris",
     "method": "GET",
+    "path": "/api/hris/overtime/attachment/{path...}"
+  },
+  {
+    "module": "hris",
+    "method": "POST",
+    "path": "/api/hris/overtime/attachments"
+  },
+  {
+    "module": "hris",
+    "method": "GET",
     "path": "/api/hris/overtime/day-type"
   },
   {
