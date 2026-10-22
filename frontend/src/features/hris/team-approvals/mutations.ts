@@ -1,6 +1,7 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import type { OvertimeTimes } from "@/lib/hris/overtime-rules";
 import { decideTeamRequest } from "./api";
 import { teamApprovalsQueryKeys } from "./query-keys";
 import type { TeamDecision, TeamRequestKind } from "./types";
@@ -12,8 +13,13 @@ import type { TeamDecision, TeamRequestKind } from "./types";
 export function useDecideTeamRequest() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (v: { kind: TeamRequestKind; id: string; action: TeamDecision; rejectionReason?: string }) =>
-      decideTeamRequest(v.kind, v.id, v.action, v.rejectionReason),
+    mutationFn: (v: {
+      kind: TeamRequestKind;
+      id: string;
+      action: TeamDecision;
+      rejectionReason?: string;
+      times?: Partial<OvertimeTimes>;
+    }) => decideTeamRequest(v.kind, v.id, v.action, v.rejectionReason, v.times),
     retry: false,
     onSettled: () => {
       void qc.invalidateQueries({ queryKey: teamApprovalsQueryKeys.all });

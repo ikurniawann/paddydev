@@ -28,6 +28,9 @@ export interface TeamOvertimeRequest {
   end_time: string;
   hours: string | number;
   day_type: OvertimeDayType;
+  /** EPIC-066: istirahat (menit) dan path dokumentasi privat. */
+  break_minutes: number;
+  attachments: string[];
   reason: string | null;
   created_at: string;
   employee: TeamMemberRef;

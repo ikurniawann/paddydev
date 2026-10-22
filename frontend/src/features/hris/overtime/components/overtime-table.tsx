@@ -1,7 +1,12 @@
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatDate } from "@/lib/format";
-import { OVERTIME_DAY_TYPE_OPTIONS, overtimeDayTypeLabel, type OvertimeDecisionAction } from "@/lib/hris/overtime-rules";
+import {
+  OVERTIME_DAY_TYPE_OPTIONS,
+  overtimeAttachmentHref,
+  overtimeDayTypeLabel,
+  type OvertimeDecisionAction,
+} from "@/lib/hris/overtime-rules";
 import { hhmm } from "@/lib/hris/shifts-view";
 import { useState } from "react";
 import type { OvertimeDayType, OvertimeRow } from "../types";
@@ -84,6 +89,9 @@ interface OvertimeTableRowProps {
 function OvertimeTableRow({ row, deciding, onDecide, canCorrect, isHrd, onCorrect }: OvertimeTableRowProps) {
   const badge = STATUS_BADGES[row.status] ?? STATUS_BADGES.pending;
   const pending = row.status === "pending";
+  // Koreksi jam lembur karyawan yang punya atasan langsung adalah hak atasan (EPIC-066).
+  const managerOwnsCorrection =
+    row.source === "employee" && !!row.employee?.reporting_to && row.employee.reporting_to !== row.employee_id;
   const [dayType, setDayType] = useState<OvertimeDayType>(row.day_type ?? "regular");
   return (
     <tr className="border-b last:border-0 hover:bg-gray-50/60">
@@ -107,7 +115,23 @@ function OvertimeTableRow({ row, deciding, onDecide, canCorrect, isHrd, onCorrec
       <td className="px-4 py-3">
         {hhmm(row.start_time)}–{hhmm(row.end_time)}
       </td>
-      <td className="px-4 py-3">{Number(row.hours)} jam</td>
+      <td className="px-4 py-3">
+        {Number(row.hours)} jam
+        {row.source === "employee" && (
+          <p className="text-xs text-gray-500">istirahat {row.break_minutes ?? 0} menit</p>
+        )}
+        {(row.attachments ?? []).map((path, i) => (
+          <a
+            key={path}
+            href={overtimeAttachmentHref(path)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mr-2 block text-xs font-medium text-pink-600 hover:underline"
+          >
+            Dokumentasi {i + 1}
+          </a>
+        ))}
+      </td>
       <td className="px-4 py-3">
         {row.source === "company" ? (
           <span className="rounded-full bg-sky-100 px-2 py-0.5 text-xs font-medium text-sky-700">
@@ -170,7 +194,7 @@ function OvertimeTableRow({ row, deciding, onDecide, canCorrect, isHrd, onCorrec
             </Button>
           </div>
         )}
-        {canCorrect && (row.status === "pending" || row.status === "approved") && (
+        {canCorrect && !managerOwnsCorrection && (row.status === "pending" || row.status === "approved") && (
           <Button size="sm" variant="ghost" className="ml-2 text-xs" onClick={() => onCorrect(row)}>
             Koreksi
           </Button>

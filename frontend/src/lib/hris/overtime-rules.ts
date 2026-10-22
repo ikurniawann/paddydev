@@ -176,3 +176,31 @@ export function paidOvertimeHours(start: string, end: string, breakMinutes: numb
   const minutes = Math.max(0, grossMinutes(start, end) - (Number.isFinite(breakMinutes) ? breakMinutes : 0));
   return Math.round((minutes / 60) * 100) / 100;
 }
+
+/** Tautan dokumentasi lembur privat (pemilik, atasan langsung, HR). */
+export function overtimeAttachmentHref(path: string): string {
+  return `/api/hris/overtime/attachment/${path.split("/").map(encodeURIComponent).join("/")}`;
+}
+
+/** Jam & istirahat lembur yang dikoreksi atasan saat menyetujui ("HH:MM", menit). */
+export interface OvertimeTimes {
+  start_time: string;
+  end_time: string;
+  break_minutes: number;
+}
+
+/**
+ * Hanya kolom yang BERBEDA dari nilai tersimpan (HH:MM tanpa detik; istirahat
+ * sebagai angka). Server memeriksa kewenangan koreksi sebelum membandingkan,
+ * jadi menyetujui tanpa perubahan tidak boleh mengirim jam sama sekali.
+ */
+export function overtimeTimeChanges(
+  stored: { start_time: string; end_time: string; break_minutes?: number | string | null },
+  next: OvertimeTimes
+): Partial<OvertimeTimes> | undefined {
+  const changes: Partial<OvertimeTimes> = {};
+  if (next.start_time.slice(0, 5) !== stored.start_time.slice(0, 5)) changes.start_time = next.start_time;
+  if (next.end_time.slice(0, 5) !== stored.end_time.slice(0, 5)) changes.end_time = next.end_time;
+  if (next.break_minutes !== Number(stored.break_minutes ?? 0)) changes.break_minutes = next.break_minutes;
+  return Object.keys(changes).length > 0 ? changes : undefined;
+}

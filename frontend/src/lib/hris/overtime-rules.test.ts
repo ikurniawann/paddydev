@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
+  overtimeAttachmentHref,
+  overtimeTimeChanges,
   canDecideOvertime,
   decidedAs,
   OVERTIME_DAY_TYPE_OPTIONS,
@@ -171,5 +173,24 @@ describe("overtimeDayTypeLabel — K-13", () => {
       { value: "regular", label: "Weekday" },
       { value: "rest_day", label: "Weekend / Libur" },
     ]);
+  });
+});
+
+describe("overtimeAttachmentHref & overtimeTimeChanges (EPIC-066)", () => {
+  it("meng-encode tiap segmen path", () => {
+    expect(overtimeAttachmentHref("overtime-attachments/e1/a b.pdf")).toBe(
+      "/api/hris/overtime/attachment/overtime-attachments/e1/a%20b.pdf");
+  });
+  const stored = { start_time: "17:00:00", end_time: "21:00:00", break_minutes: 0 };
+  it("tanpa perubahan -> undefined", () => {
+    expect(overtimeTimeChanges(stored, { start_time: "17:00", end_time: "21:00", break_minutes: 0 })).toBeUndefined();
+  });
+  it("hanya kolom yang berbeda", () => {
+    expect(overtimeTimeChanges(stored, { start_time: "17:00", end_time: "20:00", break_minutes: 0 })).toEqual({ end_time: "20:00" });
+    expect(overtimeTimeChanges(stored, { start_time: "18:00", end_time: "21:00", break_minutes: 30 })).toEqual({ start_time: "18:00", break_minutes: 30 });
+  });
+  it("istirahat tersimpan string/null dibandingkan sebagai angka", () => {
+    expect(overtimeTimeChanges({ ...stored, break_minutes: "30" as unknown as number }, { start_time: "17:00", end_time: "21:00", break_minutes: 30 })).toBeUndefined();
+    expect(overtimeTimeChanges({ ...stored, break_minutes: undefined }, { start_time: "17:00", end_time: "21:00", break_minutes: 0 })).toBeUndefined();
   });
 });
