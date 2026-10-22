@@ -178,10 +178,14 @@ func (h handlers) decideOvertime(w http.ResponseWriter, r *http.Request, a *Acto
 	action := f.Enum("action", validate.Rule{}, []string{"approve", "reject", "cancel"})
 	rejection := f.Str("rejection_reason", optional, validate.StrOpts{})
 	dayType := f.Enum("day_type", optional, overtimeDayTypes)
+	var times overtimeTimes
+	times.Start = f.Str("start_time", optional, validate.StrOpts{Check: regexOf(overtimeTimeRe)})
+	times.End = f.Str("end_time", optional, validate.StrOpts{Check: regexOf(overtimeTimeRe)})
+	times.Break = f.Int("break_minutes", optional, validate.NumOpts{Min: validate.Bound(0), Max: validate.Bound(720)})
 	if err := formErr(f, message); err != nil {
 		return err
 	}
-	out, err := h.svc.DecideOvertime(r.Context(), a, *id, *action, rejection, dayType, auditMeta(r))
+	out, err := h.svc.DecideOvertime(r.Context(), a, *id, *action, rejection, dayType, times, auditMeta(r))
 	if err != nil {
 		return err
 	}

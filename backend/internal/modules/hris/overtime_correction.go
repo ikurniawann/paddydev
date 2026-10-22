@@ -59,6 +59,15 @@ func (s *Service) CorrectOvertime(ctx context.Context, a *Actor, id string, in o
 		if a.EmployeeID != nil && *a.EmployeeID == ot.Str("employee_id") {
 			return httpx.Forbidden(overtimeCorrectSelf)
 		}
+		if ot.Str("source") == "employee" {
+			var reportingTo *string
+			if emp := ot.Child("employee"); emp != nil {
+				reportingTo = emp.StrPtr("reporting_to")
+			}
+			if allowed, msg := domain.CanCorrectOvertimeTimes(a.EmployeeID, a.IsHRD, ot.Str("employee_id"), reportingTo); !allowed {
+				return httpx.Forbidden(msg)
+			}
+		}
 		was := struct{ date, start, end, dayType string }{dateText(ot, "date"), overtimeClock(ot.Str("start_time")),
 			overtimeClock(ot.Str("end_time")), ot.Str("day_type")}
 		pick := func(sent *string, cur string) string {
@@ -75,10 +84,10 @@ func (s *Service) CorrectOvertime(ctx context.Context, a *Actor, id string, in o
 		if start == end {
 			return httpx.BadRequest("Jam mulai dan selesai tidak boleh sama")
 		}
-		hours := domain.OvertimeHoursFromTimes(start, end)
-		if hours > 12 {
+		if domain.OvertimeGrossMinutes(start, end) > 12*60 {
 			return httpx.BadRequest("Durasi lembur maksimal 12 jam")
 		}
+		hours := domain.PaidOvertimeHours(start, end, int(ot.Num("break_minutes")))
 		if hours < 1 {
 			return httpx.BadRequest("Durasi lembur minimal 1 jam")
 		}

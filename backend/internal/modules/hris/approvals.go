@@ -159,7 +159,7 @@ func (s *store) TeamPendingLeaves(ctx context.Context, managerID string) ([]*Row
 
 func (s *store) TeamPendingOvertime(ctx context.Context, managerID string) ([]*Row, error) {
 	rows, err := queryRows(ctx, s.db, `SELECT o.id, o.employee_id, o.date::text AS date, o.start_time, o.end_time,
-		o.hours, o.day_type, o.reason, o.created_at, `+teamEmployee+`
+		o.hours, o.break_minutes, o.attachments, o.day_type, o.reason, o.created_at, `+teamEmployee+`
 		FROM hris.overtime_requests o `+teamMember("o")+`
 		WHERE o.status = 'pending' AND o.source = 'employee'
 		ORDER BY o.date, o.created_at LIMIT 200`, managerID)

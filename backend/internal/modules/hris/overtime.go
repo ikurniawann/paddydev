@@ -105,6 +105,14 @@ type overtimeInput struct {
 // overtimeDayTypes: rest_day = hari istirahat mingguan, dibayar tarif libur.
 var overtimeDayTypes = []string{"regular", "rest_day"}
 
+// overtimeTimes is the direct manager's correction while approving (EPIC-066).
+type overtimeTimes struct {
+	Start, End *string
+	Break      *int
+}
+
+func (t overtimeTimes) any() bool { return t.Start != nil || t.End != nil || t.Break != nil }
+
 // overtimeClock trims a DB-style HH:MM:SS down to HH:MM.
 func overtimeClock(v string) string {
 	if len(v) == 8 && v[5] == ':' {
@@ -270,7 +278,7 @@ var (
 // domain.CanDecideOvertime); the update is guarded on status = pending. An
 // employee request's approval or rejection stores the decider's capacity
 // (direct manager or HR, Q-APV-3) and is audited (EPIC-063 R1).
-func (s *Service) DecideOvertime(ctx context.Context, a *Actor, id, action string, rejection, dayType *string, meta audit.Entry) (*Row, error) {
+func (s *Service) DecideOvertime(ctx context.Context, a *Actor, id, action string, rejection, dayType *string, times overtimeTimes, meta audit.Entry) (*Row, error) {
 	ot, err := s.repo.OvertimeForDecision(ctx, id)
 	if err != nil {
 		return nil, err
@@ -317,6 +325,52 @@ func (s *Service) DecideOvertime(ctx context.Context, a *Actor, id, action strin
 		if stored := ot.Str("day_type"); stored != *dayType {
 			auditBefore = map[string]any{"day_type": stored}
 			auditAfter["day_type"] = *dayType
+		}
+	}
+	if times.any() {
+		if action != "approve" || ot.Str("source") != "employee" {
+			return nil, httpx.BadRequest("Koreksi jam hanya saat menyetujui input lembur karyawan")
+		}
+		if allowed, msg := domain.CanCorrectOvertimeTimes(a.EmployeeID, a.IsHRD, ot.Str("employee_id"), reportingTo); !allowed {
+			return nil, httpx.Forbidden(msg)
+		}
+		was := struct {
+			start, end string
+			brk        int
+		}{overtimeClock(ot.Str("start_time")), overtimeClock(ot.Str("end_time")), int(ot.Num("break_minutes"))}
+		start, end, brk := was.start, was.end, was.brk
+		if times.Start != nil {
+			start = *times.Start
+		}
+		if times.End != nil {
+			end = *times.End
+		}
+		if times.Break != nil {
+			brk = *times.Break
+		}
+		if start == end {
+			return nil, httpx.BadRequest("Jam mulai dan selesai tidak boleh sama")
+		}
+		if domain.OvertimeGrossMinutes(start, end) > 12*60 {
+			return nil, httpx.BadRequest("Durasi lembur maksimal 12 jam")
+		}
+		hours := domain.PaidOvertimeHours(start, end, brk)
+		if hours < 1 {
+			return nil, httpx.BadRequest("Durasi lembur minimal 1 jam")
+		}
+		if start != was.start || end != was.end || brk != was.brk {
+			f.add("start_time", start)
+			f.add("end_time", end)
+			f.add("break_minutes", brk)
+			f.add("hours", hours)
+			f.add("corrected_at", now)
+			f.add("corrected_by_name", actorName(a))
+			if auditBefore == nil {
+				auditBefore = map[string]any{}
+			}
+			auditBefore["start_time"], auditBefore["end_time"], auditBefore["break_minutes"] = was.start, was.end, was.brk
+			auditBefore["hours"] = ot.Get("hours")
+			auditAfter["start_time"], auditAfter["end_time"], auditAfter["break_minutes"], auditAfter["hours"] = start, end, brk, hours
 		}
 	}
 	decidedAs := ""
