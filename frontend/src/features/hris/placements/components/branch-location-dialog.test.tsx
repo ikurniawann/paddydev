@@ -15,11 +15,18 @@ vi.mock("@/components/maps/location-picker-field", () => ({
   LocationPickerField: ({
     onPick,
     radiusM,
+    onSearch,
   }: {
     onPick: (p: { lat: number; lng: number }) => void;
     radiusM?: number | null;
+    onSearch?: unknown;
   }) => (
-    <button type="button" data-radius={radiusM} onClick={() => onPick({ lat: -6.8889, lng: 107.596 })}>
+    <button
+      type="button"
+      data-radius={radiusM}
+      data-searchable={String(typeof onSearch === "function")}
+      onClick={() => onPick({ lat: -6.8889, lng: 107.596 })}
+    >
       pilih titik
     </button>
   ),
@@ -61,6 +68,23 @@ describe("BranchLocationDialog", () => {
     fireEvent.click(screen.getByRole("button", { name: "Simpan lokasi" }));
     expect(mutate).not.toHaveBeenCalled();
     expect(toastError).toHaveBeenCalledWith("Radius absensi 25–1000 meter");
+  });
+
+  it("menempel link Google Maps lengkap; link pendek dan teks lain diberi petunjuk", () => {
+    render(<BranchLocationDialog open onOpenChange={() => {}} branches={branches} />);
+    fireEvent.click(screen.getByRole("button", { name: /Paddy PVJ/ }));
+    expect(screen.getByRole("button", { name: "pilih titik" }).getAttribute("data-searchable")).toBe("true");
+    const paste = screen.getByLabelText("Tempel dari Google Maps");
+    fireEvent.change(paste, {
+      target: { value: "https://www.google.com/maps/place/Paddy/@-6.88,107.61,17z/data=!3m1!8m2!3d-6.8889123!4d107.6131456" },
+    });
+    expect((screen.getByLabelText("Latitude") as HTMLInputElement).value).toBe("-6.888912");
+    expect((screen.getByLabelText("Longitude") as HTMLInputElement).value).toBe("107.613146");
+    fireEvent.change(paste, { target: { value: "https://maps.app.goo.gl/AbCdEf123" } });
+    expect(screen.getByText(/Link pendek tidak memuat koordinat/)).toBeTruthy();
+    fireEvent.change(paste, { target: { value: "Jl. Dago 1" } });
+    expect(screen.getByText(/Tidak terbaca sebagai koordinat/)).toBeTruthy();
+    expect((screen.getByLabelText("Latitude") as HTMLInputElement).value).toBe("-6.888912");
   });
 
   it("lingkaran peta mengikuti radius yang diketik, bawaan 100 m bila kosong", () => {

@@ -9,7 +9,7 @@ import { Dialog, DialogFooter, DialogPanel, DialogPanelBody, DialogPanelDescript
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { ImageUrlField, ItemListField, LabeledField, LinesField, LongText } from "@/features/site/admin/fields";
-import { parseLatLng, type LatLngPoint } from "@/lib/maps/coords";
+import { parseLocationText, type LatLngPoint } from "@/lib/maps/coords";
 import { fetchBranchProfile, saveBranchProfile, type BranchProfile } from "../api";
 
 type Accordions = BranchProfile["accordions"];
@@ -116,7 +116,7 @@ function ProfileForm({ branchId, branchName, initial, onClose }: { branchId: str
   const setPoint = (p: LatLngPoint) => setForm((f) => ({ ...f, lat: String(p.lat), lng: String(p.lng) }));
   // "-6.2, 106.8" yang disalin dari Google Maps: isi lat dan lng sekaligus (input angka menolak teks itu).
   const pasteCoords = (e: React.ClipboardEvent<HTMLInputElement>) => {
-    const p = parseLatLng(e.clipboardData.getData("text"));
+    const p = parseLocationText(e.clipboardData.getData("text"));
     if (!p) return;
     e.preventDefault();
     setPoint(p);
