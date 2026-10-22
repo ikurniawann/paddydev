@@ -158,23 +158,22 @@ func TestLeaves(t *testing.T) {
 }
 
 func TestOvertimeAndShifts(t *testing.T) {
-	h := newHarness(t)
+	h, _ := newFileHarness(t)
 	hr, _ := h.staff("hrd", []string{menuKepegawaian}, true)
 	boss, bossID := h.staff("pos", nil, true)
 	staff, own := h.staff("pos", nil, true)
 	h.grantDelete(hr, "hris.kepegawaian.shifts")
 	h.exec(`UPDATE hris.employees SET reporting_to = $2 WHERE id = $1`, own, bossID)
 
-	created := h.do(&staff, "POST", "/api/hris/overtime", map[string]any{
-		"date": "2026-10-06", "start_time": "17:00", "end_time": "19:30", "reason": "Stock opname"})
+	created := h.do(&staff, "POST", "/api/hris/overtime", h.otSelfBody(&staff, "2026-10-01", "17:00", "19:30"))
 	expect(t, created, 200, "")
 	if created.data()["hours"] != "2.50" || created.data()["source"] != "employee" {
 		t.Fatalf("overtime = %s", created.raw)
 	}
-	expect(t, h.do(&staff, "POST", "/api/hris/overtime", map[string]any{
-		"date": "2026-10-06", "start_time": "17:00", "end_time": "19:30", "reason": "Lagi"}), 400, "Validation failed")
-	dup := h.do(&staff, "POST", "/api/hris/overtime", map[string]any{
-		"date": "2026-10-06", "start_time": "18:00", "end_time": "19:00", "reason": "Stock opname lagi"})
+	negBreak := h.otSelfBody(&staff, "2026-10-01", "17:00", "19:30")
+	negBreak["break_minutes"] = -1
+	expect(t, h.do(&staff, "POST", "/api/hris/overtime", negBreak), 400, "Validation failed")
+	dup := h.do(&staff, "POST", "/api/hris/overtime", h.otSelfBody(&staff, "2026-10-01", "18:00", "19:00"))
 	expect(t, dup, 400, "Sudah ada pengajuan lembur pending/approved di tanggal tersebut")
 
 	approvals := h.do(&boss, "GET", "/api/hris/overtime?scope=approvals", nil)

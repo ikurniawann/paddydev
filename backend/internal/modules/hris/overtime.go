@@ -46,8 +46,8 @@ type overtimeFilter struct {
 
 const overtimeDuplicate = "Sudah ada pengajuan lembur pending/approved di tanggal tersebut"
 
-// overtimeTooLate is MOM AP-02's refusal (EPIC-063 R3).
-const overtimeTooLate = "Lembur wajib diajukan sebelum dimulai — jam mulai sudah lewat"
+// overtimeAttachmentRe is a stored overtime documentation path (EPIC-066).
+var overtimeAttachmentRe = regexp.MustCompile(`^overtime-attachments/([0-9a-f-]{36})/[0-9]+-[0-9a-f]{16}\.(pdf|jpg|png|webp)$`)
 
 // overtimeQuery is overtimeListQuerySchema.
 type overtimeQuery struct{ Status, Month, Year, EmployeeID, Scope *string }
@@ -98,6 +98,8 @@ type overtimeInput struct {
 	EmployeeID                       *string
 	Date, StartTime, EndTime, Reason string
 	DayType                          *string // regular (Weekday) | rest_day (Weekend / Libur), K-13; nil = saran jadwal
+	BreakMinutes                     int
+	Attachments                      []string
 }
 
 // overtimeDayTypes: rest_day = hari istirahat mingguan, dibayar tarif libur.
@@ -140,8 +142,23 @@ func (s *Service) CreateOvertime(ctx context.Context, a *Actor, in overtimeInput
 		!overtimeTimeRe.MatchString(in.EndTime) {
 		return nil, httpx.BadRequest("Tanggal atau jam lembur tidak valid")
 	}
-	if isSelf && domain.OvertimeStartsInPast(in.Date, in.StartTime, s.now()) {
-		return nil, httpx.BadRequest(overtimeTooLate)
+	if isSelf {
+		if domain.OvertimeNotFinished(in.Date, in.StartTime, in.EndTime, s.now()) {
+			ends, _ := domain.OvertimeEndsAt(in.Date, in.StartTime, in.EndTime)
+			return nil, httpx.BadRequest("Lembur baru bisa diinput setelah selesai (" + ends.Format("02-01-2006 15:04") + " WIB)")
+		}
+		if err := s.ensureAttendanceOpen(ctx, in.Date); err != nil {
+			return nil, err
+		}
+		if err := s.checkOvertimeAttachments(*targetID, in.Attachments); err != nil {
+			return nil, err
+		}
+	} else {
+		// HR may record a past assignment for someone else (EPIC-063 R3).
+		if len(domain.JSTrim(in.Reason)) < 5 {
+			return nil, httpx.BadRequest("Alasan minimal 5 karakter")
+		}
+		in.BreakMinutes, in.Attachments = 0, nil
 	}
 	target, err := s.repo.OvertimeTarget(ctx, *targetID)
 	if err != nil {
@@ -160,11 +177,14 @@ func (s *Service) CreateOvertime(ctx context.Context, a *Actor, in overtimeInput
 	if in.StartTime == in.EndTime {
 		return nil, httpx.BadRequest("Jam mulai dan selesai tidak boleh sama")
 	}
-	hours := domain.OvertimeHoursFromTimes(in.StartTime, in.EndTime)
-	if hours > 12 {
+	if domain.OvertimeGrossMinutes(in.StartTime, in.EndTime) > 12*60 {
 		return nil, httpx.BadRequest("Durasi lembur maksimal 12 jam")
 	}
+	hours := domain.PaidOvertimeHours(in.StartTime, in.EndTime, in.BreakMinutes)
 	if hours < 1 {
+		if in.BreakMinutes > 0 {
+			return nil, httpx.BadRequest("Durasi lembur minimal 1 jam setelah dikurangi istirahat")
+		}
 		return nil, httpx.BadRequest("Durasi lembur minimal 1 jam")
 	}
 	dayType, err := s.overtimeDayType(ctx, *targetID, in.Date, in.DayType, !isSelf)
@@ -181,6 +201,8 @@ func (s *Service) CreateOvertime(ctx context.Context, a *Actor, in overtimeInput
 	f.add("start_time", in.StartTime)
 	f.add("end_time", in.EndTime)
 	f.add("hours", hours)
+	f.add("break_minutes", in.BreakMinutes)
+	f.add("attachments", nonNilStrings(in.Attachments))
 	f.add("source", source)
 	f.add("status", "pending")
 	f.add("reason", in.Reason)
@@ -209,6 +231,34 @@ func (s *Service) CreateOvertime(ctx context.Context, a *Actor, in overtimeInput
 		message = "Penugasan lembur dibuat — menunggu konfirmasi karyawan"
 	}
 	return obj("data", row, "message", message), nil
+}
+
+// checkOvertimeAttachments: 1–3 paths uploaded by the owner and still on disk.
+func (s *Service) checkOvertimeAttachments(ownerID string, paths []string) error {
+	if len(paths) == 0 {
+		return httpx.BadRequest("Lampirkan minimal 1 dokumentasi lembur")
+	}
+	if len(paths) > maxOvertimeAttachments {
+		return httpx.BadRequest("Maksimal 3 dokumentasi lembur")
+	}
+	const invalid = "Dokumentasi lembur tidak valid — unggah ulang filenya"
+	for _, p := range paths {
+		m := overtimeAttachmentRe.FindStringSubmatch(p)
+		if m == nil || m[1] != ownerID {
+			return httpx.BadRequest(invalid)
+		}
+		if _, _, err := s.files.ReadPrivate(p); err != nil {
+			return httpx.BadRequest(invalid)
+		}
+	}
+	return nil
+}
+
+func nonNilStrings(v []string) []string {
+	if v == nil {
+		return []string{}
+	}
+	return v
 }
 
 var (
