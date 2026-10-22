@@ -134,3 +134,42 @@ describe("proxy: Go backend prefixes", () => {
     }
   });
 });
+
+describe("proxy: root ke login per host (PADDY_LOGIN_ROOT_HOSTS)", () => {
+  async function redirectOf(host: string, path: string, method = "GET") {
+    const req = new NextRequest(new URL(`https://${host}${path}`), { headers: { host }, method });
+    const res = await proxy(req);
+    return { status: res.status, location: res.headers.get("location") };
+  }
+
+  test("host terdaftar: / dialihkan 307 ke /login tanpa query", async () => {
+    vi.stubEnv("PADDY_LOGIN_ROOT_HOSTS", "paddydev.reddie.id");
+    try {
+      const r = await redirectOf("paddydev.reddie.id", "/?utm_source=wa");
+      expect(r.status).toBe(307);
+      expect(new URL(r.location ?? "").pathname).toBe("/login");
+      expect(new URL(r.location ?? "").search).toBe("");
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  test("host lain dan env kosong: / tetap situs publik", async () => {
+    vi.stubEnv("PADDY_LOGIN_ROOT_HOSTS", "paddydev.reddie.id");
+    try {
+      expect((await redirectOf("dashboard.paddy.id", "/")).location).toBeNull();
+    } finally {
+      vi.unstubAllEnvs();
+    }
+    expect((await redirectOf("paddydev.reddie.id", "/")).location).toBeNull();
+  });
+
+  test("host member yang terdaftar tetap di-rewrite ke /member", async () => {
+    vi.stubEnv("PADDY_LOGIN_ROOT_HOSTS", "member.paddy.id");
+    try {
+      expect(await call("member.paddy.id", "/")).toBe("/member");
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+});
