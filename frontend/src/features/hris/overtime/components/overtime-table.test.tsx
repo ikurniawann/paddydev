@@ -61,7 +61,9 @@ describe("OvertimeTable — istirahat, dokumentasi, koreksi (EPIC-066)", () => {
   it("menampilkan istirahat dan tautan dokumentasi", () => {
     render(table({ ...base, break_minutes: 30, attachments: ["overtime-attachments/e1/1-aaaaaaaaaaaaaaaa.pdf"] }));
     expect(screen.getByText(/istirahat 30 menit/)).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Dokumentasi 1" }).getAttribute("href")).toBe(
+    expect(screen.queryByRole("link", { name: "Dokumentasi 1" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Dokumentasi 1" }));
+    expect(screen.getByTitle("Dokumentasi 1").getAttribute("src")).toBe(
       "/api/hris/overtime/attachment/overtime-attachments/e1/1-aaaaaaaaaaaaaaaa.pdf");
   });
   it("tombol Koreksi disembunyikan untuk lembur karyawan yang punya atasan langsung", () => {
