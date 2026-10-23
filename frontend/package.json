@@ -2,10 +2,18 @@
   "name": "arkiv-os",
   "version": "0.1.0",
   "private": true,
+  "browserslist": [
+    "chrome 111",
+    "edge 111",
+    "firefox 111",
+    "safari >= 15",
+    "ios_saf >= 15"
+  ],
   "scripts": {
     "dev": "node scripts/dev.mjs",
     "dev:next": "next dev",
     "build": "next build",
+    "check:safari": "node scripts/check-legacy-safari.mjs",
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
