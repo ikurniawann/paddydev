@@ -27,7 +27,7 @@
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
     "date-fns": "^4.1.0",
-    "dompurify": "3.4.16",
+    "dompurify": "3.4.17",
     "exceljs": "^4.4.0",
     "flatpickr": "^4.6.13",
     "framer-motion": "^12.38.0",
@@ -101,7 +101,7 @@
       "minimatch@10>brace-expansion": "^5.0.9",
       "axios": "^1.20.0",
       "follow-redirects": "^1.16.1",
-      "dompurify": "3.4.16",
+      "dompurify": "3.4.17",
       "sharp": "0.35.5",
       "source-map-js": "1.2.2"
     }
