@@ -36,7 +36,10 @@ func setup(t *testing.T, menus map[string][]string) *env {
 	return &env{t: t, staff: staff, tx: tx, mux: mux}
 }
 
-func settingsUsers(t *testing.T) *env { return setup(t, map[string][]string{"settings.users": nil}) }
+// settingsUsers is a full Manajemen User holder (super_admin/admin grant every action).
+func settingsUsers(t *testing.T) *env {
+	return setup(t, map[string][]string{"settings.users": {"read", "create", "update", "delete"}})
+}
 
 func (e *env) do(method, target string, body any) (int, map[string]any, string) {
 	e.t.Helper()

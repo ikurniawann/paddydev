@@ -72,7 +72,7 @@ func TestSystemRoleNeedsSuperAdmin(t *testing.T) {
 	adminTarget := testutil.CreateStaff(t, testutil.StaffOptions{Role: "admin"})
 	plainTarget := testutil.CreateStaff(t, testutil.StaffOptions{Role: "hrd"})
 	resignedSuper := testutil.CreateStaff(t, testutil.StaffOptions{Role: "super_admin"})
-	hrd := testutil.CreateStaff(t, testutil.StaffOptions{Role: "hrd", Menus: map[string][]string{"settings.users": nil}})
+	hrd := testutil.CreateStaff(t, testutil.StaffOptions{Role: "hrd", Menus: map[string][]string{"settings.users": {"read", "create", "update", "delete"}}})
 	e := setupStaff(t, hrd)
 	ctx := context.Background()
 	holding := e.holding()
@@ -180,7 +180,7 @@ func TestSystemRoleNeedsSuperAdmin(t *testing.T) {
 // role with the app role and records it, as Manajemen User does.
 func TestAdminUserRoleChangeSyncsIam(t *testing.T) {
 	target := testutil.CreateStaff(t, testutil.StaffOptions{Role: "hrd"})
-	hrd := testutil.CreateStaff(t, testutil.StaffOptions{Role: "hrd", Menus: map[string][]string{"settings.users": nil}})
+	hrd := testutil.CreateStaff(t, testutil.StaffOptions{Role: "hrd", Menus: map[string][]string{"settings.users": {"read", "create", "update", "delete"}}})
 	e := setupStaff(t, hrd)
 	ctx := context.Background()
 	if _, err := e.tx.Exec(ctx, `INSERT INTO iam.roles (code, name) VALUES ('hrd', 'HRD'), ('finance_staff', 'Finance Staff') ON CONFLICT (code) DO NOTHING`); err != nil {
@@ -257,7 +257,7 @@ func TestSuperAdminSetsSystemRoles(t *testing.T) {
 // TestAdminUserCreateSyncsIam: POST /api/admin/users gives the new account
 // its IAM role and records it, in the creating transaction.
 func TestAdminUserCreateSyncsIam(t *testing.T) {
-	hrd := testutil.CreateStaff(t, testutil.StaffOptions{Role: "hrd", Menus: map[string][]string{"settings.users": nil}})
+	hrd := testutil.CreateStaff(t, testutil.StaffOptions{Role: "hrd", Menus: map[string][]string{"settings.users": {"read", "create", "update", "delete"}}})
 	e := setupStaff(t, hrd)
 	if _, err := e.tx.Exec(context.Background(), `INSERT INTO iam.roles (code, name) VALUES ('finance_staff', 'Finance Staff') ON CONFLICT (code) DO NOTHING`); err != nil {
 		t.Fatal(err)
@@ -285,7 +285,7 @@ func TestAdminUserCreateSyncsIam(t *testing.T) {
 // is a 400 before anything runs (temuan re-review EPIC-061).
 func TestSystemAccountIDForms(t *testing.T) {
 	superTarget := testutil.CreateStaff(t, testutil.StaffOptions{Role: "super_admin"})
-	hrd := testutil.CreateStaff(t, testutil.StaffOptions{Role: "hrd", Menus: map[string][]string{"settings.users": nil}})
+	hrd := testutil.CreateStaff(t, testutil.StaffOptions{Role: "hrd", Menus: map[string][]string{"settings.users": {"read", "create", "update", "delete"}}})
 	e := setupStaff(t, hrd)
 	before := e.account(superTarget.UserID)
 	for _, id := range []string{strings.ToUpper(superTarget.UserID), strings.ReplaceAll(superTarget.UserID, "-", "")} {
