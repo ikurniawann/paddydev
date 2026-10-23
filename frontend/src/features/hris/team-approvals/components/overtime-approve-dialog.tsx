@@ -4,7 +4,8 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { overtimeAttachmentHref, paidOvertimeHours, type OvertimeTimes } from "@/lib/hris/overtime-rules";
+import { OvertimeAttachmentButtons } from "@/components/hris/overtime-attachment-preview";
+import { paidOvertimeHours, type OvertimeTimes } from "@/lib/hris/overtime-rules";
 
 export interface OvertimeApproveRow {
   id: string;
@@ -59,15 +60,7 @@ export function OvertimeApproveDialog({
           <DialogTitle>Setujui lembur {row.employee_name}</DialogTitle>
         </DialogHeader>
         <div className="space-y-3 text-sm">
-          <ul className="space-y-1">
-            {row.attachments.map((p, i) => (
-              <li key={p}>
-                <a className="text-blue-600 underline" href={overtimeAttachmentHref(p)} target="_blank" rel="noreferrer">
-                  Dokumentasi {i + 1}
-                </a>
-              </li>
-            ))}
-          </ul>
+          <OvertimeAttachmentButtons paths={row.attachments} buttonClassName="text-sm text-blue-600 underline" />
           <div className="grid grid-cols-3 gap-2">
             <label className="text-xs font-medium text-gray-600">
               Jam Mulai

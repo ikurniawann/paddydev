@@ -3,13 +3,13 @@ import { Button } from "@/components/ui/button";
 import { formatDate } from "@/lib/format";
 import {
   OVERTIME_DAY_TYPE_OPTIONS,
-  overtimeAttachmentHref,
   overtimeDayTypeLabel,
   type OvertimeDecisionAction,
 } from "@/lib/hris/overtime-rules";
 import { hhmm } from "@/lib/hris/shifts-view";
 import { useState } from "react";
 import type { OvertimeDayType, OvertimeRow } from "../types";
+import { OvertimeAttachmentButtons } from "@/components/hris/overtime-attachment-preview";
 
 const STATUS_BADGES: Record<string, { label: string; className: string }> = {
   pending: { label: "Menunggu", className: "bg-amber-100 text-amber-700" },
@@ -124,17 +124,7 @@ function OvertimeTableRow({ row, deciding, onDecide, canCorrect, isHrd, onCorrec
         {row.source === "employee" && (
           <p className="text-xs text-gray-500">istirahat {row.break_minutes ?? 0} menit</p>
         )}
-        {(row.attachments ?? []).map((path, i) => (
-          <a
-            key={path}
-            href={overtimeAttachmentHref(path)}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mr-2 block text-xs font-medium text-pink-600 hover:underline"
-          >
-            Dokumentasi {i + 1}
-          </a>
-        ))}
+        <OvertimeAttachmentButtons paths={row.attachments ?? []} className="mt-1" />
       </td>
       <td className="px-4 py-3">
         {row.source === "company" ? (

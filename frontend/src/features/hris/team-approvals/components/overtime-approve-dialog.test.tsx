@@ -11,8 +11,11 @@ describe("OvertimeApproveDialog (EPIC-066)", () => {
   it("atasan mengubah jam & istirahat lalu menyetujui; jam dibayar dihitung ulang", () => {
     const onApprove = vi.fn();
     render(<OvertimeApproveDialog row={row} open onOpenChange={() => {}} onApprove={onApprove} />);
-    expect(screen.getByRole("link", { name: /Dokumentasi 1/ }).getAttribute("href")).toBe(
+    expect(screen.queryByRole("link", { name: /Dokumentasi 1/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Dokumentasi 1" }));
+    expect(screen.getByTitle("Dokumentasi 1").getAttribute("src")).toBe(
       "/api/hris/overtime/attachment/overtime-attachments/e1/1-abcdefabcdefabcd.pdf");
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
     fireEvent.change(screen.getByLabelText("Jam Selesai"), { target: { value: "20:00" } });
     fireEvent.change(screen.getByLabelText("Istirahat (menit)"), { target: { value: "30" } });
     expect(screen.getByText(/2,5 jam dibayar/)).toBeTruthy();
