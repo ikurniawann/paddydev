@@ -26,7 +26,7 @@ func setupAs(t *testing.T, opts testutil.StaffOptions) *env {
 
 func TestHrisRoleInManajemenUser(t *testing.T) {
 	requireHrisAccounts(t)
-	admin := testutil.CreateStaff(t, testutil.StaffOptions{Role: "admin", Menus: map[string][]string{"settings.users": nil}})
+	admin := testutil.CreateStaff(t, testutil.StaffOptions{Role: "admin", Menus: map[string][]string{"settings.users": {"read", "create", "update", "delete"}}})
 	e := setupAs(t, testutil.StaffOptions{Role: "super_admin"})
 	ctx := context.Background()
 	var holding string
@@ -89,7 +89,7 @@ func TestHrisRoleInManajemenUser(t *testing.T) {
 // account exactly as they were, on create and on update.
 func TestHrisRoleRejectedWritesNothing(t *testing.T) {
 	requireHrisAccounts(t)
-	admin := testutil.CreateStaff(t, testutil.StaffOptions{Role: "admin", Menus: map[string][]string{"settings.users": nil}})
+	admin := testutil.CreateStaff(t, testutil.StaffOptions{Role: "admin", Menus: map[string][]string{"settings.users": {"read", "create", "update", "delete"}}})
 	e := setupAs(t, testutil.StaffOptions{Role: "super_admin"})
 	adminEnv := &env{t: t, staff: admin, tx: e.tx, mux: e.mux}
 	ctx := context.Background()
