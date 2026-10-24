@@ -22,6 +22,17 @@
 - paddydev.reddie.id menjadi **staging** setelah cutover.
 - Jadwal: **secepatnya** setelah rencana disetujui dan gladi lulus.
 
+## Status implementasi (24-10-2026)
+
+Task 1 sampai 4 sudah di main: PR #25 (toolkit VPS), PR #28 (banner, SQL cutover, skrip cutover/rollback). **Kode final di repo adalah acuannya.** Potongan kode di rencana ini adalah draf, dan berbeda di lima poin berikut (semuanya ditemukan saat gladi):
+1. `01-hris-only.sql` dan `02-demo-dan-sesi.sql` menyetel `SET LOCAL search_path` (sama dengan `backend/internal/platform/database.SearchPath`) dan `timezone`. Role DB production tidak menyetel search_path, sedangkan trigger memakai nama tabel tanpa schema; tanpa ini `02` gagal `relation "employees" does not exist`.
+2. Gladi lokal me-restore memakai klien Postgres 16 (`docker run --network host postgres:16-alpine pg_restore ...`), karena `pg_restore` 17+ menulis `SET transaction_timeout`.
+3. `cutover-remote.sh` tidak punya `verify`; diganti `check` (ringkasan data). Image API production lebih tua dari dump, sehingga verify saat gladi selalu gagal. Skema dicek oleh `deploy-paddydev.sh` dengan image baru.
+4. `execute` memasang trap: bila ada langkah yang gagal setelah live dibekukan, live dinyalakan kembali dan perintah rollback dicetak. Skrip juga menolak berjalan bila HEAD bukan `paddydev/main` terbaru.
+5. Source di VPS diganti ke folder bersih. Folder lama disimpan sebagai `paddydev-src.old`, karena Caddyfile di-bind-mount dari sana.
+
+Sisa yang menunggu user: Task 0 (kunci SSH, ganti password VPS), Task 5 (gladi di VPS), Task 6 (eksekusi), Task 7 (verifikasi dan dokumen ops).
+
 ## Global Constraints
 
 - Sebelum mengubah DB production, selalu backup DB production (`pg_dump -Fc`) dan storage production (`tar`) di VPS. Keduanya chmod 600, di `~/backups/` VPS.
