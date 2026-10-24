@@ -1,6 +1,6 @@
 # EPIC-065: Paket Absensi Lanjutan — Pengajuan Absen Manual/Koreksi, Absen Terlewat, Kurang Jam HQ
 
-status: review
+status: ready-for-qa
 environment: dev
 retries: 0
 
@@ -101,3 +101,4 @@ Tidak ada. K-9 dan Q-AB-1 sudah diputuskan user pada 20-10-2026. Butir turunan y
   - (e) Antrean HR dibatasi `LIMIT 200` tanpa paging (hanya riwayat "Semua status" yang terpotong).
   - (f) Grid tab HR sempit di layar < 500px.
   - (g) Label "kurang jam" mengabaikan cuti sebagian yang disetujui / Izin pulang awal (keputusan produk).
+- 2026-10-24: Status `review` → `ready-for-qa`. Sudah live sejak 22-10-2026 15:56 WIB (PR #16 → main `39c20e5`, image `local-20261022-155522`); rilis berikutnya sampai main `031e9d2` (image `local-20261023-203412`) tetap memuatnya. Menunggu QA manusia (skenario di atas) dan HR mengisi jam minimum HQ di Lokasi Toko. Ikut ke production paddyadorable.biz.id saat cutover.
