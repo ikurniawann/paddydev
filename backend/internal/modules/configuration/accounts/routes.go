@@ -54,6 +54,16 @@ func (h handlers) guard(r *http.Request) (string, error) {
 	return u.ID, nil
 }
 
+// actionGuard is guard for a write: the Manajemen User grant must hold the
+// action (per-account access: read-only or update-only holders never create).
+func (h handlers) actionGuard(r *http.Request, action string) (string, error) {
+	u, err := h.d.Auth.RequireMenuAction(r, action, iam.SettingsUsers...)
+	if err != nil {
+		return "", err
+	}
+	return u.ID, nil
+}
+
 // Writers without Manajemen User (the HRIS employee directory) change employee data only.
 var (
 	errAccountNeedsSettings    = httpx.Forbidden("Akun login hanya bisa diatur lewat Settings → Manajemen User")
@@ -78,26 +88,22 @@ func (h handlers) writeGuard(r *http.Request, action string) (actor string, acco
 	if err != nil {
 		return "", false, err
 	}
-	granted, err := h.d.Auth.GrantedMenuCodes(r.Context(), u.ID, u.Role)
+	roleIDs, err := h.d.Auth.ResolveRoleIDs(r.Context(), u.ID, u.Role)
 	if err != nil {
 		return "", false, err
 	}
-	if iam.HasAnyMenuPrefix(granted, iam.SettingsUsers) {
+	actions, err := h.d.Auth.GrantedMenuActions(r.Context(), roleIDs)
+	if err != nil {
+		return "", false, err
+	}
+	// Manajemen User writes accounts only with the action granted; without it
+	// the HRIS employee directory grant may still write employee data.
+	if iam.HasGrantedAction(actions, iam.SettingsUsers, action) {
 		return u.ID, true, nil
 	}
-	if iam.HasAnyMenuPrefix(granted, iam.HrisKaryawan) {
-		roleIDs, err := h.d.Auth.ResolveRoleIDs(r.Context(), u.ID, u.Role)
-		if err != nil {
-			return "", false, err
-		}
-		actions, err := h.d.Auth.GrantedMenuActions(r.Context(), roleIDs)
-		if err != nil {
-			return "", false, err
-		}
-		for _, code := range iam.HrisKaryawan {
-			if slices.Contains(actions[code], action) {
-				return u.ID, false, nil
-			}
+	for _, code := range iam.HrisKaryawan {
+		if slices.Contains(actions[code], action) {
+			return u.ID, false, nil
 		}
 	}
 	return "", false, httpx.Forbidden("Insufficient permissions")
@@ -256,7 +262,7 @@ func (h handlers) updateUser(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (h handlers) resetUserPassword(w http.ResponseWriter, r *http.Request) error {
-	if _, err := h.guard(r); err != nil {
+	if _, err := h.actionGuard(r, "update"); err != nil {
 		return err
 	}
 	res, err := h.svc.resetEmployeePassword(r.Context(), r.PathValue("id"), h.superAdminGate(r))
@@ -282,7 +288,7 @@ func (h handlers) listAdmins(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (h handlers) createAdmin(w http.ResponseWriter, r *http.Request) error {
-	actor, err := h.guard(r)
+	actor, err := h.actionGuard(r, "create")
 	if err != nil {
 		return err
 	}
@@ -315,7 +321,7 @@ func pathUserID(r *http.Request) (string, error) {
 }
 
 func (h handlers) updateAdmin(w http.ResponseWriter, r *http.Request) error {
-	actor, err := h.guard(r)
+	actor, err := h.actionGuard(r, "update")
 	if err != nil {
 		return err
 	}
@@ -339,7 +345,7 @@ func (h handlers) updateAdmin(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (h handlers) resetAdminPassword(w http.ResponseWriter, r *http.Request) error {
-	actor, err := h.guard(r)
+	actor, err := h.actionGuard(r, "update")
 	if err != nil {
 		return err
 	}

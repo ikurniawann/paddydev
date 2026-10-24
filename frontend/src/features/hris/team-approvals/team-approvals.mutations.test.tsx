@@ -49,4 +49,20 @@ describe("useDecideTeamRequest", () => {
     expect(keys).toContainEqual(["hris", "team-approvals"]);
     expect(keys).toContainEqual(["hris", "nav-badges"]);
   });
+
+  it("lembur dengan times menyebarkan start/end/break ke body decide (EPIC-066)", async () => {
+    apiPost.mockResolvedValue({});
+    const { result } = setup();
+    act(() => result.current.mutate({ kind: "overtime", id: "o1", action: "approve", times: { end_time: "20:00", break_minutes: 30 } }));
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(apiPost).toHaveBeenCalledWith("/api/hris/overtime/decide", {
+      overtime_id: "o1",
+      action: "approve",
+      rejection_reason: undefined,
+      end_time: "20:00",
+      break_minutes: 30,
+    });
+    const body = apiPost.mock.calls[0][1] as Record<string, unknown>;
+    expect("start_time" in body).toBe(false);
+  });
 });

@@ -80,7 +80,17 @@ export async function submitMyLeave(form: EssLeaveForm, attachmentDataUrl?: stri
 export const fetchMyOvertime = () => softGet<EssOvertimeRow[]>("/api/hris/overtime", []);
 
 export const submitOvertime = (form: EssOvertimeForm) =>
-  apiPost<{ data: unknown }>("/api/hris/overtime", form);
+  apiPost<{ data: unknown }>("/api/hris/overtime", { ...form, break_minutes: Number(form.break_minutes || 0) });
+
+/** Unggah 1 dokumentasi lembur (PDF/JPG/PNG/WebP ≤ 5 MB); kembalikan path privat. */
+export async function uploadOvertimeAttachment(file: File): Promise<string> {
+  const body = new FormData();
+  body.append("file", file);
+  const res = await fetch("/api/hris/overtime/attachments", { method: "POST", body });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json?.error || "Gagal mengunggah dokumentasi");
+  return json.data.path as string;
+}
 
 export const fetchOvertimeDayType = (date: string) =>
   apiGet<{ data: EssOvertimeDayTypeHint }>(`/api/hris/overtime/day-type?date=${encodeURIComponent(date)}`).then(

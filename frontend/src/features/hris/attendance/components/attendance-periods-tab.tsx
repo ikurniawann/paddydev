@@ -138,6 +138,9 @@ export function AttendancePeriodsTab() {
                         {(p.stats?.without_clock_out ?? 0) > 0 && (
                           <p className="text-amber-700">{p.stats?.without_clock_out} tanpa jam pulang</p>
                         )}
+                        {(p.stats?.pending_requests ?? 0) > 0 && (
+                          <p className="text-amber-700">{p.stats?.pending_requests} pengajuan absensi menunggu</p>
+                        )}
                         {(p.stats?.adjusted ?? 0) > 0 && (
                           <p className="text-violet-700">{p.stats?.adjusted} disesuaikan manual</p>
                         )}

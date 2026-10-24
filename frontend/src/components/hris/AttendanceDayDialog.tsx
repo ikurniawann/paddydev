@@ -4,6 +4,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import type { HolidayRow } from "@/lib/hris/holidays";
 import { shiftClock } from "@/lib/hris/attendance-calendar";
 import { formatDateLong, formatTime } from "@/lib/format";
+import { SHORT_HOURS_LABEL, shortHoursDetail } from "@/lib/hris/short-hours";
 import type { CalendarAttendance, CalendarScheduleRow } from "@/features/hris/attendance/types";
 
 export interface AttendanceDayInfo {
@@ -92,6 +93,11 @@ export function AttendanceDayDialog({ info, hasSchedule, onClose }: AttendanceDa
                       ? ` · ${Number(attendance.work_hours).toFixed(1)} jam kerja`
                       : ""}
                   </p>
+                  {attendance.is_short_hours && (
+                    <p className="text-orange-600">
+                      {SHORT_HOURS_LABEL} · {shortHoursDetail(attendance.min_work_hours)}
+                    </p>
+                  )}
                 </div>
               ) : (
                 <p className="mt-1 text-sm text-gray-400">Belum ada catatan absen</p>

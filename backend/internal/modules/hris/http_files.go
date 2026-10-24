@@ -32,6 +32,9 @@ func (h handlers) fileRoutes() []module.Route {
 		r("GET /api/hris/attendance/photo/{path...}", h.withActor(h.attendancePhoto)),
 		r("POST /api/hris/leaves/attachment", h.withActor(h.uploadLeaveAttachment)),
 		r("GET /api/hris/leaves/attachment/{path...}", h.withActor(h.leaveAttachment)),
+		r("POST /api/hris/overtime/attachments", h.withActor(h.uploadOvertimeAttachment)),
+		r("GET /api/hris/overtime/attachment/{path...}", h.withActor(h.overtimeAttachment)),
+		r("GET /api/hris/attendance-requests/attachment/{path...}", h.withActor(h.attendanceRequestAttachment)),
 		r("POST /api/hris/announcements/cover", h.withMenu(kepegawaian, h.uploadCover)),
 		r("GET /api/hris/announcements/cover/{path...}", h.withActor(h.coverFile)),
 		r("GET /api/hris/contracts/{id}/document", h.withMenu(kepegawaian, h.contractDocument)),
@@ -143,7 +146,11 @@ func (h handlers) uploadLeaveAttachment(w http.ResponseWriter, r *http.Request, 
 // The employee's direct manager reads it too: Persetujuan Tim links the file
 // from the queue (EPIC-063). A reporting_to pointing at oneself grants nothing.
 func (h handlers) leaveAttachment(w http.ResponseWriter, r *http.Request, a *Actor) error {
-	const prefix, folder = "/api/hris/leaves/attachment/", "leave-attachments"
+	return h.managerReadableFile(w, r, a, "/api/hris/leaves/attachment/", "leave-attachments")
+}
+
+// managerReadableFile is ownedFile that the owner's direct manager reads too.
+func (h handlers) managerReadableFile(w http.ResponseWriter, r *http.Request, a *Actor, prefix, folder string) error {
 	if !a.IsHR && a.EmployeeID != nil {
 		if segments := privateSegments(r, prefix, folder, 3); segments != nil && segments[1] != *a.EmployeeID {
 			reports, err := h.svc.repo.SubordinateIDs(r.Context(), *a.EmployeeID)
@@ -158,14 +165,63 @@ func (h handlers) leaveAttachment(w http.ResponseWriter, r *http.Request, a *Act
 	return h.ownedFile(w, r, a, prefix, folder)
 }
 
+/* ── Overtime documentation (EPIC-066) ───────────────────────────────── */
+
+const (
+	overtimeAttachmentFolder = "overtime-attachments"
+	maxOvertimeAttachments   = 3
+)
+
+// POST /api/hris/overtime/attachments (multipart "file"): one PDF/JPG/PNG/WebP
+// of at most 5 MB for one's own overtime input.
+func (h handlers) uploadOvertimeAttachment(w http.ResponseWriter, r *http.Request, a *Actor) error {
+	const tooLarge = "Ukuran dokumentasi maksimal 5 MB"
+	if a.EmployeeID == nil {
+		return httpx.Forbidden("Akun ini tidak terhubung ke data karyawan")
+	}
+	form, err := storage.ReadForm(r, maxAttachmentBytes+64<<10)
+	var file *storage.File
+	switch {
+	case errors.Is(err, storage.ErrBodyTooLarge):
+		return httpx.BadRequest(tooLarge)
+	case err == nil:
+		file = form.File("file")
+	case !isURLEncoded(r):
+		return httpx.BadRequest("Form data tidak valid")
+	}
+	if file == nil {
+		return httpx.BadRequest("File tidak ditemukan")
+	}
+	if file.Size() > maxAttachmentBytes {
+		return httpx.BadRequest(tooLarge)
+	}
+	path, err := h.svc.files.SavePrivateDocument(file.Data, overtimeAttachmentFolder+"/"+*a.EmployeeID)
+	if err != nil {
+		return httpx.BadRequest(err.Error())
+	}
+	return ok(w, dataMsg(obj("path", path), "Dokumentasi tersimpan"))
+}
+
+// GET /api/hris/overtime/attachment/overtime-attachments/<employeeId>/<file>:
+// the owner, their direct manager and HR.
+func (h handlers) overtimeAttachment(w http.ResponseWriter, r *http.Request, a *Actor) error {
+	return h.managerReadableFile(w, r, a, "/api/hris/overtime/attachment/", overtimeAttachmentFolder)
+}
+
 // ownedFile serves <folder>/<employeeId>/<file>…: HR reads all, others only
 // files under their own employee id.
 func (h handlers) ownedFile(w http.ResponseWriter, r *http.Request, a *Actor, prefix, folder string) error {
+	return h.ownedFileFor(w, r, a, a.IsHR, prefix, folder)
+}
+
+// ownedFileFor is ownedFile with the reading staff chosen by the caller
+// (IsHR, or the narrower IsHRD).
+func (h handlers) ownedFileFor(w http.ResponseWriter, r *http.Request, a *Actor, staff bool, prefix, folder string) error {
 	segments := privateSegments(r, prefix, folder, 3)
 	if segments == nil {
 		return httpx.BadRequest("Path tidak valid")
 	}
-	if !a.IsHR && (a.EmployeeID == nil || *a.EmployeeID != segments[1]) {
+	if !staff && (a.EmployeeID == nil || *a.EmployeeID != segments[1]) {
 		return httpx.Forbidden("Forbidden")
 	}
 	return h.svc.servePrivate(w, strings.Join(segments, "/"), "")

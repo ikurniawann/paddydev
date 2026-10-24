@@ -10,14 +10,14 @@ import (
 
 // MOM AP-04 (EPIC-063 R6): AdminHRIS = aksi update di menu Lembur.
 func TestOvertimeCorrectionByAdminHRIS(t *testing.T) {
-	h := newHarness(t)
+	h, _ := newFileHarness(t)
 	admin, _ := h.staff("hrd", []string{"hris.kepegawaian.overtime"}, true, emp{name: "Admin HRIS"})
 	viewer := testutil.CreateStaff(t, testutil.StaffOptions{Role: "hrd",
 		Menus: map[string][]string{"hris.kepegawaian.overtime": {"read", "approve"}}})
 	t.Cleanup(func() { _ = h.tx.Rollback(context.Background()) })
 	staff, _ := h.staff("pos", nil, true, emp{name: "Crew Koreksi"})
 
-	created := h.do(&staff, "POST", "/api/hris/overtime", otBody("2026-10-06", "17:00", "19:00"))
+	created := h.do(&staff, "POST", "/api/hris/overtime", h.otSelfBody(&staff, "2026-10-01", "17:00", "19:00"))
 	expect(t, created, 200, "")
 	id := created.data()["id"].(string)
 	path := "/api/hris/overtime/" + id
@@ -42,24 +42,24 @@ func TestOvertimeCorrectionByAdminHRIS(t *testing.T) {
 		t.Fatalf("corrected = %s", fixed.raw)
 	}
 	if n := h.scalar(`SELECT count(*)::text FROM audit.audit_log WHERE action = 'overtime.correct' AND entity_id = $1
-		AND reason = 'Sesuai absensi' AND before->>'end_time' = '19:00' AND before->>'date' = '2026-10-06'
+		AND reason = 'Sesuai absensi' AND before->>'end_time' = '19:00' AND before->>'date' = '2026-10-01'
 		AND after->>'end_time' = '20:30' AND after->>'date' = '2026-10-07' AND after->>'day_type' = 'rest_day'`, id); n != "1" {
 		t.Fatalf("audit koreksi = %s", n)
 	}
 
 	// Tanggal bentrok dengan lembur aktif lain → 400 duplikat, bukan 500.
-	expect(t, h.do(&staff, "POST", "/api/hris/overtime", otBody("2026-10-09", "17:00", "19:00")), 200, "")
-	expect(t, h.do(&admin, "PATCH", path, map[string]any{"date": "2026-10-09", "reason": "Pindah ke Jumat"}), 400,
+	expect(t, h.do(&staff, "POST", "/api/hris/overtime", h.otSelfBody(&staff, "2026-10-03", "17:00", "19:00")), 200, "")
+	expect(t, h.do(&admin, "PATCH", path, map[string]any{"date": "2026-10-03", "reason": "Pindah ke Sabtu"}), 400,
 		"Sudah ada pengajuan lembur pending/approved di tanggal tersebut")
 
 	// Lembur sendiri tidak bisa dikoreksi sendiri.
-	mine := h.do(&admin, "POST", "/api/hris/overtime", otBody("2026-10-08", "17:00", "19:00"))
+	mine := h.do(&admin, "POST", "/api/hris/overtime", h.otSelfBody(&admin, "2026-10-05", "06:00", "08:00"))
 	expect(t, mine, 200, "")
 	expect(t, h.do(&admin, "PATCH", "/api/hris/overtime/"+mine.data()["id"].(string),
 		map[string]any{"end_time": "21:00", "reason": "Tambah jam sendiri"}), 403, "Tidak bisa mengoreksi lembur sendiri")
 
 	// Yang ditolak tidak bisa dikoreksi.
-	other := h.do(&staff, "POST", "/api/hris/overtime", otBody("2026-10-13", "17:00", "19:00"))
+	other := h.do(&staff, "POST", "/api/hris/overtime", h.otSelfBody(&staff, "2026-10-04", "17:00", "19:00"))
 	expect(t, other, 200, "")
 	otherID := other.data()["id"].(string)
 	expect(t, h.do(&admin, "POST", "/api/hris/overtime/decide", map[string]any{"overtime_id": otherID, "action": "reject",
@@ -107,10 +107,10 @@ func TestOvertimeAssignmentNeedsHRD(t *testing.T) {
 // yang tanggal closing-nya lewat terkunci walau belum ada yang menekan Closing,
 // dan tanggal baru di periode closed ditolak juga.
 func TestOvertimeCorrectionHonoursLazyAndNewDateClosing(t *testing.T) {
-	h := newHarness(t)
+	h, _ := newFileHarness(t)
 	admin, _ := h.staff("hrd", []string{"hris.kepegawaian.overtime"}, true, emp{name: "Admin HRIS"})
 	staff, _ := h.staff("pos", nil, true, emp{name: "Crew Closing"})
-	created := h.do(&staff, "POST", "/api/hris/overtime", otBody("2026-10-06", "17:00", "19:00"))
+	created := h.do(&staff, "POST", "/api/hris/overtime", h.otSelfBody(&staff, "2026-10-01", "17:00", "19:00"))
 	expect(t, created, 200, "")
 	path := "/api/hris/overtime/" + created.data()["id"].(string)
 
@@ -141,10 +141,10 @@ func TestOvertimeCorrectionHonoursLazyAndNewDateClosing(t *testing.T) {
 
 // Lembur yang sudah disetujui bisa dikoreksi tanpa mengubah statusnya; alasan wajib.
 func TestOvertimeCorrectionOfApprovedRow(t *testing.T) {
-	h := newHarness(t)
+	h, _ := newFileHarness(t)
 	admin, _ := h.staff("hrd", []string{"hris.kepegawaian.overtime"}, true, emp{name: "Admin HRIS"})
 	staff, _ := h.staff("pos", nil, true, emp{name: "Crew Disetujui"})
-	created := h.do(&staff, "POST", "/api/hris/overtime", otBody("2026-10-06", "17:00", "19:00"))
+	created := h.do(&staff, "POST", "/api/hris/overtime", h.otSelfBody(&staff, "2026-10-01", "17:00", "19:00"))
 	expect(t, created, 200, "")
 	id := created.data()["id"].(string)
 	expect(t, h.do(&admin, "POST", "/api/hris/overtime/decide", map[string]any{"overtime_id": id, "action": "approve"}), 200, "")

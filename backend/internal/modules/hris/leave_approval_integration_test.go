@@ -80,7 +80,7 @@ func TestLeaveHiringManagerIsNotHRBackup(t *testing.T) {
 
 // Data live: satu karyawan reporting_to-nya dirinya sendiri (EPIC-063 R2).
 func TestLeaveSelfManagerCannotApproveOwn(t *testing.T) {
-	h := newHarness(t)
+	h, _ := newFileHarness(t)
 	loop, loopID := h.staff("pos", nil, true, emp{name: "Retail Ops Loop", phone: "0812 1111 2222"})
 	h.exec(`UPDATE hris.employees SET reporting_to = id WHERE id = $1`, loopID)
 
@@ -95,8 +95,7 @@ func TestLeaveSelfManagerCannotApproveOwn(t *testing.T) {
 	expect(t, h.do(&loop, "POST", "/api/hris/leaves/approve", decideLeaveBody(leave.data()["id"], "approve", "")), 403,
 		"Tidak bisa memutuskan pengajuan cuti sendiri")
 
-	expect(t, h.do(&loop, "POST", "/api/hris/overtime", map[string]any{
-		"date": "2031-03-05", "start_time": "17:00", "end_time": "19:00", "reason": "Closing stok"}), 200, "")
+	expect(t, h.do(&loop, "POST", "/api/hris/overtime", h.otSelfBody(&loop, "2026-10-01", "17:00", "19:00")), 200, "")
 	team := h.do(&loop, "GET", "/api/hris/overtime?scope=approvals", nil)
 	expect(t, team, 200, "")
 	if len(team.list()) != 0 {

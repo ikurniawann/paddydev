@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { updateSession } from "@/lib/auth/middleware";
 import { goBackendTarget } from "@/lib/backend-routes";
 import { legacyRedirectTarget } from "@/lib/legacy-host-redirect";
+import { loginRootRedirect } from "@/lib/login-root-redirect";
 
 /**
  * Serves the member portal at its own hostname.
@@ -40,6 +41,14 @@ export async function proxy(request: NextRequest) {
     const redirects = process.env.PADDY_LEGACY_HOST_REDIRECTS ?? process.env.MIZU_LEGACY_HOST_REDIRECTS;
     const target = legacyRedirectTarget(request.headers.get("host") ?? "", request.nextUrl, redirects);
     if (target) return NextResponse.redirect(target, 308);
+  }
+  // Host staf (mis. paddydev.reddie.id): mengetik domain langsung ke halaman
+  // login, bukan situs publik. 307 supaya browser tidak meng-cache permanen.
+  if (loginRootRedirect(request.headers.get("host") ?? "", request.nextUrl.pathname, request.method, process.env.PADDY_LOGIN_ROOT_HOSTS)) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/login";
+    url.search = "";
+    return NextResponse.redirect(url, 307);
   }
   // Strangler migration: /api prefixes ported to the Go backend go there
   // first, on every host. Method, query, body and cookies travel with the

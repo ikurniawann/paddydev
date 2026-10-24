@@ -5,7 +5,7 @@ import "testing"
 // EPIC-063 R7: antrean Persetujuan Tim = cuti & lembur pending bawahan
 // langsung; badge ikut Perjalanan Dinas dan kasbon tahap manager.
 func TestTeamApprovalsQueueAndBadge(t *testing.T) {
-	h := newHarness(t)
+	h, _ := newFileHarness(t)
 	boss, bossID := h.staff("pos", nil, true, emp{name: "Atasan Tim"})
 	memberA, _ := h.staff("pos", nil, true, emp{name: "Anggota A", boss: &bossID})
 	memberB, _ := h.staff("pos", nil, true, emp{name: "Anggota B", boss: &bossID})
@@ -18,8 +18,8 @@ func TestTeamApprovalsQueueAndBadge(t *testing.T) {
 
 	expect(t, h.do(&memberA, "POST", "/api/hris/leaves", leaveBody("annual", "2031-03-04", "2031-03-04")), 200, "")
 	expect(t, h.do(&outsider, "POST", "/api/hris/leaves", leaveBody("annual", "2031-03-04", "2031-03-04")), 200, "")
-	expect(t, h.do(&memberB, "POST", "/api/hris/overtime", otBody("2026-10-06", "17:00", "19:00")), 200, "")
-	expect(t, h.do(&boss, "POST", "/api/hris/overtime", otBody("2026-10-06", "17:00", "19:00")), 200, "")
+	expect(t, h.do(&memberB, "POST", "/api/hris/overtime", h.otSelfBody(&memberB, "2026-10-01", "17:00", "19:00")), 200, "")
+	expect(t, h.do(&boss, "POST", "/api/hris/overtime", h.otSelfBody(&boss, "2026-10-01", "17:00", "19:00")), 200, "")
 	expect(t, h.do(&memberA, "POST", "/api/hris/business-trips", map[string]any{"start_date": "2026-10-10",
 		"end_date": "2026-10-11", "destination": "Gudang Cikarang", "purpose": "Stock opname gudang"}), 200, "")
 
@@ -35,7 +35,7 @@ func TestTeamApprovalsQueueAndBadge(t *testing.T) {
 		t.Fatalf("leave = %v", l)
 	}
 	o := overtime[0].(map[string]any)
-	if o["date"] != "2026-10-06" || o["day_type"] != "regular" || o["employee"].(map[string]any)["full_name"] != "Anggota B" {
+	if o["date"] != "2026-10-01" || o["day_type"] != "regular" || o["employee"].(map[string]any)["full_name"] != "Anggota B" {
 		t.Fatalf("overtime = %v", o)
 	}
 

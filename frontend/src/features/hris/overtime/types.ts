@@ -15,12 +15,22 @@ export interface OvertimeRow {
   rejection_reason: string | null;
   /** rest_day = hari istirahat mingguan, dibayar tarif libur (EPIC-055). */
   day_type?: OvertimeDayType;
+  /** EPIC-066: istirahat (menit) dan path dokumentasi privat. */
+  break_minutes?: number;
+  attachments?: string[];
   /** EPIC-063: kapasitas pemutus (atasan langsung / HR cadangan) dan koreksi AdminHRIS terakhir. */
   decided_as?: "manager" | "hr" | null;
   decided_by_name?: string | null;
   corrected_at?: string | null;
   corrected_by_name?: string | null;
-  employee?: { id: string; full_name: string; nip: string | null } | null;
+  employee?: {
+    id: string;
+    full_name: string;
+    nip: string | null;
+    reporting_to?: string | null;
+    /** Atasan langsung aktif; null tanpa atasan. Atasan nonaktif = tanpa atasan (EPIC-063 R9). */
+    reporting_to_active?: boolean | null;
+  } | null;
   requester?: { full_name: string } | null;
   decider?: { full_name: string } | null;
 }
@@ -44,6 +54,8 @@ export interface OvertimeCorrection {
   date: string;
   start_time: string;
   end_time: string;
+  /** EPIC-066: dikirim hanya bila diubah. */
+  break_minutes?: number;
   day_type: OvertimeDayType;
   reason: string;
 }

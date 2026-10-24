@@ -36,7 +36,10 @@ func setup(t *testing.T, menus map[string][]string) *env {
 	return &env{t: t, staff: staff, tx: tx, mux: mux}
 }
 
-func settingsUsers(t *testing.T) *env { return setup(t, map[string][]string{"settings.users": nil}) }
+// settingsUsers is a full Manajemen User holder (super_admin/admin grant every action).
+func settingsUsers(t *testing.T) *env {
+	return setup(t, map[string][]string{"settings.users": {"read", "create", "update", "delete"}})
+}
 
 func (e *env) do(method, target string, body any) (int, map[string]any, string) {
 	e.t.Helper()
@@ -587,6 +590,9 @@ func TestResendingSameRoleKeepsIamRoles(t *testing.T) {
 	if got := roles(); got != before {
 		t.Fatalf("same-role save replaced IAM roles: %q → %q", before, got)
 	}
+	// finance_staff comes from the IAM seeder, not a migration: a migrations-only
+	// DB (CI) lacks it, and the role change would leave no IAM role at all.
+	mustExec(`INSERT INTO iam.roles (code, name) VALUES ('finance_staff', 'Finance Staff') ON CONFLICT (code) DO NOTHING`)
 	if code, _, raw := e.do("PUT", "/api/users/"+id, scoped(map[string]any{"is_access_app": true, "role": "finance_staff"})); code != 200 {
 		t.Fatalf("role change = %d %s", code, raw)
 	}

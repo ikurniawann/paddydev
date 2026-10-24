@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import type { HolidayRow } from "@/lib/hris/holidays";
 import { shiftClock } from "@/lib/hris/attendance-calendar";
 import { formatTime } from "@/lib/format";
+import { shortHoursDetail } from "@/lib/hris/short-hours";
 import type { CalendarAttendance, CalendarScheduleRow } from "@/features/hris/attendance/types";
 
 interface AttendanceDayCellProps {
@@ -73,6 +74,7 @@ export function AttendanceDayCell({
             />
           )}
           {scheduledShift && <span className="h-1.5 w-1.5 rounded-full bg-indigo-400" />}
+          {attendance?.is_short_hours && <span className="h-1.5 w-1.5 rounded-full bg-orange-500" />}
         </span>
       </div>
 
@@ -130,6 +132,14 @@ export function AttendanceDayCell({
                 ? `${Number(attendance.work_hours).toFixed(1)} jam`
                 : "Hadir"}
           </p>
+          {attendance.is_short_hours && (
+            <p
+              className="truncate text-[10px] font-semibold leading-tight text-orange-600"
+              title={shortHoursDetail(attendance.min_work_hours)}
+            >
+              Kurang jam
+            </p>
+          )}
         </div>
       )}
       {extra}

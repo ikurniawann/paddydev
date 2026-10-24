@@ -148,7 +148,7 @@ func (s *store) ClearOtherPrimary(ctx context.Context, employeeID, exceptID, sta
 
 func (s *store) ActiveBranches(ctx context.Context) ([]*Row, error) {
 	return queryRows(ctx, s.db, `SELECT b.id, b.code, b.name, b.company_id, c.name AS company_name, b.lat, b.lng,
-		b.geofence_radius_m
+		b.geofence_radius_m, b.min_work_hours
 		FROM configuration.branches b JOIN configuration.companies c ON c.id = b.company_id
 		WHERE b.is_active
 		ORDER BY c.name, b.name`)
@@ -161,7 +161,7 @@ func (s *store) BranchExists(ctx context.Context, id string) (bool, error) {
 }
 
 func (s *store) BranchGeofence(ctx context.Context, id string) (*Row, error) {
-	row, err := queryRow(ctx, s.db, `SELECT name, lat, lng, geofence_radius_m FROM configuration.branches WHERE id::text = $1`, id)
+	row, err := queryRow(ctx, s.db, `SELECT name, lat, lng, geofence_radius_m, min_work_hours FROM configuration.branches WHERE id::text = $1`, id)
 	return row, ignoreBadInput(err)
 }
 

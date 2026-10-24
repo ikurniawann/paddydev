@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { ClockIcon, PaperAirplaneIcon, BellAlertIcon } from "@heroicons/react/24/outline";
 import { Loader2 } from "lucide-react";
@@ -17,9 +17,10 @@ import { todayWib } from "@/lib/dates";
 import { formatDate } from "@/lib/format";
 import {
   OVERTIME_DAY_TYPE_OPTIONS,
-  OVERTIME_TOO_LATE,
   overtimeDayTypeLabel,
-  overtimeStartsInPast,
+  overtimeEndLabel,
+  overtimeNotFinished,
+  paidOvertimeHours,
   type OvertimeDayType,
 } from "@/lib/hris/overtime-rules";
 import { splitOvertime } from "@/lib/hris/ess-view";
@@ -27,6 +28,7 @@ import { useEssMe, useMyOvertime, useOvertimeDayType } from "../queries";
 import { useDecideOvertime, useSubmitOvertime } from "../mutations";
 import type { EssOvertimeDecision, EssOvertimeForm } from "../types";
 import { EssLoading, EssNotLinked } from "./ess-states";
+import { OvertimeAttachmentsField } from "./overtime-attachments-field";
 
 /**
  * ESS → Lembur (/dashboard/me/lembur): pengajuan lembur mandiri +
@@ -46,7 +48,15 @@ function clockLabel(value: string): string {
   return value?.slice(0, 5) ?? "—";
 }
 
-const EMPTY_FORM: EssOvertimeForm = { date: "", start_time: "", end_time: "", reason: "", day_type: "regular" };
+const EMPTY_FORM: EssOvertimeForm = {
+  date: "",
+  start_time: "",
+  end_time: "",
+  break_minutes: "0",
+  reason: "",
+  day_type: "regular",
+  attachments: [],
+};
 
 export function EssLemburPage() {
   const { data: me, isLoading } = useEssMe();
@@ -55,6 +65,11 @@ export function EssLemburPage() {
   const decideMutation = useDecideOvertime();
   const [dialog, setDialog] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
+  // Generasi form (EPIC-066): unggahan yang selesai setelah form direset tidak
+  // ditambahkan ke form baru; Kirim nonaktif selama dokumentasi diunggah.
+  const generation = useRef(0);
+  const [formGeneration, setFormGeneration] = useState(0);
+  const [uploading, setUploading] = useState(false);
   const decidingId = decideMutation.isPending ? decideMutation.variables?.id : null;
   // K-13 (EPIC-063 R5): jenis dikunci ke saran jadwal bila server mengetahuinya.
   const hint = useOvertimeDayType(form.date).data ?? null;
@@ -62,25 +77,38 @@ export function EssLemburPage() {
   const dayType: OvertimeDayType = lockedType ?? form.day_type;
 
   function handleSubmit() {
+    if (uploading) return;
     if (!form.date || !form.start_time || !form.end_time) {
       toast.error("Tanggal dan jam lembur wajib diisi");
       return;
     }
-    if (form.reason.trim().length < 5) {
-      toast.error("Alasan minimal 5 karakter");
+    if (overtimeNotFinished(form.date, form.start_time, form.end_time)) {
+      toast.error(`Lembur baru bisa diinput setelah selesai (${overtimeEndLabel(form.date, form.start_time, form.end_time)} WIB)`);
       return;
     }
-    if (overtimeStartsInPast(form.date, form.start_time)) {
-      toast.error(OVERTIME_TOO_LATE);
+    const breakMinutes = Number(form.break_minutes || 0);
+    if (!Number.isInteger(breakMinutes) || breakMinutes < 0 || breakMinutes > 720) {
+      toast.error("Istirahat 0–720 menit");
+      return;
+    }
+    if (paidOvertimeHours(form.start_time, form.end_time, breakMinutes) < 1) {
+      toast.error("Durasi lembur minimal 1 jam setelah dikurangi istirahat");
+      return;
+    }
+    if (form.attachments.length === 0) {
+      toast.error("Lampirkan minimal 1 dokumentasi lembur");
       return;
     }
     submitMutation.mutate({ ...form, day_type: dayType }, {
       onSuccess: () => {
-        toast.success("Pengajuan lembur terkirim — menunggu persetujuan");
+        toast.success("Lembur terkirim — menunggu persetujuan atasan");
         setDialog(false);
         setForm(EMPTY_FORM);
+        generation.current += 1;
+        setFormGeneration(generation.current);
+        setUploading(false);
       },
-      onError: (error) => toast.error(error.message || "Gagal mengajukan lembur"),
+      onError: (error) => toast.error(error.message || "Gagal mengirim lembur"),
     });
   }
 
@@ -110,11 +138,11 @@ export function EssLemburPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Lembur</h1>
           <p className="text-sm text-gray-500">
-            Ajukan lembur atau konfirmasi penugasan lembur dari perusahaan
+            Input lembur setelah selesai, atau konfirmasi penugasan lembur dari perusahaan
           </p>
         </div>
         <Button className="gap-2" onClick={() => setDialog(true)}>
-          <PaperAirplaneIcon className="h-4 w-4" /> Ajukan Lembur
+          <PaperAirplaneIcon className="h-4 w-4" /> Input Lembur
         </Button>
       </div>
 
@@ -176,6 +204,7 @@ export function EssLemburPage() {
                     <p className="text-sm font-medium text-gray-900">
                       {formatDate(row.date, "—")} · {clockLabel(row.start_time)}–{clockLabel(row.end_time)}{" "}
                       ({Number(row.hours)} jam)
+                      {row.break_minutes > 0 && ` · istirahat ${row.break_minutes} menit`}
                       {row.source === "company" && (
                         <span className="ml-2 rounded-full bg-sky-100 px-2 py-0.5 text-xs font-medium text-sky-700">
                           Penugasan
@@ -222,7 +251,7 @@ export function EssLemburPage() {
       <Dialog open={dialog} onOpenChange={setDialog}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Ajukan Lembur</DialogTitle>
+            <DialogTitle>Input Lembur</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
             <div>
@@ -230,7 +259,7 @@ export function EssLemburPage() {
               <Input
                 id="ot-date"
                 type="date"
-                min={todayWib()}
+                max={todayWib()}
                 value={form.date}
                 onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
               />
@@ -256,6 +285,23 @@ export function EssLemburPage() {
               </div>
             </div>
             <div>
+              <label htmlFor="ot-break" className="mb-1 block text-xs font-medium text-gray-600">Istirahat (menit)</label>
+              <Input id="ot-break" type="number" min={0} max={720} step={5} value={form.break_minutes}
+                onChange={(e) => setForm((f) => ({ ...f, break_minutes: e.target.value }))} />
+            </div>
+            {form.start_time && form.end_time && (
+              <p className="text-xs text-gray-600">
+                {paidOvertimeHours(form.start_time, form.end_time, Number(form.break_minutes || 0)).toLocaleString("id-ID")} jam dibayar
+              </p>
+            )}
+            <OvertimeAttachmentsField
+              value={form.attachments}
+              onChange={(attachments) => {
+                if (formGeneration === generation.current) setForm((f) => ({ ...f, attachments }));
+              }}
+              onBusyChange={setUploading}
+            />
+            <div>
               <label htmlFor="ot-day-type" className="mb-1 block text-xs font-medium text-gray-600">Jenis lembur</label>
               <select
                 id="ot-day-type"
@@ -280,7 +326,7 @@ export function EssLemburPage() {
             </div>
             <div>
               <label htmlFor="ot-reason" className="mb-1 block text-xs font-medium text-gray-600">
-                Alasan / pekerjaan yang dilembur (min. 5 karakter)
+                Keterangan (opsional)
               </label>
               <Input
                 id="ot-reason"
@@ -290,16 +336,16 @@ export function EssLemburPage() {
               />
             </div>
             <p className="rounded-lg bg-sky-50 px-3 py-2 text-xs text-sky-700">
-              Lembur wajib diajukan sebelum jam mulai. Lembur yang disetujui dibayar sesuai jam yang
-              terealisasi (wajib absen clock-in/out pada hari tersebut).
+              Lembur diinput setelah selesai, dengan dokumentasi. Lembur yang disetujui atasan dibayar
+              sesuai jam setelah dikurangi istirahat.
             </p>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialog(false)}>
               Batal
             </Button>
-            <Button onClick={handleSubmit} disabled={submitMutation.isPending}>
-              {submitMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Kirim Pengajuan"}
+            <Button onClick={handleSubmit} disabled={submitMutation.isPending || uploading}>
+              {submitMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Kirim"}
             </Button>
           </DialogFooter>
         </DialogContent>

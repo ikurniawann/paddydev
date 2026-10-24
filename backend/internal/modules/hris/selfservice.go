@@ -261,6 +261,14 @@ func (s *Service) NavBadges(ctx context.Context, a *Actor) (*Row, error) {
 			badges.Set(approvalHrefs[m], n)
 		}
 	}
+	// HR Absensi: employee attendance requests waiting for HRD (EPIC-065 R2).
+	if a.IsHRD {
+		n, err := s.repo.PendingAttendanceRequestCount(ctx)
+		if err != nil {
+			return nil, err
+		}
+		badges.Set(attendanceHref, n)
+	}
 	if a.EmployeeID != nil {
 		for _, m := range essModules {
 			var n int64

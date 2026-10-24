@@ -1,6 +1,7 @@
 import { apiDelete, apiGet, apiPatch, apiPost, apiPut, buildListUrl } from "@/lib/api-client";
 import { withReasonQuery } from "@/lib/hris/delete-reason";
 import type { BranchLocationPayload } from "@/lib/hris/geofence";
+import type { PlaceResult } from "@/lib/maps/coords";
 import type {
   BulkPlacementPayload,
   ClockPlacements,
@@ -9,15 +10,24 @@ import type {
   PlacementOverviewRow,
   PlacementPayload,
   SavedBranchLocation,
+  SavedBranchMinWorkHours,
   StoreBranch,
 } from "./types";
 
 export const fetchStoreBranches = () =>
   apiGet<{ data: StoreBranch[] }>("/api/hris/branches").then((res) => res.data ?? []);
 
+/** Cari nama tempat/alamat untuk peta Lokasi Toko (OSM Nominatim lewat server). */
+export const searchPlaces = (q: string) =>
+  apiGet<{ data: PlaceResult[] }>(`/api/hris/places?q=${encodeURIComponent(q)}`).then((res) => res.data ?? []);
+
 /** PUT penuh: kirim selalu ketiga kunci (kunci yang hilang disimpan sebagai null). */
 export const saveBranchLocation = (id: string, payload: BranchLocationPayload) =>
   apiPut<{ data: SavedBranchLocation }>(`/api/hris/branches/${id}/location`, payload);
+
+/** PUT penuh: null = tanpa aturan jam minimum (EPIC-065 AB-05). */
+export const saveBranchMinWorkHours = (id: string, payload: { min_work_hours: number | null }) =>
+  apiPut<{ data: SavedBranchMinWorkHours; message?: string }>(`/api/hris/branches/${id}/min-work-hours`, payload);
 
 export const fetchEmployeePlacements = (employeeId: string) =>
   apiGet<{ data: Placement[] }>(`/api/hris/employees/${employeeId}/placements`).then((res) => res.data ?? []);
