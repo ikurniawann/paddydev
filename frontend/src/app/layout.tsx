@@ -8,6 +8,7 @@ import { ThemeProvider } from "@/components/providers/theme-provider";
 import { ThemeScript } from "@/components/providers/theme-script";
 import { ActivityLogProvider } from "@/contexts/ActivityLogContext";
 import { ErrorBoundary } from "@/components/error-boundary";
+import { StagingBanner } from "@/components/layout/staging-banner";
 
 // Font remote dimuat lewat <link>: `@import url(...)` di globals.css dibuang
 // bundler CSS Next, sehingga Roundo/Nunito tidak pernah termuat.
@@ -52,6 +53,7 @@ export default function RootLayout({
         <ThemeScript />
       </head>
       <body suppressHydrationWarning>
+        <StagingBanner productionUrl={process.env.STAGING_BANNER_PRODUCTION_URL} />
         <ErrorBoundary>
           <ThemeProvider>
             <QueryProvider>
