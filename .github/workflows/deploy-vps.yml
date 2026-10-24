@@ -1,0 +1,57 @@
+# Deploy ke VPS Paddy (https://paddyadorable.biz.id).
+# Secret aplikasi (web.env, api.env, db.env) hanya ada di server, di ~/.config/paddydev.
+# GitHub hanya menyimpan kunci SSH deploy. Build Docker berjalan di VPS memakai
+# tools/deploy-paddydev.sh (migrasi, health-check, rollback otomatis bila gagal).
+#
+# Secret repo yang dibutuhkan: VPS_SSH_KEY (private key), VPS_KNOWN_HOSTS (isi
+# `ssh-keyscan -p 2418 43.134.250.152`). Variabel opsional: VPS_HOST, VPS_PORT, VPS_USER.
+name: Deploy VPS
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-vps
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      HOST: ${{ vars.VPS_HOST || '43.134.250.152' }}
+      PORT: ${{ vars.VPS_PORT || '2418' }}
+      SSH_USER: ${{ vars.VPS_USER || 'wit' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Siapkan SSH
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "${{ secrets.VPS_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+
+      - name: Kirim source
+        run: |
+          SSH="ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -p $PORT"
+          rsync -az --delete -e "$SSH" \
+            --exclude '.git' --exclude 'node_modules' --exclude '.worktrees' \
+            ./ "$SSH_USER@$HOST:paddydev-src/"
+
+      - name: Bootstrap dan deploy
+        run: |
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -p $PORT "$SSH_USER@$HOST" \
+            'cd paddydev-src && bash tools/vps/bootstrap.sh && PADDYDEV_URL=https://paddyadorable.biz.id bash tools/deploy-paddydev.sh'
+
+      - name: Smoke test
+        run: |
+          for i in $(seq 1 12); do
+            curl -fsS --max-time 15 https://paddyadorable.biz.id/api/ready && exit 0
+            sleep 5
+          done
+          exit 1
