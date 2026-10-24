@@ -1,0 +1,8 @@
+# Reverse proxy + TLS otomatis (Let's Encrypt) untuk VPS Paddy.
+# Caddy berada di jaringan paddydev-net, jadi cukup menunjuk nama container.
+paddyadorable.biz.id, www.paddyadorable.biz.id {
+	encode zstd gzip
+	# Domain ini tanpa landing page: akar situs langsung ke login (hanya path "/").
+	redir / /login 302
+	reverse_proxy paddydev:3000
+}

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Deploy the local checkout to paddydev.reddie.id (Docker on this host).
+# Deploy the local checkout (Docker on this host). Default URL paddydev.reddie.id; override with PADDYDEV_URL.
 # First run creates the containers; later runs replace them and roll back on failure.
 set -Eeuo pipefail
 cd "$(dirname "$0")/.."
@@ -93,4 +93,4 @@ for attempt in $(seq 1 60); do
 done
 test "$ready" = 1
 trap - ERR INT TERM
-echo "Deploy selesai: https://paddydev.reddie.id ($TAG)"
+echo "Deploy selesai: ${PADDYDEV_URL:-https://paddydev.reddie.id} ($TAG)"
