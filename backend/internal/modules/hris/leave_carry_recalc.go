@@ -207,31 +207,60 @@ func recomputeCarryOverWith(ctx context.Context, q database.Querier, settings Le
 
 	// The review follows the figures whether or not the value changed.
 	if carry < row.CarryUsed {
-		causeJSON, err := json.Marshal(cause.json())
-		if err != nil {
+		if err := openCarryReview(ctx, q, employeeID, year, carry, row.CarryUsed, cause); err != nil {
 			return carryResult{}, err
 		}
-		if _, err := q.Exec(ctx, `INSERT INTO hris.leave_carry_over_reviews
-				(employee_id, year, carry_over_days, carry_over_used, excess, cause)
-			VALUES ($1, $2, $3, $4, $5, $6::jsonb)
-			ON CONFLICT (employee_id, year) WHERE resolved_at IS NULL DO UPDATE SET
-				carry_over_days = EXCLUDED.carry_over_days, carry_over_used = EXCLUDED.carry_over_used,
-				excess = EXCLUDED.excess, cause = EXCLUDED.cause
-			WHERE (leave_carry_over_reviews.carry_over_days, leave_carry_over_reviews.carry_over_used)
-				IS DISTINCT FROM (EXCLUDED.carry_over_days, EXCLUDED.carry_over_used)`,
-			employeeID, year, carry, row.CarryUsed, row.CarryUsed-carry, string(causeJSON)); err != nil {
-			return carryResult{}, err
-		}
-	} else if err := closeSettledCarryReviews(ctx, q, employeeID, year, actor); err != nil {
+	} else if err := syncOpenCarryReview(ctx, q, employeeID, year, actor); err != nil {
 		return carryResult{}, err
 	}
 	return res, nil
 }
 
-// closeSettledCarryReviews closes the open review of the row when its carry-over
-// covers the days used again (resolution 'otomatis'). A no-op without the
-// review table or without an open review.
-func closeSettledCarryReviews(ctx context.Context, q database.Querier, employeeID string, year int, actor *auth.User) error {
+// openCarryReview opens, or updates, the review of the row whose carry-over
+// (days) is below what is used. At most one review is open per employee and
+// year. It stays quiet when the latest review of the row already covers these
+// exact figures: an open one needs nothing, and one HR resolved must not come
+// back for a recalculation that changes nothing. A review that closed by
+// itself ('otomatis') does not count as handled: the same shortfall appearing
+// again opens a new one.
+func openCarryReview(ctx context.Context, q database.Querier, employeeID string, year int, days, used float64, cause carryCause) error {
+	var id string
+	var lastDays, lastUsed float64
+	var open bool
+	var resolution *string
+	err := q.QueryRow(ctx, `SELECT id::text, carry_over_days::float8, carry_over_used::float8, resolved_at IS NULL, resolution
+		FROM hris.leave_carry_over_reviews WHERE employee_id = $1 AND year = $2
+		ORDER BY (resolved_at IS NULL) DESC, resolved_at DESC NULLS LAST, opened_at DESC LIMIT 1`, employeeID, year).
+		Scan(&id, &lastDays, &lastUsed, &open, &resolution)
+	found := err == nil
+	if err != nil && !database.IsNoRows(err) {
+		return err
+	}
+	same := found && lastDays == days && lastUsed == used
+	if same && (open || (resolution != nil && *resolution != reviewResolutionAuto)) {
+		return nil
+	}
+	causeJSON, err := json.Marshal(cause.json())
+	if err != nil {
+		return err
+	}
+	if found && open {
+		_, err = q.Exec(ctx, `UPDATE hris.leave_carry_over_reviews
+			SET carry_over_days = $2, carry_over_used = $3, excess = $4, cause = $5::jsonb WHERE id = $1`,
+			id, days, used, used-days, string(causeJSON))
+		return err
+	}
+	_, err = q.Exec(ctx, `INSERT INTO hris.leave_carry_over_reviews (employee_id, year, carry_over_days, carry_over_used, excess, cause)
+		VALUES ($1, $2, $3, $4, $5, $6::jsonb)`, employeeID, year, days, used, used-days, string(causeJSON))
+	return err
+}
+
+// syncOpenCarryReview brings the open review of the row in step with its
+// balance after the balance changed: it closes when the carry-over covers the
+// used days again (resolution 'otomatis'), and while the shortfall remains it
+// takes the new used figure and excess (a partial refund shrinks it). A no-op
+// without the review table or without an open review.
+func syncOpenCarryReview(ctx context.Context, q database.Querier, employeeID string, year int, actor *auth.User) error {
 	var ready bool
 	if err := q.QueryRow(ctx, `SELECT to_regclass('hris.leave_carry_over_reviews') IS NOT NULL`).Scan(&ready); err != nil || !ready {
 		return err
@@ -241,12 +270,21 @@ func closeSettledCarryReviews(ctx context.Context, q database.Querier, employeeI
 	if actorID != "" {
 		by = &actorID
 	}
-	_, err := q.Exec(ctx, `UPDATE hris.leave_carry_over_reviews r
+	if _, err := q.Exec(ctx, `UPDATE hris.leave_carry_over_reviews r
 		SET resolved_at = now(), resolved_by = $3::uuid, resolved_by_name = $4, resolution = $5
 		FROM hris.leave_balances b
 		WHERE r.employee_id = $1 AND r.year = $2 AND r.resolved_at IS NULL
 		  AND b.employee_id = r.employee_id AND b.year = r.year AND b.carry_over_used <= b.carry_over_days`,
-		employeeID, year, by, who, reviewResolutionAuto)
+		employeeID, year, by, who, reviewResolutionAuto); err != nil {
+		return err
+	}
+	_, err := q.Exec(ctx, `UPDATE hris.leave_carry_over_reviews r
+		SET carry_over_days = b.carry_over_days, carry_over_used = b.carry_over_used,
+		    excess = b.carry_over_used - b.carry_over_days
+		FROM hris.leave_balances b
+		WHERE r.employee_id = $1 AND r.year = $2 AND r.resolved_at IS NULL
+		  AND b.employee_id = r.employee_id AND b.year = r.year AND b.carry_over_used > b.carry_over_days
+		  AND (r.carry_over_days, r.carry_over_used) IS DISTINCT FROM (b.carry_over_days, b.carry_over_used)`, employeeID, year)
 	return err
 }
 
@@ -264,11 +302,24 @@ func lockPreviousBalance(ctx context.Context, q database.Querier, employeeID str
 // already exists (recomputeCarryOver ignores a missing row). q is the caller's
 // transaction, which holds year's row lock.
 func afterBalanceChange(ctx context.Context, q database.Querier, employeeID string, year int, cause carryCause, actor *auth.User) error {
-	if err := closeSettledCarryReviews(ctx, q, employeeID, year, actor); err != nil {
+	if err := syncOpenCarryReview(ctx, q, employeeID, year, actor); err != nil {
 		return err
 	}
 	_, err := recomputeCarryOver(ctx, q, employeeID, year+1, cause, actor)
 	return err
+}
+
+// nextCarrySource is carry_over_source after HR set the carry-over days and
+// expiry on a row (the same rule SetLeaveBalance applies in SQL): clearing both
+// gives the row back to the formula, a changed value makes it manual.
+func nextCarrySource(was balanceRaw, carryDays float64, expires *string) string {
+	switch {
+	case carryDays == 0 && expires == nil:
+		return carrySourceAuto
+	case carryDays != was.CarryDays || !sameText(expires, was.CarryExpires):
+		return carrySourceManual
+	}
+	return was.Source
 }
 
 // carryState is the part of a balance that a carry-over audit row records.

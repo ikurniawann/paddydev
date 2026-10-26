@@ -444,12 +444,13 @@ func (s *Service) ImportLeaveBalances(ctx context.Context, a *Actor, in leaveImp
 			entry.Before = balanceAudit(sc.Year, *was)
 			after := *was
 			after.Total, after.Adjustment, after.CarryDays, after.CarryExpires = li.Total, li.Adjustment, li.CarryDays, li.CarryExpires
+			after.Source = nextCarrySource(*was, li.CarryDays, li.CarryExpires)
 			entry.After = balanceAudit(sc.Year, after)
 			entry.Reason = &reason
 			if err := audit.Write(ctx, q, entry); err != nil {
 				return err
 			}
-			if err := s.carryAfterHRInput(ctx, q, c.EmployeeID, li, was.Source, userOf(a), carryCause{Type: causeImport}); err != nil {
+			if err := s.carryAfterHRInput(ctx, q, c.EmployeeID, li, *was, userOf(a), carryCause{Type: causeImport}); err != nil {
 				return err
 			}
 		}

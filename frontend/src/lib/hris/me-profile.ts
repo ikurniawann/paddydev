@@ -183,7 +183,8 @@ interface LeaveBalanceRow {
 
 /** Baris saldo → bentuk yang sama dengan respons Go (EPIC-068 R12): angka, bawaan, dan `available` (R4). */
 export function essLeaveBalanceOf(row: LeaveBalanceRow, today: string) {
-  const carryRemaining = Number(row.carry_over_days) - Number(row.carry_over_used);
+  // Dihitung ulang bisa di bawah terpakai (tinjauan HR terbuka): tampil 0, bukan negatif.
+  const carryRemaining = Math.max(Number(row.carry_over_days) - Number(row.carry_over_used), 0);
   const carryActive = !!row.carry_over_expires_on && row.carry_over_expires_on >= today;
   const remaining = Number(row.annual_leave_remaining);
   return {

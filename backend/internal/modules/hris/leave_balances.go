@@ -418,12 +418,13 @@ func (s *Service) UpdateLeaveBalanceManual(ctx context.Context, a *Actor, employ
 		entry.Before = balanceAudit(in.Year, *was)
 		after := *was
 		after.Total, after.Adjustment, after.CarryDays, after.CarryExpires = in.Total, in.Adjustment, in.CarryDays, in.CarryExpires
+		after.Source = nextCarrySource(*was, in.CarryDays, in.CarryExpires)
 		entry.After = balanceAudit(in.Year, after)
 		entry.Reason = &reason
 		if err := audit.Write(ctx, r.querier(), entry); err != nil {
 			return err
 		}
-		return s.carryAfterHRInput(ctx, r.querier(), employeeID, in, was.Source, userOf(a), carryCause{Type: causeHRUpdate})
+		return s.carryAfterHRInput(ctx, r.querier(), employeeID, in, *was, userOf(a), carryCause{Type: causeHRUpdate})
 	})
 	if err != nil {
 		return LeaveBalanceView{}, err
@@ -437,8 +438,11 @@ func (s *Service) UpdateLeaveBalanceManual(ctx context.Context, a *Actor, employ
 // carry below used), a row HR just cleared goes back to the formula and is
 // recalculated at once, and next year's row follows this year's remainder.
 func (s *Service) carryAfterHRInput(ctx context.Context, q database.Querier, employeeID string, in LeaveBalanceInput,
-	wasSource string, actor *auth.User, cause carryCause) error {
-	if wasSource == carrySourceManual && in.CarryDays == 0 && in.CarryExpires == nil {
+	was balanceRaw, actor *auth.User, cause carryCause) error {
+	// Clearing a carry-over that was stored (auto or manual) puts the row back
+	// on the formula: recalculate it now, or it would sit at 0 until some
+	// unrelated hook restored it with a misleading cause.
+	if in.CarryDays == 0 && in.CarryExpires == nil && (was.CarryDays != 0 || was.CarryExpires != nil) {
 		if _, err := recomputeCarryOver(ctx, q, employeeID, in.Year, carryCause{Type: cause.Type,
 			Label: cause.reason() + " — sisa bawaan dikembalikan ke perhitungan otomatis"}, actor); err != nil {
 			return err
@@ -451,6 +455,7 @@ func (s *Service) carryAfterHRInput(ctx context.Context, q database.Querier, emp
 func balanceAudit(year int, b balanceRaw) map[string]any {
 	return map[string]any{"year": year, "annual_leave_total": b.Total, "annual_leave_adjustment": b.Adjustment,
 		"annual_leave_used": b.Used, "carry_over_days": b.CarryDays, "carry_over_used": b.CarryUsed,
+		"carry_over_source":     b.Source,
 		"carry_over_expires_on": b.CarryExpires}
 }
 

@@ -313,6 +313,10 @@ func TestCarryRecalcManualCarryNotOverwritten(t *testing.T) {
 	if h.carrySource(f.id, 2027) != "manual" {
 		t.Fatalf("source = %q, want manual", h.carrySource(f.id, 2027))
 	}
+	if got := h.scalar(`SELECT concat_ws('|', before->>'carry_over_source', after->>'carry_over_source') FROM audit.audit_log
+		WHERE action = 'leave_balance.update' AND entity_id = $1 AND reason = 'Kesepakatan'`, f.id); got != "auto|manual" {
+		t.Fatalf("update audit sources = %q, want auto|manual", got)
+	}
 	audits := h.carryAudits(f.id)
 
 	leave := h.request(f, "2026-12-07", "2026-12-08")
@@ -339,6 +343,10 @@ func TestCarryRecalcManualCarryNotOverwritten(t *testing.T) {
 		"carry_over_expires_on": nil, "reason": "Kembali otomatis"}), 200, "")
 	if h.carrySource(f.id, 2027) != "auto" {
 		t.Fatalf("source after clearing = %q, want auto", h.carrySource(f.id, 2027))
+	}
+	if got := h.scalar(`SELECT concat_ws('|', before->>'carry_over_source', after->>'carry_over_source') FROM audit.audit_log
+		WHERE action = 'leave_balance.update' AND entity_id = $1 AND reason = 'Kembali otomatis'`, f.id); got != "manual|auto" {
+		t.Fatalf("clearing audit sources = %q, want manual|auto", got)
 	}
 	if got := h.carryOf(f.id, 2027); got != "7.00|0.00|2027-03-31" {
 		t.Fatalf("carry after clearing = %q, want the formula's 7", got)
@@ -373,11 +381,11 @@ func TestCarryRecalcMaxAndFloor(t *testing.T) {
 	}
 }
 
-// Review 2: the order of locks is year N-1, N, N+1 for every path, so a leave
-// decision on last year and an edit of this year's row never wait on each
-// other in a cycle. Checked here through the only observable: both orders of
-// the two operations in one transaction succeed and agree.
-func TestCarryRecalcApproveThenEditSameEmployee(t *testing.T) {
+// Review 2 (lock order Y-1, Y, Y+1 on every path) is verified by reading the
+// code, not here: this test is sequential and proves only that an approval of
+// last year followed by edits of both years leaves the carry equal to the
+// formula.
+func TestCarryRecalcApproveThenEditsAgreeWithFormula(t *testing.T) {
 	h := newHarness(t)
 	f := h.carryFixture(nil)
 	editor, _ := h.saldoStaff("pos", false, "read", "update")
@@ -472,5 +480,112 @@ func TestCarryRecalcImportOnBelowUsedRow(t *testing.T) {
 	bad := h.importStep(t, f, "preview", nil, fileBytes(t, y))
 	if !strings.Contains(issueMessages(bad, "errors"), "Sisa bawaan (3) tidak boleh kurang dari bawaan yang sudah terpakai (5)") {
 		t.Fatalf("errors = %s", issueMessages(bad, "errors"))
+	}
+}
+
+// Clearing an AUTO carry (0 and no expiry) recalculates the row at once: it is
+// back on the formula, with the HR cause, not left at 0 until a later hook.
+func TestCarryRecalcClearAutoCarryRecomputesAtOnce(t *testing.T) {
+	h := newHarness(t)
+	f := h.carryFixture(nil)
+	editor, _ := h.saldoStaff("pos", false, "read", "update")
+	if h.carrySource(f.id, 2027) != "auto" || h.carryOf(f.id, 2027) != "8.00|0.00|2027-03-31" {
+		t.Fatalf("setup = %s %s", h.carrySource(f.id, 2027), h.carryOf(f.id, 2027))
+	}
+	expect(t, h.putSaldo(&editor, f.id, map[string]any{"year": 2027, "carry_over_days": 0,
+		"carry_over_expires_on": nil, "reason": "Kosongkan"}), 200, "")
+	if got := h.carryOf(f.id, 2027); got != "8.00|0.00|2027-03-31" {
+		t.Fatalf("carry after clearing an auto row = %q, want the formula's 8 again", got)
+	}
+	if h.carrySource(f.id, 2027) != "auto" {
+		t.Fatal("the row must stay auto")
+	}
+	got := h.carryAudit(f.id, "hr_update")
+	if !strings.HasPrefix(got, "hr_update|-|Koreksi HR") || !strings.Contains(got, "|true|") || !strings.Contains(got, "|0|8|") {
+		t.Fatalf("clear audit = %q, want cause hr_update, carry 0 -> 8", got)
+	}
+	// A Jatah-only edit does not touch the carry-over (no 2028 row exists either).
+	before := h.carryAudits(f.id)
+	expect(t, h.putSaldo(&editor, f.id, map[string]any{"year": 2027, "annual_leave_total": 13, "reason": "Jatah"}), 200, "")
+	if h.carryAudits(f.id) != before {
+		t.Fatal("a Jatah-only edit wrote a carry-over audit")
+	}
+}
+
+// resolveReviews stands in for the resolve API (a later task): HR closes the
+// open review of the row with a note.
+func (h *harness) resolveReviews(employeeID string, year int) {
+	h.t.Helper()
+	h.exec(`UPDATE hris.leave_carry_over_reviews SET resolved_at = now(), resolved_by_name = 'HRD', resolution = 'Sudah dibahas'
+		WHERE employee_id = $1 AND year = $2 AND resolved_at IS NULL`, employeeID, year)
+}
+
+// A review HR resolved does not come back for a recalculation with the same
+// figures (job rerun, an unrelated change of last year); new figures open a
+// new one. One that closed by itself does come back when the shortfall recurs.
+func TestCarryRecalcResolvedReviewStaysResolved(t *testing.T) {
+	h := newHarness(t)
+	f := h.carryFixture(nil)
+	editor, _ := h.saldoStaff("pos", false, "read", "update")
+	h.belowUsedRow(f, &editor) // 2027: carry 2 < used 5, review open (excess 3)
+	h.resolveReviews(f.id, 2027)
+	if got := h.reviews(f.id, 2027); got != "0|1|-|Sudah dibahas" {
+		t.Fatalf("reviews after resolve = %q", got)
+	}
+
+	// The job again (claim deleted): same figures, no new review.
+	h.exec(`DELETE FROM hris.leave_carry_over_runs WHERE year = 2027`)
+	if err := h.svc.RunLeaveCarryOver(context.Background(), jan1(2027)); err != nil {
+		t.Fatal(err)
+	}
+	if got := h.reviews(f.id, 2027); got != "0|1|-|Sudah dibahas" {
+		t.Fatalf("reviews after the job rerun = %q, want still only the resolved one", got)
+	}
+	// An unrelated change of 2026 (jatah up, adjustment down: remaining stays 2).
+	expect(t, h.putSaldo(&editor, f.id, map[string]any{"year": 2026, "annual_leave_total": 13, "annual_leave_adjustment": -7,
+		"reason": "Pindah angka"}), 200, "")
+	if got := h.carryOf(f.id, 2027); got != "2.00|5.00|2027-03-31" {
+		t.Fatalf("carry = %q", got)
+	}
+	if got := h.reviews(f.id, 2027); got != "0|1|-|Sudah dibahas" {
+		t.Fatalf("reviews after an unrelated change = %q, want no reopened review", got)
+	}
+
+	// New figures (remaining 1 -> carry 1): a new review opens.
+	expect(t, h.putSaldo(&editor, f.id, map[string]any{"year": 2026, "annual_leave_adjustment": -8, "reason": "Turun"}), 200, "")
+	if got := h.reviews(f.id, 2027); got != "1|1|4.00|Sudah dibahas" {
+		t.Fatalf("reviews after new figures = %q, want a new open review (excess 4) beside the resolved one", got)
+	}
+	// Only one open review, and it closes by itself when the shortfall goes ...
+	expect(t, h.putSaldo(&editor, f.id, map[string]any{"year": 2026, "annual_leave_adjustment": 0, "reason": "Balik"}), 200, "")
+	if got := h.reviews(f.id, 2027); got != "0|2|-|otomatis" && got != "0|2|-|Sudah dibahas" {
+		t.Fatalf("reviews after undo = %q", got)
+	}
+	// ... and the same shortfall as an auto-closed review reopens.
+	expect(t, h.putSaldo(&editor, f.id, map[string]any{"year": 2026, "annual_leave_adjustment": -8, "reason": "Turun lagi"}), 200, "")
+	if got := h.reviews(f.id, 2027); got != "1|2|4.00|otomatis" && got != "1|2|4.00|Sudah dibahas" {
+		t.Fatalf("reviews after the shortfall recurred = %q, want a new open review", got)
+	}
+}
+
+// A refund that shrinks the shortfall without clearing it updates the open
+// review's used figure and excess.
+func TestCarryRecalcPartialRefundUpdatesReview(t *testing.T) {
+	h := newHarness(t)
+	f := h.carryFixture(nil)
+	editor, _ := h.saldoStaff("pos", false, "read", "update")
+	h.belowUsedRow(f, &editor) // 2027: carry 2, used 5, excess 3
+	leave := h.scalar(`INSERT INTO hris.leaves (employee_id, leave_type, start_date, end_date, total_days, reason, status, decided_as, carry_over_days_used)
+		VALUES ($1, 'annual', '2027-02-01', '2027-02-02', 2, 'Cuti bawaan', 'approved', 'hr', 2) RETURNING id::text`, f.id)
+	expect(t, h.do(&f.hr, "PUT", "/api/hris/leaves/"+leave, map[string]any{"status": "cancelled"}), 200, "")
+	if got := h.carryOf(f.id, 2027); got != "2.00|3.00|2027-03-31" {
+		t.Fatalf("carry after the refund = %q", got)
+	}
+	if got := h.scalar(`SELECT concat_ws('|', carry_over_used, excess) FROM hris.leave_carry_over_reviews
+		WHERE employee_id = $1 AND year = 2027 AND resolved_at IS NULL`, f.id); got != "3.00|1.00" {
+		t.Fatalf("open review after a partial refund = %q, want used 3, excess 1", got)
+	}
+	if got := h.reviews(f.id, 2027); !strings.HasPrefix(got, "1|0|") {
+		t.Fatalf("reviews = %q, want exactly one open", got)
 	}
 }

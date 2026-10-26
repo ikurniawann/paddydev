@@ -100,4 +100,15 @@ describe("essLeaveBalanceOf", () => {
       available: 8,
     });
   });
+
+  it("bawaan di bawah terpakai (hitung ulang, tinjauan HR) tampil 0, tidak negatif", () => {
+    const below = { ...row, carry_over_days: "2.00", carry_over_used: "5.00" };
+    expect(essLeaveBalanceOf(below, "2026-03-10")).toMatchObject({
+      carry_over_days: 2,
+      carry_over_used: 5,
+      carry_over_remaining: 0,
+      carry_over_active: true,
+      available: 8,
+    });
+  });
 });
