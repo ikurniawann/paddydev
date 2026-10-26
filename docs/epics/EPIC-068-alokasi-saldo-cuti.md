@@ -64,3 +64,17 @@ Lihat `docs/superpowers/plans/2026-10-26-alokasi-saldo-cuti.md` (Task 1–7, rul
   - belum ada carry-over.
   
   Data production 26-10: 254 baris saldo 2026 (jatah 2–24), 126 karyawan aktif tanpa saldo 2026.
+- 2026-10-26: **Task 1-7 selesai** (branch `feat/epic068-saldo-cuti`, basis `acb887a`). Status epic diubah controller, bukan di entri ini.
+  - **Task 1 `3e39f8e`:** migrasi (kolom adjustment/carry-over, `annual_leave_remaining` generated, `hris.leave_settings`, `leave_carry_over_runs`, `leaves.carry_over_days_used`), fungsi jatah default R1, backfill 2026, trigger karyawan baru, menu daun Saldo Cuti + grant + masker.
+  - **Task 2 `d1d0a84`:** `LeaveBalanceView` bersama (GET, daftar, PUT, ESS), pembuatan baris lazy, PUT manual beralasan beraudit, persetujuan memakai sisa bawaan dulu, pembatalan mengembalikan per sumber, `CreateLeave` memeriksa sisa tersedia.
+  - **Task 3 `f513b70`:** template dan import Excel (pratinjau, fingerprint, ack peringatan, satu transaksi, file error).
+  - **Task 4 `a70ef1a`:** setting sisa bawaan (`GET/PUT /api/hris/leave-settings`) dan job 1 Januari (`LeaveCarryOverLoop`, klaim per tahun).
+  - **Task 5 `41b8a13`:** frontend HR: tab Leave Balance karyawan, halaman Saldo Cuti, ubah manual, setting bawaan.
+  - **Task 6 `3806a97`:** dialog import Excel.
+  - **Task 7 (commit ini):** ESS (Beranda, Izin & Cuti, form pengajuan) menampilkan `available` dengan rincian jatah/penyesuaian/terpakai/sisa bawaan + kedaluwarsa, "12" palsu dihapus; acuan ES-03 diperbarui.
+  - **Keputusan controller yang berlaku:**
+    - akun role `hrd` tidak lagi bisa mengubah saldo lewat cek role; harus diberi aksi `update` di Saldo Cuti lewat Hak Akses HRIS;
+    - mengaktifkan sisa bawaan di tengah tahun baru berlaku pada 1 Januari berikutnya (klaim tahun berjalan sudah terpakai); sisa bawaan tahun berjalan diisi manual atau lewat import;
+    - cabang saldo = cabang penempatan utama (`employee_placements`);
+    - fingerprint import mencakup karyawan yang ada di file (bukan seluruh cakupan cabang).
+  - **Bukti:** lihat `.superpowers/sdd/2026-10-26-alokasi-saldo-cuti/task-7-report.md` untuk perintah dan hasil verifikasi penuh. Memori hanya cache; keputusan ini adalah catatan resminya.

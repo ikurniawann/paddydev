@@ -12,8 +12,10 @@ import { greeting, initials, tenure } from "@/lib/hris/ess-view";
 import { monthName, monthYearLabel } from "@/lib/hris/month-label";
 import { TherapistBerandaCard } from "@/features/spa/components/therapist-beranda-card";
 import { useSpaMe } from "@/features/spa/queries";
+import { formatDays } from "@/features/hris/leave-balances/balance-math";
 import { useEssBeranda } from "../queries";
 import { EssClockPanel } from "./ess-clock-panel";
+import { balanceSubtitle } from "./leave-balance-summary";
 import {
   AnnouncementsCard,
   KpiSummaryCard,
@@ -57,7 +59,7 @@ export function EssBerandaPage() {
 
   const emp = data.employee;
   const { attendance, today_shift, latest_payslip, active_loans, kpi } = data;
-  const leaveRemaining = data.leave_balance ? Number(data.leave_balance.annual_leave_remaining) : null;
+  const leaveAvailable = data.leave_balance ? data.leave_balance.available : null;
 
   return (
     <div className="space-y-6">
@@ -120,12 +122,8 @@ export function EssBerandaPage() {
           icon={<CalendarDaysIcon className="h-5 w-5 text-indigo-600" />}
           accent="bg-indigo-50"
           label="Sisa Cuti Tahunan"
-          value={leaveRemaining !== null ? `${leaveRemaining} hari` : "-"}
-          sub={
-            data.leave_balance
-              ? `Terpakai ${data.leave_balance.annual_leave_used} / ${data.leave_balance.annual_leave_total} hari`
-              : "Belum ada kuota"
-          }
+          value={leaveAvailable !== null ? `${formatDays(leaveAvailable)} hari` : "-"}
+          sub={data.leave_balance ? balanceSubtitle(data.leave_balance) : "Belum ada kuota"}
         />
         <StatCard
           href="/dashboard/me/absensi"

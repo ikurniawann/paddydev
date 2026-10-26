@@ -33,7 +33,7 @@ Detail lengkap ada di `docs/hris/acuan-mom-20261019/`:
 | Izin Pribadi | 3 hari/bulan, potong 1 hari THP; intern tidak dipotong |
 | Izin Leader | 1 hari/bulan, hangus, level Supervisor ke atas, full paid |
 | Sakit / Cuti Melahirkan | Potong (Transport + Makan) per hari; Sakit ≥ 2 hari wajib surat (K-3) |
-| Cuti Tahunan | 12/tahun, maks. 3/bulan, setelah 12 bulan kerja |
+| Cuti Tahunan | 12/tahun setelah 12 bulan kerja: jatah default 0 → prorata tahun genap 12 bulan → 12 (ditegakkan saat baris saldo dibuat, EPIC-068); HR atur jatah/penyesuaian/sisa bawaan di menu Saldo Cuti; maks. 3/bulan belum ditegakkan |
 | Lembur | Weekday 1,5×, libur/istirahat 2× Gaji Pokok/173 per jam; min. 1 jam; diajukan **sebelum**; approver atasan langsung |
 | Kasbon | Maks. ½ THP, tenor 1 atau 2 (default 50/50); Probation/Freelance/Intern tidak bisa; approver Manager Departemen **dan** HR Penggajian; Pinjaman Darurat dihapus |
 | Subsidi BPJS Kes | Rp100.000 bila masa kerja > 1 tahun pada tanggal cutoff |

@@ -9,11 +9,21 @@ export interface EssTodayShift {
   late_tolerance_minutes: number;
 }
 
+/** Saldo cuti tahunan (EPIC-068 R12/R13): angka sungguhan, bukan string. */
 export interface EssLeaveBalance {
   year: number;
-  annual_leave_total: string;
-  annual_leave_used: string;
-  annual_leave_remaining: string;
+  annual_leave_total: number;
+  annual_leave_adjustment: number;
+  annual_leave_used: number;
+  annual_leave_remaining: number;
+  carry_over_days: number;
+  carry_over_used: number;
+  carry_over_remaining: number;
+  /** YYYY-MM-DD; null = sisa bawaan tidak berlaku. */
+  carry_over_expires_on: string | null;
+  carry_over_active: boolean;
+  /** Sisa tersedia hari ini (WIB): sisa jatah + sisa bawaan yang masih berlaku. */
+  available: number;
 }
 
 /** GET /api/hris/me: karyawan tertaut akun yang login (null = tidak tertaut). */
@@ -225,7 +235,7 @@ export interface EssBeranda {
     position_title: string | null;
     department_name: string | null;
   } | null;
-  leave_balance: Omit<EssLeaveBalance, "year"> | null;
+  leave_balance: EssLeaveBalance | null;
   today_shift: EssTodayShift | null;
   has_schedule: boolean;
   week_schedule: EssWeekDay[];
