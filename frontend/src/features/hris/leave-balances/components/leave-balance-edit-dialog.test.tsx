@@ -23,6 +23,7 @@ const balance: LeaveBalanceView = {
   carry_over_remaining: 1.5,
   carry_over_expires_on: "2027-03-31",
   carry_over_active: true,
+  carry_over_source: "auto",
   available: 10.5,
   updated_at: null,
   exists: true,

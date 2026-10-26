@@ -1,7 +1,13 @@
 "use client";
 
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { fetchLeaveBalance, fetchLeaveBalanceAccess, fetchLeaveBalances, fetchLeaveSettings } from "./api";
+import {
+  fetchCarryReviews,
+  fetchLeaveBalance,
+  fetchLeaveBalanceAccess,
+  fetchLeaveBalances,
+  fetchLeaveSettings,
+} from "./api";
 import { leaveBalanceQueryKeys } from "./query-keys";
 import type { LeaveBalanceListParams } from "./types";
 
@@ -33,3 +39,11 @@ export const useLeaveBalanceAccess = () =>
 
 export const useLeaveSettings = () =>
   useQuery({ queryKey: leaveBalanceQueryKeys.settings(), queryFn: fetchLeaveSettings });
+
+/** Tinjauan sisa bawaan yang masih terbuka pada tahun itu; `enabled` false = tanpa hak baca. */
+export const useCarryReviews = (year: number, enabled = true) =>
+  useQuery({
+    queryKey: leaveBalanceQueryKeys.reviews(year),
+    queryFn: () => fetchCarryReviews(year),
+    enabled,
+  });

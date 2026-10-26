@@ -15,12 +15,16 @@ export interface LeaveBalanceView {
   /** YYYY-MM-DD; null = sisa bawaan tidak berlaku. */
   carry_over_expires_on: string | null;
   carry_over_active: boolean;
+  /** "auto" = dihitung otomatis dari sisa tahun lalu; "manual" = diisi HR atau lewat import (tidak ditimpa hitung ulang). */
+  carry_over_source: CarryOverSource;
   /** Sisa tersedia hari ini (WIB): sisa jatah + sisa bawaan yang masih berlaku. */
   available: number;
   updated_at: string | null;
   /** false = baris belum tersimpan (tampil dari jatah default). */
   exists: boolean;
 }
+
+export type CarryOverSource = "auto" | "manual";
 
 export interface LeaveBalanceListParams {
   year: number;
@@ -59,13 +63,53 @@ export interface LeaveSettings {
   carry_over_ready: boolean;
 }
 
-/** PUT adalah patch; carry_over_max_days: null menghapus batas. */
+/** Isian yang diubah; carry_over_max_days: null menghapus batas. Dipakai pratinjau (tanpa alasan) dan simpan. */
 export type LeaveSettingsPatch = Partial<
   Pick<
     LeaveSettings,
     "carry_over_enabled" | "carry_over_max_days" | "carry_over_expiry_month" | "carry_over_expiry_day"
   >
 >;
+
+/** Body PUT /api/hris/leave-settings: patch + alasan wajib (dicatat di audit). */
+export type LeaveSettingsSavePatch = LeaveSettingsPatch & { reason: string };
+
+/** POST /api/hris/leave-settings/preview: dampak perubahan pada sisa bawaan tahun berjalan (tidak menyimpan apa pun). */
+export interface LeaveSettingsImpact {
+  /** Karyawan yang sisa bawaannya berubah. */
+  employees_changed: number;
+  /** Total hari yang bertambah (positif). */
+  days_increase: number;
+  /** Total hari yang berkurang (positif). */
+  days_decrease: number;
+  /** Karyawan yang baru perlu ditinjau HR karena sisa bawaan baru di bawah yang sudah terpakai. */
+  needs_review: number;
+}
+
+/** Penyebab tinjauan; type = leave_approve | leave_cancel | leave_reject | hr_update | import | settings | job. */
+export interface CarryReviewCause {
+  type: string;
+  leave_id?: string;
+}
+
+/** Sisa bawaan yang dihitung ulang di bawah yang sudah terpakai, menunggu HR (GET /api/hris/leave-balances/reviews). */
+export interface CarryReview {
+  id: string;
+  employee_id: string;
+  nip: string | null;
+  full_name: string;
+  branch_name: string | null;
+  year: number;
+  carry_over_days: number;
+  carry_over_used: number;
+  /** terpakai − bawaan. */
+  excess: number;
+  cause: CarryReviewCause | null;
+  opened_at: string;
+  resolved_at: string | null;
+  resolved_by_name: string | null;
+  resolution: string | null;
+}
 
 /** Satu masalah di file import: galat (menghalangi simpan) atau peringatan (perlu dicentang). */
 export interface LeaveBalanceImportIssue {
