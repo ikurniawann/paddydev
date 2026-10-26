@@ -9,10 +9,10 @@ const base: OvertimeRow = {
   day_type: "regular", employee: { id: "e1", full_name: "Crew Koreksi", nip: "N01" },
 };
 
-function table(row: OvertimeRow, onDecide = vi.fn(), isHrd = true, canCorrect = false, canDecide = true) {
+function table(row: OvertimeRow, onDecide = vi.fn(), canCorrect = false, canDecide = true) {
   return (
     <OvertimeTable rows={[row]} loading={false} decidingId={null} onDecide={onDecide} canCorrect={canCorrect}
-      isHrd={isHrd} canDecide={canDecide} onCorrect={vi.fn()} />
+      canDecide={canDecide} onCorrect={vi.fn()} />
   );
 }
 
@@ -41,18 +41,8 @@ describe("OvertimeTable — jenis hari mengikuti nilai server", () => {
     expect(onDecide).toHaveBeenCalledWith("o1", "approve", "rest_day");
   });
 
-  it("bukan HRD: tanpa pilihan jenis hari; Setujui tidak mengirim jenis (server mengabaikannya)", () => {
-    const onDecide = vi.fn();
-    render(table({ ...base, day_type: "rest_day" }, onDecide, false));
-    expect(screen.queryByLabelText("Jenis hari")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Setujui" }));
-    expect(onDecide).toHaveBeenCalledWith("o1", "approve", undefined);
-    fireEvent.click(screen.getByRole("button", { name: "Tolak" }));
-    expect(onDecide).toHaveBeenLastCalledWith("o1", "reject");
-  });
-
-  it("HRD: pilihan jenis hari tampil", () => {
-    render(table(base, vi.fn(), true));
+  it("pemegang approve: pilihan jenis hari tampil (mengikuti canDecide, bukan role)", () => {
+    render(table(base, vi.fn()));
     expect(screen.getByLabelText("Jenis hari")).toBeTruthy();
   });
 });
@@ -67,21 +57,21 @@ describe("OvertimeTable — istirahat, dokumentasi, koreksi (EPIC-066)", () => {
       "/api/hris/overtime/attachment/overtime-attachments/e1/1-aaaaaaaaaaaaaaaa.pdf");
   });
   it("tombol Koreksi disembunyikan untuk lembur karyawan yang punya atasan langsung", () => {
-    render(table({ ...base, employee: { ...base.employee!, reporting_to: "m1", reporting_to_active: true } }, vi.fn(), true, true));
+    render(table({ ...base, employee: { ...base.employee!, reporting_to: "m1", reporting_to_active: true } }, vi.fn(), true));
     expect(screen.queryByRole("button", { name: "Koreksi" })).toBeNull();
   });
   it("tombol Koreksi tampil bila atasan langsung nonaktif (EPIC-063 R9)", () => {
-    render(table({ ...base, employee: { ...base.employee!, reporting_to: "m1", reporting_to_active: false } }, vi.fn(), true, true));
+    render(table({ ...base, employee: { ...base.employee!, reporting_to: "m1", reporting_to_active: false } }, vi.fn(), true));
     expect(screen.getByRole("button", { name: "Koreksi" })).toBeTruthy();
   });
   it("tombol Koreksi tetap ada tanpa atasan, atau bila atasan = diri sendiri, atau sumber perusahaan", () => {
-    const { unmount } = render(table({ ...base, employee: { ...base.employee!, reporting_to: null } }, vi.fn(), true, true));
+    const { unmount } = render(table({ ...base, employee: { ...base.employee!, reporting_to: null } }, vi.fn(), true));
     expect(screen.getByRole("button", { name: "Koreksi" })).toBeTruthy();
     unmount();
-    const r2 = render(table({ ...base, employee: { ...base.employee!, reporting_to: "e1" } }, vi.fn(), true, true));
+    const r2 = render(table({ ...base, employee: { ...base.employee!, reporting_to: "e1" } }, vi.fn(), true));
     expect(screen.getByRole("button", { name: "Koreksi" })).toBeTruthy();
     r2.unmount();
-    render(table({ ...base, source: "company", employee: { ...base.employee!, reporting_to: "m1" } }, vi.fn(), true, true));
+    render(table({ ...base, source: "company", employee: { ...base.employee!, reporting_to: "m1" } }, vi.fn(), true));
     expect(screen.getByRole("button", { name: "Koreksi" })).toBeTruthy();
   });
 });
@@ -89,13 +79,13 @@ describe("OvertimeTable — istirahat, dokumentasi, koreksi (EPIC-066)", () => {
 
 describe("OvertimeTable — tombol keputusan mengikuti akses approve (EPIC-067 R14)", () => {
   it("canDecide=false: Setujui, Tolak, dan pilihan jenis hari tidak dirender", () => {
-    render(table(base, vi.fn(), true, false, false));
+    render(table(base, vi.fn(), false, false));
     expect(screen.queryByRole("button", { name: "Setujui" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Tolak" })).toBeNull();
     expect(screen.queryByLabelText("Jenis hari")).toBeNull();
   });
   it("canDecide=false: Koreksi dan Batalkan penugasan perusahaan tidak ikut hilang", () => {
-    render(table({ ...base, source: "company" }, vi.fn(), true, true, false));
+    render(table({ ...base, source: "company" }, vi.fn(), true, false));
     expect(screen.getByRole("button", { name: "Batalkan" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Koreksi" })).toBeTruthy();
   });

@@ -30,7 +30,7 @@ const STATUS_FILTER_OPTIONS = [
   { value: "cancelled", label: "Dibatalkan" },
 ];
 
-export function OvertimePage({ canCorrect = false, isHrd = false }: { canCorrect?: boolean; isHrd?: boolean }) {
+export function OvertimePage({ canCorrect = false }: { canCorrect?: boolean }) {
   const [statusFilter, setStatusFilter] = useState("all");
   const [monthFilter, setMonthFilter] = useState(currentMonthValue);
   const [assignOpen, setAssignOpen] = useState(false);
@@ -100,7 +100,6 @@ export function OvertimePage({ canCorrect = false, isHrd = false }: { canCorrect
         decidingId={decide.isPending ? (decide.variables?.overtime_id ?? null) : null}
         onDecide={handleDecide}
         canCorrect={canCorrect}
-        isHrd={isHrd}
         canDecide={access?.overtime === true}
         onCorrect={setCorrecting}
       />
