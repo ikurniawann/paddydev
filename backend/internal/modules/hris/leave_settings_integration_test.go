@@ -33,6 +33,7 @@ func TestLeaveSettingsGet(t *testing.T) {
 
 func TestLeaveSettingsPut(t *testing.T) {
 	h := newHarness(t)
+	h.unlockCarryOver()
 	h.exec(`UPDATE hris.leave_settings SET carry_over_enabled = false, carry_over_max_days = NULL,
 		carry_over_expiry_month = 3, carry_over_expiry_day = 31`)
 	viewer, _ := h.saldoStaff("pos", true, "read")
@@ -104,4 +105,33 @@ func TestLeaveSettingsPut(t *testing.T) {
 	if got := h.scalar(`SELECT concat_ws('|', carry_over_enabled::text, carry_over_expiry_month, carry_over_expiry_day) FROM hris.leave_settings`); got != "false|12|31" {
 		t.Fatalf("final = %q", got)
 	}
+}
+
+// Sisa bawaan terkunci sampai migrasi tindak lanjut (hitung ulang) membuat
+// hris.leave_carry_over_reviews: menyalakan ditolak, setting lain tetap bisa disimpan.
+func TestLeaveSettingsCarryOverLocked(t *testing.T) {
+	h := newHarness(t)
+	h.exec(`DROP TABLE IF EXISTS hris.leave_carry_over_reviews`)
+	h.exec(`UPDATE hris.leave_settings SET carry_over_enabled = false, carry_over_max_days = NULL,
+		carry_over_expiry_month = 3, carry_over_expiry_day = 31`)
+	editor, _ := h.saldoStaff("pos", true, "read", "update")
+	path := "/api/hris/leave-settings"
+
+	c := h.do(&editor, "GET", path, nil)
+	expect(t, c, 200, "")
+	if data, _ := c.body["data"].(map[string]any); data["carry_over_ready"] != false {
+		t.Fatalf("carry_over_ready = %v, want false", data["carry_over_ready"])
+	}
+	expect(t, h.do(&editor, "PUT", path, settingsBody(true, nil, 3, 31)), 400, carryOverLockedMsg)
+	if h.scalar(`SELECT carry_over_enabled::text FROM hris.leave_settings`) != "false" {
+		t.Fatal("refused enable changed the setting")
+	}
+	expect(t, h.do(&editor, "PUT", path, settingsBody(false, 6, 4, 30)), 200, "")
+
+	h.unlockCarryOver()
+	c = h.do(&editor, "GET", path, nil)
+	if data, _ := c.body["data"].(map[string]any); data["carry_over_ready"] != true {
+		t.Fatalf("carry_over_ready after unlock = %v, want true", data["carry_over_ready"])
+	}
+	expect(t, h.do(&editor, "PUT", path, settingsBody(true, nil, 3, 31)), 200, "")
 }

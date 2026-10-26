@@ -24,6 +24,15 @@ func (h *harness) carrySetup(enabled bool, max any, month, day int) {
 	h.exec(`DELETE FROM hris.leave_carry_over_runs`)
 	h.exec(`UPDATE hris.leave_settings SET carry_over_enabled = $1, carry_over_max_days = $2,
 		carry_over_expiry_month = $3, carry_over_expiry_day = $4`, enabled, max, month, day)
+	h.unlockCarryOver()
+}
+
+// unlockCarryOver stands in for the follow-up migration that creates
+// hris.leave_carry_over_reviews (the carry-over unlock marker); the test
+// transaction rolls it back.
+func (h *harness) unlockCarryOver() {
+	h.t.Helper()
+	h.exec(`CREATE TABLE IF NOT EXISTS hris.leave_carry_over_reviews (employee_id uuid)`)
 }
 
 func (h *harness) carryOf(employeeID string, year int) string {
@@ -296,5 +305,25 @@ func TestNewWithoutDBStartsNoCarryOverLoop(t *testing.T) {
 	case msg := <-logged:
 		t.Fatalf("a loop ran without a database: %q", msg)
 	case <-time.After(300 * time.Millisecond):
+	}
+}
+
+// Flag menyala langsung di DB tanpa migrasi tindak lanjut: job tetap tidak
+// membuat sisa bawaan (hanya baris tahun baru).
+func TestLeaveCarryOverLockedIgnoresEnabled(t *testing.T) {
+	h := newHarness(t)
+	h.carrySetup(true, nil, 3, 31)
+	h.exec(`DROP TABLE IF EXISTS hris.leave_carry_over_reviews`)
+	a := h.employee(emp{name: "Bawaan Terkunci", join: "2024-01-10"})
+	h.setBalance(a, 2026, 12, 0, 4, 0, 0, nil)
+
+	if err := h.svc.RunLeaveCarryOver(context.Background(), jan1(2027)); err != nil {
+		t.Fatal(err)
+	}
+	if got := h.carryOf(a, 2027); got != "0.00|0.00|-" {
+		t.Fatalf("2027 carry while locked = %q, want none", got)
+	}
+	if h.carryAudits(a) != "0" {
+		t.Fatal("audit written while carry-over is locked")
 	}
 }

@@ -55,6 +55,8 @@ export interface LeaveSettings {
   carry_over_expiry_day: number;
   updated_at: string | null;
   updated_by_name: string | null;
+  /** false sampai migrasi perhitungan ulang sisa bawaan terpasang; selama itu sisa bawaan tidak bisa dinyalakan. */
+  carry_over_ready: boolean;
 }
 
 /** PUT adalah patch; carry_over_max_days: null menghapus batas. */

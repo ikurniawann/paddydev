@@ -95,7 +95,7 @@ func (s *Service) runLeaveCarryOver(ctx context.Context, now time.Time) (*carryO
 		}
 		res := &carryOverResult{Year: year, Employees: len(ids)}
 
-		if settings.CarryOverEnabled {
+		if settings.CarryOverEnabled && settings.CarryOverReady {
 			// A row HR already filled (carry-over or expiry set) is left alone.
 			rows, err := q.Query(ctx, `SELECT e.id::text, e.full_name, p.annual_leave_remaining::float8,
 					c.annual_leave_total::float8, c.annual_leave_adjustment::float8, c.annual_leave_used::float8

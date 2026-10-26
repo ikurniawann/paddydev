@@ -19,6 +19,7 @@ const stored: LeaveSettings = {
   carry_over_expiry_day: 31,
   updated_at: null,
   updated_by_name: null,
+  carry_over_ready: true,
 };
 
 beforeEach(() => {
@@ -36,6 +37,13 @@ describe("LeaveSettingsCard", () => {
     expect(screen.getByText(/otomatis setiap 1 Januari \(WIB\)/)).toBeTruthy();
     expect(screen.getByText(/berlaku mulai 1 Januari berikutnya/)).toBeTruthy();
     expect(screen.getByText(/tahun yang sudah berjalan.*manual.*impor Excel/i)).toBeTruthy();
+  });
+
+  it("sebelum perbaikan hitung ulang terpasang, sakelar terkunci dan alasannya ditampilkan", () => {
+    settings = { ...stored, carry_over_ready: false };
+    render(<LeaveSettingsCard canUpdate />);
+    expect((screen.getByRole("switch") as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText(/belum bisa diaktifkan.*perhitungan ulang/i)).toBeTruthy();
   });
 
   it("tanpa hak update semua isian terkunci dan tombol simpan tidak ada", () => {

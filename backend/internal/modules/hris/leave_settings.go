@@ -25,7 +25,15 @@ type LeaveSettings struct {
 	CarryOverExpiryDay   int        `json:"carry_over_expiry_day"`
 	UpdatedAt            *time.Time `json:"updated_at"`
 	UpdatedByName        *string    `json:"updated_by_name"`
+	// CarryOverReady: the follow-up migration (carry-over recalculation) is
+	// installed; until then carry-over cannot be switched on and the job
+	// carries nothing.
+	CarryOverReady bool `json:"carry_over_ready"`
 }
+
+// carryOverLockedMsg refuses switching carry-over on before the follow-up
+// migration creates hris.leave_carry_over_reviews (EPIC-068 tindak lanjut).
+const carryOverLockedMsg = "Sisa bawaan belum bisa diaktifkan: perbaikan perhitungan ulang sisa bawaan belum terpasang"
 
 // LeaveSettingsPatch is the PUT body: a field left out keeps its value; a
 // sent null maximum clears it (carry everything).
@@ -47,6 +55,9 @@ func loadLeaveSettings(ctx context.Context, q database.Querier, lock bool) (Leav
 	sql := `SELECT ` + leaveSettingsColumns + ` FROM hris.leave_settings WHERE id`
 	if lock {
 		sql += ` FOR UPDATE`
+	}
+	if err := q.QueryRow(ctx, `SELECT to_regclass('hris.leave_carry_over_reviews') IS NOT NULL`).Scan(&s.CarryOverReady); err != nil {
+		return s, err
 	}
 	err := q.QueryRow(ctx, sql).Scan(&s.CarryOverEnabled, &s.CarryOverMaxDays, &s.CarryOverExpiryMonth,
 		&s.CarryOverExpiryDay, &s.UpdatedAt, &s.UpdatedByName)
@@ -123,6 +134,9 @@ func (s *Service) SaveLeaveSettings(ctx context.Context, a *Actor, p LeaveSettin
 		}
 		if err := validateLeaveSettings(next); err != nil {
 			return err
+		}
+		if next.CarryOverEnabled && !before.CarryOverEnabled && !before.CarryOverReady {
+			return httpx.BadRequest(carryOverLockedMsg)
 		}
 		if _, err := q.Exec(ctx, `INSERT INTO hris.leave_settings (id, carry_over_enabled, carry_over_max_days,
 				carry_over_expiry_month, carry_over_expiry_day, updated_at, updated_by, updated_by_name)

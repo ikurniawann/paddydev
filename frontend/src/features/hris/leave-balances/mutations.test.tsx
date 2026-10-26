@@ -16,6 +16,7 @@ const old: LeaveSettings = {
   carry_over_expiry_day: 31,
   updated_at: null,
   updated_by_name: null,
+  carry_over_ready: true,
 };
 
 describe("useSaveLeaveSettings", () => {

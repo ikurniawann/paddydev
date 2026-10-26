@@ -67,6 +67,7 @@ export function LeaveSettingsCard({ canUpdate }: { canUpdate: boolean }) {
   const stored = query.data;
 
   const enabled = edits.enabled ?? stored?.carry_over_enabled ?? false;
+  const locked = stored ? !stored.carry_over_ready : false;
   const maxText = edits.max ?? (stored?.carry_over_max_days != null ? String(stored.carry_over_max_days) : "");
   const monthText = edits.month ?? String(stored?.carry_over_expiry_month ?? 3);
   const dayText = edits.day ?? String(stored?.carry_over_expiry_day ?? 31);
@@ -134,9 +135,18 @@ export function LeaveSettingsCard({ canUpdate }: { canUpdate: boolean }) {
         ) : (
           <>
             <label className="flex items-center gap-3 text-sm font-medium text-gray-700">
-              <Switch checked={enabled} onCheckedChange={(v) => patchEdits({ enabled: v })} disabled={!canUpdate} />
+              <Switch
+                checked={enabled}
+                onCheckedChange={(v) => patchEdits({ enabled: v })}
+                disabled={!canUpdate || (locked && !enabled)}
+              />
               Bawa sisa cuti ke tahun berikutnya
             </label>
+            {locked && (
+              <p className="text-sm text-amber-700">
+                Sisa bawaan belum bisa diaktifkan sampai perbaikan perhitungan ulang sisa bawaan terpasang.
+              </p>
+            )}
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <div>
