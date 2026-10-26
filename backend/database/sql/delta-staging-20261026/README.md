@@ -1,6 +1,6 @@
 # Delta staging → production (25–26 Okt 2026)
 
-Setelah cutover 24-10-2026 23:30 WIB, sebagian karyawan tetap memakai paddydev.reddie.id (staging). `generate.py` mengambil data yang masuk ke staging sejak cutover sampai dump tetap `staging-db-before-freeze-20261026-110218` dan menulis satu file SQL untuk production. Rencana: `docs/superpowers/plans/2026-10-26-pindah-data-staging-ke-production.md`.
+Setelah cutover 24-10-2026 23:30 WIB, sebagian karyawan tetap memakai paddydev.reddie.id (staging). `prepare.sh` mengambil dump staging terbaru, dan `generate.py` menghitung data karyawan yang masuk ke staging sejak cutover, lalu menulis satu file SQL untuk production. Rencana: `docs/superpowers/plans/2026-10-26-pindah-data-staging-ke-production.md`.
 
 ## Revisi 26-10-2026 siang (instruksi user)
 
