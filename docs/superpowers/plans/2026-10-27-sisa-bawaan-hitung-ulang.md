@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**Status implementasi (27-10-2026):** Tugas 1-4 selesai di kode pada branch `feat/epic068-sisa-bawaan` (commit `efed744`..`ec39b82` + dokumen); **belum deploy**, setting sisa bawaan tetap mati. Catatan resmi: Automation Log EPIC-068.
+
 **Goal:** Sisa bawaan tahun N selalu sama dengan sisa akhir tahun N−1 yang terbaru, dibatasi oleh batas maksimal yang diatur admin HRIS. Nilainya dihitung ulang otomatis di setiap perubahan saldo N−1, tanpa nilai negatif, dengan audit, dan karyawan yang terdampak ditandai "perlu ditinjau HR".
 
 **Architecture:**
