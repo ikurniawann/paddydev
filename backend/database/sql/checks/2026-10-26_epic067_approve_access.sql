@@ -3,8 +3,17 @@
 --
 -- Jalankan sebelum DAN sesudah migrasi (staging, gladi salinan production):
 --   psql "$DATABASE_URL" -f backend/database/sql/checks/2026-10-26_epic067_approve_access.sql
--- Gerbang: tidak ada baris daftar = 'lost'. Bila ada, berhenti dan laporkan; jangan menambah
--- grant ke role non-HR untuk menutupnya.
+--
+-- Run SEBELUM migrasi hanya informasi, BUKAN gerbang: kolom after_* membaca grant saat ini,
+-- jadi sebelum "approve" diberikan hampir setiap akun HR muncul sebagai 'lost'. Simpan hasilnya
+-- sebagai pembanding saja.
+--
+-- Gerbang 1: run SESUDAH migrasi menghasilkan NOL baris daftar = 'lost'. Bila ada, berhenti dan
+--   laporkan; jangan menambah grant ke role non-HR untuk menutupnya.
+-- Gerbang 2: setiap baris daftar = 'gained' pada run SESUDAH migrasi wajib ditinjau dan harus akun
+--   HR yang memang dimaksud. Role non-HR yang sudah memegang "approve" di Lembur (atau daun lain)
+--   diam-diam ikut mendapat kuasa override HR. Tunjukkan daftar 'gained' ke user dan tunggu
+--   persetujuan sebelum melanjutkan.
 --
 -- Satu query, kolom pertama `daftar`, urutan: lost, gained, akun.
 --   lost   : sebelum ya, sesudah tidak (salah satu keputusan)
