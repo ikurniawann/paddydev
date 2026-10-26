@@ -118,18 +118,41 @@ const minBalanceYear = 2020
 // ensureLeaveBalance creates the employee's row for year with the default
 // allocation (R1) unless it exists; a missing employee creates nothing.
 func ensureLeaveBalance(ctx context.Context, q database.Querier, employeeID string, year int) error {
+	_, err := insertLeaveBalance(ctx, q, employeeID, year)
+	return err
+}
+
+// insertLeaveBalance is ensureLeaveBalance that also says whether it created
+// the row (false: it existed, or the employee or year is not valid).
+func insertLeaveBalance(ctx context.Context, q database.Querier, employeeID string, year int) (bool, error) {
 	if year < minBalanceYear {
-		return nil
+		return false, nil
 	}
-	_, err := q.Exec(ctx, ensureBalanceSQL, employeeID, year)
-	return ignoreBadInput(err)
+	tag, err := q.Exec(ctx, ensureBalanceSQL, employeeID, year)
+	if err = ignoreBadInput(err); err != nil {
+		return false, err
+	}
+	return tag.RowsAffected() == 1, nil
 }
 
 // EnsureLeaveBalance makes sure the employee has a balance row for year,
-// created with the default allocation (R1) when missing. Existing rows are
-// never recomputed (R2). q is the caller's pool or transaction.
-func (s *Service) EnsureLeaveBalance(ctx context.Context, q database.Querier, employeeID string, year int) error {
-	return ensureLeaveBalance(ctx, q, employeeID, year)
+// created with the default allocation (R1) when missing; a row it creates
+// gets the carry-over of the formula in the same transaction (cause
+// 'row_created', audited as the system). Existing rows are never recomputed
+// here (R2).
+func (s *Service) EnsureLeaveBalance(ctx context.Context, employeeID string, year int) error {
+	if year < minBalanceYear {
+		return nil
+	}
+	q := s.repo.querier()
+	var exists bool
+	if err := q.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM hris.leave_balances WHERE employee_id = $1 AND year = $2)`,
+		employeeID, year).Scan(&exists); err != nil || exists {
+		return ignoreBadInput(err)
+	}
+	return s.repo.InTx(ctx, func(r Repository) error {
+		return ensureLeaveBalanceCarry(ctx, r.querier(), employeeID, year, carryCause{Type: causeRowCreated}, nil)
+	})
 }
 
 /* ── Storage ─────────────────────────────────────────────────────────── */
@@ -331,7 +354,7 @@ func (s *Service) LeaveBalanceView(ctx context.Context, a *Actor, employeeID str
 	if emp == nil || !emp.Bool("is_active") || year > domain.NowWIB(s.now()).Year()+1 {
 		return v, nil
 	}
-	if err := s.EnsureLeaveBalance(ctx, s.repo.querier(), employeeID, year); err != nil {
+	if err := s.EnsureLeaveBalance(ctx, employeeID, year); err != nil {
 		return LeaveBalanceView{}, err
 	}
 	v, found, err = s.leaveBalanceOf(ctx, employeeID, year)
@@ -385,7 +408,7 @@ func (s *Service) UpdateLeaveBalanceManual(ctx context.Context, a *Actor, employ
 		if err := lockPreviousBalance(ctx, r.querier(), employeeID, in.Year); err != nil {
 			return err
 		}
-		if err := ensureLeaveBalance(ctx, r.querier(), employeeID, in.Year); err != nil {
+		if err := ensureLeaveBalanceCarry(ctx, r.querier(), employeeID, in.Year, carryCause{Type: causeHRUpdate}, userOf(a)); err != nil {
 			return err
 		}
 		was, err := r.LockLeaveBalance(ctx, employeeID, in.Year)
@@ -437,9 +460,11 @@ func (s *Service) UpdateLeaveBalanceManual(ctx context.Context, a *Actor, employ
 }
 
 // carryAfterHRInput keeps the carry-overs in step after HR set a year's row
-// (the PUT and the import): the row's open review closes (HR input never leaves
-// carry below used), a row HR just cleared goes back to the formula and is
-// recalculated at once, and next year's row follows this year's remainder.
+// (the PUT and the import): the row's open review follows its figures (it closes
+// once carry covers the used days; a save that leaves carry untouched may leave
+// it below used, so the review can stay open), a row HR just cleared goes back
+// to the formula and is recalculated at once, and next year's row follows this
+// year's remainder.
 func (s *Service) carryAfterHRInput(ctx context.Context, q database.Querier, employeeID string, in LeaveBalanceInput,
 	was balanceRaw, actor *auth.User, cause carryCause) error {
 	// Clearing a carry-over that was stored (auto or manual) puts the row back

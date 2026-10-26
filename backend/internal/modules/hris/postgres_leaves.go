@@ -190,7 +190,10 @@ func (s *store) consumeAnnualLeave(ctx context.Context, leaveID string, m *quota
 	if err != nil {
 		return err
 	}
-	if err := ensureLeaveBalance(ctx, s.db, m.EmployeeID, m.Year); err != nil {
+	// A row created here gets the formula's carry-over before the read below,
+	// so the carry-over is used first (final review I1).
+	if err := ensureLeaveBalanceCarry(ctx, s.db, m.EmployeeID, m.Year,
+		carryCause{Type: causeLeaveApprove, LeaveID: leaveID}, m.Actor); err != nil {
 		return err
 	}
 	var remaining, carryAvailable float64

@@ -104,6 +104,9 @@ func (s *Service) ResolveCarryReview(ctx context.Context, a *Actor, id, note str
 	switch {
 	case note == "":
 		return CarryReview{}, httpx.BadRequest("Catatan wajib diisi")
+	case strings.EqualFold(note, reviewResolutionAuto):
+		// The word marks a review the system closed; HR's note must not look like one.
+		return CarryReview{}, httpx.BadRequest(`Catatan tidak boleh "otomatis" — tulis alasan penyelesaian`)
 	case len([]rune(note)) > maxReviewNote:
 		return CarryReview{}, httpx.BadRequest("Catatan terlalu panjang (maksimal 500 karakter)")
 	}

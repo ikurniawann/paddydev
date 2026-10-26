@@ -110,6 +110,10 @@ func TestLeaveCarryReviewResolve(t *testing.T) {
 		}
 	}
 	expect(t, h.do(&editor, "POST", path, map[string]any{}), 400, "Catatan wajib diisi")
+	// "otomatis" marks a review the system closed: HR may not write it (final review).
+	for _, word := range []string{"otomatis", "  Otomatis ", "OTOMATIS"} {
+		expect(t, h.do(&editor, "POST", path, map[string]any{"note": word}), 400, `Catatan tidak boleh "otomatis" — tulis alasan penyelesaian`)
+	}
 	expect(t, h.do(&editor, "POST", "/api/hris/leave-balances/reviews/bukan-uuid/resolve", body), 400, "")
 	expect(t, h.do(&editor, "POST", "/api/hris/leave-balances/reviews/00000000-0000-0000-0000-000000000000/resolve", body), 404, "")
 	if got := h.reviews(f.id, 2027); got != "1|0|3.00|-" {

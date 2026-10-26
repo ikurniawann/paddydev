@@ -33,6 +33,7 @@ const (
 	causeImport       = "import"
 	causeSettings     = "settings"
 	causeJob          = "job"
+	causeRowCreated   = "row_created"
 )
 
 // carrySourceAuto / carrySourceManual are hris.leave_balances.carry_over_source.
@@ -72,6 +73,8 @@ func (c carryCause) reason() string {
 		return "Batas sisa bawaan diubah"
 	case causeJob:
 		return "Job 1 Januari"
+	case causeRowCreated:
+		return "Saldo cuti tahun ini dibuat"
 	}
 	return "Hitung ulang sisa bawaan"
 }
@@ -143,6 +146,15 @@ func recomputeCarryOver(ctx context.Context, q database.Querier, employeeID stri
 // callers that recalculate many rows in one transaction.
 func recomputeCarryOverWith(ctx context.Context, q database.Querier, settings LeaveSettings, employeeID string, year int,
 	cause carryCause, actor *auth.User) (carryResult, error) {
+	return recomputeCarryOverOpts(ctx, q, settings, employeeID, year, cause, actor, false)
+}
+
+// recomputeCarryOverOpts is recomputeCarryOverWith; resetExpiry (the 1 January
+// job) also takes the setting's date of this year for a row that carries
+// something, since a row projected in December may hold the date of an older
+// setting.
+func recomputeCarryOverOpts(ctx context.Context, q database.Querier, settings LeaveSettings, employeeID string, year int,
+	cause carryCause, actor *auth.User, resetExpiry bool) (carryResult, error) {
 	if !settings.CarryOverEnabled || !settings.CarryOverReady {
 		return carryResult{}, nil
 	}
@@ -179,7 +191,7 @@ func recomputeCarryOverWith(ctx context.Context, q database.Querier, settings Le
 	// The expiry is the setting's date in this year, filled when the row first
 	// gets a carry-over; a later change of the setting date leaves it alone.
 	expires := row.CarryExpires
-	if expires == nil && carry > 0 {
+	if carry > 0 && (expires == nil || resetExpiry) {
 		e := fmt.Sprintf("%04d-%02d-%02d", year, settings.CarryOverExpiryMonth, settings.CarryOverExpiryDay)
 		expires = &e
 	}
@@ -211,7 +223,7 @@ func recomputeCarryOverWith(ctx context.Context, q database.Querier, settings Le
 		if err := openCarryReview(ctx, q, employeeID, year, carry, row.CarryUsed, cause); err != nil {
 			return carryResult{}, err
 		}
-	} else if err := syncOpenCarryReview(ctx, q, employeeID, year, actor); err != nil {
+	} else if err := syncOpenCarryReview(ctx, q, employeeID, year); err != nil {
 		return carryResult{}, err
 	}
 	return res, nil
@@ -261,22 +273,18 @@ func openCarryReview(ctx context.Context, q database.Querier, employeeID string,
 // used days again (resolution 'otomatis'), and while the shortfall remains it
 // takes the new used figure and excess (a partial refund shrinks it). A no-op
 // without the review table or without an open review.
-func syncOpenCarryReview(ctx context.Context, q database.Querier, employeeID string, year int, actor *auth.User) error {
+func syncOpenCarryReview(ctx context.Context, q database.Querier, employeeID string, year int) error {
 	var ready bool
 	if err := q.QueryRow(ctx, `SELECT to_regclass('hris.leave_carry_over_reviews') IS NOT NULL`).Scan(&ready); err != nil || !ready {
 		return err
 	}
-	actorID, who := carryActor(actor)
-	var by *string
-	if actorID != "" {
-		by = &actorID
-	}
+	// It closes by itself, whoever triggered the recalculation: the system.
 	if _, err := q.Exec(ctx, `UPDATE hris.leave_carry_over_reviews r
-		SET resolved_at = now(), resolved_by = $3::uuid, resolved_by_name = $4, resolution = $5
+		SET resolved_at = now(), resolved_by = NULL, resolved_by_name = $3, resolution = $4
 		FROM hris.leave_balances b
 		WHERE r.employee_id = $1 AND r.year = $2 AND r.resolved_at IS NULL
 		  AND b.employee_id = r.employee_id AND b.year = r.year AND b.carry_over_used <= b.carry_over_days`,
-		employeeID, year, by, who, reviewResolutionAuto); err != nil {
+		employeeID, year, sistemName, reviewResolutionAuto); err != nil {
 		return err
 	}
 	_, err := q.Exec(ctx, `UPDATE hris.leave_carry_over_reviews r
@@ -297,13 +305,28 @@ func lockPreviousBalance(ctx context.Context, q database.Querier, employeeID str
 	return ignoreBadInput(err)
 }
 
+// ensureLeaveBalanceCarry creates the employee's row for year like
+// ensureLeaveBalance and, when it just created it, gives it the carry-over of
+// the formula at once (a no-op while carry-over is off or locked). A row born
+// from an approval, an HR edit or an import would otherwise sit at carry 0
+// until some later hook recalculated it, so the leave in hand would skip the
+// carry-over. It takes year-1 (shared) then year, the ascending order.
+func ensureLeaveBalanceCarry(ctx context.Context, q database.Querier, employeeID string, year int, cause carryCause, actor *auth.User) error {
+	created, err := insertLeaveBalance(ctx, q, employeeID, year)
+	if err != nil || !created {
+		return err
+	}
+	_, err = recomputeCarryOver(ctx, q, employeeID, year, cause, actor)
+	return err
+}
+
 // afterBalanceChange is the hook of every path that changed year's balance
 // (R2): the open review of the year closes when its carry-over covers the used
 // days again, and the next year's carry-over is recalculated when that row
 // already exists (recomputeCarryOver ignores a missing row). q is the caller's
 // transaction, which holds year's row lock.
 func afterBalanceChange(ctx context.Context, q database.Querier, employeeID string, year int, cause carryCause, actor *auth.User) error {
-	if err := syncOpenCarryReview(ctx, q, employeeID, year, actor); err != nil {
+	if err := syncOpenCarryReview(ctx, q, employeeID, year); err != nil {
 		return err
 	}
 	_, err := recomputeCarryOver(ctx, q, employeeID, year+1, cause, actor)

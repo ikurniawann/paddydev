@@ -59,7 +59,9 @@ func (s *Service) runLeaveCarryOver(ctx context.Context, now time.Time) (*carryO
 		if err != nil || tag.RowsAffected() == 0 {
 			return err
 		}
-		settings, err := loadLeaveSettings(ctx, q, false)
+		// Settings first (locked), then the balance rows: the order the settings
+		// save uses, so the two never wait on each other in a cycle.
+		settings, err := loadLeaveSettings(ctx, q, true)
 		if err != nil {
 			return err
 		}
@@ -94,7 +96,7 @@ func (s *Service) runLeaveCarryOver(ctx context.Context, now time.Time) (*carryO
 		// is left alone; an inactive employee has no row here.
 		if settings.CarryOverEnabled && settings.CarryOverReady {
 			for _, id := range ids {
-				r, err := recomputeCarryOverWith(ctx, q, settings, id, year, carryCause{Type: causeJob}, nil)
+				r, err := recomputeCarryOverOpts(ctx, q, settings, id, year, carryCause{Type: causeJob}, nil, true)
 				if err != nil {
 					return err
 				}

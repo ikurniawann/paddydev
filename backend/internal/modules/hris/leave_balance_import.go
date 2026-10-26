@@ -412,7 +412,7 @@ func (s *Service) ImportLeaveBalances(ctx context.Context, a *Actor, in leaveImp
 			if err := lockPreviousBalance(ctx, q, c.EmployeeID, sc.Year); err != nil {
 				return err
 			}
-			if err := ensureLeaveBalance(ctx, q, c.EmployeeID, sc.Year); err != nil {
+			if err := ensureLeaveBalanceCarry(ctx, q, c.EmployeeID, sc.Year, carryCause{Type: causeImport}, userOf(a)); err != nil {
 				return err
 			}
 			was, err := r.LockLeaveBalance(ctx, c.EmployeeID, sc.Year)

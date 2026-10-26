@@ -11,6 +11,7 @@ import (
 	contracts "nuhabit/backend/internal/contracts/hris"
 	"nuhabit/backend/internal/modules/hris/domain"
 	"nuhabit/backend/internal/platform/audit"
+	"nuhabit/backend/internal/platform/auth"
 	"nuhabit/backend/internal/platform/httpx"
 	"nuhabit/backend/internal/platform/iam"
 	"nuhabit/backend/internal/platform/outbox"
@@ -71,6 +72,9 @@ type quotaMove struct {
 	// (hris.leaves.carry_over_days_used); a refund returns it to the
 	// carry-over and the rest to the annual quota. Used when refunding.
 	CarryDays string
+	// Actor is who approved (nil: the system); a carry-over recalculated for a
+	// row this approval creates is audited under it.
+	Actor *auth.User
 }
 
 // leaveVerdict is what DecideLeave writes (EPIC-063 R1).
@@ -174,7 +178,7 @@ func (s *Service) CreateLeave(ctx context.Context, a *Actor, in leaveRequest) (*
 		// then the request must fit what is available on its start date
 		// (annual remainder plus a carry-over that has not expired by then).
 		year := yearOf(in.StartDate)
-		if err := s.EnsureLeaveBalance(ctx, s.repo.querier(), *employeeID, year); err != nil {
+		if err := s.EnsureLeaveBalance(ctx, *employeeID, year); err != nil {
 			return nil, err
 		}
 		available, found, err := s.repo.AnnualAvailable(ctx, *employeeID, year, in.StartDate)
@@ -418,7 +422,7 @@ func (s *Service) DecideLeave(ctx context.Context, a *Actor, in leaveDecision, m
 		status, rejection = "approved", nil
 		if leave.Str("leave_type") == "annual" {
 			credit = &quotaMove{EmployeeID: leave.Str("employee_id"), Year: dateYear(leave, "start_date"),
-				Days: leave.Str("total_days"), StartDate: dateText(leave, "start_date")}
+				Days: leave.Str("total_days"), StartDate: dateText(leave, "start_date"), Actor: userOf(a)}
 		}
 	}
 	verdict := leaveVerdict{Status: status, ApproverID: a.EmployeeID, Rejection: rejection,

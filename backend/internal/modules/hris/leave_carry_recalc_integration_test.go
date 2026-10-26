@@ -208,6 +208,11 @@ func TestCarryRecalcBelowUsedOpensAndClosesReview(t *testing.T) {
 	if got := h.reviews(f.id, 2027); got != "0|1|-|otomatis" {
 		t.Fatalf("reviews after undo = %q, want closed 'otomatis'", got)
 	}
+	// Final review M3: the system closed it, not the HR user who triggered it.
+	if got := h.scalar(`SELECT concat_ws('|', resolved_by IS NULL, resolved_by_name) FROM hris.leave_carry_over_reviews
+		WHERE employee_id = $1 AND year = 2027`, f.id); got != "t|Sistem" {
+		t.Fatalf("auto-closed review resolved by %q, want NULL and Sistem", got)
+	}
 }
 
 // A leave consuming a carry already below used must not take negative days
@@ -587,5 +592,93 @@ func TestCarryRecalcPartialRefundUpdatesReview(t *testing.T) {
 	}
 	if got := h.reviews(f.id, 2027); !strings.HasPrefix(got, "1|0|") {
 		t.Fatalf("reviews = %q, want exactly one open", got)
+	}
+}
+
+// Final review I1: a 2027 leave requested while the 2027 row does not exist yet
+// creates the row; the carry-over of the formula must be there before the
+// leave consumes, so it is used first.
+func TestCarryRecalcApproveCreatesNextYearRowWithCarry(t *testing.T) {
+	h := newHarness(t)
+	h.carrySetup(true, nil, 3, 31)
+	f := h.leaveFixture("2024-01-10")
+	h.setBalance(f.id, 2026, 12, 0, 4, 0, 0, nil) // remainder 8, and no 2027 row (the job has not run)
+	if got := h.scalar(`SELECT count(*)::text FROM hris.leave_balances WHERE employee_id = $1 AND year = 2027`, f.id); got != "0" {
+		t.Fatalf("2027 rows before = %s", got)
+	}
+	leave := h.request(f, "2027-02-01", "2027-02-02")
+	expect(t, leave, 200, "")
+	id := leave.data()["id"].(string)
+	expect(t, h.approve(f, id), 200, "")
+	if got := h.carryOf(f.id, 2027); got != "8.00|2.00|2027-03-31" {
+		t.Fatalf("carry after the approval = %q, want 8 with 2 used", got)
+	}
+	if used, carryUsed := h.balanceOf(f.id, 2027); used != "0.00" || carryUsed != "2.00" {
+		t.Fatalf("used %s, carry used %s: the leave must come from the carry-over", used, carryUsed)
+	}
+	// The request created the row (before the approval): audited as the system.
+	if got := h.carryAudit(f.id, "row_created"); !strings.HasPrefix(got, "row_created|-|Saldo cuti tahun ini dibuat|false|Sistem|0|8|") {
+		t.Fatalf("carry audit = %q", got)
+	}
+}
+
+// Final review I1: the PUT of a year whose row does not exist yet gets the
+// formula's carry-over too.
+func TestCarryRecalcPutCreatesRowWithCarry(t *testing.T) {
+	h := newHarness(t)
+	h.carrySetup(true, nil, 3, 31)
+	f := h.leaveFixture("2024-01-10")
+	h.setBalance(f.id, 2026, 12, 0, 4, 0, 0, nil)
+	editor, _ := h.saldoStaff("pos", false, "read", "update")
+	expect(t, h.putSaldo(&editor, f.id, map[string]any{"year": 2027, "annual_leave_adjustment": 1, "reason": "Tambahan"}), 200, "")
+	if got := h.carryOf(f.id, 2027); got != "8.00|0.00|2027-03-31" {
+		t.Fatalf("carry of the created row = %q, want 8", got)
+	}
+	if h.carrySource(f.id, 2027) != "auto" {
+		t.Fatal("the row must stay auto")
+	}
+}
+
+// Final review I1: the approval itself creates a missing row (here the row is
+// gone between the request and the approval) with the carry-over in place.
+func TestCarryRecalcApprovalCreatesMissingRowWithCarry(t *testing.T) {
+	h := newHarness(t)
+	h.carrySetup(true, nil, 3, 31)
+	f := h.leaveFixture("2024-01-10")
+	h.setBalance(f.id, 2026, 12, 0, 4, 0, 0, nil)
+	leave := h.request(f, "2027-02-01", "2027-02-02")
+	expect(t, leave, 200, "")
+	h.exec(`DELETE FROM hris.leave_balances WHERE employee_id = $1 AND year = 2027`, f.id)
+	id := leave.data()["id"].(string)
+	expect(t, h.approve(f, id), 200, "")
+	if got := h.carryOf(f.id, 2027); got != "8.00|2.00|2027-03-31" {
+		t.Fatalf("carry after the approval = %q, want 8 with 2 used", got)
+	}
+	got := h.carryAudit(f.id, "leave_approve")
+	if !strings.HasPrefix(got, "leave_approve|"+id+"|Cuti "+id+" disetujui|true|") || !strings.Contains(got, "|0|8|") {
+		t.Fatalf("carry audit = %q", got)
+	}
+}
+
+// Final review M2: the job gives an auto row that carries the setting's expiry
+// date of the year, also when the row was projected in December under an older
+// date (changing only the date recalculates nothing by itself).
+func TestCarryRecalcJobRefreshesExpiryOfProjectedRow(t *testing.T) {
+	h := newHarness(t)
+	h.carrySetup(true, nil, 3, 31)
+	f := h.leaveFixture("2024-01-10")
+	h.setBalance(f.id, 2026, 12, 0, 4, 0, 0, nil)
+	h.exec(`INSERT INTO hris.leave_balances (employee_id, year, annual_leave_total, carry_over_days, carry_over_expires_on)
+		VALUES ($1, 2027, 12, 8, '2027-03-31')`, f.id) // a December projection: auto, old date
+	h.exec(`UPDATE hris.leave_balances SET carry_over_source = 'auto' WHERE employee_id = $1 AND year = 2027`, f.id)
+	h.exec(`UPDATE hris.leave_settings SET carry_over_expiry_month = 6, carry_over_expiry_day = 30`)
+	if err := h.svc.RunLeaveCarryOver(context.Background(), jan1(2027)); err != nil {
+		t.Fatal(err)
+	}
+	if got := h.carryOf(f.id, 2027); got != "8.00|0.00|2027-06-30" {
+		t.Fatalf("carry after the job = %q, want the new date", got)
+	}
+	if h.carrySource(f.id, 2027) != "auto" {
+		t.Fatal("the row must stay auto")
 	}
 }
