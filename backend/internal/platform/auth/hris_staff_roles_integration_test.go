@@ -84,7 +84,8 @@ func syncTx(t *testing.T) pgx.Tx {
 
 // staffRoleSpec is the seeded mask of each derived role (EPIC-057 subtrees,
 // EPIC-061: no "delete" on HRIS for the two staff roles; hris.access comes
-// with Task 8 and is hidden from them).
+// with Task 8 and is hidden from them; EPIC-068 R7: Saldo Cuti stays read
+// only for the two staff roles).
 var staffRoleSpec = map[string]struct {
 	excluded []string
 	noDelete bool
@@ -110,6 +111,9 @@ func TestHrisStaffRolesDeriveFromAdminHris(t *testing.T) {
 			all = slices.Compact(all)
 			if spec.noDelete && under(code, "hris") {
 				all = slices.DeleteFunc(all, func(a string) bool { return a == "delete" })
+			}
+			if spec.noDelete && code == "hris.workforce.leave-balances" {
+				all = slices.DeleteFunc(all, func(a string) bool { return a == "update" || a == "import" || a == "export" })
 			}
 			exp[code] = all
 		}

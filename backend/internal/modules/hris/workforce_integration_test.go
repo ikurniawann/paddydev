@@ -141,18 +141,22 @@ func TestLeaves(t *testing.T) {
 	expect(t, h.do(&staff, "DELETE", "/api/hris/leaves/"+leaveID, nil), 403, "Insufficient permissions")
 	expect(t, h.do(&hr, "DELETE", "/api/hris/leaves/"+leaveID+"?reason=Pengajuan%20ganda", nil), 200, "")
 
-	// Balances: the owner reads (row created on first read), HRD writes.
+	// Balances: the owner reads (row created on first read); writing needs the
+	// "update" action on Saldo Cuti (EPIC-068), not a role, and a reason.
 	bal := h.do(&staff, "GET", "/api/hris/leave-balances/"+own+"?year=2027", nil)
 	expect(t, bal, 200, "")
-	if bal.data()["annual_leave_total"] != "12.00" && bal.data()["annual_leave_total"] != "12" {
+	if bal.data()["annual_leave_total"] != 12.0 || bal.data()["available"] != 12.0 {
 		t.Fatalf("balance = %s", bal.raw)
 	}
 	expect(t, h.do(&staff, "GET", "/api/hris/leave-balances/"+own+"?year=1999", nil), 400, "Tahun tidak valid")
-	expect(t, h.do(&staff, "PUT", "/api/hris/leave-balances/"+own, map[string]any{"annual_leave_total": 14}), 403,
-		"Forbidden: Only HRD can update leave balances")
-	set := h.do(&hr, "PUT", "/api/hris/leave-balances/"+own+"?year=2027", map[string]any{"annual_leave_total": 14})
+	expect(t, h.do(&staff, "PUT", "/api/hris/leave-balances/"+own, map[string]any{"annual_leave_total": 14, "reason": "Uji"}), 403,
+		"Insufficient permissions")
+	expect(t, h.do(&hr, "PUT", "/api/hris/leave-balances/"+own, map[string]any{"annual_leave_total": 14, "reason": "Uji"}), 403,
+		"Insufficient permissions")
+	editor, _ := h.saldoStaff("hrd", true, "read", "update")
+	set := h.do(&editor, "PUT", "/api/hris/leave-balances/"+own+"?year=2027", map[string]any{"annual_leave_total": 14, "reason": "Penyesuaian uji"})
 	expect(t, set, 200, "")
-	if set.body["message"] != "Leave balance updated successfully" {
+	if set.body["message"] != "Saldo cuti diperbarui" || set.data()["annual_leave_total"] != 14.0 {
 		t.Fatalf("balance update = %s", set.raw)
 	}
 }

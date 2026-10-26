@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
 
 	"nuhabit/backend/internal/modules/hris/domain"
 	"nuhabit/backend/internal/platform/database"
+	"nuhabit/backend/internal/platform/httpx"
 	"nuhabit/backend/internal/platform/outbox"
 )
 
@@ -86,12 +88,6 @@ func (s *store) ActiveHolidays(ctx context.Context, start, end string) ([]domain
 	})
 }
 
-func (s *store) AnnualRemaining(ctx context.Context, employeeID string, year int) (*Row, error) {
-	row, err := queryRow(ctx, s.db, `SELECT annual_leave_remaining FROM hris.leave_balances
-		WHERE employee_id = $1 AND year = $2 LIMIT 1`, employeeID, year)
-	return row, ignoreBadInput(err)
-}
-
 func (s *store) InsertLeave(ctx context.Context, f fields) (*Row, error) {
 	return insertRow(ctx, s.db, "hris.leaves", f, "*")
 }
@@ -137,9 +133,16 @@ func (s *store) CancelLeave(ctx context.Context, id string, refund *quotaMove) e
 	if refund == nil {
 		return nil
 	}
+	// The carry-over part goes back to carry_over_used, the rest to the
+	// annual quota; a leave approved before EPIC-068 has no carry-over part.
+	carry := refund.CarryDays
+	if carry == "" {
+		carry = "0"
+	}
 	_, err := s.db.Exec(ctx, `UPDATE hris.leave_balances
-		SET annual_leave_used = GREATEST(annual_leave_used - $3, 0), updated_at = now()
-		WHERE employee_id = $1 AND year = $2`, refund.EmployeeID, refund.Year, refund.Days)
+		SET annual_leave_used = GREATEST(annual_leave_used - ($3::numeric - $4::numeric), 0),
+		    carry_over_used = GREATEST(carry_over_used - $4::numeric, 0), updated_at = now()
+		WHERE employee_id = $1 AND year = $2`, refund.EmployeeID, refund.Year, refund.Days, carry)
 	return err
 }
 
@@ -168,11 +171,44 @@ func (s *store) DecideLeave(ctx context.Context, id string, v leaveVerdict, cred
 	if credit == nil {
 		return nil
 	}
-	_, err = s.db.Exec(ctx, `INSERT INTO hris.leave_balances (employee_id, year, annual_leave_total, annual_leave_used)
-		VALUES ($1, $2, 12, $3)
-		ON CONFLICT (employee_id, year)
-		DO UPDATE SET annual_leave_used = leave_balances.annual_leave_used + $3, updated_at = now()`,
-		credit.EmployeeID, credit.Year, credit.Days)
+	return s.consumeAnnualLeave(ctx, id, credit)
+}
+
+// consumeAnnualLeave takes an approved leave's days from the carry-over first
+// (while it has not expired on the leave's start date) and the rest from the
+// annual quota (EPIC-068 R5), recording the carry-over part on the leave. The
+// row is created from the default rule (R1) when missing; it is locked, so a
+// request that no longer fits is refused with a 400, not a CHECK violation.
+func (s *store) consumeAnnualLeave(ctx context.Context, leaveID string, m *quotaMove) error {
+	days, err := strconv.ParseFloat(m.Days, 64)
+	if err != nil {
+		return err
+	}
+	if err := ensureLeaveBalance(ctx, s.db, m.EmployeeID, m.Year); err != nil {
+		return err
+	}
+	var remaining, carryAvailable float64
+	err = s.db.QueryRow(ctx, `SELECT annual_leave_remaining::float8,
+		(CASE WHEN carry_over_expires_on >= $3::date THEN carry_over_days - carry_over_used ELSE 0 END)::float8
+		FROM hris.leave_balances WHERE employee_id = $1 AND year = $2 FOR UPDATE`,
+		m.EmployeeID, m.Year, m.StartDate).Scan(&remaining, &carryAvailable)
+	if database.IsNoRows(err) {
+		return httpx.BadRequest("Sisa cuti tahunan tidak cukup", obj("remaining", 0, "requested", days))
+	}
+	if err != nil {
+		return err
+	}
+	carry := min(days, carryAvailable)
+	if rest := days - carry; rest > remaining {
+		return httpx.BadRequest("Sisa cuti tahunan tidak cukup", obj("remaining", remaining+carryAvailable, "requested", days))
+	}
+	if _, err := s.db.Exec(ctx, `UPDATE hris.leave_balances
+		SET annual_leave_used = annual_leave_used + ($3::numeric - $4::numeric),
+		    carry_over_used = carry_over_used + $4::numeric, updated_at = now()
+		WHERE employee_id = $1 AND year = $2`, m.EmployeeID, m.Year, days, carry); err != nil {
+		return err
+	}
+	_, err = s.db.Exec(ctx, `UPDATE hris.leaves SET carry_over_days_used = $2 WHERE id = $1`, leaveID, carry)
 	return err
 }
 
@@ -182,41 +218,6 @@ func (s *store) LeavesForExport(ctx context.Context, f leaveFilter) ([]*Row, err
 		leaveEmployeeEmbed("employee", "full_name, nip, "+deptName+", "+
 			embedOne("job_title", "title", "hris.positions", "id = employees.job_title_id"))+", "+
 		leaveApproverEmbed("full_name, nip")+` FROM hris.leaves `+where+` ORDER BY created_at DESC`, args...)
-}
-
-func (s *store) LeaveBalance(ctx context.Context, employeeID string, year int) (*Row, error) {
-	return queryRow(ctx, s.db, `SELECT *, `+
-		embedOne("employee", "id, full_name, nip, photo_url, "+deptName+", "+
-			embedOne("job_title", "title", "hris.positions", "id = employees.job_title_id"),
-			"hris.employees", "id = leave_balances.employee_id")+
-		` FROM hris.leave_balances WHERE employee_id = $1 AND year = $2`, employeeID, year)
-}
-
-func (s *store) EmployeeJoinDate(ctx context.Context, id string) (*string, bool, error) {
-	var join *string
-	err := s.db.QueryRow(ctx, `SELECT join_date::text FROM hris.employees WHERE id = $1`, id).Scan(&join)
-	if database.IsNoRows(err) || database.PgCode(err) == "22P02" {
-		return nil, false, nil
-	}
-	return join, err == nil, err
-}
-
-func (s *store) InsertLeaveBalance(ctx context.Context, f fields) (*Row, error) {
-	return insertRow(ctx, s.db, "hris.leave_balances", f, "*")
-}
-
-func (s *store) LeaveBalanceID(ctx context.Context, employeeID string, year int) (*string, error) {
-	var id string
-	err := s.db.QueryRow(ctx, `SELECT id::text FROM hris.leave_balances WHERE employee_id = $1 AND year = $2 LIMIT 1`,
-		employeeID, year).Scan(&id)
-	if database.IsNoRows(err) || database.PgCode(err) == "22P02" {
-		return nil, nil
-	}
-	return &id, err
-}
-
-func (s *store) UpdateLeaveBalance(ctx context.Context, id string, f fields) (*Row, error) {
-	return updateOne(ctx, s.db, "hris.leave_balances", f, fields{{"id", id}}, "*")
 }
 
 // ManagerContact is the active direct manager of an employee.
