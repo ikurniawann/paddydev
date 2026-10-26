@@ -15,6 +15,7 @@ import (
 	"nuhabit/backend/internal/platform/audit"
 	"nuhabit/backend/internal/platform/database"
 	"nuhabit/backend/internal/platform/httpx"
+	"nuhabit/backend/internal/platform/iam"
 	"nuhabit/backend/internal/platform/validate"
 )
 
@@ -296,7 +297,11 @@ func (s *Service) DecideOvertime(ctx context.Context, a *Actor, id, action strin
 	}
 	emp := ot.Child("employee")
 	reportingTo, managerActive := overtimeManager(emp)
-	allowed, reason := domain.CanDecideOvertime(domain.OvertimeActor{EmployeeID: a.EmployeeID, IsHR: a.IsHRD},
+	// The HR side of the decision holds "approve" on the Lembur leaf
+	// (EPIC-067 R11): backup/override, day type, time correction, cancelling
+	// a company assignment.
+	isHR := a.CanApprove(iam.LeafLembur)
+	allowed, reason := domain.CanDecideOvertime(domain.OvertimeActor{EmployeeID: a.EmployeeID, IsHR: isHR},
 		domain.OvertimeRequest{EmployeeID: ot.Str("employee_id"), RequestedBy: ot.StrPtr("requested_by"),
 			Source: ot.Str("source"), ReportingTo: reportingTo}, action)
 	if !allowed {
@@ -320,9 +325,9 @@ func (s *Service) DecideOvertime(ctx context.Context, a *Actor, id, action strin
 	// employee request (R11); never on a company assignment, where the target
 	// (possibly an HRD) only confirms and must not change their own pay rate.
 	// A real change is audited as before/after day_type.
-	// Ruling C1/P2: HR here is the HRD set (IsHRD), never IsHR.
+	// HR here is "approve" on the Lembur leaf (EPIC-067 R11), never IsHR.
 	auditBefore, auditAfter := map[string]any(nil), map[string]any{}
-	if action == "approve" && a.IsHRD && dayType != nil && ot.Str("source") == "employee" {
+	if action == "approve" && isHR && dayType != nil && ot.Str("source") == "employee" {
 		f.add("day_type", *dayType)
 		if stored := ot.Str("day_type"); stored != *dayType {
 			auditBefore = map[string]any{"day_type": stored}
@@ -333,7 +338,7 @@ func (s *Service) DecideOvertime(ctx context.Context, a *Actor, id, action strin
 		if action != "approve" || ot.Str("source") != "employee" {
 			return nil, httpx.BadRequest("Koreksi jam hanya saat menyetujui input lembur karyawan")
 		}
-		if allowed, msg := domain.CanCorrectOvertimeTimes(a.EmployeeID, a.IsHRD, ot.Str("employee_id"), reportingTo, managerActive); !allowed {
+		if allowed, msg := domain.CanCorrectOvertimeTimes(a.EmployeeID, isHR, ot.Str("employee_id"), reportingTo, managerActive); !allowed {
 			return nil, httpx.Forbidden(msg)
 		}
 		was := struct {
@@ -378,7 +383,7 @@ func (s *Service) DecideOvertime(ctx context.Context, a *Actor, id, action strin
 	decidedAs := ""
 	if ot.Str("source") == "employee" && action != "cancel" {
 		var refusal string
-		decidedAs, refusal = domain.DecideAs(domain.Approver{EmployeeID: a.EmployeeID, IsHR: a.IsHRD},
+		decidedAs, refusal = domain.DecideAs(domain.Approver{EmployeeID: a.EmployeeID, IsHR: isHR},
 			ot.Str("employee_id"), reportingTo, "lembur")
 		if decidedAs == "" { // never store '' (the CHECK would 500)
 			return nil, httpx.Forbidden(refusal)

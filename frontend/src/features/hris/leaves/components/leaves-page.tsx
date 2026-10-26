@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { formatDate } from "@/lib/format";
 import { ApprovalButtons } from "@/components/hris/ApprovalButtons";
+import { useHrApproveAccess } from "@/features/hris/approve-access";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -49,6 +50,10 @@ export function LeavesPage() {
   );
 
   const { data, isLoading } = useLeaveList(listParams);
+  // Tombol keputusan HR hanya untuk pemegang `approve` daun Cuti (EPIC-067 R14); gagal tutup
+  // selama memuat/error. Antrean atasan ada di ESS Persetujuan Tim, bukan di sini.
+  const { data: access } = useHrApproveAccess();
+  const canDecide = access?.leaves === true;
   const leaves = useMemo(() => data ?? [], [data]);
 
   const handleExport = async () => {
@@ -244,7 +249,7 @@ export function LeavesPage() {
                     <p className="text-xs text-gray-500">
                       Diajukan: {formatDate(leave.created_at)}
                     </p>
-                    <ApprovalButtons leaveId={leave.id} />
+                    {canDecide && <ApprovalButtons leaveId={leave.id} />}
                   </div>
                 )}
               </CardContent>

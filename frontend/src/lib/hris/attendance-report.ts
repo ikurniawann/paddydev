@@ -31,6 +31,9 @@ export interface AttendanceReportRow {
   status: string | null;
   isLate: boolean;
   lateMinutes: number;
+  /** EPIC-067: label tersimpan "kurang jam" + jam minimum cabang saat itu. */
+  isShortHours: boolean;
+  minWorkHours: number | null;
   notes: string | null;
   clockInPhotoPath: string | null;
   clockOutPhotoPath: string | null;
@@ -108,7 +111,7 @@ export async function buildAttendanceXlsx(
   const header = [
     "Tanggal", "Nama Karyawan", "NIP", "Departemen", "Jabatan",
     "Jam Masuk", "Jam Pulang", "Jam Kerja", "Status",
-    "Terlambat (menit)", "Catatan",
+    "Terlambat (menit)", "Kurang Jam", "Jam Minimum", "Catatan",
   ];
 
   const aoa: unknown[][] = [
@@ -135,6 +138,8 @@ export async function buildAttendanceXlsx(
       row.workHours ?? 0,
       statusLabel(row.status),
       row.isLate ? row.lateMinutes : 0,
+      row.isShortHours ? "Ya" : "-",
+      row.minWorkHours ?? "-",
       row.notes ?? "",
     ]),
   ];
@@ -148,7 +153,7 @@ export async function buildAttendanceXlsx(
     {
       name: "Rekap Absensi",
       rows: aoa as (string | number | null | undefined)[][],
-      columnWidths: [18, 26, 20, 18, 18, 10, 11, 9, 12, 16, 30],
+      columnWidths: [18, 26, 20, 18, 18, 10, 11, 9, 12, 16, 11, 13, 30],
       merges,
     },
   ]);
@@ -309,11 +314,11 @@ export async function buildAttendancePdf(
     put(jamWib(row.clockIn), COLS[2].w);
     put(jamWib(row.clockOut), COLS[3].w);
     put(row.workHours != null ? `${row.workHours}` : "—", COLS[4].w);
-    put(
-      row.isLate ? `${statusLabel(row.status)} +${row.lateMinutes}m` : statusLabel(row.status),
-      COLS[5].w,
-      { color: row.isLate ? COLOR_LATE : COLOR_TEXT }
-    );
+    // Tabel sudah penuh: label kurang jam (EPIC-067) menumpang di kolom Status.
+    const statusText =
+      (row.isLate ? `${statusLabel(row.status)} +${row.lateMinutes}m` : statusLabel(row.status)) +
+      (row.isShortHours ? " · kurang jam" : "");
+    put(statusText, COLS[5].w, { color: row.isLate ? COLOR_LATE : COLOR_TEXT });
 
     await drawPhoto(row.clockInPhotoPath, x, y, COLS[6].w);
     x += COLS[6].w;
@@ -367,6 +372,8 @@ export interface AttendanceExportRecord {
   status: string | null;
   is_late: boolean | null;
   late_minutes: number | null;
+  is_short_hours: boolean | null;
+  min_work_hours: string | number | null;
   notes: string | null;
   clock_in_photo_url: string | null;
   clock_out_photo_url: string | null;
@@ -405,6 +412,8 @@ export function toReportRows(records: readonly AttendanceExportRecord[]): Attend
     status: r.status ?? null,
     isLate: Boolean(r.is_late),
     lateMinutes: Number(r.late_minutes) || 0,
+    isShortHours: Boolean(r.is_short_hours),
+    minWorkHours: r.min_work_hours == null ? null : Number(r.min_work_hours),
     notes: r.notes ?? null,
     clockInPhotoPath: r.clock_in_photo_url ?? null,
     clockOutPhotoPath: r.clock_out_photo_url ?? null,
@@ -431,6 +440,8 @@ const CSV_HEADERS = [
   "Status",
   "Terlambat",
   "Keterlambatan (menit)",
+  "Kurang Jam",
+  "Jam Minimum (jam)",
   "Catatan",
 ];
 
@@ -458,6 +469,8 @@ export function buildAttendanceCsv(records: readonly AttendanceExportRecord[]): 
       record.status || "-",
       record.is_late ? "Ya" : "Tidak",
       record.late_minutes || 0,
+      record.is_short_hours ? "Ya" : "-",
+      record.min_work_hours ?? "-",
       record.notes || "-",
     ]
       .map((field) => `"${String(field).replace(/"/g, '""')}"`)

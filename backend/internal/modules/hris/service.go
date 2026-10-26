@@ -3,6 +3,7 @@ package hris
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	"github.com/jackc/pgx/v5"
 
@@ -32,6 +33,8 @@ type Repository interface {
 	ApprovalRepo
 	AttendanceRequestRepo
 	AttendanceGapRepo
+	AttendanceGapSummaryRepo
+	AttendanceGapDigestRepo
 	WorkHoursRepo
 	// InTx runs fn against one transaction (a savepoint when already in one).
 	InTx(ctx context.Context, fn func(Repository) error) error
@@ -69,8 +72,11 @@ type Actor struct {
 	EmployeeID   *string
 	DepartmentID *string
 	IsHR         bool
-	// IsHRD: super_admin/admin/hrd only (tripHRRoles); gates the HR powers of
-	// Perjalanan Dinas. IsHR stays the broader flag for every other feature.
+	// IsHRD: super_admin/admin/hrd only (tripHRRoles): overtime assignments
+	// for others and the separate overtime correction. The HR side of the
+	// four decisions (attendance requests, leave, overtime, Perjalanan Dinas)
+	// is CanApprove instead (EPIC-067 R11). IsHR stays the broader flag for
+	// every other feature.
 	IsHRD bool
 	// PerformanceMenu: the account holds the HR side of the Kinerja menu, not
 	// only the employee-level Review/Tugas Departemen (set by withLogbook).
@@ -78,6 +84,16 @@ type Actor struct {
 	// WorkforceMenu: the account holds the Cuti/Absensi menu (hris.workforce);
 	// set by handlers that need it (EPIC-058 leave quota).
 	WorkforceMenu bool
+	// Approves lists the iam.HrisApproveLeaves on which the account holds
+	// "approve" (EPIC-067 R10/R11); set by handlers.actorFor.
+	Approves []string
+}
+
+// CanApprove reports whether the account holds "approve" on leaf (one of
+// iam.HrisApproveLeaves): the HR side of a decision. A direct manager
+// decides their reports without it.
+func (a *Actor) CanApprove(leaf string) bool {
+	return a != nil && slices.Contains(a.Approves, leaf)
 }
 
 // ActorRepo resolves the employee behind an account.

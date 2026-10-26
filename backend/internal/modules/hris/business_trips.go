@@ -12,6 +12,7 @@ import (
 	"nuhabit/backend/internal/platform/audit"
 	"nuhabit/backend/internal/platform/database"
 	"nuhabit/backend/internal/platform/httpx"
+	"nuhabit/backend/internal/platform/iam"
 	"nuhabit/backend/internal/platform/validate"
 )
 
@@ -46,10 +47,12 @@ var (
 
 const tripOverlap = "Sudah ada Perjalanan Dinas menunggu/disetujui yang beririsan dengan tanggal ini"
 
-// ListTrips: scope=approvals → the direct reports' trips; HRD (IsHRD) → all (or one
-// employee, "me" = own); others → own.
+// ListTrips: scope=approvals → the direct reports' trips; HR ("approve" on
+// the Absensi leaf, EPIC-067 R10/R11) → all (or one employee, "me" = own);
+// others → own.
 func (s *Service) ListTrips(ctx context.Context, a *Actor, scope, status, employeeID string) ([]*Row, error) {
 	f := tripFilter{Status: status}
+	isHR := a.CanApprove(iam.LeafAbsensi)
 	switch {
 	case scope == "approvals":
 		if a.EmployeeID == nil {
@@ -60,12 +63,12 @@ func (s *Service) ListTrips(ctx context.Context, a *Actor, scope, status, employ
 			return []*Row{}, err
 		}
 		f.EmployeeIDs = ids
-	case a.IsHRD && employeeID == "me":
+	case isHR && employeeID == "me":
 		if a.EmployeeID == nil {
 			return []*Row{}, nil
 		}
 		f.EmployeeIDs = []string{*a.EmployeeID}
-	case a.IsHRD:
+	case isHR:
 		if employeeID != "" {
 			f.EmployeeIDs = []string{employeeID}
 		}
@@ -89,7 +92,7 @@ func (s *Service) CreateTrip(ctx context.Context, a *Actor, in tripInput, meta a
 		return nil, httpx.BadRequest("Akun ini tidak tertaut ke data karyawan")
 	}
 	self := a.EmployeeID != nil && *target == *a.EmployeeID
-	if !self && !a.IsHRD {
+	if !self && !a.CanApprove(iam.LeafAbsensi) {
 		return nil, httpx.Forbidden("Hanya HRD yang bisa mencatat Perjalanan Dinas karyawan lain")
 	}
 	if msg := domain.ValidateBusinessTripDates(in.StartDate, in.EndDate, domain.TodayWIB(s.now())); msg != "" {
@@ -162,7 +165,7 @@ func (s *Service) DecideTrip(ctx context.Context, a *Actor, id, action string, r
 	if emp := trip.Child("employee"); emp != nil {
 		reportingTo = emp.StrPtr("reporting_to")
 	}
-	allowed, reason := domain.CanDecideBusinessTrip(domain.TripActor{EmployeeID: a.EmployeeID, IsHR: a.IsHRD},
+	allowed, reason := domain.CanDecideBusinessTrip(domain.TripActor{EmployeeID: a.EmployeeID, IsHR: a.CanApprove(iam.LeafAbsensi)},
 		domain.TripRef{EmployeeID: trip.Str("employee_id"), ReportingTo: reportingTo, Status: status}, action)
 	if !allowed {
 		return nil, httpx.Forbidden(reason)

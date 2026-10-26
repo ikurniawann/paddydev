@@ -1806,6 +1806,11 @@
   },
   {
     "module": "hris",
+    "method": "GET",
+    "path": "/api/hris/attendance/gap-summary"
+  },
+  {
+    "module": "hris",
     "method": "POST",
     "path": "/api/hris/attendance/manual"
   },
@@ -2378,6 +2383,11 @@
     "module": "hris",
     "method": "GET",
     "path": "/api/hris/me"
+  },
+  {
+    "module": "hris",
+    "method": "GET",
+    "path": "/api/hris/me/approve-access"
   },
   {
     "module": "hris",

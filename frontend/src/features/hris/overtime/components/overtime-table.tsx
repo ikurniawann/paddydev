@@ -24,12 +24,12 @@ interface OvertimeTableProps {
   decidingId: string | null;
   onDecide: (id: string, action: OvertimeDecisionAction, dayType?: OvertimeDayType) => void;
   canCorrect: boolean;
-  /** HRD (super_admin/admin/hrd): hanya HRD yang boleh mengganti jenis hari saat Setujui (R11); server mengabaikannya untuk selain HRD. */
-  isHrd: boolean;
+  /** Pemegang aksi `approve` daun Lembur (EPIC-067 R14): hanya mereka melihat Setujui/Tolak, Batalkan penugasan perusahaan, dan boleh mengganti jenis hari (server menetapkan day_type hanya untuk mereka, R11). */
+  canDecide: boolean;
   onCorrect: (row: OvertimeRow) => void;
 }
 
-export function OvertimeTable({ rows, loading, decidingId, onDecide, canCorrect, isHrd, onCorrect }: OvertimeTableProps) {
+export function OvertimeTable({ rows, loading, decidingId, onDecide, canCorrect, canDecide, onCorrect }: OvertimeTableProps) {
   return (
     <div className="overflow-x-auto rounded-xl border border-gray-200/70 bg-white shadow-sm">
       <table className="w-full text-sm">
@@ -66,7 +66,7 @@ export function OvertimeTable({ rows, loading, decidingId, onDecide, canCorrect,
                 deciding={decidingId === row.id}
                 onDecide={onDecide}
                 canCorrect={canCorrect}
-                isHrd={isHrd}
+                canDecide={canDecide}
                 onCorrect={onCorrect}
               />
             ))
@@ -82,11 +82,11 @@ interface OvertimeTableRowProps {
   deciding: boolean;
   onDecide: (id: string, action: OvertimeDecisionAction, dayType?: OvertimeDayType) => void;
   canCorrect: boolean;
-  isHrd: boolean;
+  canDecide: boolean;
   onCorrect: (row: OvertimeRow) => void;
 }
 
-function OvertimeTableRow({ row, deciding, onDecide, canCorrect, isHrd, onCorrect }: OvertimeTableRowProps) {
+function OvertimeTableRow({ row, deciding, onDecide, canCorrect, canDecide, onCorrect }: OvertimeTableRowProps) {
   const badge = STATUS_BADGES[row.status] ?? STATUS_BADGES.pending;
   const pending = row.status === "pending";
   // Koreksi jam lembur karyawan yang punya atasan langsung (aktif) adalah hak atasan (EPIC-066);
@@ -146,26 +146,24 @@ function OvertimeTableRow({ row, deciding, onDecide, canCorrect, isHrd, onCorrec
         {row.decided_as === "hr" && <span className="ml-1 text-xs text-gray-500">oleh HR</span>}
       </td>
       <td className="px-4 py-3 text-right">
-        {pending && row.source === "employee" && (
+        {pending && row.source === "employee" && canDecide && (
           <div className="flex justify-end gap-2">
-            {isHrd && (
-              <select
-                aria-label="Jenis hari"
-                value={dayType}
-                onChange={(e) => setDayType(e.target.value as OvertimeDayType)}
-                className="rounded-md border border-gray-200 px-2 text-xs"
-                disabled={deciding}
-              >
-                {OVERTIME_DAY_TYPE_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            )}
+            <select
+              aria-label="Jenis hari"
+              value={dayType}
+              onChange={(e) => setDayType(e.target.value as OvertimeDayType)}
+              className="rounded-md border border-gray-200 px-2 text-xs"
+              disabled={deciding}
+            >
+              {OVERTIME_DAY_TYPE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
             <Button size="sm" disabled={deciding} onClick={() =>
-                // Hanya kirim jenis bila HRD mengubahnya di sini; jangan menimpa koreksi/nilai server.
-                onDecide(row.id, "approve", isHrd && dayType !== (row.day_type ?? "regular") ? dayType : undefined)
+                // Hanya kirim jenis bila pemegang approve mengubahnya di sini; jangan menimpa koreksi/nilai server.
+                onDecide(row.id, "approve", dayType !== (row.day_type ?? "regular") ? dayType : undefined)
               }>
               Setujui
             </Button>
@@ -177,15 +175,18 @@ function OvertimeTableRow({ row, deciding, onDecide, canCorrect, isHrd, onCorrec
         {pending && row.source === "company" && (
           <div className="flex items-center justify-end gap-2">
             <span className="text-xs text-gray-400">Menunggu konfirmasi karyawan</span>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="text-xs text-gray-500"
-              disabled={deciding}
-              onClick={() => onDecide(row.id, "cancel")}
-            >
-              Batalkan
-            </Button>
+            {/* Pembatalan oleh HR butuh approve di Lembur (CanDecideOvertime, EPIC-067 R11). */}
+            {canDecide && (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="text-xs text-gray-500"
+                disabled={deciding}
+                onClick={() => onDecide(row.id, "cancel")}
+              >
+                Batalkan
+              </Button>
+            )}
           </div>
         )}
         {canCorrect && !managerOwnsCorrection && (row.status === "pending" || row.status === "approved") && (

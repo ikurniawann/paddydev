@@ -107,6 +107,7 @@ func (s *store) AttendanceExport(ctx context.Context, f exportFilter) ([]*Row, e
 	}
 	sql := `SELECT a.date::text, a.clock_in, a.clock_out, a.clock_in_location, a.clock_out_location,
 		a.work_hours, a.break_minutes, a.status::text, a.is_late, a.late_minutes, a.notes,
+		a.is_short_hours, a.min_work_hours,
 		a.clock_in_photo_url, a.clock_out_photo_url,
 		e.full_name, e.nip, d.name AS department, p.title AS job_title
 		FROM hris.attendance a

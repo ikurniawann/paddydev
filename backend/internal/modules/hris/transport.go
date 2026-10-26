@@ -1,6 +1,7 @@
 package hris
 
 import (
+	"context"
 	"net/http"
 	"net/url"
 
@@ -8,6 +9,7 @@ import (
 	"nuhabit/backend/internal/platform/auth"
 	"nuhabit/backend/internal/platform/hrisdel"
 	"nuhabit/backend/internal/platform/httpx"
+	"nuhabit/backend/internal/platform/iam"
 	"nuhabit/backend/internal/platform/validate"
 )
 
@@ -76,7 +78,41 @@ func (h handlers) actor(r *http.Request) (*Actor, error) {
 	if err != nil || u == nil {
 		return nil, err
 	}
-	return h.svc.Actor(r.Context(), u)
+	return h.actorFor(r.Context(), u)
+}
+
+// actorFor is svc.Actor plus the leaves of iam.HrisApproveLeaves on which
+// the account holds "approve" (EPIC-067 R11): the resolved IAM roles' grants,
+// as auth.RequireMenuAction reads them, matched per leaf. They are read on
+// the module's querier (the same database as h.auth in production), two or
+// three queries for every leaf together.
+func (h handlers) actorFor(ctx context.Context, u *auth.User) (*Actor, error) {
+	a, err := h.svc.Actor(ctx, u)
+	if err != nil {
+		return nil, err
+	}
+	q := h.svc.repo.querier()
+	roleIDs, err := auth.ResolveRoleIDsOn(ctx, q, u.ID, u.Role)
+	if err != nil {
+		return nil, err
+	}
+	granted, err := auth.GrantedMenuActionsOn(ctx, q, roleIDs)
+	if err != nil {
+		return nil, err
+	}
+	for _, leaf := range iam.HrisApproveLeaves {
+		if iam.HasGrantedAction(granted, []string{leaf}, "approve") {
+			a.Approves = append(a.Approves, leaf)
+		}
+	}
+	return a, nil
+}
+
+// GET /api/hris/me/approve-access (EPIC-067 R14): the decisions the account
+// may take on the HR side, so the pages show only the buttons it can use.
+func (h handlers) myApproveAccess(w http.ResponseWriter, _ *http.Request, a *Actor) error {
+	return ok(w, obj("attendance", a.CanApprove(iam.LeafAbsensi), "leaves", a.CanApprove(iam.LeafCuti),
+		"overtime", a.CanApprove(iam.LeafLembur)))
 }
 
 // requireEmployeeAccess passes managers (any of the prefixes) and the

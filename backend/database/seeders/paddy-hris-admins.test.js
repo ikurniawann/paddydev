@@ -58,7 +58,8 @@ test("ensureRole menjaga grant admin_hris yang ada (DB test, di-rollback)", { sk
     const res = await ensureRole(c);
     assert.equal(res.revoked, 0);
     assert.deepEqual(await grant("hris.access"), access);
-    assert.deepEqual((await grant("hris.workforce.attendance")).granted_actions, ["read", "delete"]);
+    // EPIC-067: "approve" dari grant HRD ikut ditambahkan; "delete" yang ada tetap.
+    assert.deepEqual((await grant("hris.workforce.attendance")).granted_actions, ["read", "delete", "approve"]);
     assert.equal((await grant("hris.compensation.payroll")).is_active, false);
     const holidays = await grant("hris.kepegawaian.holidays");
     assert.ok(holidays && holidays.is_active, "Hari Libur dari HRD tidak ditambahkan");

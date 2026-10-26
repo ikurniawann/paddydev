@@ -6,6 +6,7 @@ export const attendanceQueryKeys = {
   list: (params: AttendanceListParams) => ["hris", "attendance", "list", params] as const,
   monthStats: (month: string) => ["hris", "attendance", "month-stats", month] as const,
   roster: (date: string) => ["hris", "attendance", "roster", date] as const,
+  gapSummary: (date: string) => ["hris", "attendance", "gap-summary", date] as const,
   calendarAll: () => ["hris", "attendance", "calendar"] as const,
   calendar: (employeeId: string | undefined, start: string, end: string) =>
     ["hris", "attendance", "calendar", employeeId ?? "", start, end] as const,

@@ -2,6 +2,7 @@ import { apiDelete, apiGet, apiPatch, apiPost, apiPut, buildListUrl } from "@/li
 import type {
   AttendanceAdjustment,
   AttendanceAdjustPayload,
+  AttendanceGapSummary,
   AttendancePeriod,
   AttendancePeriodList,
   AttendancePeriodPreview,
@@ -43,6 +44,12 @@ export async function exportAttendanceCsv(
 export const fetchDailyRoster = (date?: string) =>
   apiGet<{ data: DailyRosterData }>(
     buildListUrl("/api/hris/attendance/daily-roster", { date })
+  ).then((res) => res.data);
+
+/** date kosong = kemarin (WIB), diputuskan server. */
+export const fetchAttendanceGapSummary = (date?: string) =>
+  apiGet<{ data: AttendanceGapSummary }>(
+    buildListUrl("/api/hris/attendance/gap-summary", { date })
   ).then((res) => res.data);
 
 export const fetchAttendanceList = (params: AttendanceListParams) =>

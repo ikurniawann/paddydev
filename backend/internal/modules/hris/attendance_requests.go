@@ -13,6 +13,7 @@ import (
 	"nuhabit/backend/internal/platform/auth"
 	"nuhabit/backend/internal/platform/database"
 	"nuhabit/backend/internal/platform/httpx"
+	"nuhabit/backend/internal/platform/iam"
 	"nuhabit/backend/internal/platform/validate"
 )
 
@@ -195,14 +196,14 @@ func (s *Service) CancelAttendanceRequest(ctx context.Context, a *Actor, id stri
 }
 
 // attendanceManagers hold the HR Absensi menu: the request queue and its
-// decisions, together with Actor.IsHRD (R2).
+// decisions, together with "approve" on the Absensi leaf (EPIC-067 R11).
 var attendanceManagers = []string{"hris.workforce.attendance"}
 
 const notHRD = "Hanya HRD yang bisa memproses pengajuan absensi"
 
 // ListAttendanceRequests is the HR queue (R2): every employee's requests.
 func (s *Service) ListAttendanceRequests(ctx context.Context, a *Actor, status, employeeID string) ([]*Row, error) {
-	if !a.IsHRD {
+	if !a.CanApprove(iam.LeafAbsensi) {
 		return nil, httpx.Forbidden(notHRD)
 	}
 	return s.repo.AttendanceRequestList(ctx, attendanceRequestFilter{EmployeeID: employeeID, Status: status})
@@ -215,7 +216,7 @@ func (s *Service) ListAttendanceRequests(ctx context.Context, a *Actor, status, 
 // that transaction.
 func (s *Service) DecideAttendanceRequest(ctx context.Context, a *Actor, id, action string, rejection *string,
 	meta audit.Entry) (*Row, error) {
-	if !a.IsHRD {
+	if !a.CanApprove(iam.LeafAbsensi) {
 		return nil, httpx.Forbidden(notHRD)
 	}
 	req, err := s.repo.AttendanceRequestByID(ctx, id)
@@ -490,10 +491,10 @@ func (h handlers) cancelAttendanceRequest(w http.ResponseWriter, r *http.Request
 }
 
 // GET /api/hris/attendance-requests/attachment/attendance-requests/<employeeId>/<file>:
-// the requester and HRD read it (EPIC-065 P6: not hiring_manager, who cannot
-// list or decide requests either).
+// the requester and whoever decides requests ("approve" on the Absensi leaf,
+// EPIC-067 R11; EPIC-065 P6).
 func (h handlers) attendanceRequestAttachment(w http.ResponseWriter, r *http.Request, a *Actor) error {
-	return h.ownedFileFor(w, r, a, a.IsHRD, "/api/hris/attendance-requests/attachment/", attendanceRequestFolder)
+	return h.ownedFileFor(w, r, a, a.CanApprove(iam.LeafAbsensi), "/api/hris/attendance-requests/attachment/", attendanceRequestFolder)
 }
 
 // GET /api/hris/attendance-requests?status=&employee_id= (HR queue)
@@ -511,7 +512,7 @@ func (h handlers) listAttendanceRequests(w http.ResponseWriter, r *http.Request,
 		}
 		employeeID = id
 	}
-	a, err := h.svc.Actor(r.Context(), u)
+	a, err := h.actorFor(r.Context(), u)
 	if err != nil {
 		return err
 	}
@@ -538,7 +539,7 @@ func (h handlers) decideAttendanceRequest(w http.ResponseWriter, r *http.Request
 	if err := formErr(f, message); err != nil {
 		return err
 	}
-	a, err := h.svc.Actor(r.Context(), u)
+	a, err := h.actorFor(r.Context(), u)
 	if err != nil {
 		return err
 	}

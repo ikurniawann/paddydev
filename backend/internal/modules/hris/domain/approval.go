@@ -15,9 +15,10 @@ const (
 	DecidedAsHR      = "hr"
 )
 
-// Approver is who decides a leave or overtime request. IsHR carries the
-// controller ruling C1: callers pass Actor.IsHRD (super_admin/admin/hrd), not
-// Actor.IsHR (which also includes hiring_manager).
+// Approver is who decides a leave or overtime request. IsHR is the HR
+// decision power: callers pass Actor.CanApprove(<leaf>) — iam.LeafCuti for
+// leaves, iam.LeafLembur for overtime ("approve" on the leaf, EPIC-067 R11),
+// not a role check.
 type Approver struct {
 	EmployeeID *string
 	IsHR       bool

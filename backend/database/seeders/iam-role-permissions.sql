@@ -27,6 +27,8 @@ ON CONFLICT (code) DO UPDATE SET
 -- hrd -> HRIS + Settings. EPIC-061 (Q-RA-2/Q-RA-5): tanpa "delete" di menu daun HRIS yang hak hapusnya
 -- ditambahkan migrasi 20261022090000 dan tanpa Hak Akses HRIS (hris.access) — keduanya milik
 -- admin_hris / super_admin. Hari Libur, Pengumuman, Penempatan tetap seperti sebelumnya.
+-- EPIC-067: "approve" di Absensi, Cuti & Izin, dan Lembur ikut dari permission_context (keputusan HR,
+-- migrasi 20261027090100_iam_hris_approve).
 INSERT INTO iam.role_menu_permissions (role_id, menu_id, granted_actions)
 SELECT r.id, m.id, CASE WHEN m.code IN ('hris.kepegawaian.users', 'hris.kepegawaian.contracts', 'hris.kepegawaian.shifts',
       'hris.kepegawaian.schedules', 'hris.master.departments', 'hris.master.positions', 'hris.master.employment-statuses',

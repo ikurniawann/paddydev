@@ -6,6 +6,8 @@
 
 -- EPIC-061: menu daun HRIS yang punya endpoint hapus menawarkan "delete" (sama dengan migrasi
 -- 20261022090000_iam_hris_delete_masks); hak hapus diberikan lewat Hak Akses HRIS / Super Admin.
+-- EPIC-067: Absensi dan Cuti & Izin juga menawarkan "approve" (keputusan HR; Lembur sudah), sama
+-- dengan migrasi 20261027090100_iam_hris_approve.
 INSERT INTO iam.menus (code, menu_name, route_path, icon, menu_type, order_number, permission_context) VALUES
   ('report', 'Laporan', NULL, 'chart', 'group', 80, '{"actions":["read"]}'::jsonb),
   ('report.sales-vs-target', 'Sales vs Target', '/dashboard/report/sales-vs-target', 'chart', 'sidebar', 10, '{"actions":["read","create","update","delete"]}'::jsonb),
@@ -62,7 +64,7 @@ INSERT INTO iam.menus (code, menu_name, route_path, icon, menu_type, order_numbe
   ('hris.performance.dept-tasks', 'Task Departemen', '/dashboard/hris/dept-tasks', 'clipboard-document-check', 'sidebar', 66, '{"actions":["read","update"]}'::jsonb),
   ('hris.performance.kpi-config', 'Konfigurasi KPI Department', '/dashboard/hris/kpi-config', 'clipboard', 'sidebar', 68, '{"actions":["read","update"]}'::jsonb),
   ('hris.recruitment.candidates', 'Kandidat', '/dashboard/hris/candidates', 'user-plus', 'sidebar', 10, '{"actions":["read","delete"]}'::jsonb),
-  ('hris.workforce.attendance', 'Absensi', '/dashboard/hris/attendance', 'calendar', 'sidebar', 10, '{"actions":["read","delete"]}'::jsonb),
+  ('hris.workforce.attendance', 'Absensi', '/dashboard/hris/attendance', 'calendar', 'sidebar', 10, '{"actions":["read","delete","approve"]}'::jsonb),
   ('items.product.master', 'Data Master', NULL, 'database', 'group', 10, '{"actions":["read"]}'::jsonb),
   ('items.raw-material.master', 'Data Master', NULL, 'database', 'group', 10, '{"actions":["read"]}'::jsonb),
   ('pos.catalog.products', 'Produk', '/dashboard/pos/products', 'cube', 'sidebar', 10, '{"actions":["read"]}'::jsonb),
@@ -82,7 +84,7 @@ INSERT INTO iam.menus (code, menu_name, route_path, icon, menu_type, order_numbe
   ('hris.performance.logbook', 'Logbook', '/dashboard/hris/logbook', 'clipboard', 'sidebar', 20, '{"actions":["read"]}'::jsonb),
   ('hris.recruitment.pipeline', 'Pipeline', '/dashboard/hris/pipeline', 'clipboard', 'sidebar', 20, '{"actions":["read"]}'::jsonb),
   ('hris.recruitment.psikotes', 'Psikotes', '/dashboard/hris/psikotes', 'clipboard', 'sidebar', 25, '{"actions":["read","delete"]}'::jsonb),
-  ('hris.workforce.leaves', 'Cuti & Izin', '/dashboard/hris/leaves', 'file-text', 'sidebar', 20, '{"actions":["read","delete"]}'::jsonb),
+  ('hris.workforce.leaves', 'Cuti & Izin', '/dashboard/hris/leaves', 'file-text', 'sidebar', 20, '{"actions":["read","delete","approve"]}'::jsonb),
   ('items.product.inventory', 'Persediaan', NULL, 'circle-stack', 'group', 20, '{"actions":["read"]}'::jsonb),
   ('items.raw-material.inventory', 'Persediaan', NULL, 'circle-stack', 'group', 20, '{"actions":["read"]}'::jsonb),
   ('pos.catalog.stock-alerts', 'Stok Alert', '/dashboard/pos/stock-alerts', 'chart-bar', 'sidebar', 20, '{"actions":["read"]}'::jsonb),

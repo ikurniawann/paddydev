@@ -12,6 +12,7 @@ import (
 	"nuhabit/backend/internal/modules/hris/domain"
 	"nuhabit/backend/internal/platform/audit"
 	"nuhabit/backend/internal/platform/httpx"
+	"nuhabit/backend/internal/platform/iam"
 	"nuhabit/backend/internal/platform/outbox"
 )
 
@@ -376,8 +377,8 @@ func (s *Service) DecideLeave(ctx context.Context, a *Actor, in leaveDecision, m
 	if emp != nil {
 		reportingTo = emp.StrPtr("reporting_to")
 	}
-	// Ruling C1: the HR backup is the HRD set (IsHRD), not IsHR.
-	decidedAs, refusal := domain.DecideAs(domain.Approver{EmployeeID: a.EmployeeID, IsHR: a.IsHRD},
+	// The HR backup holds "approve" on the Cuti leaf (EPIC-067 R11), not IsHR.
+	decidedAs, refusal := domain.DecideAs(domain.Approver{EmployeeID: a.EmployeeID, IsHR: a.CanApprove(iam.LeafCuti)},
 		leave.Str("employee_id"), reportingTo, "cuti")
 	if decidedAs == "" {
 		return nil, httpx.Forbidden(refusal)

@@ -13,18 +13,6 @@ export const TRIP_STATUS_META: Record<TripStatus, { label: string; className: st
 
 export const TRIP_MAX_DAYS = 31;
 
-/**
- * Peran dengan kuasa HR Perjalanan Dinas (EPIC-062 R7 "HRD"): lihat semua,
- * memutus sebagai cadangan, membatalkan yang disetujui, mencatat untuk karyawan
- * lain. Sengaja lebih sempit dari HR_ROLES — hiring_manager (peran rekrutmen)
- * tidak termasuk. Cermin tripHRRoles di backend (server tetap menentukan).
- */
-export const TRIP_HR_ROLES = ["super_admin", "admin", "hrd"] as const;
-
-export function canManageTrips(role: string | null | undefined): boolean {
-  return !!role && (TRIP_HR_ROLES as readonly string[]).includes(role);
-}
-
 export interface TripForm {
   start_date: string;
   end_date: string;

@@ -2,9 +2,11 @@ package hris
 
 import (
 	"fmt"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"nuhabit/backend/internal/platform/iam"
 	"nuhabit/backend/internal/platform/testutil"
 )
 
@@ -14,7 +16,8 @@ func TestAttendanceRequestDecision(t *testing.T) {
 	h := newHarness(t)
 	h.exec(`UPDATE hris.attendance_settings SET cutoff_day = 0, closing_offset_days = 3`)
 	hr, hrID := h.staff("hrd", []string{"hris.workforce.attendance"}, true, emp{name: "HR Pemutus"})
-	recruiter, _ := h.staff("hiring_manager", []string{"hris.workforce.attendance"}, true)
+	// EPIC-067 R11: the recruiter reads Absensi without "approve".
+	recruiter, _ := h.staffGrants("hiring_manager", readOnly(iam.LeafAbsensi), true)
 	noMenu, _ := h.staff("hrd", nil, true)
 	boss, bossID := h.staff("pos", nil, true, emp{name: "Atasan Crew"})
 	crew, crewID := h.staff("pos", nil, true, emp{name: "Crew Diputus", boss: &bossID})
@@ -204,4 +207,61 @@ func TestAttendanceRequestDecisionRaces(t *testing.T) {
 	if s := status(raced); s != "pending" {
 		t.Fatalf("status after unique violation = %s", s)
 	}
+}
+
+// EPIC-067 R10/R11: the HR side of attendance requests (queue, decision,
+// badge, the proof photo) follows "approve" on the Absensi leaf, not the app
+// role; nobody decides their own request.
+func TestAttendanceRequestHRSideNeedsApprove(t *testing.T) {
+	h, _ := newFileHarness(t)
+	h.exec(`UPDATE hris.attendance_settings SET cutoff_day = 0, closing_offset_days = 3`)
+	hrdRead, _ := h.staffGrants("hrd", readOnly(iam.LeafAbsensi), true, emp{name: "HRD Tanpa Approve"})
+	approver, _ := h.staffGrants("pos", readApprove(iam.LeafAbsensi), true, emp{name: "Admin Absensi"})
+	crew, _ := h.staff("pos", nil, true, emp{name: "Crew Approve"})
+	const url = "/api/hris/attendance-requests"
+	created := h.do(&crew, "POST", url, map[string]any{"date": "2026-10-02", "clock_in": "08:00", "clock_out": "17:00",
+		"reason": "Internet toko mati pagi itu", "photo": dataURL("image/png", pngBytes(t))})
+	expect(t, created, 201, "")
+	id := created.data()["id"].(string)
+	photo := "/api/hris/attendance-requests/attachment/" + created.data()["attachment_path"].(string)
+	decide := func(s *testutil.Staff, id string) call {
+		return h.do(s, "POST", url+"/"+id+"/decide", map[string]any{"action": "approve"})
+	}
+	badge := func(s *testutil.Staff) (any, bool) {
+		v, has := h.do(s, "GET", "/api/hris/nav-badges", nil).body["badges"].(map[string]any)["/dashboard/hris/attendance"]
+		return v, has
+	}
+
+	// (i) App role hrd holding the menu without "approve": the HR message.
+	expect(t, h.do(&hrdRead, "GET", url, nil), 403, notHRD)
+	expect(t, decide(&hrdRead, id), 403, notHRD)
+	if _, has := badge(&hrdRead); has {
+		t.Fatal("hrd without approve got the HR attendance badge")
+	}
+	if rec := h.send(&hrdRead, httptest.NewRequest("GET", photo, nil)); rec.Code != 403 {
+		t.Fatalf("hrd without approve read the photo: %d", rec.Code)
+	}
+
+	// (ii) A non-HR app role holding "approve" on the leaf decides as HR.
+	queue := h.do(&approver, "GET", url+"?status=pending", nil)
+	expect(t, queue, 200, "")
+	if len(queue.list()) == 0 {
+		t.Fatalf("approver queue = %s", queue.raw)
+	}
+	if v, has := badge(&approver); !has || fmt.Sprint(v) == "0" {
+		t.Fatalf("approver badge = %v (%v)", v, has)
+	}
+	if rec := h.send(&approver, httptest.NewRequest("GET", photo, nil)); rec.Code != 200 {
+		t.Fatalf("approver photo read = %d", rec.Code)
+	}
+	approved := decide(&approver, id)
+	expect(t, approved, 200, "")
+	if approved.data()["status"] != "approved" || approved.data()["decided_by_name"] != approver.FullName {
+		t.Fatalf("approve = %s", approved.raw)
+	}
+
+	// (iii) "approve" never decides one's own request.
+	own := h.do(&approver, "POST", url, attReqBody("2026-10-02", "08:00", "17:00", "Internet kantor mati"))
+	expect(t, own, 201, "")
+	expect(t, decide(&approver, own.data()["id"].(string)), 403, "Tidak bisa memutuskan pengajuan absensi sendiri")
 }

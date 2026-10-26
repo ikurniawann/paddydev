@@ -24,6 +24,8 @@ const contoh = (over: Partial<AttendanceReportRow> = {}): AttendanceReportRow =>
   status: "present",
   isLate: false,
   lateMinutes: 0,
+  isShortHours: false,
+  minWorkHours: null,
   notes: null,
   clockInPhotoPath: null,
   clockOutPhotoPath: null,
@@ -62,6 +64,23 @@ describe("buildAttendanceXlsx", () => {
     expect(text).toContain("Periode: 1–31 Agustus 2026");
     expect(text).toContain("Nanda Romdona");
     expect(text).toContain("Hadir");
+  });
+
+  it("EPIC-067: Kurang Jam & Jam Minimum tepat sebelum Catatan", async () => {
+    const meta = { companyName: "P", periodLabel: "p", employeeLabel: null, generatedAt: new Date(0) };
+    const buffer = await buildAttendanceXlsx(
+      [
+        contoh({ isLate: true, lateMinutes: 5, isShortHours: true, minWorkHours: 9, notes: 'kata "kutip"' }),
+        contoh({ date: "2026-08-28" }),
+      ],
+      meta
+    );
+    const matrix = await parseXlsxToMatrix(buffer);
+    const header = matrix.find((row) => row[0] === "Tanggal");
+    expect(header?.slice(-4)).toEqual(["Terlambat (menit)", "Kurang Jam", "Jam Minimum", "Catatan"]);
+    const data = matrix.filter((row) => row[1] === "Nanda Romdona");
+    expect(data[0].slice(-4)).toEqual(["5", "Ya", "9", 'kata "kutip"']);
+    expect(data[1].slice(-4)).toEqual(["0", "-", "-", ""]);
   });
 });
 
@@ -112,6 +131,8 @@ describe("ekspor dari baris query", () => {
     status: "present",
     is_late: true,
     late_minutes: 5,
+    is_short_hours: true,
+    min_work_hours: "9.00",
     notes: 'kata "kutip"',
     clock_in_photo_url: null,
     clock_out_photo_url: null,
@@ -144,6 +165,20 @@ describe("ekspor dari baris query", () => {
     expect(line).toContain('"EMP-1","Budi","Ops","-","2026-08-27"');
     expect(line).toMatch(/08[.:]58/);
     expect(line).toContain('"-6.2,106.8 (Kantor)"');
-    expect(line).toContain('"Ya","5","kata ""kutip"""');
+    expect(line).toContain('"Ya","5","Ya","9.00","kata ""kutip"""');
+  });
+
+  it("CSV EPIC-067: header kolom baru berurutan; baris tanpa label memakai '-'", () => {
+    const [header, line] = buildAttendanceCsv([
+      record({ is_late: false, late_minutes: 0, is_short_hours: false, min_work_hours: null, notes: null }),
+    ]).split("\n");
+    expect(header.endsWith("Keterlambatan (menit),Kurang Jam,Jam Minimum (jam),Catatan")).toBe(true);
+    expect(line.endsWith('"Tidak","0","-","-","-"')).toBe(true);
+  });
+
+  it("toReportRows membawa is_short_hours dan min_work_hours", () => {
+    const [on, off] = toReportRows([record(), record({ is_short_hours: null, min_work_hours: null, date: "2026-08-28" })]);
+    expect([on.isShortHours, on.minWorkHours]).toEqual([true, 9]);
+    expect([off.isShortHours, off.minWorkHours]).toEqual([false, null]);
   });
 });

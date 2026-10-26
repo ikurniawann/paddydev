@@ -26,7 +26,7 @@ func (h handlers) withPeriodActor(fn func(w http.ResponseWriter, r *http.Request
 		if err != nil {
 			return err
 		}
-		a, err := h.svc.Actor(r.Context(), u)
+		a, err := h.actorFor(r.Context(), u)
 		if err != nil {
 			return err
 		}

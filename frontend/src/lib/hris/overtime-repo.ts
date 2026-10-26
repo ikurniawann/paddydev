@@ -11,6 +11,7 @@ import { canonicalUuid } from "@/lib/api/canonical-uuid";
 import { recordAuditAfterCommit } from "@/lib/audit";
 import { overtimeHoursFromTimes, periodBounds } from "@/lib/payroll/period";
 import { createServerPgClient } from "@/lib/pg/create-client";
+import { canApproveLeaf, HRIS_APPROVE_LEAF } from "./approve-access";
 import { auditDateText, decisionActorName } from "./decision-audit";
 import { canDecideOvertime, decidedAs, OVERTIME_TOO_LATE, overtimeStartsInPast } from "./overtime-rules";
 import type { WorkforceActor } from "./workforce-auth";
@@ -197,8 +198,10 @@ export async function decideOvertime(actor: WorkforceActor, input: z.infer<typeo
     });
   }
 
+  // Jalur HR = "approve" pada daun Lembur (EPIC-067 R11/R15), sama dengan Go DecideOvertime.
+  const isHr = await canApproveLeaf(actor, HRIS_APPROVE_LEAF.lembur);
   const decision = canDecideOvertime(
-    { employeeId: actor.employeeId, isHr: actor.isHrd },
+    { employeeId: actor.employeeId, isHr },
     {
       employee_id: overtime.employee_id,
       requested_by: overtime.requested_by,
@@ -218,7 +221,7 @@ export async function decideOvertime(actor: WorkforceActor, input: z.infer<typeo
   const capacity =
     overtime.source === "employee" && input.action !== "cancel"
       ? decidedAs(
-          { employeeId: actor.employeeId, isHr: actor.isHrd },
+          { employeeId: actor.employeeId, isHr },
           overtime.employee_id,
           overtime.employee?.reporting_to ?? null
         )

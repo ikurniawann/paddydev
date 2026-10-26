@@ -69,6 +69,7 @@ deploying-dev · ready-for-qa · blocked · done).
 | [EPIC-064](./EPIC-064-hris-aktifkan-kembali.md) | Aktifkan Kembali Karyawan & Pesan Duplikat Jelas (`MODULE-HRIS`) | ready-for-qa | 2026-10-21 |
 | [EPIC-065](./EPIC-065-absensi-lanjutan.md) | Paket Absensi Lanjutan — Pengajuan Absen Manual/Koreksi, Absen Terlewat, Kurang Jam HQ (`MODULE-HRIS`) | ready-for-qa | 2026-10-21 |
 | [EPIC-066](./EPIC-066-input-lembur-setelah-selesai.md) | Input Lembur Setelah Selesai — Istirahat, Dokumentasi Wajib, Koreksi Atasan Langsung (`MODULE-HRIS`) | ready-for-qa | 2026-10-22 |
+| [EPIC-067](./EPIC-067-absensi-tindak-lanjut.md) | HRIS Absensi — Tindak Lanjut: Export Kurang Jam, Ringkasan Absen Terlewat HR, Approve per Menu Daun (`MODULE-HRIS`) | review | 2026-10-26 |
 
 Aturan:
 - Epic + registry ini adalah sumber kebenaran status pekerjaan (canonical).

@@ -215,7 +215,7 @@ func (h handlers) ownedFile(w http.ResponseWriter, r *http.Request, a *Actor, pr
 }
 
 // ownedFileFor is ownedFile with the reading staff chosen by the caller
-// (IsHR, or the narrower IsHRD).
+// (IsHR, or Actor.CanApprove on a decision leaf).
 func (h handlers) ownedFileFor(w http.ResponseWriter, r *http.Request, a *Actor, staff bool, prefix, folder string) error {
 	segments := privateSegments(r, prefix, folder, 3)
 	if segments == nil {

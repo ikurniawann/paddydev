@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canManageTrips, EMPTY_TRIP_FORM, TRIP_STATUS_META, tripDays, tripRangeLabel, validateTripForm } from "./business-trips";
+import { EMPTY_TRIP_FORM, TRIP_STATUS_META, tripDays, tripRangeLabel, validateTripForm } from "./business-trips";
 
 const form = { start_date: "2026-10-05", end_date: "2026-10-07", destination: "Gudang Cikarang", purpose: "Stock opname" };
 
@@ -27,12 +27,5 @@ describe("Perjalanan Dinas", () => {
     expect(tripRangeLabel("2026-10-05", "2026-10-07")).toBe("5 Okt 2026 – 7 Okt 2026 (3 hari)");
     expect(tripRangeLabel("2026-10-05", "2026-10-05")).toBe("5 Okt 2026 (1 hari)");
     expect(TRIP_STATUS_META.approved.label).toBe("Disetujui");
-  });
-});
-
-describe("canManageTrips (kuasa HR Perjalanan Dinas)", () => {
-  it("hanya super_admin, admin, hrd — bukan hiring_manager atau peran lain", () => {
-    for (const role of ["super_admin", "admin", "hrd"]) expect(canManageTrips(role)).toBe(true);
-    for (const role of ["hiring_manager", "employee", "pos", "direksi", "", undefined]) expect(canManageTrips(role)).toBe(false);
   });
 });

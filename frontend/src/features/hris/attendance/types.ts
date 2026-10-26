@@ -82,6 +82,29 @@ export interface DailyRosterData {
   employees: RosterEmployee[];
 }
 
+/** Ringkasan absen terlewat satu tanggal untuk HR (EPIC-067, GET /api/hris/attendance/gap-summary). */
+export type AttendanceGapSummaryKind = "missing" | "no_clock_out";
+
+export interface AttendanceGapSummaryEmployee {
+  employee_id: string;
+  name: string;
+  nip: string | null;
+  department: string | null;
+  kind: AttendanceGapSummaryKind;
+  /** "HH:MM" WIB; hanya untuk no_clock_out. */
+  clock_in: string | null;
+}
+
+export interface AttendanceGapSummary {
+  date: string;
+  missing: number;
+  no_clock_out: number;
+  /** Karyawan tanpa jadwal berlaku pada tanggal itu; tidak dihitung sebagai belum absen. */
+  unscheduled: number;
+  period_closed: boolean;
+  employees: AttendanceGapSummaryEmployee[];
+}
+
 // ── Rekap (list absensi) ────────────────────────────────────────────────
 export interface AttendanceListParams {
   employee_id?: string;
