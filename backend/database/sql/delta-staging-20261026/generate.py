@@ -164,6 +164,10 @@ def main():
     for rel in other:
         if rel in TABLES:
             continue
+        # Tabel dari migrasi yang hanya ada di staging (mis. rilis setelah cutover): dicatat, tidak dibandingkan.
+        if q(a.base, f"SELECT to_regclass('{rel}') IS NULL") == "t":
+            skipped_tables.append(f"{rel} (tabel baru di staging, {q(a.stg, f'SELECT count(*) FROM {rel}')} baris)")
+            continue
         cnt = f"SELECT count(*) || ':' || coalesce(md5(string_agg(md5(t::text), '' ORDER BY md5(t::text))), '') FROM {rel} t"
         bs, ss = q(a.base, cnt), q(a.stg, cnt)
         if bs != ss:
