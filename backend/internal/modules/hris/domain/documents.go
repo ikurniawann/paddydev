@@ -125,6 +125,8 @@ type ReportRow struct {
 	Status                    *string
 	IsLate                    bool
 	LateMinutes               int
+	IsShortHours              bool     // EPIC-067 R2: hris.attendance.is_short_hours
+	MinWorkHours              *float64 // EPIC-067 R2: hris.attendance.min_work_hours, nil = no rule
 	Notes                     *string
 	ClockInPhoto              *string
 	ClockOutPhoto             *string

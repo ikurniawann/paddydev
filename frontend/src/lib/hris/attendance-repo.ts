@@ -404,7 +404,7 @@ export async function listAttendanceForExport(
   let builder = db.from("attendance").select(
     `id, employee_id, date, clock_in, clock_out,
       clock_in_location, clock_out_location, work_hours, break_minutes,
-      status, is_late, late_minutes, notes,
+      status, is_late, late_minutes, is_short_hours, min_work_hours, notes,
       clock_in_photo_url, clock_out_photo_url, created_at,
       employee:employees!attendance_employee_id_fkey(
         full_name, nip,

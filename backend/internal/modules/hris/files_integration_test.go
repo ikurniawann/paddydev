@@ -211,6 +211,8 @@ func TestAttendanceExport(t *testing.T) {
 		VALUES ($1, '2099-06-02', '2099-06-02T01:58:00Z', '2099-06-02T08:58:00Z', '{"latitude": -6.2, "longitude": 106.8, "address": "Kantor"}',
 		'present', true, 5, 'kata "kutip"', $2, 'attendance/x/rusak.webp'),
 		($1, '2099-06-01', '2099-06-01T01:00:00Z', NULL, NULL, 'present', false, 0, NULL, NULL, NULL)`, worker, path)
+	// EPIC-067 R2: the trigger keeps a stored label while clocks and branch stay put.
+	h.exec(`UPDATE hris.attendance SET min_work_hours = 9, is_short_hours = true WHERE employee_id = $1 AND date = '2099-06-02'`, worker)
 	q := "?employee_id=" + worker + "&start_date=2099-06-01&end_date=2099-06-30"
 
 	csv := h.send(&hr, httptest.NewRequest("GET", "/api/hris/attendance/export"+q, nil))
@@ -221,7 +223,9 @@ func TestAttendanceExport(t *testing.T) {
 	lines := strings.Split(csv.Body.String(), "\n")
 	if len(lines) != 3 || !strings.HasPrefix(lines[0], "NIP,Nama Karyawan") ||
 		!strings.Contains(lines[1], `"Nanda Ekspor","Dapur Ekspor","-","2099-06-02","2 Jun 2099, 08.58","2 Jun 2099, 15.58","-6.2,106.8 (Kantor)","-"`) ||
-		!strings.Contains(lines[1], `"Ya","5","kata ""kutip"""`) || !strings.Contains(lines[2], `"2099-06-01"`) {
+		!strings.HasSuffix(lines[0], `Keterlambatan (menit),Kurang Jam,Jam Minimum (jam),Catatan`) ||
+		!strings.HasSuffix(lines[1], `"Ya","5","Ya","9.00","kata ""kutip"""`) || !strings.Contains(lines[2], `"2099-06-01"`) ||
+		!strings.HasSuffix(lines[2], `"Tidak","0","-","-","-"`) {
 		t.Fatalf("csv body:\n%s", csv.Body)
 	}
 
@@ -241,6 +245,13 @@ func TestAttendanceExport(t *testing.T) {
 			t.Fatalf("xlsx misses %q: %s", want, text)
 		}
 	}
+	// R2: Kurang Jam and Jam Minimum sit right before Catatan.
+	for _, want := range []string{`"Terlambat (menit)","Kurang Jam","Jam Minimum","Catatan"`,
+		`"5","Ya","9","kata \"kutip\""`, `"0","-","-",""`} {
+		if !strings.Contains(string(text), want) {
+			t.Fatalf("xlsx short-hours columns miss %q: %s", want, text)
+		}
+	}
 
 	doc := h.send(&hr, httptest.NewRequest("GET", "/api/hris/attendance/export"+q+"&format=pdf", nil))
 	if doc.Code != 200 || doc.Header().Get("Content-Type") != "application/pdf" ||
@@ -251,7 +262,7 @@ func TestAttendanceExport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"Paddy — Rekap Absensi", "Nanda Ekspor", "Hadir +5m", "foto tidak dapat", "kata \"kutip\""} {
+	for _, want := range []string{"Paddy — Rekap Absensi", "Nanda Ekspor", "Hadir +5m", "kurang jam", "foto tidak dapat", "kata \"kutip\""} {
 		if !strings.Contains(pdfText, want) {
 			t.Fatalf("pdf misses %q: %s", want, pdfText)
 		}

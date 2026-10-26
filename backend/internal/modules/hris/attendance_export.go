@@ -104,7 +104,7 @@ func toReportRows(records []*Row) []domain.ReportRow {
 		row := domain.ReportRow{
 			Date: r.Str("date"), EmployeeName: name,
 			NIP: r.StrPtr("nip"), Department: r.StrPtr("department"), Position: r.StrPtr("job_title"),
-			Status: r.StrPtr("status"), IsLate: r.Bool("is_late"), Notes: r.StrPtr("notes"),
+			Status: r.StrPtr("status"), IsLate: r.Bool("is_late"), IsShortHours: r.Bool("is_short_hours"), Notes: r.StrPtr("notes"),
 			ClockInPhoto: r.StrPtr("clock_in_photo_url"), ClockOutPhoto: r.StrPtr("clock_out_photo_url"),
 		}
 		if t, ok := r.Time("clock_in"); ok {
@@ -117,6 +117,10 @@ func toReportRows(records []*Row) []domain.ReportRow {
 			h := r.Num("work_hours")
 			row.WorkHours = &h
 		}
+		if r.Get("min_work_hours") != nil {
+			m := r.Num("min_work_hours")
+			row.MinWorkHours = &m
+		}
 		row.LateMinutes = int(r.Num("late_minutes"))
 		rows[i] = row
 	}
@@ -128,7 +132,7 @@ func toReportRows(records []*Row) []domain.ReportRow {
 
 const attendanceCSVHeader = "NIP,Nama Karyawan,Departemen,Jabatan,Tanggal,Clock In,Clock Out," +
 	"Lokasi Clock In,Lokasi Clock Out,Jam Kerja (jam),Istirahat (menit),Status,Terlambat," +
-	"Keterlambatan (menit),Catatan"
+	"Keterlambatan (menit),Kurang Jam,Jam Minimum (jam),Catatan"
 
 // attendanceCSV is buildAttendanceCsv: every cell quoted, rows in query
 // order (newest first).
@@ -163,12 +167,20 @@ func attendanceCSV(records []*Row) string {
 		if r.Bool("is_late") {
 			late = "Ya"
 		}
+		short := "-"
+		if r.Bool("is_short_hours") {
+			short = "Ya"
+		}
+		minHours := "-"
+		if v, ok := r.Get("min_work_hours").(string); ok { // numeric text, like work_hours
+			minHours = v
+		}
 		cells := []string{
 			orDash(r, "nip"), orDash(r, "full_name"), orDash(r, "department"), orDash(r, "job_title"),
 			r.Str("date"), when(r, "clock_in"), when(r, "clock_out"),
 			csvLocation(r.Child("clock_in_location")), csvLocation(r.Child("clock_out_location")),
 			orZero(r, "work_hours"), orZero(r, "break_minutes"), orDash(r, "status"), late,
-			orZero(r, "late_minutes"), orDash(r, "notes"),
+			orZero(r, "late_minutes"), short, minHours, orDash(r, "notes"),
 		}
 		for i, c := range cells {
 			cells[i] = `"` + strings.ReplaceAll(c, `"`, `""`) + `"`
@@ -231,7 +243,7 @@ func orHyphen(s *string) string {
 // attendanceXlsx is buildAttendanceXlsx.
 func attendanceXlsx(rows []domain.ReportRow, m reportMeta) ([]byte, error) {
 	header := []any{"Tanggal", "Nama Karyawan", "NIP", "Departemen", "Jabatan",
-		"Jam Masuk", "Jam Pulang", "Jam Kerja", "Status", "Terlambat (menit)", "Catatan"}
+		"Jam Masuk", "Jam Pulang", "Jam Kerja", "Status", "Terlambat (menit)", "Kurang Jam", "Jam Minimum", "Catatan"}
 	aoa := [][]any{
 		{m.CompanyName + " — Rekap Absensi"},
 		{"Periode: " + m.PeriodLabel},
@@ -242,6 +254,7 @@ func attendanceXlsx(rows []domain.ReportRow, m reportMeta) ([]byte, error) {
 	}
 	for _, r := range rows {
 		hours, late, notes := 0.0, 0, ""
+		var short, minHours any = "-", "-"
 		if r.WorkHours != nil {
 			hours = *r.WorkHours
 		}
@@ -251,16 +264,22 @@ func attendanceXlsx(rows []domain.ReportRow, m reportMeta) ([]byte, error) {
 		if r.Notes != nil {
 			notes = *r.Notes
 		}
+		if r.IsShortHours {
+			short = "Ya"
+		}
+		if r.MinWorkHours != nil {
+			minHours = *r.MinWorkHours
+		}
 		aoa = append(aoa, []any{domain.TanggalShort(r.Date), r.EmployeeName, orHyphen(r.NIP), orHyphen(r.Department),
 			orHyphen(r.Position), domain.ClockWIB(r.ClockIn, "—"), domain.ClockWIB(r.ClockOut, "—"), hours,
-			domain.StatusLabel(r.Status), late, notes})
+			domain.StatusLabel(r.Status), late, short, minHours, notes})
 	}
 	merges := make([]xlsx.Merge, 4)
 	for i := range merges {
 		merges[i] = xlsx.Merge{R1: i, R2: i, C2: len(header) - 1}
 	}
 	return xlsx.Build(xlsx.SheetSpec{Name: "Rekap Absensi", Rows: aoa,
-		ColumnWidths: []float64{18, 26, 20, 18, 18, 10, 11, 9, 12, 16, 30}, Merges: merges})
+		ColumnWidths: []float64{18, 26, 20, 18, 18, 10, 11, 9, 12, 16, 11, 13, 30}, Merges: merges})
 }
 
 /* ── PDF with selfies ────────────────────────────────────────────────── */
@@ -365,6 +384,9 @@ func attendancePDF(rows []domain.ReportRow, m reportMeta, photo func(path string
 		status, statusColor := domain.StatusLabel(r.Status), reportText
 		if r.IsLate {
 			status, statusColor = fmt.Sprintf("%s +%dm", status, r.LateMinutes), reportLate
+		}
+		if r.IsShortHours { // EPIC-067 R2: the table is full, so the label rides on Status
+			status += " · kurang jam"
 		}
 		cell(domain.TanggalShort(r.Date), reportCols[0].w, pdfgen.Helvetica, reportText, "")
 		cell(r.EmployeeName, reportCols[1].w, pdfgen.HelveticaBold, reportText, strings.Join(sub, " · "))
