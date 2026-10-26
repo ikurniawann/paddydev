@@ -1,4 +1,5 @@
 import { query, queryOne } from "@/lib/db";
+import { canApproveLeaf, HRIS_APPROVE_LEAF } from "@/lib/hris/approve-access";
 import type { WorkforceActor } from "@/lib/hris/workforce-auth";
 
 /**
@@ -167,9 +168,10 @@ export async function buildNavBadges(actor: WorkforceActor): Promise<Record<stri
     }
   }
 
-  // Hanya HRD (super_admin/admin/hrd) yang memutus pengajuan absensi (EPIC-065 R2).
-  // Sama dengan Go PendingAttendanceRequestCount: semua pengajuan pending, termasuk milik HRD sendiri.
-  if (actor.isHrd) {
+  // Pengajuan absensi diputus pemegang aksi "approve" pada daun Absensi (EPIC-067 R11),
+  // sama dengan Go CanApprove(LeafAbsensi). Sama dengan Go PendingAttendanceRequestCount:
+  // semua pengajuan pending, termasuk milik pemutus sendiri.
+  if (await canApproveLeaf(actor, HRIS_APPROVE_LEAF.absensi)) {
     badges[ATTENDANCE_REQUESTS_HREF] = await countOne(
       `SELECT count(*) AS total FROM hris.attendance_requests WHERE status = 'pending'`,
       []
