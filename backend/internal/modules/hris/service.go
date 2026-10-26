@@ -3,6 +3,7 @@ package hris
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	"github.com/jackc/pgx/v5"
 
@@ -80,6 +81,16 @@ type Actor struct {
 	// WorkforceMenu: the account holds the Cuti/Absensi menu (hris.workforce);
 	// set by handlers that need it (EPIC-058 leave quota).
 	WorkforceMenu bool
+	// Approves lists the iam.HrisApproveLeaves on which the account holds
+	// "approve" (EPIC-067 R10/R11); set by handlers.actorFor.
+	Approves []string
+}
+
+// CanApprove reports whether the account holds "approve" on leaf (one of
+// iam.HrisApproveLeaves): the HR side of a decision. A direct manager
+// decides their reports without it.
+func (a *Actor) CanApprove(leaf string) bool {
+	return a != nil && slices.Contains(a.Approves, leaf)
 }
 
 // ActorRepo resolves the employee behind an account.

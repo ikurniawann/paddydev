@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 
 	"github.com/jackc/pgx/v5"
+
+	"nuhabit/backend/internal/platform/database"
 )
 
 // ResolveRoleIDs mirrors resolveRoleIds: iam.user_roles rows, else the
@@ -12,7 +14,13 @@ import (
 // super_admin shortcut in the API guards; super_admin passes because its
 // role is granted every menu.
 func (s *Service) ResolveRoleIDs(ctx context.Context, userID, role string) ([]string, error) {
-	ids, err := s.queryStrings(ctx, `SELECT role_id::text FROM iam.user_roles WHERE user_id = $1`, userID)
+	return ResolveRoleIDsOn(ctx, s.db, userID, role)
+}
+
+// ResolveRoleIDsOn is ResolveRoleIDs on q, for a module that reads grants
+// through its own querier (EPIC-067: the HRIS actor's "approve" leaves).
+func ResolveRoleIDsOn(ctx context.Context, q database.Querier, userID, role string) ([]string, error) {
+	ids, err := queryStrings(ctx, q, `SELECT role_id::text FROM iam.user_roles WHERE user_id = $1`, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -20,7 +28,7 @@ func (s *Service) ResolveRoleIDs(ctx context.Context, userID, role string) ([]st
 		return ids, nil
 	}
 	var id string
-	err = s.db.QueryRow(ctx, `SELECT id::text FROM iam.roles WHERE code = $1 AND deleted_at IS NULL LIMIT 1`, role).Scan(&id)
+	err = q.QueryRow(ctx, `SELECT id::text FROM iam.roles WHERE code = $1 AND deleted_at IS NULL LIMIT 1`, role).Scan(&id)
 	if isNoRows(err) {
 		return []string{}, nil
 	}
@@ -57,7 +65,7 @@ func (s *Service) GrantedMenuCodesForRoles(ctx context.Context, roleIDs []string
 	if len(roleIDs) == 0 {
 		return []string{}, nil
 	}
-	return s.queryStrings(ctx, `SELECT DISTINCT m.code
+	return queryStrings(ctx, s.db, `SELECT DISTINCT m.code
      FROM iam.role_menu_permissions rmp
      JOIN iam.menus m ON m.id = rmp.menu_id
      WHERE rmp.role_id = ANY($1::uuid[])
@@ -67,8 +75,8 @@ func (s *Service) GrantedMenuCodesForRoles(ctx context.Context, roleIDs []string
 }
 
 // queryStrings runs a one-column text query; no rows is an empty slice.
-func (s *Service) queryStrings(ctx context.Context, sql string, args ...any) ([]string, error) {
-	rows, err := s.db.Query(ctx, sql, args...)
+func queryStrings(ctx context.Context, q database.Querier, sql string, args ...any) ([]string, error) {
+	rows, err := q.Query(ctx, sql, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -78,11 +86,16 @@ func (s *Service) queryStrings(ctx context.Context, sql string, args ...any) ([]
 // GrantedMenuActions mirrors loadGrantedMenuActions: menu code to the union
 // of granted_actions strings across the roles.
 func (s *Service) GrantedMenuActions(ctx context.Context, roleIDs []string) (map[string][]string, error) {
+	return GrantedMenuActionsOn(ctx, s.db, roleIDs)
+}
+
+// GrantedMenuActionsOn is GrantedMenuActions on q (see ResolveRoleIDsOn).
+func GrantedMenuActionsOn(ctx context.Context, q database.Querier, roleIDs []string) (map[string][]string, error) {
 	out := map[string][]string{}
 	if len(roleIDs) == 0 {
 		return out, nil
 	}
-	rows, err := s.db.Query(ctx, `SELECT m.code, rmp.granted_actions
+	rows, err := q.Query(ctx, `SELECT m.code, rmp.granted_actions
      FROM iam.role_menu_permissions rmp
      JOIN iam.menus m ON m.id = rmp.menu_id
      WHERE rmp.role_id = ANY($1::uuid[])

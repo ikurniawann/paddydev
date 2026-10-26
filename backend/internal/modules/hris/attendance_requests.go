@@ -511,7 +511,7 @@ func (h handlers) listAttendanceRequests(w http.ResponseWriter, r *http.Request,
 		}
 		employeeID = id
 	}
-	a, err := h.svc.Actor(r.Context(), u)
+	a, err := h.actorFor(r.Context(), u)
 	if err != nil {
 		return err
 	}
@@ -538,7 +538,7 @@ func (h handlers) decideAttendanceRequest(w http.ResponseWriter, r *http.Request
 	if err := formErr(f, message); err != nil {
 		return err
 	}
-	a, err := h.svc.Actor(r.Context(), u)
+	a, err := h.actorFor(r.Context(), u)
 	if err != nil {
 		return err
 	}

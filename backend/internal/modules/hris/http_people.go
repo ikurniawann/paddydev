@@ -288,7 +288,7 @@ func (h handlers) withLogbook(fn func(w http.ResponseWriter, r *http.Request, a 
 		if u == nil {
 			return httpx.Unauthorized("Unauthorized")
 		}
-		a, err := h.svc.Actor(r.Context(), u)
+		a, err := h.actorFor(r.Context(), u)
 		if err != nil {
 			return err
 		}

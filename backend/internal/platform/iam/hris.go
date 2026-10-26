@@ -33,6 +33,16 @@ var HrisDeleteLeaves = []string{
 	LeafRunPenggajian, LeafSalary, LeafKPIScorecard, LeafKandidat, LeafPsikotes, LeafJobPortal,
 }
 
+// LeafLembur is the HR Lembur leaf (EPIC-067 R10). It has no delete
+// endpoint, so it is not in HrisDeleteLeaves.
+const LeafLembur = "hris.kepegawaian.overtime"
+
+// HrisApproveLeaves are the leaves whose "approve" action gives the HR side
+// of a decision (EPIC-067 R10): Absensi for attendance requests and
+// Perjalanan Dinas, Cuti for leaves, Lembur for overtime. Each decision
+// checks its own leaf, never a group prefix.
+var HrisApproveLeaves = []string{LeafAbsensi, LeafCuti, LeafLembur}
+
 // HrisStaffRoleCodes are the roles "Hak Akses HRIS" may change and assign:
 // admin_hris (the source) and the roles iam.sync_hris_staff_roles derives
 // from it. Keep in step with iam.hris_staff_role_masks.
