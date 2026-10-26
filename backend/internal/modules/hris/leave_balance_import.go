@@ -229,7 +229,7 @@ func leaveCheck(nowYear int) func(domain.LeaveBalanceCheck) string {
 		if c.Values.CarryExpires != "" {
 			in.CarryExpires = &c.Values.CarryExpires
 		}
-		err := validateLeaveBalance(in, c.Used, c.CarryUsed, c.Active, nowYear)
+		err := validateLeaveBalance(in, c.Used, c.CarryUsed, c.Active, c.CarryChanged, nowYear)
 		if err == nil {
 			return ""
 		}
@@ -429,7 +429,8 @@ func (s *Service) ImportLeaveBalances(ctx context.Context, a *Actor, in leaveImp
 			}
 			// The rules again under the row lock, with the figures it holds now.
 			if m := check(domain.LeaveBalanceCheck{Year: sc.Year, Values: c.After, Reason: c.Reason,
-				Used: was.Used, CarryUsed: was.CarryUsed, Active: true}); m != "" {
+				Used: was.Used, CarryUsed: was.CarryUsed, Active: true,
+				CarryChanged: c.After.CarryDays != was.CarryDays || !sameText(li.CarryExpires, was.CarryExpires)}); m != "" {
 				return httpx.BadRequest(c.Name + ": " + m)
 			}
 			if err := r.SetLeaveBalance(ctx, c.EmployeeID, sc.Year, li); err != nil {

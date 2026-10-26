@@ -390,3 +390,87 @@ func TestCarryRecalcApproveThenEditSameEmployee(t *testing.T) {
 		t.Fatalf("carry = %q, want 12 + 1 - 6 = 7", got)
 	}
 }
+
+// belowUsedRow puts the 2027 auto row of the fixture employee at carry 2 below
+// used 5 through a real correction of 2026 (a review opens with excess 3).
+func (h *harness) belowUsedRow(f leaveFixture, editor *testutil.Staff) {
+	h.t.Helper()
+	h.exec(`UPDATE hris.leave_balances SET carry_over_used = 5 WHERE employee_id = $1 AND year = 2027`, f.id)
+	expect(h.t, h.putSaldo(editor, f.id, map[string]any{"year": 2026, "annual_leave_adjustment": -6, "reason": "Koreksi turun"}), 200, "")
+	if got := h.carryOf(f.id, 2027); got != "2.00|5.00|2027-03-31" {
+		h.t.Fatalf("setup carry = %q", got)
+	}
+}
+
+// Controller ruling: the carry >= used rule of HR input applies only when the
+// request changes the carry-over days or expiry.
+func TestCarryRecalcPutOnBelowUsedRow(t *testing.T) {
+	h := newHarness(t)
+	f := h.carryFixture(nil)
+	editor, _ := h.saldoStaff("pos", false, "read", "update")
+	h.belowUsedRow(f, &editor)
+
+	// (a) Only jatah changes: accepted, carry stays, the review stays open.
+	expect(t, h.putSaldo(&editor, f.id, map[string]any{"year": 2027, "annual_leave_total": 13, "reason": "Jatah naik"}), 200, "")
+	if got := h.carryOf(f.id, 2027); got != "2.00|5.00|2027-03-31" {
+		t.Fatalf("carry after editing jatah = %q", got)
+	}
+	if got := h.reviews(f.id, 2027); got != "1|0|3.00|-" {
+		t.Fatalf("reviews after editing jatah = %q, want still open", got)
+	}
+	if h.carrySource(f.id, 2027) != "auto" {
+		t.Fatal("editing jatah must not turn the carry manual")
+	}
+	// Sending the stored carry back unchanged is not a carry change either.
+	expect(t, h.putSaldo(&editor, f.id, map[string]any{"year": 2027, "annual_leave_adjustment": 1,
+		"carry_over_days": 2, "carry_over_expires_on": "2027-03-31", "reason": "Penyesuaian"}), 200, "")
+
+	// (b) Setting a carry below used is still refused.
+	expect(t, h.putSaldo(&editor, f.id, map[string]any{"year": 2027, "carry_over_days": 3, "reason": "Terlalu kecil"}), 400,
+		"Sisa bawaan (3) tidak boleh kurang dari bawaan yang sudah terpakai (5)")
+	expect(t, h.putSaldo(&editor, f.id, map[string]any{"year": 2027, "carry_over_expires_on": "2027-06-30", "reason": "Ubah tanggal"}), 400,
+		"Sisa bawaan (2) tidak boleh kurang dari bawaan yang sudah terpakai (5)")
+	if got := h.carryOf(f.id, 2027); got != "2.00|5.00|2027-03-31" {
+		t.Fatalf("carry after refusals = %q", got)
+	}
+}
+
+// (c) An import row that changes only Jatah on a below-used row is accepted;
+// one that changes the carry-over below used is refused.
+func TestCarryRecalcImportOnBelowUsedRow(t *testing.T) {
+	h := newHarness(t)
+	f := h.saldoImportFixture()
+	h.carrySetup(true, nil, 3, 31)
+	h.exec(`UPDATE hris.leave_balances SET carry_over_days = 2, carry_over_used = 5, carry_over_expires_on = '2026-12-31'
+		WHERE employee_id = $1 AND year = 2026`, f.ana)
+	h.exec(`INSERT INTO hris.leave_carry_over_reviews (employee_id, year, carry_over_days, carry_over_used, excess)
+		VALUES ($1, 2026, 2, 5, 3)`, f.ana)
+
+	_, x := h.saldoTemplate(&f.hr, "?year=2026&branch_id="+f.branch)
+	ar := rowOf(t, x, f.anaNIP)
+	setCell(t, x, colTotal, ar, 14)
+	setCell(t, x, colReason, ar, "Jatah naik")
+	file := fileBytes(t, x)
+	pre := h.importStep(t, f, "preview", nil, file)
+	expect(t, pre, 200, "")
+	if len(pre.data()["errors"].([]any)) != 0 {
+		t.Fatalf("preview errors = %v", pre.data()["errors"])
+	}
+	expect(t, h.importStep(t, f, "commit", map[string]string{"fingerprint": pre.data()["fingerprint"].(string)}, file), 200, "")
+	if got := h.scalar(`SELECT concat_ws('|', annual_leave_total, carry_over_days, carry_over_used)
+		FROM hris.leave_balances WHERE employee_id = $1 AND year = 2026`, f.ana); got != "14.00|2.00|5.00" {
+		t.Fatalf("ana = %s", got)
+	}
+	if got := h.reviews(f.ana, 2026); got != "1|0|3.00|-" {
+		t.Fatalf("reviews = %q, want still open", got)
+	}
+
+	// Changing the carry-over to a value below used is refused in the preview.
+	_, y := h.saldoTemplate(&f.hr, "?year=2026&branch_id="+f.branch)
+	setCell(t, y, colCarry, rowOf(t, y, f.anaNIP), 3)
+	setCell(t, y, colReason, rowOf(t, y, f.anaNIP), "Terlalu kecil")
+	bad := h.importStep(t, f, "preview", nil, fileBytes(t, y))
+	if !strings.Contains(issueMessages(bad, "errors"), "Sisa bawaan (3) tidak boleh kurang dari bawaan yang sudah terpakai (5)") {
+		t.Fatalf("errors = %s", issueMessages(bad, "errors"))
+	}
+}

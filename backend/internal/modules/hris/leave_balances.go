@@ -245,8 +245,11 @@ func isHalfStep(v float64) bool { return math.Mod(v*2, 1) == 0 }
 // Excel import): the employee is active, the year is this year or next
 // (nowYear is the WIB year), a reason is given, every figure is a multiple
 // of 0,5, and neither the annual remainder nor the carry-over falls below
-// what is already used.
-func validateLeaveBalance(in LeaveBalanceInput, used, carryUsed float64, active bool, nowYear int) error {
+// what is already used. The carry-over rule applies only when the request
+// changes the carry-over days or expiry (carryChanged): a row the automatic
+// recalculation left below used (a review is open) can still have its total or
+// adjustment edited.
+func validateLeaveBalance(in LeaveBalanceInput, used, carryUsed float64, active, carryChanged bool, nowYear int) error {
 	if !active {
 		return httpx.BadRequest("Karyawan nonaktif — saldo cuti tidak bisa diubah")
 	}
@@ -278,7 +281,7 @@ func validateLeaveBalance(in LeaveBalanceInput, used, carryUsed float64, active 
 		return httpx.BadRequest(fmt.Sprintf("Sisa jatah tidak boleh kurang dari 0 (jatah %s + penyesuaian %s − terpakai %s = %s)",
 			daysText(in.Total), daysText(in.Adjustment), daysText(used), daysText(remaining)))
 	}
-	if in.CarryDays < carryUsed {
+	if carryChanged && in.CarryDays < carryUsed {
 		return httpx.BadRequest(fmt.Sprintf("Sisa bawaan (%s) tidak boleh kurang dari bawaan yang sudah terpakai (%s)",
 			daysText(in.CarryDays), daysText(carryUsed)))
 	}
@@ -368,7 +371,7 @@ func (s *Service) UpdateLeaveBalanceManual(ctx context.Context, a *Actor, employ
 	}
 	nowYear := domain.NowWIB(s.now()).Year()
 	if in.Year < minBalanceYear { // the year check below refuses it; do not touch the table
-		return LeaveBalanceView{}, validateLeaveBalance(in, 0, 0, emp.Bool("is_active"), nowYear)
+		return LeaveBalanceView{}, validateLeaveBalance(in, 0, 0, emp.Bool("is_active"), false, nowYear)
 	}
 	var entry audit.Entry
 	if len(meta) > 0 {
@@ -401,7 +404,8 @@ func (s *Service) UpdateLeaveBalanceManual(ctx context.Context, a *Actor, employ
 		if in.KeepCarryExpires {
 			in.CarryExpires = was.CarryExpires
 		}
-		if err := validateLeaveBalance(in, was.Used, was.CarryUsed, emp.Bool("is_active"), nowYear); err != nil {
+		if err := validateLeaveBalance(in, was.Used, was.CarryUsed, emp.Bool("is_active"),
+			in.CarryDays != was.CarryDays || !sameText(in.CarryExpires, was.CarryExpires), nowYear); err != nil {
 			return err
 		}
 		if err := r.SetLeaveBalance(ctx, employeeID, in.Year, in); err != nil {
