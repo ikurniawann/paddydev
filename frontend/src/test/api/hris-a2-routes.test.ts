@@ -36,6 +36,15 @@ vi.mock("@/lib/hris/logbook", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/hris/logbook")>();
   return { ...actual, getLogbookActor: () => getLogbookActor() };
 });
+// EPIC-067 R11/R15: jalur HR keputusan = aksi "approve" pada daun (IAM DB).
+// Fixture HR memegang approve di ketiga daun; karyawan biasa tidak punya.
+const HR_APPROVES = ["hris.workforce.attendance", "hris.workforce.leaves", "hris.kepegawaian.overtime"];
+const approves: Record<string, string[]> = { "u-hr": HR_APPROVES };
+vi.mock("@/lib/iam/has-menu", async (orig) => ({
+  ...(await orig<typeof import("@/lib/iam/has-menu")>()),
+  userHasIamAction: async (userId: string, _role: string, prefixes: readonly string[], action: string) =>
+    action === "approve" && prefixes.some((p) => (approves[userId] ?? []).includes(p)),
+}));
 vi.mock("@/lib/db", () => ({
   query: (...args: unknown[]) => query(...args),
   queryOne: (...args: unknown[]) => queryOne(...args),
