@@ -2317,6 +2317,16 @@
   {
     "module": "hris",
     "method": "GET",
+    "path": "/api/hris/leave-settings"
+  },
+  {
+    "module": "hris",
+    "method": "PUT",
+    "path": "/api/hris/leave-settings"
+  },
+  {
+    "module": "hris",
+    "method": "GET",
     "path": "/api/hris/leaves"
   },
   {
