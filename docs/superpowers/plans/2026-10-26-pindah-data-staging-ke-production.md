@@ -25,6 +25,16 @@ File foto/lampiran yang dirujuk diambil dari arsip `staging-storage-before-freez
 - notifikasi + audit ikut;
 - sesi login, penanda baca modul, job latar, dan rate limit tidak dibawa.
 
+## Revisi 26-10-2026 siang (menggantikan cakupan di bawah)
+
+Instruksi user:
+- dump staging baru ±22.45, delta dihitung ulang dari baseline cutover (bukan dump 11.02);
+- yang dibawa hanya data karyawan asli (absensi + foto, pengajuan absensi, cuti, lembur, kasbon, keputusan atasan) untuk karyawan yang ada di production;
+- data uji developer (akun/karyawan baru setelah cutover, master/struktur) dibuang;
+- laporkan bentrok dan hasil gladi, lalu minta izin sebelum eksekusi 23.30.
+
+Akibatnya password, notifikasi, dan audit **tidak** dibawa lagi. Implementasi: `generate.py` v2 + `prepare.sh` (lihat README folder).
+
 ## Global Constraints
 
 - Sumber tetap: `~/Desktop/paddydev-backups/staging-db-before-freeze-20261026-110218.dump` dan `staging-storage-before-freeze-20261026-110220.tgz`. Baseline: `paddydev-db-cutover-execute-20261024-233012.dump`.
