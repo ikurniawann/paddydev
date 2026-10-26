@@ -41,6 +41,13 @@ describe("OvertimeTable — jenis hari mengikuti nilai server", () => {
     expect(onDecide).toHaveBeenCalledWith("o1", "approve", "rest_day");
   });
 
+  it("pemegang approve: Tolak memanggil onDecide reject tanpa jenis hari", () => {
+    const onDecide = vi.fn();
+    render(table(base, onDecide));
+    fireEvent.click(screen.getByRole("button", { name: "Tolak" }));
+    expect(onDecide).toHaveBeenLastCalledWith("o1", "reject");
+  });
+
   it("pemegang approve: pilihan jenis hari tampil (mengikuti canDecide, bukan role)", () => {
     render(table(base, vi.fn()));
     expect(screen.getByLabelText("Jenis hari")).toBeTruthy();
@@ -84,9 +91,18 @@ describe("OvertimeTable — tombol keputusan mengikuti akses approve (EPIC-067 R
     expect(screen.queryByRole("button", { name: "Tolak" })).toBeNull();
     expect(screen.queryByLabelText("Jenis hari")).toBeNull();
   });
-  it("canDecide=false: Koreksi dan Batalkan penugasan perusahaan tidak ikut hilang", () => {
+  // Batalkan penugasan perusahaan oleh HR butuh approve di Lembur (server: CanDecideOvertime,
+  // EPIC-067 R11), jadi ikut canDecide. Koreksi tetap mengikuti canCorrect.
+  it("canDecide=false: Batalkan penugasan perusahaan disembunyikan, Koreksi tidak ikut hilang", () => {
     render(table({ ...base, source: "company" }, vi.fn(), true, false));
-    expect(screen.getByRole("button", { name: "Batalkan" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Batalkan" })).toBeNull();
+    expect(screen.getByText("Menunggu konfirmasi karyawan")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Koreksi" })).toBeTruthy();
+  });
+  it("canDecide=true: Batalkan penugasan perusahaan memanggil onDecide cancel", () => {
+    const onDecide = vi.fn();
+    render(table({ ...base, source: "company" }, onDecide, false, true));
+    fireEvent.click(screen.getByRole("button", { name: "Batalkan" }));
+    expect(onDecide).toHaveBeenCalledWith("o1", "cancel");
   });
 });

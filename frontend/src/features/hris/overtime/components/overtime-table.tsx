@@ -24,7 +24,7 @@ interface OvertimeTableProps {
   decidingId: string | null;
   onDecide: (id: string, action: OvertimeDecisionAction, dayType?: OvertimeDayType) => void;
   canCorrect: boolean;
-  /** Pemegang aksi `approve` daun Lembur (EPIC-067 R14): hanya mereka melihat Setujui/Tolak dan boleh mengganti jenis hari (server menetapkan day_type hanya untuk mereka, R11). */
+  /** Pemegang aksi `approve` daun Lembur (EPIC-067 R14): hanya mereka melihat Setujui/Tolak, Batalkan penugasan perusahaan, dan boleh mengganti jenis hari (server menetapkan day_type hanya untuk mereka, R11). */
   canDecide: boolean;
   onCorrect: (row: OvertimeRow) => void;
 }
@@ -175,15 +175,18 @@ function OvertimeTableRow({ row, deciding, onDecide, canCorrect, canDecide, onCo
         {pending && row.source === "company" && (
           <div className="flex items-center justify-end gap-2">
             <span className="text-xs text-gray-400">Menunggu konfirmasi karyawan</span>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="text-xs text-gray-500"
-              disabled={deciding}
-              onClick={() => onDecide(row.id, "cancel")}
-            >
-              Batalkan
-            </Button>
+            {/* Pembatalan oleh HR butuh approve di Lembur (CanDecideOvertime, EPIC-067 R11). */}
+            {canDecide && (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="text-xs text-gray-500"
+                disabled={deciding}
+                onClick={() => onDecide(row.id, "cancel")}
+              >
+                Batalkan
+              </Button>
+            )}
           </div>
         )}
         {canCorrect && !managerOwnsCorrection && (row.status === "pending" || row.status === "approved") && (
