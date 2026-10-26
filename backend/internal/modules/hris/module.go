@@ -13,6 +13,7 @@
 package hris
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"time"
@@ -77,6 +78,11 @@ func New(deps module.Deps, ports Ports) module.Module {
 	if deps.Events != nil {
 		deps.Events.Subscribe(TopicLeaveRequested, "hris.leave-request-whatsapp", svc.notifyLeaveRequest)
 		deps.Events.Subscribe(TopicOvertimeRequested, "hris.overtime-request-whatsapp", svc.notifyOvertimeRequest)
+	}
+	// The daily missed-attendance digest (EPIC-067 R8). Integration tests
+	// build the module with AppEnv "test" and call RunGapDigest directly.
+	if deps.Config.AppEnv != "test" {
+		go svc.GapDigestLoop(context.Background(), GapDigestEvery)
 	}
 	return mod{handlers{svc: svc, auth: deps.Auth}}
 }
