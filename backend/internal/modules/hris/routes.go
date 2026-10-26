@@ -47,6 +47,8 @@ func (h handlers) routes() []module.Route {
 		// attendance (clock-in/out, export and photos: fileRoutes)
 		r("GET /api/hris/attendance", h.withActor(h.listAttendance)),
 		r("GET /api/hris/attendance/daily-roster", h.withActor(h.dailyRoster)),
+		// Ringkasan absen terlewat HR (EPIC-067 R9).
+		r("GET /api/hris/attendance/gap-summary", h.withMenu(attendanceManagers, h.attendanceGapSummary)),
 		r("GET /api/hris/attendance/schedule", h.withActor(h.attendanceSchedule)),
 		r("GET /api/hris/attendance/stats", h.withActor(h.attendanceStats)),
 		r("GET /api/hris/attendance/{id}", h.withActor(h.getAttendance)),

@@ -32,6 +32,7 @@ type Repository interface {
 	ApprovalRepo
 	AttendanceRequestRepo
 	AttendanceGapRepo
+	AttendanceGapSummaryRepo
 	WorkHoursRepo
 	// InTx runs fn against one transaction (a savepoint when already in one).
 	InTx(ctx context.Context, fn func(Repository) error) error
