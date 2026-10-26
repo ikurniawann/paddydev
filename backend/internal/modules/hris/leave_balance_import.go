@@ -409,6 +409,9 @@ func (s *Service) ImportLeaveBalances(ctx context.Context, a *Actor, in leaveImp
 		ordered := append([]domain.LeaveBalanceChange{}, res.Changes...)
 		sort.SliceStable(ordered, func(i, j int) bool { return ordered[i].EmployeeID < ordered[j].EmployeeID })
 		for _, c := range ordered {
+			if err := lockPreviousBalance(ctx, q, c.EmployeeID, sc.Year); err != nil {
+				return err
+			}
 			if err := ensureLeaveBalance(ctx, q, c.EmployeeID, sc.Year); err != nil {
 				return err
 			}
@@ -443,6 +446,9 @@ func (s *Service) ImportLeaveBalances(ctx context.Context, a *Actor, in leaveImp
 			entry.After = balanceAudit(sc.Year, after)
 			entry.Reason = &reason
 			if err := audit.Write(ctx, q, entry); err != nil {
+				return err
+			}
+			if err := s.carryAfterHRInput(ctx, q, c.EmployeeID, li, was.Source, userOf(a), carryCause{Type: causeImport}); err != nil {
 				return err
 			}
 		}

@@ -27,9 +27,9 @@ func (h *harness) carrySetup(enabled bool, max any, month, day int) {
 	h.unlockCarryOver()
 }
 
-// unlockCarryOver stands in for the follow-up migration that creates
-// hris.leave_carry_over_reviews (the carry-over unlock marker); the test
-// transaction rolls it back.
+// unlockCarryOver makes sure the carry-over unlock marker (the table of the
+// follow-up migration, hris.leave_carry_over_reviews) exists; a test that
+// dropped it inside its transaction gets it back.
 func (h *harness) unlockCarryOver() {
 	h.t.Helper()
 	h.exec(`CREATE TABLE IF NOT EXISTS hris.leave_carry_over_reviews (employee_id uuid)`)

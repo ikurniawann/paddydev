@@ -313,7 +313,17 @@ func (s *Service) UpdateLeave(ctx context.Context, a *Actor, id string, in leave
 			refund = &quotaMove{EmployeeID: leave.Str("employee_id"), Year: dateYear(leave, "start_date"),
 				Days: leave.Str("total_days"), CarryDays: leave.Str("carry_over_days_used")}
 		}
-		err := s.repo.InTx(ctx, func(r Repository) error { return r.CancelLeave(ctx, id, status, refund) })
+		err := s.repo.InTx(ctx, func(r Repository) error {
+			if err := r.CancelLeave(ctx, id, status, refund); err != nil {
+				return err
+			}
+			if refund == nil {
+				return nil
+			}
+			// The refund changed the year's balance: next year's carry follows.
+			return afterBalanceChange(ctx, r.querier(), refund.EmployeeID, refund.Year,
+				carryCause{Type: causeLeaveCancel, LeaveID: id}, userOf(a))
+		})
 		if errors.Is(err, errNoRow) {
 			return nil, httpx.Conflict("Pengajuan sudah berubah, muat ulang halaman")
 		}
@@ -420,6 +430,15 @@ func (s *Service) DecideLeave(ctx context.Context, a *Actor, in leaveDecision, m
 	err = s.repo.InTx(ctx, func(r Repository) error {
 		if err := r.DecideLeave(ctx, in.LeaveID, verdict, credit); err != nil {
 			return err
+		}
+		// Approving annual leave used up the year's balance: next year's carry
+		// follows. A rejection (credit nil) moves no balance, so there is
+		// nothing to recalculate (causeLeaveReject is documented, never run).
+		if credit != nil {
+			if err := afterBalanceChange(ctx, r.querier(), credit.EmployeeID, credit.Year,
+				carryCause{Type: causeLeaveApprove, LeaveID: in.LeaveID}, userOf(a)); err != nil {
+				return err
+			}
 		}
 		return auditDecision(ctx, r.querier(), a, "leave."+in.Action, "hris.leaves", in.LeaveID, label, nil,
 			map[string]any{"status": status, "decided_as": decidedAs, "rejection_reason": rejection}, meta)

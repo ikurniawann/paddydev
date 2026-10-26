@@ -22,16 +22,18 @@ func (h *harness) saldoStaff(role string, linked bool, actions ...string) (testu
 	return s, id
 }
 
-// setBalance writes a balance row of employee for year.
+// setBalance writes a balance row of employee for year. A row that carries
+// something is HR-filled (carry_over_source 'manual', never recalculated).
 func (h *harness) setBalance(employeeID string, year int, total, adjustment, used, carry, carryUsed float64, expires any) {
 	h.t.Helper()
 	h.exec(`INSERT INTO hris.leave_balances (employee_id, year, annual_leave_total, annual_leave_adjustment, annual_leave_used,
-			carry_over_days, carry_over_used, carry_over_expires_on)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8::date)
+			carry_over_days, carry_over_used, carry_over_expires_on, carry_over_source)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8::date,
+			CASE WHEN $6::numeric > 0 OR $8::date IS NOT NULL THEN 'manual' ELSE 'auto' END)
 		ON CONFLICT (employee_id, year) DO UPDATE SET annual_leave_total = EXCLUDED.annual_leave_total,
 			annual_leave_adjustment = EXCLUDED.annual_leave_adjustment, annual_leave_used = EXCLUDED.annual_leave_used,
 			carry_over_days = EXCLUDED.carry_over_days, carry_over_used = EXCLUDED.carry_over_used,
-			carry_over_expires_on = EXCLUDED.carry_over_expires_on`,
+			carry_over_expires_on = EXCLUDED.carry_over_expires_on, carry_over_source = EXCLUDED.carry_over_source`,
 		employeeID, year, total, adjustment, used, carry, carryUsed, expires)
 }
 

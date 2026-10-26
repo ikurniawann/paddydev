@@ -82,12 +82,15 @@ func TestNewEmployeeLeaveBalanceRows(t *testing.T) {
 		"jatah bukan kelipatan 0,5": "annual_leave_total = 10.25",
 		"penyesuaian 0,25":          "annual_leave_adjustment = 0.25",
 		"bawaan 0,3":                "carry_over_days = 0.3",
-		"bawaan terpakai > bawaan":  "carry_over_days = 1, carry_over_used = 1.5",
+		"bawaan terpakai negatif":   "carry_over_used = -1",
 	} {
 		h.expectDBError(t, name, `UPDATE hris.leave_balances SET `+set+` WHERE employee_id = $1 AND year = $2`, id, curYear)
 	}
 	h.exec(`UPDATE hris.leave_balances SET annual_leave_adjustment = -2.5, carry_over_days = 2, carry_over_used = 1.5,
 		carry_over_expires_on = $3::date WHERE employee_id = $1 AND year = $2`, id, curYear, fmt.Sprintf("%d-03-31", curYear))
+	// The recalculation may lower the carry-over below what is used (a review
+	// is opened): the table stores it.
+	h.exec(`UPDATE hris.leave_balances SET carry_over_days = 1, carry_over_used = 1.5 WHERE employee_id = $1 AND year = $2`, id, curYear)
 }
 
 // expectDBError runs sql and fails the test unless the database rejects it;
