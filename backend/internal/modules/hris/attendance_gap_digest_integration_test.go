@@ -5,6 +5,9 @@ import (
 	"log/slog"
 	"testing"
 	"time"
+
+	"nuhabit/backend/internal/platform/config"
+	"nuhabit/backend/internal/platform/module"
 )
 
 // EPIC-067 R6, R7: ringkasan harian ke HR pukul 09.00 WIB, sekali per tanggal.
@@ -145,5 +148,52 @@ func TestGapDigestLoopRunsAtStart(t *testing.T) {
 	}
 	if h.scalar(`SELECT count(*)::text FROM hris.attendance_gap_digests WHERE date = '2026-10-04'`) != "1" {
 		t.Fatal("start run left no marker")
+	}
+}
+
+// EPIC-067 C1: app.Routes() / `api -routes` build the module without a
+// database; the digest loop must not start there (it would only log a
+// failure every tick).
+func TestNewWithoutDBStartsNoDigestLoop(t *testing.T) {
+	logged := make(chan string, 8)
+	deps := module.Deps{Log: slog.New(logSignal{ch: logged}), Now: func() time.Time { return fixedNow },
+		Config: config.Config{AppEnv: "development"}}
+	New(deps, Ports{})
+	select {
+	case msg := <-logged:
+		t.Fatalf("digest loop ran without a database: %q", msg)
+	case <-time.After(300 * time.Millisecond):
+	}
+}
+
+// EPIC-067 C8: gaps but no HR account to notify → a warning in the log; the
+// marker still records the run as sent (sent_at) with 0 recipients.
+func TestGapDigestWarnsWithoutRecipients(t *testing.T) {
+	h := newHarness(t)
+	h.exec(`UPDATE hris.attendance_settings SET cutoff_day = 0, closing_offset_days = 3`)
+	shift := h.scalar(`INSERT INTO hris.shifts (name, start_time, end_time, late_tolerance_minutes)
+		VALUES ('Pagi Digest Kosong', '08:00', '17:00', 10) RETURNING id::text`)
+	a := h.employee(emp{name: "Digest Kosong Terlewat"})
+	h.exec(`INSERT INTO hris.employee_shifts (employee_id, day_of_week, shift_id, effective_from) VALUES ($1, 4, $2, '2026-01-01')`, a, shift)
+	h.exec(`UPDATE users SET role = 'admin' WHERE role = 'hrd'`)
+	logged := make(chan string, 8)
+	h.svc.log = slog.New(logSignal{ch: logged})
+
+	wib := time.FixedZone("WIB", 7*3600)
+	got, err := h.svc.RunGapDigest(context.Background(), time.Date(2026, 10, 2, 9, 0, 0, 0, wib))
+	if err != nil || got == nil || !got.Sent || got.Recipients != 0 || got.Summary.Missing != 1 {
+		t.Fatalf("digest = %+v, %v", got, err)
+	}
+	select {
+	case msg := <-logged:
+		if msg != "hris gap digest has gaps but no HR recipients" {
+			t.Fatalf("log = %q", msg)
+		}
+	default:
+		t.Fatal("no warning for a digest without recipients")
+	}
+	if m := h.scalar(`SELECT concat_ws('|', recipients, (sent_at IS NOT NULL)::text) FROM hris.attendance_gap_digests
+		WHERE date = '2026-10-01'`); m != "0|true" {
+		t.Fatalf("marker = %q", m)
 	}
 }

@@ -79,6 +79,11 @@ func (s *Service) RunGapDigest(ctx context.Context, now time.Time) (*GapDigestRe
 	if err != nil {
 		return nil, err
 	}
+	if result != nil && result.Sent && result.Recipients == 0 {
+		// The marker keeps sent_at (the date is done); nobody was told.
+		s.log.Warn("hris gap digest has gaps but no HR recipients", "date", result.Date,
+			"missing", result.Summary.Missing, "no_clock_out", result.Summary.NoClockOut)
+	}
 	return result, nil
 }
 

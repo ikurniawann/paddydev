@@ -12,8 +12,9 @@ import (
 
 /* ── Overtime (lib/hris/overtime-rules, payroll/period) ───────────────── */
 
-// OvertimeActor is who decides. IsHR carries ruling C1/P2: callers pass
-// Actor.IsHRD (super_admin/admin/hrd), not Actor.IsHR.
+// OvertimeActor is who decides. IsHR is the HR decision power: callers pass
+// Actor.CanApprove(iam.LeafLembur) ("approve" on the Lembur leaf, EPIC-067
+// R11), not a role check.
 type OvertimeActor struct {
 	EmployeeID *string
 	IsHR       bool

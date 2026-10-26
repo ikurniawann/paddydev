@@ -80,8 +80,9 @@ func New(deps module.Deps, ports Ports) module.Module {
 		deps.Events.Subscribe(TopicOvertimeRequested, "hris.overtime-request-whatsapp", svc.notifyOvertimeRequest)
 	}
 	// The daily missed-attendance digest (EPIC-067 R8). Integration tests
-	// build the module with AppEnv "test" and call RunGapDigest directly.
-	if deps.Config.AppEnv != "test" {
+	// build the module with AppEnv "test" and call RunGapDigest directly;
+	// app.Routes() (`api -routes`, generate) builds it without a database.
+	if deps.DB != nil && deps.Config.AppEnv != "test" {
 		go svc.GapDigestLoop(context.Background(), GapDigestEvery)
 	}
 	return mod{handlers{svc: svc, auth: deps.Auth}}
