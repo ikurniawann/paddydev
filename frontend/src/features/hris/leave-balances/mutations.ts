@@ -23,6 +23,11 @@ export function useSaveLeaveSettings() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (patch: LeaveSettingsPatch) => saveLeaveSettings(patch),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: leaveBalanceQueryKeys.settings() }),
+    onSuccess: (res) => {
+      // Respons PUT menjadi isi cache lebih dulu: kartu yang menghapus isian
+      // sementaranya tidak sempat menampilkan nilai lama sebelum refetch.
+      qc.setQueryData(leaveBalanceQueryKeys.settings(), res.data);
+      void qc.invalidateQueries({ queryKey: leaveBalanceQueryKeys.settings() });
+    },
   });
 }

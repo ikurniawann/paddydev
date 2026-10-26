@@ -36,6 +36,11 @@ describe("LeaveBalanceBreakdown", () => {
     expect(screen.getByText("-1,5 hari")).toBeTruthy();
   });
 
+  it("shows a positive penyesuaian with a plus sign", () => {
+    render(<LeaveBalanceBreakdown balance={{ ...base, annual_leave_adjustment: 1, annual_leave_remaining: 10, available: 10 }} />);
+    expect(screen.getByText("+1 hari")).toBeTruthy();
+  });
+
   it("shows sisa bawaan with its expiry only while active", () => {
     const active = { ...base, carry_over_days: 2, carry_over_remaining: 2, carry_over_expires_on: "2026-03-31", carry_over_active: true, available: 11 };
     const { rerender } = render(<LeaveBalanceBreakdown balance={active} />);
@@ -51,6 +56,11 @@ describe("LeaveBalanceBreakdown", () => {
 describe("balanceSubtitle", () => {
   it("summarises jatah and terpakai", () => {
     expect(balanceSubtitle(base)).toBe("Jatah 12 hari · terpakai 3 hari");
+  });
+
+  it("includes a non-zero penyesuaian, signed, between jatah and terpakai", () => {
+    expect(balanceSubtitle({ ...base, annual_leave_adjustment: 1 })).toBe("Jatah 12 hari · penyesuaian +1 hari · terpakai 3 hari");
+    expect(balanceSubtitle({ ...base, annual_leave_adjustment: -1.5 })).toBe("Jatah 12 hari · penyesuaian -1,5 hari · terpakai 3 hari");
   });
 
   it("mentions the active carry-over", () => {

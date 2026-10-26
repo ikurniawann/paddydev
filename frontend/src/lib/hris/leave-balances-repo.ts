@@ -1,13 +1,16 @@
 /**
- * Saldo cuti per karyawan per tahun. Baris yang belum ada dibuat saat
- * pertama dibaca, dengan kuota tahunan diproratakan bila karyawan masuk di
- * tahun yang sama.
+ * Saldo cuti per karyawan per tahun (fallback lama, tidak terjangkau).
+ *
+ * EPIC-068: backend Go yang melayani saldo cuti (jatah default R1, penyesuaian,
+ * sisa bawaan, ubah manual). Rute Go ada di go-routes.generated.json, jadi
+ * proxy tidak meneruskan ke sini; hitungan prorata bulan di bawah SUDAH TIDAK
+ * dipakai Go. Jangan dikembangkan; hapus bersama sisa fallback saldo lain.
  */
 
 import { z } from "zod";
 import { ApiError } from "@/lib/api/auth";
 import { createServerPgClient } from "@/lib/pg/create-client";
-import { isHrdRole, isLineManagerRole } from "./onboarding-access";
+import { isLineManagerRole } from "./onboarding-access";
 import type { WorkforceActor } from "./workforce-auth";
 import { unwrap } from "./workforce-route";
 
@@ -15,13 +18,6 @@ const ANNUAL_LEAVE_DEFAULT = 12;
 
 export const leaveBalanceQuerySchema = z.object({
   year: z.coerce.number().int().min(2000).max(2100).optional(),
-});
-
-export const leaveBalanceUpdateSchema = z.object({
-  annual_leave_total: z.number().min(0).optional(),
-  annual_leave_used: z.number().min(0).optional(),
-  sick_leave_used: z.number().min(0).optional(),
-  unpaid_leave_used: z.number().min(0).optional(),
 });
 
 /**
@@ -90,34 +86,4 @@ export async function getLeaveBalance(actor: WorkforceActor, employeeId: string,
   if (data) return data;
   if (error?.code === "PGRST116") return initializeLeaveBalance(employeeId, year);
   throw new Error(error?.message ?? "Gagal memuat saldo cuti");
-}
-
-/** HRD menyetel saldo; baris baru memakai kuota default 12. */
-export async function updateLeaveBalance(
-  actor: WorkforceActor,
-  employeeId: string,
-  year: number,
-  input: z.infer<typeof leaveBalanceUpdateSchema>
-) {
-  if (!isHrdRole(actor.role)) {
-    throw ApiError.forbidden("Forbidden: Only HRD can update leave balances");
-  }
-  const db = await createServerPgClient();
-  const select = `*, employee:employees(id, full_name, nip)`;
-  const { data: balance } = await db
-    .from("leave_balances")
-    .select("id")
-    .eq("employee_id", employeeId)
-    .eq("year", year)
-    .maybeSingle();
-
-  return unwrap(
-    balance
-      ? await db.from("leave_balances").update(input).eq("id", balance.id).select(select).single()
-      : await db
-          .from("leave_balances")
-          .insert({ employee_id: employeeId, year, annual_leave_total: ANNUAL_LEAVE_DEFAULT, ...input })
-          .select(select)
-          .single()
-  );
 }

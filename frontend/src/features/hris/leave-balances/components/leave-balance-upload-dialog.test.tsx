@@ -139,3 +139,41 @@ it("memberi tahu bila perubahan lebih banyak dari yang ditampilkan", async () =>
   check();
   expect(await screen.findByText(/Menampilkan 500 dari 600 perubahan/)).toBeTruthy();
 });
+
+it("input file terkunci selama memeriksa dan menyimpan", async () => {
+  let resolve!: (v: unknown) => void;
+  api.importLeaveBalanceFile.mockReturnValueOnce(new Promise((r) => (resolve = r)));
+  setup();
+  const input = screen.getByLabelText("File saldo cuti (.xlsx)") as HTMLInputElement;
+  expect(input.disabled).toBe(false);
+  check();
+  await waitFor(() => expect(input.disabled).toBe(true));
+  resolve(preview());
+  await screen.findByText("Ana Lestari");
+  expect(input.disabled).toBe(false);
+});
+
+it("pratinjau terikat pada file yang diperiksa: respons lama tidak membuka simpan untuk file lain", async () => {
+  let resolve!: (v: unknown) => void;
+  api.importLeaveBalanceFile.mockReturnValueOnce(new Promise((r) => (resolve = r)));
+  setup();
+  check();
+  // Pengguna berhasil mengganti file selagi pemeriksaan file pertama berjalan.
+  fireEvent.change(screen.getByLabelText("File saldo cuti (.xlsx)"), { target: { files: [new File(["lain"], "lain.xlsx")] } });
+  resolve(preview());
+  await waitFor(() => expect(screen.getByRole("button", { name: "Periksa file" })).toBeTruthy());
+  await new Promise((r) => setTimeout(r, 0));
+  expect(screen.queryByText("Ana Lestari")).toBeNull();
+  expect(saveBtn().disabled).toBe(true);
+});
+
+it("commit mengirim file yang sama dengan yang diperiksa", async () => {
+  api.importLeaveBalanceFile.mockResolvedValueOnce(preview()).mockResolvedValueOnce({ data: { summary }, message: "ok" });
+  setup();
+  check();
+  await screen.findByText("Ana Lestari");
+  fireEvent.click(saveBtn());
+  await waitFor(() => expect(api.importLeaveBalanceFile).toHaveBeenCalledTimes(2));
+  const [previewed, committed] = api.importLeaveBalanceFile.mock.calls.map((c) => c[0].file);
+  expect(committed).toBe(previewed);
+});

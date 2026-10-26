@@ -106,14 +106,14 @@ export function LeaveBalancesPage() {
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        {access?.import === true ? (
+        {access?.import === true || access?.export === true ? (
           <div className="flex flex-wrap gap-2" data-testid="leave-balance-import-slot">
             {access.export ? (
               <Button asChild variant="outline">
                 <a href={leaveBalanceTemplateUrl({ year, branch_id: branchId })}>Unduh template</a>
               </Button>
             ) : null}
-            <Button onClick={() => setUploadOpen(true)}>Import Excel</Button>
+            {access.import ? <Button onClick={() => setUploadOpen(true)}>Import Excel</Button> : null}
           </div>
         ) : null}
       </div>

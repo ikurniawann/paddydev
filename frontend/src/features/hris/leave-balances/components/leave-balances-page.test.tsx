@@ -150,6 +150,14 @@ describe("LeaveBalancesPage", () => {
     expect(screen.getByRole("button", { name: "Import Excel" })).toBeTruthy();
   });
 
+  it("template tampil dengan hak export saja, tanpa tombol Import", () => {
+    hooks.useLeaveBalanceAccess.mockReturnValue({ data: { read: true, update: false, import: false, export: true } });
+    render(<LeaveBalancesPage />);
+    expect(screen.getByTestId("leave-balance-import-slot")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Unduh template" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Import Excel" })).toBeNull();
+  });
+
   it("menampilkan galat dan keadaan kosong", () => {
     hooks.useLeaveBalances.mockReturnValue({ data: undefined, isLoading: false, isError: true, error: new Error("Forbidden") });
     render(<LeaveBalancesPage />);

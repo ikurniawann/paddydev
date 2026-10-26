@@ -54,7 +54,11 @@ function IssueList({ issues, tone }: { issues: LeaveBalanceImportIssue[]; tone: 
 export function LeaveBalanceUploadDialog({ open, onOpenChange, year, branchId, branchName, onSaved }: Props) {
   const qc = useQueryClient();
   const [file, setFile] = useState<File | null>(null);
-  const [preview, setPreview] = useState<LeaveBalanceImportPreview | null>(null);
+  // Pratinjau terikat pada objek File yang diperiksa: berlaku hanya selama
+  // file itu yang terpilih, jadi respons lama tidak pernah membuka simpan
+  // untuk file lain.
+  const [checked, setChecked] = useState<{ file: File; data: LeaveBalanceImportPreview } | null>(null);
+  const preview = checked && checked.file === file ? checked.data : null;
   const [ack, setAck] = useState(false);
   const [busy, setBusy] = useState<"check" | "save" | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -68,14 +72,15 @@ export function LeaveBalanceUploadDialog({ open, onOpenChange, year, branchId, b
 
   async function check() {
     if (!file) return;
+    const target = file;
     setBusy("check");
     setNotice(null);
     try {
-      const res = await importLeaveBalanceFile({ ...scope, file, step: "preview" });
-      setPreview(res.data);
+      const res = await importLeaveBalanceFile({ ...scope, file: target, step: "preview" });
+      setChecked({ file: target, data: res.data });
       setAck(false);
     } catch (err) {
-      setPreview(null);
+      setChecked(null);
       toast.error(err instanceof Error ? err.message : "File tidak bisa diperiksa");
     } finally {
       setBusy(null);
@@ -83,13 +88,13 @@ export function LeaveBalanceUploadDialog({ open, onOpenChange, year, branchId, b
   }
 
   async function save() {
-    if (!canSave || !file || !preview) return;
+    if (!canSave || !checked || checked.file !== file || !preview) return;
     setBusy("save");
     setNotice(null);
     try {
       const res = await importLeaveBalanceFile({
         ...scope,
-        file,
+        file: checked.file,
         step: "commit",
         fingerprint: preview.fingerprint,
         ack_warnings: ack,
@@ -103,7 +108,7 @@ export function LeaveBalanceUploadDialog({ open, onOpenChange, year, branchId, b
       const message = err instanceof Error ? err.message : "Gagal menyimpan saldo cuti";
       if (statusOf(err) === 409) {
         // Saldo berubah sejak pratinjau: pratinjau lama tidak boleh disimpan.
-        setPreview(null);
+        setChecked(null);
         setAck(false);
         setNotice(`${message} — klik "Periksa file" untuk melihat pratinjau terbaru.`);
       } else {
@@ -138,9 +143,11 @@ export function LeaveBalanceUploadDialog({ open, onOpenChange, year, branchId, b
               type="file"
               accept=".xlsx"
               aria-label="File saldo cuti (.xlsx)"
+              disabled={busy !== null}
               onChange={(e) => {
                 setFile(e.target.files?.[0] ?? null);
-                setPreview(null);
+                setChecked(null);
+                setAck(false);
                 setNotice(null);
               }}
             />
