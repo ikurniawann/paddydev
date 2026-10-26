@@ -11,7 +11,6 @@ import type {
   EmployeeDocumentRow,
   EmployeeWithoutManager,
   EmploymentHistoryRow,
-  LeaveBalanceRow,
   UserDirectoryStats,
   UserFormLookups,
   UserListParams,
@@ -139,9 +138,6 @@ export const fetchEmployeeAttendance = (employeeId: string, month: number, year:
   });
   return apiGet<{ data: AttendanceRow[] }>(`/api/hris/attendance?${params}`);
 };
-
-export const fetchEmployeeLeaveBalances = (employeeId: string) =>
-  apiGet<{ data: LeaveBalanceRow[] }>(`/api/hris/leave-balances/${employeeId}`);
 
 // ── Kontrak karyawan (PKWTT / PKWT) ─────────────────────────────────────
 export interface EmployeeContractRow {

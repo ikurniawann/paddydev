@@ -97,19 +97,6 @@ export interface AttendanceRow {
   is_late?: boolean;
 }
 
-export interface LeaveBalanceRow {
-  id: string;
-  leave_type: string;
-  leave_type_name?: string;
-  total_days?: number;
-  used_days?: number;
-  remaining_days?: number;
-  balance?: number;
-  quota?: number;
-  used?: number;
-  year?: number;
-}
-
 /** GET /api/hris/employees/without-manager (EPIC-063 R9). */
 export interface EmployeeWithoutManager {
   id: string;

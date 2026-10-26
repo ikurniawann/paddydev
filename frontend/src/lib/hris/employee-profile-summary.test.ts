@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   calculateTenure,
-  leaveBalanceUsage,
   summarizeAttendance,
 } from "./employee-profile-summary";
 
@@ -31,24 +30,5 @@ describe("summarizeAttendance", () => {
         { status: "absent", work_hours: null },
       ])
     ).toEqual({ present: 2, late: 1, absent: 1, totalHours: 15.5 });
-  });
-});
-
-describe("leaveBalanceUsage", () => {
-  it("kolom baru *_days", () => {
-    expect(leaveBalanceUsage({ total_days: 12, used_days: 3, remaining_days: 9 })).toEqual({
-      remaining: 9,
-      total: 12,
-      used: 3,
-      percent: 25,
-    });
-  });
-  it("kolom lama dan batas 100%", () => {
-    expect(leaveBalanceUsage({ quota: 2, used: 5, balance: -3 })).toEqual({
-      remaining: -3,
-      total: 2,
-      used: 5,
-      percent: 100,
-    });
   });
 });
