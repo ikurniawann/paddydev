@@ -104,14 +104,22 @@ describe("LeaveBalancesPage", () => {
     expect(hooks.useLeaveBalances).toHaveBeenLastCalledWith({ year: 2027, branch_id: "b2", q: "ana" });
   });
 
-  it("kolom Sumber menandai sisa bawaan Otomatis atau Manual, dan tanda hanya bila ada sisa bawaan", () => {
+  it("kolom Sumber menandai sisa bawaan Otomatis atau Manual, dan menampilkan – bila tidak ada sisa bawaan", () => {
+    const rows3 = hooks.useLeaveBalances().data as LeaveBalanceView[];
+    hooks.useLeaveBalances.mockReturnValue({
+      data: [...rows3, row({ employee_id: "e3", nip: "2025003", full_name: "Citra", carry_over_days: 3, carry_over_source: "manual" })],
+      isLoading: false,
+      isError: false,
+    });
     render(<LeaveBalancesPage />);
     const header = screen.getByRole("columnheader", { name: "Sumber" });
     expect(header).toBeTruthy();
     const idx = screen.getAllByRole("columnheader").indexOf(header);
     const rows = screen.getAllByRole("row");
     expect(within(rows[1]).getAllByRole("cell")[idx].textContent).toBe("Otomatis");
-    expect(within(rows[2]).getAllByRole("cell")[idx].textContent).toBe("Manual");
+    // Budi has no carry-over: the source ("manual" in the data) is not shown.
+    expect(within(rows[2]).getAllByRole("cell")[idx].textContent).toBe("–");
+    expect(within(rows[3]).getAllByRole("cell")[idx].textContent).toBe("Manual");
   });
 
   it("kartu tinjauan tampil untuk akun read, mengikuti tahun terpilih, dan hak koreksi hanya tahun berjalan/depan", () => {

@@ -115,6 +115,45 @@ describe("LeaveBalanceEditDialog", () => {
     expect(save().disabled).toBe(true);
   });
 
+  describe("baris yang bawaannya dihitung ulang di bawah yang terpakai", () => {
+    const below: LeaveBalanceView = {
+      ...balance,
+      carry_over_days: 1,
+      carry_over_used: 3,
+      carry_over_remaining: 0,
+      available: 9,
+    };
+
+    it("mengubah isian lain tetap bisa disimpan dan tidak menampilkan angka negatif", () => {
+      open(below);
+      type("Jatah", "13");
+      type("Alasan", "Koreksi jatah");
+      expect(save().disabled).toBe(false);
+      expect(screen.queryByText(/Sisa bawaan tidak boleh kurang/)).toBeNull();
+      expect(preview("remaining")).toBe("10");
+      expect(preview("available")).toBe("10");
+      expect(screen.getByTestId("preview-available").parentElement?.textContent).toContain("sisa bawaan 0");
+      expect(screen.getByTestId("preview-available").parentElement?.textContent).not.toContain("-");
+    });
+
+    it("mengubah sisa bawaan atau kedaluwarsa tetap wajib menutup yang terpakai", () => {
+      open(below);
+      type("Alasan", "Koreksi");
+      type("Sisa bawaan", "2");
+      expect(screen.getByText(/Sisa bawaan tidak boleh kurang dari yang sudah terpakai \(3\)/)).toBeTruthy();
+      expect(save().disabled).toBe(true);
+      type("Sisa bawaan", "1");
+      expect(save().disabled).toBe(false);
+      type("Kedaluwarsa", "2027-06-30");
+      expect(save().disabled).toBe(true);
+    });
+  });
+
+  it("memberi petunjuk bahwa 0 tanpa kedaluwarsa dihitung otomatis", () => {
+    open();
+    expect(screen.getByText("0 tanpa kedaluwarsa = dihitung otomatis; isi kedaluwarsa untuk menetapkan 0.")).toBeTruthy();
+  });
+
   it("mengirim PUT dengan semua angka, tanggal, dan alasan yang dipangkas", () => {
     const onOpenChange = open();
     type("Jatah", "13");

@@ -150,6 +150,30 @@ export function LeaveCarryReviewsCard({
   const [resolving, setResolving] = useState<CarryReview | null>(null);
   const [correcting, setCorrecting] = useState<CarryReview | null>(null);
   const reviews = query.data ?? [];
+  if (query.isError) {
+    return (
+      <Card className="border-warning/40">
+        <CardContent className="flex flex-wrap items-center justify-between gap-2 pt-6">
+          <p role="alert" className="text-sm text-danger">
+            Gagal memuat tinjauan sisa bawaan{query.error instanceof Error && query.error.message ? `: ${query.error.message}` : ""}.
+          </p>
+          <Button size="sm" variant="outline" onClick={() => void query.refetch()}>
+            Coba lagi
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+  if (query.isLoading) {
+    return (
+      <Card className="border-warning/40">
+        <CardContent className="flex items-center gap-2 pt-6 text-sm text-gray-500" role="status">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Memuat tinjauan sisa bawaan…
+        </CardContent>
+      </Card>
+    );
+  }
   if (reviews.length === 0) return null;
   const hasActions = canUpdate || canCorrect;
 

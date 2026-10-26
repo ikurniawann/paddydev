@@ -34,7 +34,9 @@ export interface BalanceFigures {
  */
 export function previewBalance(f: BalanceFigures) {
   const remaining = f.total + f.adjustment - f.used;
-  const carryRemaining = f.carryDays - f.carryUsed;
+  // A carry-over recalculated below what is used counts as 0, never negative
+  // (the server clamps the same way).
+  const carryRemaining = Math.max(f.carryDays - f.carryUsed, 0);
   const carryActive = !!f.expiresOn && f.expiresOn >= f.today;
   return { remaining, carryRemaining, carryActive, available: remaining + (carryActive ? carryRemaining : 0) };
 }

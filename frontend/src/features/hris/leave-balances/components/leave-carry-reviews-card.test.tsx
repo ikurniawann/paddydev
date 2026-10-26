@@ -54,21 +54,27 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("LeaveCarryReviewsCard", () => {
-  it("memuat tinjauan tahun yang dipilih (hanya dengan hak baca) dan tidak tampil bila kosong, memuat, atau galat", () => {
+  it("memuat tinjauan tahun yang dipilih (hanya dengan hak baca) dan tidak tampil bila kosong", () => {
     render(<LeaveCarryReviewsCard year={2027} canUpdate canCorrect />);
     expect(q.useCarryReviews).toHaveBeenLastCalledWith(2027);
     expect(screen.getByText("Perlu ditinjau HR (2)")).toBeTruthy();
     cleanup();
-    for (const state of [
-      { data: [], isLoading: false, isError: false },
-      { data: undefined, isLoading: true, isError: false },
-      { data: undefined, isLoading: false, isError: true },
-    ]) {
-      q.useCarryReviews.mockReturnValue(state);
-      const r = render(<LeaveCarryReviewsCard year={2027} canUpdate canCorrect />);
-      expect(r.container.textContent).toBe("");
-      cleanup();
-    }
+    q.useCarryReviews.mockReturnValue({ data: [], isLoading: false, isError: false });
+    const r = render(<LeaveCarryReviewsCard year={2027} canUpdate canCorrect />);
+    expect(r.container.textContent).toBe("");
+  });
+
+  it("menampilkan status memuat, dan galat dengan tombol Coba lagi, bukan kartu kosong", () => {
+    q.useCarryReviews.mockReturnValue({ data: undefined, isLoading: true, isError: false });
+    render(<LeaveCarryReviewsCard year={2027} canUpdate canCorrect />);
+    expect(screen.getByRole("status").textContent).toContain("Memuat tinjauan sisa bawaan");
+    cleanup();
+    const refetch = vi.fn();
+    q.useCarryReviews.mockReturnValue({ data: undefined, isLoading: false, isError: true, error: new Error("Jaringan putus"), refetch });
+    render(<LeaveCarryReviewsCard year={2027} canUpdate canCorrect />);
+    expect(screen.getByRole("alert").textContent).toContain("Gagal memuat tinjauan sisa bawaan: Jaringan putus");
+    fireEvent.click(screen.getByRole("button", { name: "Coba lagi" }));
+    expect(refetch).toHaveBeenCalledTimes(1);
   });
 
   it("menampilkan NIP, nama, cabang, bawaan, terpakai, kelebihan, penyebab terbaca, dan sejak kapan", () => {

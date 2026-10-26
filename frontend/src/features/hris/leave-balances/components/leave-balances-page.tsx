@@ -172,7 +172,7 @@ export function LeaveBalancesPage() {
                   <TableCell className="text-right">{formatDays(b.annual_leave_used)}</TableCell>
                   <TableCell className="text-right">{formatDays(b.annual_leave_remaining)}</TableCell>
                   <TableCell>{carryCell(b)}</TableCell>
-                  <TableCell className="text-gray-600">{SOURCE_LABEL[b.carry_over_source] ?? "-"}</TableCell>
+                  <TableCell className="text-gray-600">{b.carry_over_days > 0 ? (SOURCE_LABEL[b.carry_over_source] ?? "–") : "–"}</TableCell>
                   <TableCell className="text-right font-semibold text-gray-900">{formatDays(b.available)}</TableCell>
                   {canEdit ? (
                     <TableCell className="text-right">

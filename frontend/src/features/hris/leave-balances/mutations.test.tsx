@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
+import { ApiError } from "@/lib/api-client";
 import { usePreviewLeaveSettings, useResolveCarryReview, useSaveLeaveSettings } from "./mutations";
 import { leaveBalanceQueryKeys } from "./query-keys";
 import type { LeaveSettings } from "./types";
@@ -87,5 +88,30 @@ describe("useResolveCarryReview", () => {
     await waitFor(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: leaveBalanceQueryKeys.all }));
     expect(api.resolveCarryReview).toHaveBeenCalledWith("r1", "Dibahas");
     expect(leaveBalanceQueryKeys.reviews(2026).slice(0, 2)).toEqual(leaveBalanceQueryKeys.all);
+  });
+
+  it.each([404, 409])("galat %i (tinjauan hilang atau sudah ditutup) memuat ulang daftar", async (status) => {
+    api.resolveCarryReview.mockRejectedValueOnce(new ApiError("Tinjauan sudah diselesaikan", status, {}));
+    const qc = new QueryClient();
+    const invalidate = vi.spyOn(qc, "invalidateQueries");
+    const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={qc}>{children}</QueryClientProvider>;
+    const { result } = renderHook(() => useResolveCarryReview(), { wrapper });
+    await act(async () => {
+      result.current.mutate({ id: "r1", note: "Dibahas" });
+    });
+    await waitFor(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: leaveBalanceQueryKeys.all }));
+  });
+
+  it("galat lain (mis. 400) tidak memuat ulang", async () => {
+    api.resolveCarryReview.mockRejectedValueOnce(new ApiError("Catatan wajib diisi", 400, {}));
+    const qc = new QueryClient();
+    const invalidate = vi.spyOn(qc, "invalidateQueries");
+    const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={qc}>{children}</QueryClientProvider>;
+    const { result } = renderHook(() => useResolveCarryReview(), { wrapper });
+    await act(async () => {
+      result.current.mutate({ id: "r1", note: "x" });
+    });
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(invalidate).not.toHaveBeenCalled();
   });
 });

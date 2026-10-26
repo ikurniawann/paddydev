@@ -1,6 +1,7 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { ApiError } from "@/lib/api-client";
 import { essQueryKeys } from "@/features/hris/ess/query-keys";
 import { previewLeaveSettings, resolveCarryReview, saveLeaveSettings, updateLeaveBalance } from "./api";
 import { leaveBalanceQueryKeys } from "./query-keys";
@@ -47,6 +48,13 @@ export function useResolveCarryReview() {
     mutationFn: ({ id, note }: { id: string; note: string }) => resolveCarryReview(id, note),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: leaveBalanceQueryKeys.all });
+    },
+    // 404/409: the review is gone or was closed meanwhile (resolved by someone
+    // else or by the system), so the list on screen is stale.
+    onError: (err) => {
+      if (err instanceof ApiError && (err.status === 404 || err.status === 409)) {
+        void qc.invalidateQueries({ queryKey: leaveBalanceQueryKeys.all });
+      }
     },
   });
 }
