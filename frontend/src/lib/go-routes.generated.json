@@ -2291,6 +2291,16 @@
   },
   {
     "module": "hris",
+    "method": "POST",
+    "path": "/api/hris/leave-balances/import"
+  },
+  {
+    "module": "hris",
+    "method": "GET",
+    "path": "/api/hris/leave-balances/template"
+  },
+  {
+    "module": "hris",
     "method": "GET",
     "path": "/api/hris/leave-balances/{employee_id}"
   },
