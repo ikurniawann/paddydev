@@ -77,6 +77,8 @@ func (h handlers) routes() []module.Route {
 		r("GET /api/hris/leave-settings", h.withLeaveBalanceAction("read", h.getLeaveSettings)),
 		r("PUT /api/hris/leave-settings", h.withLeaveBalanceAction("update", h.putLeaveSettings)),
 		r("POST /api/hris/leave-settings/preview", h.withLeaveBalanceAction("update", h.previewLeaveSettings)),
+		r("GET /api/hris/leave-balances/reviews", h.withLeaveBalanceAction("read", h.listCarryReviews)),
+		r("POST /api/hris/leave-balances/reviews/{id}/resolve", h.withLeaveBalanceAction("update", h.resolveCarryReview)),
 		r("GET /api/hris/leave-balances/template", h.withLeaveBalanceAction("export", h.leaveBalanceTemplate)),
 		r("POST /api/hris/leave-balances/import", h.withLeaveBalanceAction("import", h.importLeaveBalances)),
 		r("GET /api/hris/leave-balances/{employee_id}", h.withActor(h.getLeaveBalance)),

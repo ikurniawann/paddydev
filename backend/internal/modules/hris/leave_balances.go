@@ -34,23 +34,26 @@ const maxLeaveDays = 366
 // GET, the list, ESS and the PUT answer. Rows that do not exist yet carry
 // the default allocation and Exists false.
 type LeaveBalanceView struct {
-	EmployeeID           string     `json:"employee_id"`
-	NIP                  *string    `json:"nip"`
-	FullName             string     `json:"full_name"`
-	BranchName           *string    `json:"branch_name"`
-	Year                 int        `json:"year"`
-	AnnualLeaveTotal     float64    `json:"annual_leave_total"`
-	AnnualLeaveAdjust    float64    `json:"annual_leave_adjustment"`
-	AnnualLeaveUsed      float64    `json:"annual_leave_used"`
-	AnnualLeaveRemaining float64    `json:"annual_leave_remaining"`
-	CarryOverDays        float64    `json:"carry_over_days"`
-	CarryOverUsed        float64    `json:"carry_over_used"`
-	CarryOverRemaining   float64    `json:"carry_over_remaining"`
-	CarryOverExpiresOn   *string    `json:"carry_over_expires_on"`
-	CarryOverActive      bool       `json:"carry_over_active"`
-	Available            float64    `json:"available"`
-	UpdatedAt            *time.Time `json:"updated_at"`
-	Exists               bool       `json:"exists"`
+	EmployeeID           string  `json:"employee_id"`
+	NIP                  *string `json:"nip"`
+	FullName             string  `json:"full_name"`
+	BranchName           *string `json:"branch_name"`
+	Year                 int     `json:"year"`
+	AnnualLeaveTotal     float64 `json:"annual_leave_total"`
+	AnnualLeaveAdjust    float64 `json:"annual_leave_adjustment"`
+	AnnualLeaveUsed      float64 `json:"annual_leave_used"`
+	AnnualLeaveRemaining float64 `json:"annual_leave_remaining"`
+	CarryOverDays        float64 `json:"carry_over_days"`
+	CarryOverUsed        float64 `json:"carry_over_used"`
+	CarryOverRemaining   float64 `json:"carry_over_remaining"`
+	CarryOverExpiresOn   *string `json:"carry_over_expires_on"`
+	// CarryOverSource is 'auto' (kept by the formula) or 'manual' (HR input or
+	// import); a row that does not exist yet is 'auto'.
+	CarryOverSource string     `json:"carry_over_source"`
+	CarryOverActive bool       `json:"carry_over_active"`
+	Available       float64    `json:"available"`
+	UpdatedAt       *time.Time `json:"updated_at"`
+	Exists          bool       `json:"exists"`
 }
 
 // LeaveBalanceInput is what HR sets on one balance (R11); Used is never
@@ -164,7 +167,7 @@ func leaveBalanceViews(ctx context.Context, q database.Querier, f balanceFilter)
 		COALESCE(b.annual_leave_used, 0)::float8,
 		COALESCE(b.annual_leave_remaining, hris.default_annual_leave(e.join_date, $1::int))::float8,
 		COALESCE(b.carry_over_days, 0)::float8, COALESCE(b.carry_over_used, 0)::float8,
-		b.carry_over_expires_on::text, b.updated_at
+		b.carry_over_expires_on::text, COALESCE(b.carry_over_source, 'auto'), b.updated_at
 		FROM hris.employees e
 		LEFT JOIN hris.leave_balances b ON b.employee_id = e.id AND b.year = $1::int
 		LEFT JOIN LATERAL (SELECT ep.branch_id, br.name AS branch_name
@@ -184,7 +187,7 @@ func leaveBalanceViews(ctx context.Context, q database.Querier, f balanceFilter)
 		v := LeaveBalanceView{Year: f.Year}
 		if err := rows.Scan(&v.EmployeeID, &v.NIP, &v.FullName, &v.BranchName, &v.Exists,
 			&v.AnnualLeaveTotal, &v.AnnualLeaveAdjust, &v.AnnualLeaveUsed, &v.AnnualLeaveRemaining,
-			&v.CarryOverDays, &v.CarryOverUsed, &v.CarryOverExpiresOn, &v.UpdatedAt); err != nil {
+			&v.CarryOverDays, &v.CarryOverUsed, &v.CarryOverExpiresOn, &v.CarryOverSource, &v.UpdatedAt); err != nil {
 			return nil, err
 		}
 		v.finish(f.Today)

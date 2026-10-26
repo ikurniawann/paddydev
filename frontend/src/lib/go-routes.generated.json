@@ -2297,6 +2297,16 @@
   {
     "module": "hris",
     "method": "GET",
+    "path": "/api/hris/leave-balances/reviews"
+  },
+  {
+    "module": "hris",
+    "method": "POST",
+    "path": "/api/hris/leave-balances/reviews/{id}/resolve"
+  },
+  {
+    "module": "hris",
+    "method": "GET",
     "path": "/api/hris/leave-balances/template"
   },
   {
