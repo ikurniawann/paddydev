@@ -32,7 +32,13 @@ func (h *harness) carrySetup(enabled bool, max any, month, day int) {
 // dropped it inside its transaction gets it back.
 func (h *harness) unlockCarryOver() {
 	h.t.Helper()
-	h.exec(`CREATE TABLE IF NOT EXISTS hris.leave_carry_over_reviews (employee_id uuid)`)
+	// The columns recomputeCarryOver reads and writes, for a test that dropped
+	// the real table.
+	h.exec(`CREATE TABLE IF NOT EXISTS hris.leave_carry_over_reviews (
+		id uuid PRIMARY KEY DEFAULT gen_random_uuid(), employee_id uuid NOT NULL, year integer NOT NULL,
+		carry_over_days numeric(5,2) NOT NULL, carry_over_used numeric(5,2) NOT NULL, excess numeric(5,2) NOT NULL,
+		cause jsonb, opened_at timestamptz NOT NULL DEFAULT now(), resolved_at timestamptz, resolved_by uuid,
+		resolved_by_name text, resolution text)`)
 }
 
 func (h *harness) carryOf(employeeID string, year int) string {

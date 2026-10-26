@@ -2326,6 +2326,11 @@
   },
   {
     "module": "hris",
+    "method": "POST",
+    "path": "/api/hris/leave-settings/preview"
+  },
+  {
+    "module": "hris",
     "method": "GET",
     "path": "/api/hris/leaves"
   },

@@ -112,8 +112,9 @@ func carryActor(u *auth.User) (id, name string) {
 
 // carryResult is what one recalculation did.
 type carryResult struct {
-	Changed bool
-	Carry   float64 // the carry-over after the call (unchanged when !Changed)
+	Changed  bool
+	Carry    float64 // the carry-over after the call (unchanged when !Changed)
+	Previous float64 // the carry-over before the call
 }
 
 // recomputeCarryOver sets the carry-over of employeeID's row of year from the
@@ -171,7 +172,7 @@ func recomputeCarryOverWith(ctx context.Context, q database.Querier, settings Le
 	}
 	row.Source = source
 	if !active || source != carrySourceAuto {
-		return carryResult{Carry: row.CarryDays}, nil
+		return carryResult{Carry: row.CarryDays, Previous: row.CarryDays}, nil
 	}
 
 	carry := carryAmount(prevRemaining, settings.CarryOverMaxDays)
@@ -182,7 +183,7 @@ func recomputeCarryOverWith(ctx context.Context, q database.Querier, settings Le
 		e := fmt.Sprintf("%04d-%02d-%02d", year, settings.CarryOverExpiryMonth, settings.CarryOverExpiryDay)
 		expires = &e
 	}
-	res := carryResult{Carry: carry}
+	res := carryResult{Carry: carry, Previous: row.CarryDays}
 	if carry != row.CarryDays || !sameText(expires, row.CarryExpires) {
 		if _, err := q.Exec(ctx, `UPDATE hris.leave_balances
 			SET carry_over_days = $3, carry_over_expires_on = $4::date, updated_at = now()
