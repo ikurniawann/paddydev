@@ -1,8 +1,8 @@
 package hris
 
 import (
+	"context"
 	"fmt"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -157,10 +157,30 @@ func (h *harness) settingsFixture() (editor testutil.Staff, id string) {
 	return editor, f.id
 }
 
+// openReviews maps employee id to "days|used" of the open review of year.
+func (h *harness) openReviews(year int) map[string]string {
+	h.t.Helper()
+	rows, err := h.tx.Query(context.Background(), `SELECT employee_id::text, carry_over_days::text || '|' || carry_over_used::text
+		FROM hris.leave_carry_over_reviews WHERE year = $1 AND resolved_at IS NULL`, year)
+	if err != nil {
+		h.t.Fatal(err)
+	}
+	defer rows.Close()
+	out := map[string]string{}
+	for rows.Next() {
+		var id, v string
+		if err := rows.Scan(&id, &v); err != nil {
+			h.t.Fatal(err)
+		}
+		out[id] = v
+	}
+	return out
+}
+
 // settingsImpactOf is what a saved settings recalculation really did, read
-// from the audit trail and the review table: the same four figures a preview
-// returns.
-func (h *harness) settingsImpactOf(year int) map[string]any {
+// from the audit trail and from the open reviews before (a snapshot taken ahead
+// of the save) and after: the same four figures a preview returns.
+func (h *harness) settingsImpactOf(year int, reviewsBefore map[string]string) map[string]any {
 	h.t.Helper()
 	row := h.scalar(`SELECT concat_ws('|', count(*), coalesce(sum(greatest((after->>'carry_over_days')::numeric - (before->>'carry_over_days')::numeric, 0)), 0),
 			coalesce(sum(greatest((before->>'carry_over_days')::numeric - (after->>'carry_over_days')::numeric, 0)), 0))
@@ -171,9 +191,13 @@ func (h *harness) settingsImpactOf(year int) map[string]any {
 	if _, err := fmt.Sscanf(strings.ReplaceAll(row, "|", " "), "%d %g %g", &n, &up, &down); err != nil {
 		h.t.Fatalf("impact %q: %v", row, err)
 	}
-	open := h.scalar(`SELECT count(*)::text FROM hris.leave_carry_over_reviews WHERE year = $1 AND resolved_at IS NULL`, year)
-	review, _ := strconv.Atoi(open)
-	return map[string]any{"employees_changed": float64(n), "days_increase": up, "days_decrease": down, "needs_review": float64(review)}
+	flagged := 0
+	for id, v := range h.openReviews(year) {
+		if was, open := reviewsBefore[id]; !open || was != v {
+			flagged++
+		}
+	}
+	return map[string]any{"employees_changed": float64(n), "days_increase": up, "days_decrease": down, "needs_review": float64(flagged)}
 }
 
 func sameImpact(a, b map[string]any) bool {
@@ -215,6 +239,7 @@ func TestLeaveSettingsRecalcCurrentYear(t *testing.T) {
 
 	// Save: carry 6, expiry of the setting in 2026, 2025 untouched, manual kept.
 	body["reason"] = "Kebijakan baru 2026"
+	reviewsBefore := h.openReviews(2026)
 	expect(t, h.do(&editor, "PUT", path, body), 200, "")
 	if got := h.carryOf(id, 2026); got != "6.00|0.00|2026-03-31" {
 		t.Fatalf("2026 carry = %q, want 6", got)
@@ -231,7 +256,7 @@ func TestLeaveSettingsRecalcCurrentYear(t *testing.T) {
 	if got := h.scalar(`SELECT reason FROM audit.audit_log WHERE action = 'leave_settings.update' AND actor_id = $1`, editor.UserID); got != "Kebijakan baru 2026" {
 		t.Fatalf("settings audit reason = %q", got)
 	}
-	if real := h.settingsImpactOf(2026); !sameImpact(pre, real) {
+	if real := h.settingsImpactOf(2026, reviewsBefore); !sameImpact(pre, real) {
 		t.Fatalf("preview %v != real %v", pre, real)
 	}
 
@@ -267,29 +292,44 @@ func TestLeaveSettingsRecalcCurrentYear(t *testing.T) {
 }
 
 // A max that drops the carry below what is already used keeps the value, opens
-// one review, counts it in the preview, and closes it again when the max is
-// cleared.
+// one review and closes it again when the max is cleared. The preview counts
+// only the employees this change newly flags: one whose review opens (A) or
+// whose open review gets other figures (C), not one already under review whose
+// figures stay the same (B).
 func TestLeaveSettingsRecalcBelowUsedOpensReview(t *testing.T) {
 	h := newHarness(t)
-	editor, id := h.settingsFixture()
+	editor, id := h.settingsFixture() // A: 2025 remaining 8
 	h.carrySetup(true, nil, 3, 31)
 	h.setBalance(id, 2026, 12, 0, 0, 8, 5, "2026-03-31")
-	h.exec(`UPDATE hris.leave_balances SET carry_over_source = 'auto' WHERE employee_id = $1 AND year = 2026`, id)
+	b := h.leaveFixture("2024-02-10")
+	c := h.leaveFixture("2024-03-10")
+	h.exec(`UPDATE hris.employees SET is_active = false WHERE id NOT IN ($1, $2, $3)`, id, b.id, c.id)
+	h.setBalance(b.id, 2025, 12, 0, 9, 0, 0, nil) // remaining 3
+	h.setBalance(b.id, 2026, 12, 0, 0, 3, 5, "2026-03-31")
+	h.setBalance(c.id, 2025, 12, 0, 4, 0, 0, nil) // remaining 8
+	h.setBalance(c.id, 2026, 12, 0, 0, 4, 6, "2026-03-31")
+	h.exec(`UPDATE hris.leave_balances SET carry_over_source = 'auto' WHERE year = 2026 AND employee_id IN ($1, $2, $3)`, id, b.id, c.id)
+	// B and C are already under review, with the figures their rows have now.
+	h.exec(`INSERT INTO hris.leave_carry_over_reviews (employee_id, year, carry_over_days, carry_over_used, excess, cause)
+		VALUES ($1, 2026, 3, 5, 2, '{"type":"hr_update"}'), ($2, 2026, 4, 6, 2, '{"type":"hr_update"}')`, b.id, c.id)
 	path := "/api/hris/leave-settings"
 
 	body := settingsBody(true, 3, 3, 31)
 	delete(body, "reason")
-	c := h.do(&editor, "POST", path+"/preview", body)
-	expect(t, c, 200, "")
-	pre := c.data()
-	if pre["employees_changed"] != float64(1) || pre["days_decrease"] != float64(5) || pre["days_increase"] != float64(0) || pre["needs_review"] != float64(1) {
-		t.Fatalf("preview = %s", c.raw)
+	res := h.do(&editor, "POST", path+"/preview", body)
+	expect(t, res, 200, "")
+	pre := res.data()
+	// A: 8 -> 3 and C: 4 -> 3 change (-5, -1); B stays 3. A is newly flagged,
+	// C's review gets other figures, B's does not change: needs_review 2, not 3.
+	if pre["employees_changed"] != float64(2) || pre["days_decrease"] != float64(6) || pre["days_increase"] != float64(0) || pre["needs_review"] != float64(2) {
+		t.Fatalf("preview = %s", res.raw)
 	}
-	if h.reviews(id, 2026) != "0|0|-|-" {
-		t.Fatalf("the preview left a review: %s", h.reviews(id, 2026))
+	if h.reviews(id, 2026) != "0|0|-|-" || h.reviews(c.id, 2026) != "1|0|2.00|-" {
+		t.Fatalf("the preview changed reviews: A %s, C %s", h.reviews(id, 2026), h.reviews(c.id, 2026))
 	}
 
 	body["reason"] = "Batas 3 hari"
+	reviewsBefore := h.openReviews(2026)
 	expect(t, h.do(&editor, "PUT", path, body), 200, "")
 	if got := h.carryOf(id, 2026); got != "3.00|5.00|2026-03-31" {
 		t.Fatalf("carry = %q, want 3 kept with 5 used", got)
@@ -297,11 +337,22 @@ func TestLeaveSettingsRecalcBelowUsedOpensReview(t *testing.T) {
 	if h.reviews(id, 2026) != "1|0|2.00|-" {
 		t.Fatalf("reviews = %s, want one open with excess 2", h.reviews(id, 2026))
 	}
-	if real := h.settingsImpactOf(2026); !sameImpact(pre, real) {
+	if h.reviews(b.id, 2026) != "1|0|2.00|-" || h.reviews(c.id, 2026) != "1|0|3.00|-" {
+		t.Fatalf("B %s (unchanged), C %s (excess 3)", h.reviews(b.id, 2026), h.reviews(c.id, 2026))
+	}
+	if real := h.settingsImpactOf(2026, reviewsBefore); !sameImpact(pre, real) {
 		t.Fatalf("preview %v != real %v", pre, real)
 	}
 
+	// Cleared max: all three get their whole remainder back and the reviews close.
 	body = settingsBody(true, nil, 3, 31)
+	delete(body, "reason")
+	res = h.do(&editor, "POST", path+"/preview", body)
+	expect(t, res, 200, "")
+	if res.data()["needs_review"] != float64(0) {
+		t.Fatalf("preview of clearing = %s, want needs_review 0", res.raw)
+	}
+	body["reason"] = "Tanpa batas"
 	expect(t, h.do(&editor, "PUT", path, body), 200, "")
 	if got := h.carryOf(id, 2026); got != "8.00|5.00|2026-03-31" {
 		t.Fatalf("carry after clearing = %q", got)

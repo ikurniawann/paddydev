@@ -58,8 +58,9 @@ type LeaveSettingsImpact struct {
 	EmployeesChanged int     `json:"employees_changed"`
 	DaysIncrease     float64 `json:"days_increase"`
 	DaysDecrease     float64 `json:"days_decrease"`
-	// NeedsReview is the number of carry-overs of the year left with an open
-	// review once the change is applied.
+	// NeedsReview is how many employees this change newly flags for HR: those
+	// whose review is opened by it, or whose already open review gets other
+	// figures. A review that was open before and stays as it is is not counted.
 	NeedsReview int `json:"needs_review"`
 }
 
@@ -234,6 +235,10 @@ func applyLeaveSettings(ctx context.Context, q database.Querier, a *Actor, year 
 	}
 
 	if next.CarryOverEnabled && next.CarryOverReady && (!before.CarryOverEnabled || !sameFloatPtr(before.CarryOverMaxDays, next.CarryOverMaxDays)) {
+		var reviewsBefore map[string][2]float64
+		if reviewsBefore, err = openCarryReviews(ctx, q, year); err != nil {
+			return
+		}
 		cause := carryCause{Type: causeSettings}
 		if p.Reason != "" {
 			cause.Label = cause.reason() + " — " + p.Reason
@@ -260,12 +265,40 @@ func applyLeaveSettings(ctx context.Context, q database.Querier, a *Actor, year 
 				impact.DaysDecrease += res.Previous - res.Carry
 			}
 		}
-	}
-	if next.CarryOverReady { // the review table exists
-		err = q.QueryRow(ctx, `SELECT count(*)::int FROM hris.leave_carry_over_reviews WHERE year = $1 AND resolved_at IS NULL`, year).
-			Scan(&impact.NeedsReview)
+		// Newly flagged: an open review now that was not open, or whose
+		// figures differ from before.
+		var reviewsAfter map[string][2]float64
+		if reviewsAfter, err = openCarryReviews(ctx, q, year); err != nil {
+			return
+		}
+		for id, f := range reviewsAfter {
+			if was, open := reviewsBefore[id]; !open || was != f {
+				impact.NeedsReview++
+			}
+		}
 	}
 	return
+}
+
+// openCarryReviews maps employee id to the figures (carry-over days, used) of
+// the open review of year.
+func openCarryReviews(ctx context.Context, q database.Querier, year int) (map[string][2]float64, error) {
+	rows, err := q.Query(ctx, `SELECT employee_id::text, carry_over_days::float8, carry_over_used::float8
+		FROM hris.leave_carry_over_reviews WHERE year = $1 AND resolved_at IS NULL`, year)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string][2]float64{}
+	for rows.Next() {
+		var id string
+		var f [2]float64
+		if err := rows.Scan(&id, &f[0], &f[1]); err != nil {
+			return nil, err
+		}
+		out[id] = f
+	}
+	return out, rows.Err()
 }
 
 // activeEmployeeIDs lists the active employees in a stable order, so every
