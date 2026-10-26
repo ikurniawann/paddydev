@@ -10,6 +10,7 @@ import {
   fetchAttendanceSettings,
   previewAttendanceSettings,
   fetchActiveEmployees,
+  fetchAttendanceGapSummary,
   fetchAttendanceList,
   fetchAttendanceMonthStats,
   fetchCalendarAttendances,
@@ -40,6 +41,13 @@ export const useAttendanceMonthStats = (month: string) =>
 
 export const useDailyRoster = (date: string) =>
   useQuery({ queryKey: attendanceQueryKeys.roster(date), queryFn: () => fetchDailyRoster(date) });
+
+/** Ringkasan absen terlewat satu tanggal (default kemarin WIB, diputuskan server). */
+export const useAttendanceGapSummary = (date?: string) =>
+  useQuery({
+    queryKey: attendanceQueryKeys.gapSummary(date ?? ""),
+    queryFn: () => fetchAttendanceGapSummary(date),
+  });
 
 export const useCalendarAttendances = (
   employeeId: string | undefined,

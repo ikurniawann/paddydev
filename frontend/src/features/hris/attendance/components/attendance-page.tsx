@@ -5,6 +5,7 @@ import { AttendanceRequestsTab } from "@/features/hris/attendance-requests";
 import { BusinessTripsTab } from "@/features/hris/business-trips";
 import { useAuth } from "@/hooks/use-auth";
 import { canManageTrips } from "@/lib/hris/business-trips";
+import { AttendanceGapSummaryCard } from "./attendance-gap-summary-card";
 import { AttendanceMonitoringTab } from "./attendance-monitoring-tab";
 import { AttendanceRecapTab } from "./attendance-recap-tab";
 import { AttendancePeriodsTab } from "./attendance-periods-tab";
@@ -34,6 +35,8 @@ export function AttendancePage() {
           Monitoring kehadiran per shift dan rekap absensi karyawan
         </p>
       </div>
+
+      <AttendanceGapSummaryCard />
 
       <Tabs defaultValue="monitoring" className="w-full flex-col">
         <TabsList className={`grid h-9 w-full max-w-3xl ${hrd ? "grid-cols-5" : "grid-cols-3"}`}>

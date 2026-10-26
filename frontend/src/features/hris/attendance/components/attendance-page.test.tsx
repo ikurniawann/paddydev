@@ -8,6 +8,7 @@ vi.mock("@/hooks/use-auth", () => ({
 }));
 vi.mock("@/features/hris/business-trips", () => ({ BusinessTripsTab: () => <div>tab-dinas</div> }));
 vi.mock("@/features/hris/attendance-requests", () => ({ AttendanceRequestsTab: () => <div>tab-pengajuan</div> }));
+vi.mock("./attendance-gap-summary-card", () => ({ AttendanceGapSummaryCard: () => <div>kartu-ringkasan</div> }));
 vi.mock("./attendance-monitoring-tab", () => ({ AttendanceMonitoringTab: () => <div>monitoring</div> }));
 vi.mock("./attendance-recap-tab", () => ({ AttendanceRecapTab: () => <div>rekap</div> }));
 vi.mock("./attendance-periods-tab", () => ({ AttendancePeriodsTab: () => <div>periode</div> }));
@@ -40,5 +41,15 @@ describe("AttendancePage: tab Pengajuan Absensi (EPIC-065)", () => {
     role = r;
     render(<AttendancePage />);
     expect(screen.queryByRole("tab", { name: "Pengajuan Absensi" })).toBeNull();
+  });
+});
+
+describe("AttendancePage: kartu ringkasan absen terlewat (EPIC-067)", () => {
+  it("dirender di atas tab", () => {
+    role = "hrd";
+    render(<AttendancePage />);
+    const card = screen.getByText("kartu-ringkasan");
+    const tabs = screen.getByRole("tablist");
+    expect(card.compareDocumentPosition(tabs) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });
