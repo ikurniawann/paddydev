@@ -4,6 +4,11 @@
 
 **Status implementasi (27-10-2026):** Tugas 1-4 selesai di kode pada branch `feat/epic068-sisa-bawaan` (commit `efed744`..`ec39b82` + dokumen); **belum deploy**, setting sisa bawaan tetap mati. Catatan resmi: Automation Log EPIC-068.
 
+**Runbook deploy dan rollback (kunci setting = keberadaan tabel `hris.leave_carry_over_reviews`):**
+- Setelah deploy periksa `carry_over_enabled = false`; HR tidak boleh menyentuh pengaturan Saldo Cuti selama jendela deploy.
+- Rollback binary ke PR #33 hanya bila setting masih mati dan tabel review kosong, disertai `DROP TABLE hris.leave_carry_over_reviews` (mengunci ulang).
+- Setelah setting dinyalakan, rollback binary butuh rencana manual yang disetujui user. Rincian: Automation Log EPIC-068, entri review akhir 27-10-2026.
+
 **Goal:** Sisa bawaan tahun N selalu sama dengan sisa akhir tahun N−1 yang terbaru, dibatasi oleh batas maksimal yang diatur admin HRIS. Nilainya dihitung ulang otomatis di setiap perubahan saldo N−1, tanpa nilai negatif, dengan audit, dan karyawan yang terdampak ditandai "perlu ditinjau HR".
 
 **Architecture:**
