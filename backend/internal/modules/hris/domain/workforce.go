@@ -108,18 +108,44 @@ func isInt(f float64) bool { return IsFinite(f) && f == float64(int64(f)) }
 
 /* ── Leave (lib/hris/leave-balances-repo, leave-wa, recruitment/wa) ────── */
 
-// ProratedAnnualQuota: 12 days, or 12 × remaining months / 12 (join month
-// included, floored) for an employee who joined in that year.
-func ProratedAnnualQuota(joinDate *string, year int) int {
+// DefaultAnnualLeave is the default annual-leave quota of an employee for
+// year (EPIC-068 R1), mirrored by SQL hris.default_annual_leave. Leave is
+// earned after 12 months of service: with A = join + 12 months, A after 31
+// Dec of year gives 0, A on or before 1 Jan gives 12, otherwise 12 × days
+// from A to 31 Dec (inclusive) / days in year, floored to a multiple of 0.5.
+// A missing or unreadable join date gives 12. Integer maths keeps the floor
+// exact and identical to the SQL function.
+func DefaultAnnualLeave(joinDate *string, year int) float64 {
 	if joinDate == nil || *joinDate == "" {
 		return 12
 	}
 	t, ok := parseContractDate(*joinDate)
-	if !ok || t.Year() != year {
+	if !ok {
 		return 12
 	}
-	return 13 - int(t.Month()) // months left in the year, join month included
+	// join + 12 months; 29 Feb clamps to 28 Feb like Postgres interval maths.
+	ay, am, ad := t.Year()+1, t.Month(), t.Day()
+	if am == time.February && ad == 29 && !isLeapYear(ay) {
+		ad = 28
+	}
+	a := time.Date(ay, am, ad, 0, 0, 0, 0, time.UTC)
+	yearStart := time.Date(year, time.January, 1, 0, 0, 0, 0, time.UTC)
+	yearEnd := time.Date(year, time.December, 31, 0, 0, 0, 0, time.UTC)
+	if a.After(yearEnd) {
+		return 0
+	}
+	if !a.After(yearStart) {
+		return 12
+	}
+	days := int(yearEnd.Sub(a).Hours()/24) + 1
+	inYear := 365
+	if isLeapYear(year) {
+		inYear = 366
+	}
+	return float64(24*days/inYear) / 2
 }
+
+func isLeapYear(y int) bool { return y%4 == 0 && (y%100 != 0 || y%400 == 0) }
 
 var (
 	idWeekdays = []string{"Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"}

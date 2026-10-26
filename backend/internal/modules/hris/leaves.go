@@ -512,7 +512,7 @@ func (s *Service) LeaveBalance(ctx context.Context, a *Actor, employeeID string,
 	var f fields
 	f.add("employee_id", employeeID)
 	f.add("year", year)
-	f.add("annual_leave_total", domain.ProratedAnnualQuota(join, year))
+	f.add("annual_leave_total", domain.DefaultAnnualLeave(join, year))
 	for _, col := range []string{"annual_leave_used", "sick_leave_used", "unpaid_leave_used", "maternity_leave_used", "paternity_leave_used"} {
 		f.add(col, 0)
 	}

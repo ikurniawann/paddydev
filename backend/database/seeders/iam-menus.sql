@@ -8,6 +8,8 @@
 -- 20261022090000_iam_hris_delete_masks); hak hapus diberikan lewat Hak Akses HRIS / Super Admin.
 -- EPIC-067: Absensi dan Cuti & Izin juga menawarkan "approve" (keputusan HR; Lembur sudah), sama
 -- dengan migrasi 20261027090100_iam_hris_approve.
+-- EPIC-068: menu daun Saldo Cuti (read/update/import/export), sama dengan migrasi
+-- 20261028090000_leave_balance_allocation.
 INSERT INTO iam.menus (code, menu_name, route_path, icon, menu_type, order_number, permission_context) VALUES
   ('report', 'Laporan', NULL, 'chart', 'group', 80, '{"actions":["read"]}'::jsonb),
   ('report.sales-vs-target', 'Sales vs Target', '/dashboard/report/sales-vs-target', 'chart', 'sidebar', 10, '{"actions":["read","create","update","delete"]}'::jsonb),
@@ -101,6 +103,7 @@ INSERT INTO iam.menus (code, menu_name, route_path, icon, menu_type, order_numbe
   ('hris.master.positions', 'Jabatan', '/dashboard/master/positions', 'briefcase', 'sidebar', 20, '{"actions":["read","delete"]}'::jsonb),
   ('hris.performance.logbook-list', 'Logbook List', '/dashboard/hris/logbook-list', 'clipboard', 'sidebar', 30, '{"actions":["read"]}'::jsonb),
   ('hris.recruitment.talent-pool', 'Talent Pool', '/dashboard/hris/talent-pool', 'star', 'sidebar', 30, '{"actions":["read"]}'::jsonb),
+  ('hris.workforce.leave-balances', 'Saldo Cuti', '/dashboard/hris/leave-balances', 'clipboard', 'sidebar', 25, '{"actions":["read","update","import","export"]}'::jsonb),
   ('hris.workforce.schedules', 'Schedules', '/dashboard/hris/schedules', 'calendar', 'sidebar', 30, '{"actions":["read"]}'::jsonb),
   ('items.product.purchasing', 'Pembelian', NULL, 'shopping', 'group', 30, '{"actions":["read"]}'::jsonb),
   ('items.raw-material.purchasing', 'Pembelian', NULL, 'shopping', 'group', 30, '{"actions":["read"]}'::jsonb),
@@ -255,6 +258,8 @@ WHERE deleted_at IS NULL
     'report', 'report.sales-vs-target',
     'spa.commissions', 'spa.outlets', 'spa.rush-hour', 'spa.trend', 'spa.rating',
     'hris.kepegawaian.overtime', 'hris.kepegawaian.loans',
+    -- EPIC-068 (26 Okt 2026): Saldo Cuti
+    'hris.workforce.leave-balances',
     'hris.kepegawaian.announcements',
     'hris.performance.kpi-scorecard', 'hris.performance.dept-tasks', 'hris.performance.kpi-config',
     'hris.recruitment.live-monitoring',
