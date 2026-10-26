@@ -64,3 +64,45 @@ export type LeaveSettingsPatch = Partial<
     "carry_over_enabled" | "carry_over_max_days" | "carry_over_expiry_month" | "carry_over_expiry_day"
   >
 >;
+
+/** Satu masalah di file import: galat (menghalangi simpan) atau peringatan (perlu dicentang). */
+export interface LeaveBalanceImportIssue {
+  line: number;
+  column: string;
+  name: string;
+  message: string;
+}
+
+/** Angka saldo satu karyawan di pratinjau import (R10). */
+export interface LeaveBalanceImportFigures {
+  annual_leave_total: number;
+  annual_leave_adjustment: number;
+  carry_over_days: number;
+  carry_over_expires_on: string | null;
+}
+
+export interface LeaveBalanceImportChange {
+  nip: string;
+  name: string;
+  before: LeaveBalanceImportFigures;
+  after: LeaveBalanceImportFigures;
+  /** true = baris saldo belum ada dan akan dibuat. */
+  new: boolean;
+  reason: string;
+}
+
+/** Isi `data` untuk step=preview; step=commit hanya mengembalikan `summary`. */
+export interface LeaveBalanceImportPreview {
+  summary: { employees: number; new: number; changed: number; same: number };
+  errors?: LeaveBalanceImportIssue[];
+  warnings?: LeaveBalanceImportIssue[];
+  fingerprint?: string;
+  /** Paling banyak 500. */
+  changes?: LeaveBalanceImportChange[];
+}
+
+export interface LeaveBalanceImportScope {
+  year: number;
+  /** "" = semua cabang. */
+  branch_id: string;
+}

@@ -32,6 +32,11 @@ vi.mock("@/components/ui/combobox", () => ({
 vi.mock("./leave-settings-card", () => ({
   LeaveSettingsCard: ({ canUpdate }: { canUpdate: boolean }) => <div>kartu-pengaturan-{canUpdate ? "ubah" : "baca"}</div>,
 }));
+vi.mock("./leave-balance-upload-dialog", () => ({
+  LeaveBalanceUploadDialog: (p: { year: number; branchId: string; branchName: string }) => (
+    <div>{`dialog-import-${p.year}-${p.branchId || "semua"}-${p.branchName}`}</div>
+  ),
+}));
 vi.mock("./leave-balance-edit-dialog", () => ({
   LeaveBalanceEditDialog: ({ balance }: { balance: LeaveBalanceView }) => <div>dialog-ubah-{balance.full_name}</div>,
 }));
@@ -124,6 +129,25 @@ describe("LeaveBalancesPage", () => {
     hooks.useLeaveBalanceAccess.mockReturnValue({ data: { read: true, update: true, import: false, export: false } });
     render(<LeaveBalancesPage />);
     expect(screen.queryByTestId("leave-balance-import-slot")).toBeNull();
+  });
+
+  it("tombol Import membuka dialog dengan tahun dan cabang terpilih; template mengikuti filter dan hak export", () => {
+    render(<LeaveBalancesPage />);
+    const tpl = screen.getByRole("link", { name: "Unduh template" }) as HTMLAnchorElement;
+    expect(tpl.getAttribute("href")).toBe("/api/hris/leave-balances/template?year=2026");
+    fireEvent.change(screen.getByLabelText("Cabang"), { target: { value: "b2" } });
+    fireEvent.change(screen.getByLabelText("Tahun"), { target: { value: "2027" } });
+    expect(screen.getByRole("link", { name: "Unduh template" }).getAttribute("href")).toBe(
+      "/api/hris/leave-balances/template?year=2027&branch_id=b2"
+    );
+    expect(screen.queryByText(/^dialog-import-/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Import Excel" }));
+    expect(screen.getByText("dialog-import-2027-b2-PVJ")).toBeTruthy();
+    cleanup();
+    hooks.useLeaveBalanceAccess.mockReturnValue({ data: { read: true, update: true, import: true, export: false } });
+    render(<LeaveBalancesPage />);
+    expect(screen.queryByRole("link", { name: "Unduh template" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Import Excel" })).toBeTruthy();
   });
 
   it("menampilkan galat dan keadaan kosong", () => {

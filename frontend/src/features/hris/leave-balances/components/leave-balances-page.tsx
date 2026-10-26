@@ -10,10 +10,12 @@ import { useStoreBranches } from "@/features/hris/placements/queries";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { todayWib } from "@/lib/dates";
 import { formatDate } from "@/lib/format";
+import { leaveBalanceTemplateUrl } from "../api";
 import { formatDays } from "../balance-math";
 import { useLeaveBalanceAccess, useLeaveBalances } from "../queries";
 import type { LeaveBalanceView } from "../types";
 import { LeaveBalanceEditDialog } from "./leave-balance-edit-dialog";
+import { LeaveBalanceUploadDialog } from "./leave-balance-upload-dialog";
 import { LeaveSettingsCard } from "./leave-settings-card";
 
 function carryCell(b: LeaveBalanceView) {
@@ -43,6 +45,7 @@ export function LeaveBalancesPage() {
   const [branchId, setBranchId] = useState("");
   const [search, setSearch] = useState("");
   const [editing, setEditing] = useState<LeaveBalanceView | null>(null);
+  const [uploadOpen, setUploadOpen] = useState(false);
   const q = useDebouncedValue(search, 300).trim();
   const branches = useStoreBranches();
   const access = useLeaveBalanceAccess().data;
@@ -104,8 +107,14 @@ export function LeaveBalancesPage() {
           />
         </div>
         {access?.import === true ? (
-          // Task 6: tombol Import (dan unduh template) dipasang di sini.
-          <div className="flex flex-wrap gap-2" data-testid="leave-balance-import-slot" />
+          <div className="flex flex-wrap gap-2" data-testid="leave-balance-import-slot">
+            {access.export ? (
+              <Button asChild variant="outline">
+                <a href={leaveBalanceTemplateUrl({ year, branch_id: branchId })}>Unduh template</a>
+              </Button>
+            ) : null}
+            <Button onClick={() => setUploadOpen(true)}>Import Excel</Button>
+          </div>
         ) : null}
       </div>
 
@@ -172,6 +181,16 @@ export function LeaveBalancesPage() {
         </div>
       )}
       {rows.length > 0 ? <p className="text-xs text-gray-400">{rows.length} karyawan</p> : null}
+
+      {uploadOpen ? (
+        <LeaveBalanceUploadDialog
+          open
+          onOpenChange={setUploadOpen}
+          year={year}
+          branchId={branchId}
+          branchName={(branches.data ?? []).find((b) => b.id === branchId)?.name ?? "Semua cabang"}
+        />
+      ) : null}
 
       {editing ? (
         <LeaveBalanceEditDialog
