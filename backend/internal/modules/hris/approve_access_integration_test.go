@@ -92,6 +92,32 @@ func (h *harness) account(role string, iamRoles ...string) testutil.Staff {
 	return s
 }
 
+// staffGrants is h.staff with explicit actions per menu (EPIC-067 R11: an
+// HR decision needs "approve" on its leaf, a menu "read" alone does not).
+func (h *harness) staffGrants(role string, grants map[string][]string, linked bool, opts ...emp) (testutil.Staff, string) {
+	h.t.Helper()
+	s := h.staffActions(role, grants)
+	if !linked {
+		return s, ""
+	}
+	e := emp{}
+	if len(opts) > 0 {
+		e = opts[0]
+	}
+	e.user = &s.UserID
+	return s, h.employee(e)
+}
+
+// readOnly and readApprove are the leaf grants of an HR account without and
+// with the decision (EPIC-067 R10).
+func readOnly(leaf string) map[string][]string {
+	return map[string][]string{leaf: {"read"}}
+}
+
+func readApprove(leaf string) map[string][]string {
+	return map[string][]string{leaf: {"read", "approve"}}
+}
+
 // approveCheckStatement is the check script's single statement without its
 // BEGIN READ ONLY / ROLLBACK wrapper.
 func approveCheckStatement(t *testing.T) string {

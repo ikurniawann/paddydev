@@ -9,6 +9,7 @@ import (
 	"nuhabit/backend/internal/modules/hris/domain"
 	"nuhabit/backend/internal/platform/audit"
 	"nuhabit/backend/internal/platform/httpx"
+	"nuhabit/backend/internal/platform/iam"
 	"nuhabit/backend/internal/platform/validate"
 )
 
@@ -270,6 +271,14 @@ func (s *Service) logAdjustment(ctx context.Context, r Repository, a *Actor, act
 	return audit.Write(ctx, r.querier(), meta)
 }
 
+// mayWriteAttendance: the HR adjustment roles (canManageAttendance), or the
+// approval of an employee request (also is set only by
+// DecideAttendanceRequest), whose decider holds "approve" on the Absensi
+// leaf (EPIC-067 R11) whatever their app role.
+func mayWriteAttendance(a *Actor, also func(Repository, *Row) error) bool {
+	return canManageAttendance(a) || (also != nil && a.CanApprove(iam.LeafAbsensi))
+}
+
 // CreateManualAttendance adds a missing attendance row for an employee.
 func (s *Service) CreateManualAttendance(ctx context.Context, a *Actor, in adjustment, meta audit.Entry) (*Row, error) {
 	return s.createManualAttendance(ctx, a, in, meta, nil)
@@ -280,7 +289,7 @@ func (s *Service) CreateManualAttendance(ctx context.Context, a *Actor, in adjus
 // approved employee request records its decision atomically with the row).
 func (s *Service) createManualAttendance(ctx context.Context, a *Actor, in adjustment, meta audit.Entry,
 	also func(Repository, *Row) error) (*Row, error) {
-	if !canManageAttendance(a) {
+	if !mayWriteAttendance(a, also) {
 		return nil, httpx.Forbidden("Hanya HRD/admin yang bisa menambah absensi manual")
 	}
 	if err := requireReason(in.Reason); err != nil {
@@ -381,7 +390,7 @@ func (s *Service) adjustAttendance(ctx context.Context, a *Actor, id string, in 
 	}
 	data := in.changesData()
 	if data {
-		if !canManageAttendance(a) {
+		if !mayWriteAttendance(a, also) {
 			return nil, httpx.Forbidden("Hanya HRD/admin yang bisa menyesuaikan absensi")
 		}
 		if err := requireReason(in.Reason); err != nil {

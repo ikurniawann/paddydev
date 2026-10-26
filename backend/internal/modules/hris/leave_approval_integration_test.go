@@ -3,6 +3,9 @@ package hris
 import (
 	"context"
 	"testing"
+
+	"nuhabit/backend/internal/platform/iam"
+	"nuhabit/backend/internal/platform/testutil"
 )
 
 func decideLeaveBody(id any, action, reason string) map[string]any {
@@ -17,7 +20,7 @@ func decideLeaveBody(id any, action, reason string) map[string]any {
 // override tercatat; tidak ada yang memutus cutinya sendiri.
 func TestLeaveDecisionManagerFirstHRBackup(t *testing.T) {
 	h := newHarness(t)
-	hr, _ := h.staff("hrd", []string{menuWorkforce}, true, emp{name: "HR Cadangan"})
+	hr, _ := h.staff("hrd", []string{menuWorkforce, iam.LeafCuti}, true, emp{name: "HR Cadangan"}) // EPIC-067 R11
 	boss, bossID := h.staff("pos", nil, true, emp{name: "Atasan Langsung"})
 	staff, _ := h.staff("pos", nil, true, emp{name: "Crew Cuti", boss: &bossID})
 	stranger, _ := h.staff("pos", nil, true, emp{name: "Rekan Lain"})
@@ -100,5 +103,43 @@ func TestLeaveSelfManagerCannotApproveOwn(t *testing.T) {
 	expect(t, team, 200, "")
 	if len(team.list()) != 0 {
 		t.Fatalf("lembur sendiri tidak boleh masuk antrean atasan: %s", team.raw)
+	}
+}
+
+// EPIC-067 R10/R11: the HR backup of a leave decision is "approve" on the
+// Cuti leaf, not the app role; the direct manager still decides without a
+// menu and nobody decides their own leave.
+func TestLeaveHRSideNeedsApprove(t *testing.T) {
+	h := newHarness(t)
+	hrdRead, _ := h.staffGrants("hrd", readOnly(iam.LeafCuti), true, emp{name: "HRD Tanpa Approve"})
+	approver, _ := h.staffGrants("pos", readApprove(iam.LeafCuti), true, emp{name: "Admin Cuti"})
+	boss, bossID := h.staff("pos", nil, true, emp{name: "Atasan Tanpa Menu"})
+	staff, _ := h.staff("pos", nil, true, emp{name: "Crew Cuti", boss: &bossID})
+	file := func(s *testutil.Staff, date string) string {
+		t.Helper()
+		c := h.do(s, "POST", "/api/hris/leaves", leaveBody("annual", date, date))
+		expect(t, c, 200, "")
+		return c.data()["id"].(string)
+	}
+	decide := func(s *testutil.Staff, id string) call {
+		return h.do(s, "POST", "/api/hris/leaves/approve", decideLeaveBody(id, "approve", ""))
+	}
+
+	// (i) App role hrd without "approve" on Cuti: refused as before for non-HR.
+	first := file(&staff, "2031-03-04")
+	expect(t, decide(&hrdRead, first), 403, "Hanya atasan langsung atau HRD yang bisa memproses pengajuan ini")
+	// (ii) A non-HR app role with "approve" decides as HR.
+	byHR := decide(&approver, first)
+	expect(t, byHR, 200, "")
+	if d := byHR.data(); d["decided_as"] != "hr" || d["status"] != "approved" {
+		t.Fatalf("approve as HR = %s", byHR.raw)
+	}
+	// (iii) "approve" never decides one's own leave.
+	expect(t, decide(&approver, file(&approver, "2031-03-11")), 403, "Tidak bisa memutuskan pengajuan cuti sendiri")
+	// (iv) The direct manager decides without any menu.
+	byBoss := decide(&boss, file(&staff, "2031-03-18"))
+	expect(t, byBoss, 200, "")
+	if byBoss.data()["decided_as"] != "manager" {
+		t.Fatalf("manager approve = %s", byBoss.raw)
 	}
 }

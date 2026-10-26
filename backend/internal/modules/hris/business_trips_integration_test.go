@@ -4,12 +4,13 @@ import (
 	"testing"
 	"time"
 
+	"nuhabit/backend/internal/platform/iam"
 	"nuhabit/backend/internal/platform/testutil"
 )
 
 func TestBusinessTripFlow(t *testing.T) {
 	h, _ := newFileHarness(t)
-	hr, _ := h.staff("hrd", nil, true)
+	hr, _ := h.staff("hrd", []string{iam.LeafAbsensi}, true) // EPIC-067 R11: approve on Absensi
 	boss, bossID := h.staff("pos", nil, true, emp{name: "Atasan Dinas"})
 	staff, own := h.staff("pos", nil, true, emp{name: "Crew Dinas", boss: &bossID})
 	other, otherID := h.staff("pos", nil, true, emp{name: "Rekan Lain"})
@@ -131,7 +132,7 @@ func TestBusinessTripFlow(t *testing.T) {
 // dicek menjadi dinas, kecuali di periode yang sudah closing.
 func TestBusinessTripRejectCancelAndClosedPeriod(t *testing.T) {
 	h, _ := newFileHarness(t)
-	hr, _ := h.staff("hrd", nil, true)
+	hr, _ := h.staff("hrd", []string{iam.LeafAbsensi}, true) // EPIC-067 R11: approve on Absensi
 	boss, bossID := h.staff("pos", nil, true, emp{name: "Atasan Tolak"})
 	staff, own := h.staff("pos", nil, true, emp{name: "Crew Tolak", boss: &bossID})
 	base := "/api/hris/business-trips"
@@ -211,7 +212,7 @@ func TestBusinessTripRejectCancelAndClosedPeriod(t *testing.T) {
 // attendance date for a clock-out (an overnight shift stays dinas).
 func TestBusinessTripDateIsServerSide(t *testing.T) {
 	h, _ := newFileHarness(t)
-	hr, _ := h.staff("hrd", nil, true)
+	hr, _ := h.staff("hrd", []string{iam.LeafAbsensi}, true) // EPIC-067 R11: approve on Absensi
 	early, earlyID := h.staff("pos", nil, true, emp{name: "Crew Dinas Besok"})
 	night, nightID := h.staff("pos", nil, true, emp{name: "Crew Shift Malam"})
 	store := h.branch("Toko Malam")
@@ -254,7 +255,7 @@ func TestBusinessTripDateIsServerSide(t *testing.T) {
 // mengajukan sendiri, memutus hanya sebagai atasan langsung, daftar hanya miliknya.
 func TestBusinessTripHRPowerExcludesHiringManager(t *testing.T) {
 	h, _ := newFileHarness(t)
-	hr, _ := h.staff("hrd", nil, true)
+	hr, _ := h.staff("hrd", []string{iam.LeafAbsensi}, true) // EPIC-067 R11: approve on Absensi
 	hm, hmID := h.staff("hiring_manager", nil, true, emp{name: "Manajer Rekrutmen"})
 	sub, _ := h.staff("pos", nil, true, emp{name: "Bawahan HM", boss: &hmID})
 	other, otherID := h.staff("pos", nil, true, emp{name: "Rekan Lain"})
@@ -304,4 +305,65 @@ func TestBusinessTripHRPowerExcludesHiringManager(t *testing.T) {
 	}
 	expect(t, decide(&hr, otherTripID, "approve"), 200, "")
 	expect(t, h.do(&hr, "POST", base, body("2026-10-10", map[string]any{"employee_id": otherID})), 200, "")
+}
+
+// EPIC-067 R10/R11: every HR power of Perjalanan Dinas (list all, record
+// for another employee, decide as backup, cancel an approved trip) is
+// "approve" on the Absensi leaf, not the app role; the direct manager still
+// decides without a menu and nobody decides their own trip.
+func TestBusinessTripHRSideNeedsApprove(t *testing.T) {
+	h, _ := newFileHarness(t)
+	hrdRead, _ := h.staffGrants("hrd", readOnly(iam.LeafAbsensi), true, emp{name: "HRD Tanpa Approve"})
+	approver, _ := h.staffGrants("pos", readApprove(iam.LeafAbsensi), true, emp{name: "Admin Dinas"})
+	boss, bossID := h.staff("pos", nil, true, emp{name: "Atasan Tanpa Menu"})
+	sub, _ := h.staff("pos", nil, true, emp{name: "Bawahan Dinas", boss: &bossID})
+	other, otherID := h.staff("pos", nil, true, emp{name: "Rekan Lain"})
+	base := "/api/hris/business-trips"
+	body := func(start string, extra map[string]any) map[string]any {
+		m := map[string]any{"start_date": start, "end_date": start, "destination": "Gudang Cikarang", "purpose": "Stock opname gudang"}
+		for k, v := range extra {
+			m[k] = v
+		}
+		return m
+	}
+	file := func(s *testutil.Staff, start string) string {
+		t.Helper()
+		c := h.do(s, "POST", base, body(start, nil))
+		expect(t, c, 200, "")
+		return c.data()["id"].(string)
+	}
+	decide := func(s *testutil.Staff, id, action string) call {
+		return h.do(s, "POST", base+"/"+id+"/decide", map[string]any{"action": action})
+	}
+	otherTrip := file(&other, "2026-10-06")
+
+	// (i) App role hrd without "approve" on Absensi: an ordinary employee.
+	if rows := h.do(&hrdRead, "GET", base+"?employee_id="+otherID, nil).list(); len(rows) != 0 {
+		t.Fatalf("hrd without approve listed another employee: %v", rows)
+	}
+	expect(t, h.do(&hrdRead, "POST", base, body("2026-10-08", map[string]any{"employee_id": otherID})), 403,
+		"Hanya HRD yang bisa mencatat Perjalanan Dinas karyawan lain")
+	expect(t, decide(&hrdRead, otherTrip, "approve"), 403, "Hanya atasan langsung atau HRD yang bisa memproses pengajuan ini")
+
+	// (ii) A non-HR app role with "approve" holds every HR power.
+	if rows := h.do(&approver, "GET", base+"?employee_id="+otherID, nil).list(); len(rows) != 1 {
+		t.Fatalf("approver list for other employee = %v", rows)
+	}
+	expect(t, decide(&approver, otherTrip, "approve"), 200, "")
+	expect(t, decide(&hrdRead, otherTrip, "cancel"), 403, "Hanya pemohon (saat menunggu) atau HRD yang bisa membatalkan Perjalanan Dinas")
+	cancelled := decide(&approver, otherTrip, "cancel")
+	expect(t, cancelled, 200, "")
+	if cancelled.data()["status"] != "cancelled" {
+		t.Fatalf("cancel by approver = %s", cancelled.raw)
+	}
+	assigned := h.do(&approver, "POST", base, body("2026-10-09", map[string]any{"employee_id": otherID}))
+	expect(t, assigned, 200, "")
+	if assigned.data()["status"] != "approved" {
+		t.Fatalf("assigned = %s", assigned.raw)
+	}
+
+	// (iii) "approve" never decides one's own trip.
+	expect(t, decide(&approver, file(&approver, "2026-10-07"), "approve"), 403, "Tidak bisa memutuskan Perjalanan Dinas sendiri")
+	// (iv) The direct manager decides without any menu.
+	expect(t, decide(&boss, file(&sub, "2026-10-07"), "approve"), 200, "")
 }

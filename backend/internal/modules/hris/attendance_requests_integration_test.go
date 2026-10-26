@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"nuhabit/backend/internal/platform/iam"
 	"nuhabit/backend/internal/platform/testutil"
 )
 
@@ -29,7 +30,8 @@ func TestAttendanceRequestCreate(t *testing.T) {
 	crew, crewID := h.staff("pos", nil, true, emp{name: "Crew Pengajuan"})
 	other, _ := h.staff("pos", nil, true, emp{name: "Crew Lain"})
 	unlinked, _ := h.staff("pos", nil, false)
-	manager, _ := h.staff("hiring_manager", []string{"hris.workforce.attendance"}, true, emp{name: "Hiring Manager"})
+	// EPIC-067 R11: the hiring manager reads Absensi without "approve".
+	manager, _ := h.staffGrants("hiring_manager", readOnly(iam.LeafAbsensi), true, emp{name: "Hiring Manager"})
 	const url = "/api/hris/attendance-requests"
 	const why = "Internet toko mati, tidak bisa absen"
 

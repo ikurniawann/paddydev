@@ -72,8 +72,11 @@ type Actor struct {
 	EmployeeID   *string
 	DepartmentID *string
 	IsHR         bool
-	// IsHRD: super_admin/admin/hrd only (tripHRRoles); gates the HR powers of
-	// Perjalanan Dinas. IsHR stays the broader flag for every other feature.
+	// IsHRD: super_admin/admin/hrd only (tripHRRoles): overtime assignments
+	// for others and the separate overtime correction. The HR side of the
+	// four decisions (attendance requests, leave, overtime, Perjalanan Dinas)
+	// is CanApprove instead (EPIC-067 R11). IsHR stays the broader flag for
+	// every other feature.
 	IsHRD bool
 	// PerformanceMenu: the account holds the HR side of the Kinerja menu, not
 	// only the employee-level Review/Tugas Departemen (set by withLogbook).

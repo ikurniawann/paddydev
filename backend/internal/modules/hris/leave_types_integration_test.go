@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"nuhabit/backend/internal/platform/iam"
 	"nuhabit/backend/internal/platform/testutil"
 )
 
@@ -59,7 +60,7 @@ func TestRemovedLeaveTypesRefusedForNewRequests(t *testing.T) {
 
 func TestRemovedLeaveTypesStayReadable(t *testing.T) {
 	h := newHarness(t)
-	hr, _ := h.staff("hrd", []string{menuWorkforce}, true)
+	hr, _ := h.staff("hrd", []string{menuWorkforce, iam.LeafCuti}, true) // EPIC-067 R11: approve on Cuti
 	_, own := h.staff("pos", nil, true, emp{name: "Riwayat Darurat"})
 	id := h.scalar(`INSERT INTO hris.leaves (employee_id, leave_type, start_date, end_date, total_days, reason)
 		VALUES ($1, 'emergency', '2031-03-04', '2031-03-04', 1, 'Import Odoo: Cuti Menikah') RETURNING id::text`, own)
@@ -103,7 +104,7 @@ func TestLeaderLeaveEligibility(t *testing.T) {
 
 func TestLeaveMonthlyQuota(t *testing.T) {
 	h := newHarness(t)
-	hr, _ := h.staff("hrd", []string{menuWorkforce}, true)
+	hr, _ := h.staff("hrd", []string{menuWorkforce, iam.LeafCuti}, true) // EPIC-067 R11: approve on Cuti
 	staff, _ := h.staff("pos", nil, true)
 	var ids []string
 	for _, d := range []string{"2031-03-04", "2031-03-05", "2031-03-06"} {

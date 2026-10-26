@@ -14,6 +14,7 @@ import { describeLeaveDays } from "./holidays";
 import { loadHolidayIndex } from "./holidays-db";
 import { SELECTABLE_LEAVE_CODES } from "./leave-types";
 import { notifyLeaveRequestWa } from "./leave-wa";
+import { canApproveLeaf, HRIS_APPROVE_LEAF } from "./approve-access";
 import { auditDateText, decisionActorName } from "./decision-audit";
 import { decidedAs } from "./overtime-rules";
 import type { WorkforceActor } from "./workforce-auth";
@@ -286,9 +287,9 @@ export async function decideLeave(actor: WorkforceActor, input: z.infer<typeof l
     .maybeSingle();
   if (!leave) throw ApiError.notFound("Leave request not found");
 
-  // Q-APV-3 (EPIC-063 R1/R2), sama dengan Go DecideLeave; HR = himpunan HRD (ruling C1/P3).
+  // Q-APV-3 (EPIC-063 R1/R2), sama dengan Go DecideLeave; HR = "approve" pada daun Cuti (EPIC-067 R11/R15).
   const capacity = decidedAs(
-    { employeeId: actor.employeeId, isHr: actor.isHrd },
+    { employeeId: actor.employeeId, isHr: await canApproveLeaf(actor, HRIS_APPROVE_LEAF.cuti) },
     leave.employee_id,
     leave.employee?.reporting_to ?? null
   );

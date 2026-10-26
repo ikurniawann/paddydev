@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"nuhabit/backend/internal/modules/hris/domain"
+	"nuhabit/backend/internal/platform/iam"
 )
 
 // Employee self service (/api/hris/me, /me/beranda, /me/team), in-app
@@ -261,8 +262,9 @@ func (s *Service) NavBadges(ctx context.Context, a *Actor) (*Row, error) {
 			badges.Set(approvalHrefs[m], n)
 		}
 	}
-	// HR Absensi: employee attendance requests waiting for HRD (EPIC-065 R2).
-	if a.IsHRD {
+	// HR Absensi: employee attendance requests waiting for whoever decides
+	// them (EPIC-065 R2; "approve" on the Absensi leaf, EPIC-067 R11).
+	if a.CanApprove(iam.LeafAbsensi) {
 		n, err := s.repo.PendingAttendanceRequestCount(ctx)
 		if err != nil {
 			return nil, err

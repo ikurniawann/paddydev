@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"nuhabit/backend/internal/platform/iam"
 	"nuhabit/backend/internal/platform/testutil"
 )
 
@@ -63,7 +64,7 @@ func TestOvertimeDayTypeFollowsSchedule(t *testing.T) {
 // Q-APV-3 (R1) + WA atasan saat pengajuan lembur (R8).
 func TestOvertimeDecisionRecordsCapacityAndNotifiesManager(t *testing.T) {
 	h, _ := newFileHarness(t)
-	hr, _ := h.staff("hrd", []string{menuKepegawaian}, true)
+	hr, _ := h.staff("hrd", []string{menuKepegawaian, iam.LeafLembur}, true)
 	boss, bossID := h.staff("pos", nil, true, emp{name: "Atasan Lembur", phone: "0812 3456 7000"})
 	staff, own := h.staff("pos", nil, true, emp{name: "Crew Lembur", boss: &bossID})
 	dispatch := func() {
@@ -115,7 +116,7 @@ func TestOvertimeDecisionRecordsCapacityAndNotifiesManager(t *testing.T) {
 // bukan atasan bukan cadangan HR untuk lembur.
 func TestOvertimeSelfAndHiringManagerCannotDecide(t *testing.T) {
 	h, _ := newFileHarness(t)
-	hr, _ := h.staff("hrd", []string{menuKepegawaian}, true, emp{name: "HRD Lembur"})
+	hr, _ := h.staff("hrd", []string{menuKepegawaian, iam.LeafLembur}, true, emp{name: "HRD Lembur"})
 	hm, _ := h.staff("hiring_manager", []string{menuWorkforce}, true, emp{name: "Manajer Rekrutmen"})
 	_, bossID := h.staff("pos", nil, true, emp{name: "Atasan Lembur"})
 	staff, _ := h.staff("pos", nil, true, emp{name: "Crew Lembur", boss: &bossID})
@@ -138,7 +139,7 @@ func TestOvertimeSelfAndHiringManagerCannotDecide(t *testing.T) {
 // P10: jam mulai diperiksa ketat HH:MM sebelum aturan "sebelum dimulai".
 func TestOvertimeStartTimeStrictAndStaleDecision(t *testing.T) {
 	h, _ := newFileHarness(t)
-	hr, _ := h.staff("hrd", []string{menuKepegawaian}, true)
+	hr, _ := h.staff("hrd", []string{menuKepegawaian, iam.LeafLembur}, true)
 	boss, bossID := h.staff("pos", nil, true)
 	staff, _ := h.staff("pos", nil, true, emp{boss: &bossID})
 
@@ -159,8 +160,8 @@ func TestOvertimeStartTimeStrictAndStaleDecision(t *testing.T) {
 // and a real change is audited (rest_day pays 2× vs 1.5×).
 func TestOvertimeHRDayTypeOverrideScopeAndAudit(t *testing.T) {
 	h, _ := newFileHarness(t)
-	hr, hrID := h.staff("hrd", []string{menuKepegawaian}, true, emp{name: "HRD Penerima"})
-	hr2, _ := h.staff("hrd", []string{menuKepegawaian}, true, emp{name: "HRD Penugas"})
+	hr, hrID := h.staff("hrd", []string{menuKepegawaian, iam.LeafLembur}, true, emp{name: "HRD Penerima"})
+	hr2, _ := h.staff("hrd", []string{menuKepegawaian, iam.LeafLembur}, true, emp{name: "HRD Penugas"})
 	staff, _ := h.staff("pos", nil, true, emp{name: "Crew Jenis"})
 	decide := func(s *testutil.Staff, id string, extra map[string]any) {
 		t.Helper()
@@ -216,5 +217,74 @@ func TestOvertimeHRDayTypeOverrideScopeAndAudit(t *testing.T) {
 		if b, a := diff(id, "before"), diff(id, "after"); b != "-" || a != "-" {
 			t.Fatalf("unchanged type leaked into audit: before=%s after=%s", b, a)
 		}
+	}
+}
+
+// EPIC-067 R10/R11: the HR side of an overtime decision (backup/override,
+// day type, time correction, cancelling a company assignment) is "approve"
+// on the Lembur leaf, not the app role; the direct manager still decides
+// without a menu and nobody decides their own request.
+func TestOvertimeHRSideNeedsApprove(t *testing.T) {
+	h, _ := newFileHarness(t)
+	hrdRead, _ := h.staffGrants("hrd", readOnly(iam.LeafLembur), true, emp{name: "HRD Tanpa Approve"})
+	assigner, _ := h.staffGrants("hrd", readOnly(iam.LeafLembur), true, emp{name: "HRD Penugas"})
+	approver, _ := h.staffGrants("pos", readApprove(iam.LeafLembur), true, emp{name: "Admin Lembur"})
+	boss, bossID := h.staff("pos", nil, true, emp{name: "Atasan Tanpa Menu"})
+	staff, _ := h.staff("pos", nil, true, emp{name: "Crew Lembur", boss: &bossID})
+	lone, loneID := h.staff("pos", nil, true, emp{name: "Crew Tanpa Atasan"})
+	file := func(s *testutil.Staff, date string) string {
+		t.Helper()
+		c := h.do(s, "POST", "/api/hris/overtime", h.otSelfBody(s, date, "17:00", "19:00"))
+		expect(t, c, 200, "")
+		return c.data()["id"].(string)
+	}
+	decide := func(s *testutil.Staff, id, action string, extra map[string]any) call {
+		body := map[string]any{"overtime_id": id, "action": action}
+		for k, v := range extra {
+			body[k] = v
+		}
+		return h.do(s, "POST", "/api/hris/overtime/decide", body)
+	}
+
+	// (i) App role hrd without "approve" on Lembur: refused like a non-HR.
+	first := file(&staff, "2026-10-01")
+	expect(t, decide(&hrdRead, first, "approve", nil), 403, "Hanya atasan langsung atau HRD yang bisa memproses pengajuan ini")
+	loneReq := file(&lone, "2026-10-01")
+	expect(t, decide(&hrdRead, loneReq, "approve", map[string]any{"start_time": "17:30"}), 403,
+		"Hanya atasan langsung atau HRD yang bisa memproses pengajuan ini")
+
+	// (ii) A non-HR app role with "approve" decides as HR, sets the day type
+	// and corrects the times of a request without an active manager.
+	byHR := decide(&approver, first, "approve", map[string]any{"day_type": "rest_day"})
+	expect(t, byHR, 200, "")
+	if d := byHR.data(); d["decided_as"] != "hr" || d["status"] != "approved" {
+		t.Fatalf("approve as HR = %s", byHR.raw)
+	}
+	if got := h.scalar(`SELECT day_type::text FROM hris.overtime_requests WHERE id = $1`, first); got != "rest_day" {
+		t.Fatalf("day_type = %s", got)
+	}
+	corrected := decide(&approver, loneReq, "approve", map[string]any{"start_time": "17:30"})
+	expect(t, corrected, 200, "")
+	if got := h.scalar(`SELECT start_time::text || '|' || decided_as FROM hris.overtime_requests WHERE id = $1`, loneReq); got != "17:30:00|hr" {
+		t.Fatalf("corrected = %q (%s)", got, corrected.raw)
+	}
+
+	// A company assignment is cancelled by its creator or an approver, not
+	// by another hrd without "approve".
+	assign := otBody("2026-10-08", "17:00", "19:00")
+	assign["employee_id"] = loneID
+	assigned := h.do(&assigner, "POST", "/api/hris/overtime", assign)
+	expect(t, assigned, 200, "")
+	assignedID := assigned.data()["id"].(string)
+	expect(t, decide(&hrdRead, assignedID, "cancel", nil), 403, "Hanya pembuat pengajuan yang bisa membatalkan")
+	expect(t, decide(&approver, assignedID, "cancel", nil), 200, "")
+
+	// (iii) "approve" never decides one's own request.
+	expect(t, decide(&approver, file(&approver, "2026-10-02"), "approve", nil), 403, "Tidak bisa memutuskan pengajuan lembur sendiri")
+	// (iv) The direct manager decides without any menu.
+	byBoss := decide(&boss, file(&staff, "2026-10-02"), "approve", nil)
+	expect(t, byBoss, 200, "")
+	if byBoss.data()["decided_as"] != "manager" {
+		t.Fatalf("manager approve = %s", byBoss.raw)
 	}
 }
