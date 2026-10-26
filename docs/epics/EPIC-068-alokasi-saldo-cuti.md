@@ -54,6 +54,9 @@ Lihat `docs/superpowers/plans/2026-10-26-alokasi-saldo-cuti.md` (Task 1–7, rul
 - ESS (Beranda, Cuti, form pengajuan) menampilkan sisa tersedia, rincian sisa bawaan + kedaluwarsa, tanpa angka "12" palsu.
 - Migrasi lulus gladi di salinan DB production: baris lama tidak berubah nilainya, karyawan aktif tanpa saldo tahun berjalan dibuatkan dengan jatah default, `migrate -verify` 0 selisih, skrip cek akses 0 akun kehilangan akses.
 
+## Tindak lanjut
+- **Snapshot sisa bawaan vs cuti tahun lalu yang diputuskan setelah job 1 Januari** harus diselesaikan sebelum HR mengaktifkan sisa bawaan dan sebelum 1 Januari 2027 (rincian di Automation Log, entri gelombang perbaikan review akhir).
+
 ## Automation Log
 - 2026-10-26: **Instruksi user:** "Mulai EPIC-068 … mengikuti alur migrasi", ditambah keputusan di atas (dua kali tanya jawab). Kondisi awal (pemetaan kode main `e6554fa`):
   - `PUT /api/hris/leave-balances` hanya untuk role `hrd`, tanpa audit dan tanpa UI;
@@ -78,3 +81,7 @@ Lihat `docs/superpowers/plans/2026-10-26-alokasi-saldo-cuti.md` (Task 1–7, rul
     - cabang saldo = cabang penempatan utama (`employee_placements`);
     - fingerprint import mencakup karyawan yang ada di file (bukan seluruh cakupan cabang).
   - **Bukti:** lihat `.superpowers/sdd/2026-10-26-alokasi-saldo-cuti/task-7-report.md` untuk perintah dan hasil verifikasi penuh. Memori hanya cache; keputusan ini adalah catatan resminya.
+- 2026-10-26: **Gelombang perbaikan review akhir seluruh branch** (15 butir; laporan: `.superpowers/sdd/2026-10-26-alokasi-saldo-cuti/final-fix-report.md`).
+  - **Backend:** pembatalan cuti memakai `AND status = <dibaca>` dalam satu transaksi (409 "Pengajuan sudah berubah, muat ulang halaman"; tidak ada refund ganda atau hari hilang saat berpacu dengan persetujuan); fingerprint import = hash file + kolom yang ditulis commit (tanpa "terpakai"/exists), baris dikunci urut `employee_id`; `step` tak dikenal = 400; unggahan dibatasi 16 MB (`MaxBytesReader`); PUT parsial membaca angka yang tak dikirim dari baris terkunci; GET saldo hanya membuat baris untuk karyawan aktif dan tahun ≤ tahun depan; snapshot skema `leave_balances` diselaraskan (`migrate -verify` 0 beda).
+  - **Frontend:** subtitle Beranda memuat penyesuaian bertanda; tombol "Unduh template" tampil dengan `export` saja; dialog import terkunci saat memeriksa dan pratinjau terikat pada file yang diperiksa; kartu setting menaruh respons PUT ke cache; PUT fallback Next saldo cuti mengembalikan 501.
+  - **Tindak lanjut (belum dikerjakan, wajib sebelum HR mengaktifkan sisa bawaan / sebelum 1 Januari 2027):** snapshot sisa bawaan job 1 Januari dihitung dari `annual_leave_remaining` tahun Y-1 pada saat job jalan. Cuti tahun Y-1 yang disetujui atau dibatalkan SETELAH job (mis. cuti 28 Des yang baru disetujui 3 Januari) tidak mengubah bawaan yang sudah tercatat, sehingga bawaan bisa terlalu besar atau terlalu kecil. Putuskan aturannya (hitung ulang selisih saat persetujuan/pembatalan tahun lalu, atau tutup persetujuan cuti tahun lalu sebelum job) dan uji sebelum fitur bawaan diaktifkan.
