@@ -1,5 +1,3 @@
-import { canManageTrips } from "./business-trips";
-
 /**
  * Pengajuan absen manual / koreksi absen (EPIC-065, MOM AB-04/AB-06, K-9):
  * status, label, dan validasi form. Pesan sama dengan server
@@ -26,9 +24,6 @@ export const ATTENDANCE_GAP_LABEL: Record<AttendanceGapKind, string> = {
   missing: "Tidak ada absen",
   no_clock_out: "Belum absen pulang",
 };
-
-/** Pemutus = HRD (Actor.IsHRD: super_admin/admin/hrd), sama dengan Perjalanan Dinas (R2). */
-export const canDecideAttendanceRequests = canManageTrips;
 
 export interface AttendanceRequestForm {
   date: string;

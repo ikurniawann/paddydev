@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   attendanceRequestClocks,
-  canDecideAttendanceRequests,
   gapHint,
   toAttendanceRequestPayload,
   validateAttendanceRequestForm,
@@ -55,11 +54,6 @@ describe("toAttendanceRequestPayload", () => {
 });
 
 describe("label & hak", () => {
-  it("hanya HRD (super_admin/admin/hrd) yang memutus", () => {
-    expect(["super_admin", "admin", "hrd"].map(canDecideAttendanceRequests)).toEqual([true, true, true]);
-    expect([canDecideAttendanceRequests("hiring_manager"), canDecideAttendanceRequests(null)]).toEqual([false, false]);
-  });
-
   it("ringkasan jam dan petunjuk absen terlewat", () => {
     expect(attendanceRequestClocks({ clock_in: "08:00", clock_out: "17:00" })).toBe("Masuk 08:00 · Pulang 17:00");
     expect(attendanceRequestClocks({ clock_in: null, clock_out: "17:00" })).toBe("Pulang 17:00");
