@@ -26,10 +26,12 @@ interface OvertimeTableProps {
   canCorrect: boolean;
   /** HRD (super_admin/admin/hrd): hanya HRD yang boleh mengganti jenis hari saat Setujui (R11); server mengabaikannya untuk selain HRD. */
   isHrd: boolean;
+  /** Pemegang aksi `approve` daun Lembur (EPIC-067 R14): hanya mereka melihat Setujui/Tolak. */
+  canDecide: boolean;
   onCorrect: (row: OvertimeRow) => void;
 }
 
-export function OvertimeTable({ rows, loading, decidingId, onDecide, canCorrect, isHrd, onCorrect }: OvertimeTableProps) {
+export function OvertimeTable({ rows, loading, decidingId, onDecide, canCorrect, isHrd, canDecide, onCorrect }: OvertimeTableProps) {
   return (
     <div className="overflow-x-auto rounded-xl border border-gray-200/70 bg-white shadow-sm">
       <table className="w-full text-sm">
@@ -67,6 +69,7 @@ export function OvertimeTable({ rows, loading, decidingId, onDecide, canCorrect,
                 onDecide={onDecide}
                 canCorrect={canCorrect}
                 isHrd={isHrd}
+                canDecide={canDecide}
                 onCorrect={onCorrect}
               />
             ))
@@ -83,10 +86,11 @@ interface OvertimeTableRowProps {
   onDecide: (id: string, action: OvertimeDecisionAction, dayType?: OvertimeDayType) => void;
   canCorrect: boolean;
   isHrd: boolean;
+  canDecide: boolean;
   onCorrect: (row: OvertimeRow) => void;
 }
 
-function OvertimeTableRow({ row, deciding, onDecide, canCorrect, isHrd, onCorrect }: OvertimeTableRowProps) {
+function OvertimeTableRow({ row, deciding, onDecide, canCorrect, isHrd, canDecide, onCorrect }: OvertimeTableRowProps) {
   const badge = STATUS_BADGES[row.status] ?? STATUS_BADGES.pending;
   const pending = row.status === "pending";
   // Koreksi jam lembur karyawan yang punya atasan langsung (aktif) adalah hak atasan (EPIC-066);
@@ -146,7 +150,7 @@ function OvertimeTableRow({ row, deciding, onDecide, canCorrect, isHrd, onCorrec
         {row.decided_as === "hr" && <span className="ml-1 text-xs text-gray-500">oleh HR</span>}
       </td>
       <td className="px-4 py-3 text-right">
-        {pending && row.source === "employee" && (
+        {pending && row.source === "employee" && canDecide && (
           <div className="flex justify-end gap-2">
             {isHrd && (
               <select

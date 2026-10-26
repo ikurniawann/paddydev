@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useHrApproveAccess } from "@/features/hris/approve-access";
 import type { OvertimeDecisionAction } from "@/lib/hris/overtime-rules";
 import type { OvertimeDayType, OvertimeRow } from "../types";
 import { countPendingEmployeeRequests, currentMonthValue } from "@/lib/hris/overtime-view";
@@ -36,6 +37,8 @@ export function OvertimePage({ canCorrect = false, isHrd = false }: { canCorrect
   const [correcting, setCorrecting] = useState<OvertimeRow | null>(null);
   const { data: rows = [], isLoading } = useOvertimeRequests({ status: statusFilter, month: monthFilter });
   const decide = useDecideOvertime();
+  // Gagal tutup: tombol keputusan baru tampil setelah server memastikan `approve` (EPIC-067 R14).
+  const { data: access } = useHrApproveAccess();
   const pendingEmployeeRequests = countPendingEmployeeRequests(rows);
 
   function handleDecide(id: string, action: OvertimeDecisionAction, day_type?: OvertimeDayType) {
@@ -98,6 +101,7 @@ export function OvertimePage({ canCorrect = false, isHrd = false }: { canCorrect
         onDecide={handleDecide}
         canCorrect={canCorrect}
         isHrd={isHrd}
+        canDecide={access?.overtime === true}
         onCorrect={setCorrecting}
       />
 

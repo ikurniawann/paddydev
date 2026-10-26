@@ -9,10 +9,10 @@ const base: OvertimeRow = {
   day_type: "regular", employee: { id: "e1", full_name: "Crew Koreksi", nip: "N01" },
 };
 
-function table(row: OvertimeRow, onDecide = vi.fn(), isHrd = true, canCorrect = false) {
+function table(row: OvertimeRow, onDecide = vi.fn(), isHrd = true, canCorrect = false, canDecide = true) {
   return (
     <OvertimeTable rows={[row]} loading={false} decidingId={null} onDecide={onDecide} canCorrect={canCorrect}
-      isHrd={isHrd} onCorrect={vi.fn()} />
+      isHrd={isHrd} canDecide={canDecide} onCorrect={vi.fn()} />
   );
 }
 
@@ -86,3 +86,17 @@ describe("OvertimeTable — istirahat, dokumentasi, koreksi (EPIC-066)", () => {
   });
 });
 
+
+describe("OvertimeTable — tombol keputusan mengikuti akses approve (EPIC-067 R14)", () => {
+  it("canDecide=false: Setujui, Tolak, dan pilihan jenis hari tidak dirender", () => {
+    render(table(base, vi.fn(), true, false, false));
+    expect(screen.queryByRole("button", { name: "Setujui" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Tolak" })).toBeNull();
+    expect(screen.queryByLabelText("Jenis hari")).toBeNull();
+  });
+  it("canDecide=false: Koreksi dan Batalkan penugasan perusahaan tidak ikut hilang", () => {
+    render(table({ ...base, source: "company" }, vi.fn(), true, true, false));
+    expect(screen.getByRole("button", { name: "Batalkan" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Koreksi" })).toBeTruthy();
+  });
+});

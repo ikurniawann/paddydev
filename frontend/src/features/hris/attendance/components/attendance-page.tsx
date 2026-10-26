@@ -3,8 +3,7 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AttendanceRequestsTab } from "@/features/hris/attendance-requests";
 import { BusinessTripsTab } from "@/features/hris/business-trips";
-import { useAuth } from "@/hooks/use-auth";
-import { canManageTrips } from "@/lib/hris/business-trips";
+import { useHrApproveAccess } from "@/features/hris/approve-access";
 import { AttendanceGapSummaryCard } from "./attendance-gap-summary-card";
 import { AttendanceMonitoringTab } from "./attendance-monitoring-tab";
 import { AttendanceRecapTab } from "./attendance-recap-tab";
@@ -17,16 +16,17 @@ import { AttendancePeriodsTab } from "./attendance-periods-tab";
  * - Rekap: tabel absensi per periode absensi (cut-off) + filter + export +
  *   kalender per-karyawan; HRD bisa menambah/mengoreksi absensi sebelum closing.
  * - Periode: pengaturan cut-off & closing, daftar periode, closing/buka ulang.
- * - Pengajuan Absensi: absen manual/koreksi dari ESS (EPIC-065), HRD menyetujui/menolak.
- * - Perjalanan Dinas: pengajuan dinas karyawan (EPIC-062), HRD bisa memutus dan mencatat.
+ * - Pengajuan Absensi: absen manual/koreksi dari ESS (EPIC-065), pemegang `approve` menyetujui/menolak.
+ * - Perjalanan Dinas: pengajuan dinas karyawan (EPIC-062), pemegang `approve` bisa memutus dan mencatat.
  * Absen dilakukan karyawan via ESS (/dashboard/me/absensi) dengan selfie +
  * GPS — halaman ini murni monitoring & rekap utk HRD.
  */
 export function AttendancePage() {
-  // Kuasa HRD (super_admin/admin/hrd; bukan hiring_manager): Perjalanan Dinas dan
-  // Pengajuan Absensi (EPIC-065). Server tetap menolak aksi di luar itu.
-  const { user } = useAuth();
-  const hrd = canManageTrips(user?.role);
+  // Tab keputusan HR (Pengajuan Absensi EPIC-065, Perjalanan Dinas EPIC-062) mengikuti aksi
+  // `approve` pada daun Absensi dari server (EPIC-067 R14), bukan role. Gagal tutup: selama
+  // memuat atau bila error, tab tidak tampil. Server tetap menolak aksi di luar hak itu.
+  const { data: access } = useHrApproveAccess();
+  const hrd = access?.attendance === true;
   return (
     <div className="space-y-6">
       <div>
