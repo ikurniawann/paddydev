@@ -65,6 +65,19 @@ function fakeTable(table: string) {
   }
   return builder;
 }
+// EPIC-067 R11/R15: jalur HR keputusan = aksi "approve" pada daun (IAM).
+// Akun HRD fixture memegang approve di Cuti & Lembur; test bisa mencabutnya.
+const HRD_APPROVES = ["hris.workforce.leaves", "hris.kepegawaian.overtime"];
+const approves: Record<string, string[]> = {};
+const iamCalls: [string, readonly string[], string][] = [];
+vi.mock("@/lib/iam/has-menu", async (orig) => ({
+  ...(await orig<typeof import("@/lib/iam/has-menu")>()),
+  userHasIamAction: async (userId: string, _role: string, prefixes: readonly string[], action: string) => {
+    iamCalls.push([userId, prefixes, action]);
+    return action === "approve" && prefixes.some((p) => (approves[userId] ?? []).includes(p));
+  },
+}));
+
 vi.mock("@/lib/pg/create-client", () => ({
   createServerPgClient: async () => ({ from: (t: string) => fakeTable(t) }),
   createPgClient: () => ({ from: (t: string) => fakeTable(t) }),
@@ -114,6 +127,9 @@ beforeEach(() => {
   recordAuditAfterCommit.mockReset();
   query.mockReset();
   queryOne.mockReset();
+  for (const k of Object.keys(approves)) delete approves[k];
+  approves["u-hrd"] = [...HRD_APPROVES];
+  iamCalls.length = 0;
 });
 
 describe("decideLeave — Q-APV-3 (EPIC-063 R1/R2)", () => {
@@ -175,6 +191,16 @@ describe("decideLeave — Q-APV-3 (EPIC-063 R1/R2)", () => {
     const err = await rejects(decideLeave(manager, approve));
     expect(err.status).toBe(403);
     expect(err.message).toBe("Tidak bisa memutuskan pengajuan cuti sendiri");
+  });
+
+  it("HRD tanpa approve pada daun Cuti bukan cadangan → 403, tidak menulis (EPIC-067 R11)", async () => {
+    tables.leaves = leave();
+    approves["u-hrd"] = ["hris.kepegawaian.overtime"];
+    const err = await rejects(decideLeave(hrd, approve));
+    expect(err.status).toBe(403);
+    expect(err.message).toBe("Hanya atasan langsung atau HRD yang bisa memproses pengajuan ini");
+    expect(iamCalls).toContainEqual(["u-hrd", ["hris.workforce.leaves"], "approve"]);
+    expect(txQueries).toEqual([]);
   });
 
   it("hiring_manager (isHr tetapi bukan HRD) bukan cadangan → 403", async () => {
@@ -324,6 +350,16 @@ describe("decideOvertime — kapasitas & audit (EPIC-063 R1)", () => {
     await decideOvertime({ ...hrd, fullName: "" }, { ...approve, action: "reject", rejection_reason: "Tidak perlu" });
     expect(updateOf()?.payload).toMatchObject({ status: "rejected", decided_as: "hr", decided_by_name: "HRD" });
     expect(recordAuditAfterCommit.mock.calls[0][0]).toMatchObject({ action: "overtime.reject" });
+  });
+
+  it("HRD tanpa approve pada daun Lembur bukan cadangan → 403, tidak menulis (EPIC-067 R11)", async () => {
+    tables.overtime_requests = request();
+    approves["u-hrd"] = ["hris.workforce.leaves"];
+    const err = await rejects(decideOvertime(hrd, approve));
+    expect(err.status).toBe(403);
+    expect(err.message).toBe("Hanya atasan langsung atau HRD yang bisa memproses pengajuan ini");
+    expect(iamCalls).toContainEqual(["u-hrd", ["hris.kepegawaian.overtime"], "approve"]);
+    expect(updateOf()).toBeUndefined();
   });
 
   it("hiring_manager bukan cadangan HRD → 403, tidak menulis", async () => {
