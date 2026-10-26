@@ -501,8 +501,8 @@ func TestLeaveBalanceImportFingerprintMismatch(t *testing.T) {
 	file := fileBytes(t, x)
 	pre := h.importStep(t, f, "preview", nil, file)
 	fp := pre.data()["fingerprint"].(string)
-	// Someone else approves leave (used changes) between preview and commit.
-	h.exec(`UPDATE hris.leave_balances SET annual_leave_used = 6 WHERE employee_id = $1 AND year = 2026`, f.ana)
+	// Someone else edits the row (a concurrent PUT) between preview and commit.
+	h.exec(`UPDATE hris.leave_balances SET annual_leave_adjustment = 1 WHERE employee_id = $1 AND year = 2026`, f.ana)
 	expect(t, h.importStep(t, f, "commit", map[string]string{"fingerprint": fp}, file), 409, "Saldo cuti sudah diubah orang lain sejak preview — unggah ulang file")
 	expect(t, h.importStep(t, f, "commit", map[string]string{"fingerprint": ""}, file), 409, "")
 	if got := h.scalar(`SELECT annual_leave_total::text FROM hris.leave_balances WHERE employee_id = $1 AND year = 2026`, f.ana); got != "12.00" {
@@ -560,4 +560,95 @@ func TestLeaveBalanceImportRejectsWrongFiles(t *testing.T) {
 	// A year outside 2000..2100 is a bad request.
 	_, c = h.saldoUpload(t, &f.hr, "saldo.xlsx", map[string]string{"year": "1999", "step": "preview"}, file)
 	expect(t, c, 400, "Tahun tidak valid")
+}
+
+// Final review 5: an approval raising "terpakai" between preview and commit
+// is not a conflict (the commit re-checks the rules under the row lock).
+func TestLeaveBalanceImportIgnoresUsedChange(t *testing.T) {
+	h := newHarness(t)
+	f := h.saldoImportFixture()
+	_, x := h.saldoTemplate(&f.hr, "?year=2026&branch_id="+f.branch)
+	ar := rowOf(t, x, f.anaNIP)
+	setCell(t, x, colTotal, ar, 13)
+	setCell(t, x, colReason, ar, "uji")
+	file := fileBytes(t, x)
+	fp := h.importStep(t, f, "preview", nil, file).data()["fingerprint"].(string)
+	h.exec(`UPDATE hris.leave_balances SET annual_leave_used = 6 WHERE employee_id = $1 AND year = 2026`, f.ana)
+	expect(t, h.importStep(t, f, "commit", map[string]string{"fingerprint": fp}, file), 200, "")
+	if got := h.scalar(`SELECT concat_ws('|', annual_leave_total, annual_leave_used) FROM hris.leave_balances WHERE employee_id = $1 AND year = 2026`, f.ana); got != "13.00|6.00" {
+		t.Fatalf("ana = %s", got)
+	}
+	// But a used figure that no longer fits the new total is a 400, not a 409.
+	_, y := h.saldoTemplate(&f.hr, "?year=2026&branch_id="+f.branch)
+	yr := rowOf(t, y, f.anaNIP)
+	setCell(t, y, colTotal, yr, 7)
+	setCell(t, y, colReason, yr, "turun")
+	file2 := fileBytes(t, y)
+	fp2 := h.importStep(t, f, "preview", nil, file2).data()["fingerprint"].(string)
+	h.exec(`UPDATE hris.leave_balances SET annual_leave_used = 8 WHERE employee_id = $1 AND year = 2026`, f.ana)
+	expect(t, h.importStep(t, f, "commit", map[string]string{"fingerprint": fp2}, file2), 400, "File masih punya error — perbaiki lalu unggah ulang")
+}
+
+// Final review 4: a commit must carry the fingerprint of the very file that
+// was previewed; another file with the same fingerprint is refused.
+func TestLeaveBalanceImportCommitMustMatchPreviewedFile(t *testing.T) {
+	h := newHarness(t)
+	f := h.saldoImportFixture()
+	build := func(total int) []byte {
+		_, x := h.saldoTemplate(&f.hr, "?year=2026&branch_id="+f.branch)
+		ar := rowOf(t, x, f.anaNIP)
+		setCell(t, x, colTotal, ar, total)
+		setCell(t, x, colReason, ar, "uji")
+		return fileBytes(t, x)
+	}
+	previewed, other := build(13), build(20)
+	fp := h.importStep(t, f, "preview", nil, previewed).data()["fingerprint"].(string)
+	expect(t, h.importStep(t, f, "commit", map[string]string{"fingerprint": fp}, other), 409, "")
+	if got := h.scalar(`SELECT annual_leave_total::text FROM hris.leave_balances WHERE employee_id = $1 AND year = 2026`, f.ana); got != "12.00" {
+		t.Fatalf("ana = %s: an unpreviewed file was committed", got)
+	}
+	expect(t, h.importStep(t, f, "commit", map[string]string{"fingerprint": fp}, previewed), 200, "")
+}
+
+// Final review 6: employees are locked in a fixed order (by id), whatever the
+// order of the rows in the file.
+func TestLeaveBalanceImportLocksInIDOrder(t *testing.T) {
+	h := newHarness(t)
+	f := h.saldoImportFixture()
+	_, x := h.saldoTemplate(&f.hr, "?year=2026&branch_id="+f.branch)
+	ar, br := rowOf(t, x, f.anaNIP), rowOf(t, x, f.budiNIP)
+	for _, r := range []int{ar, br} {
+		setCell(t, x, colTotal, r, 15)
+		setCell(t, x, colReason, r, "urutan")
+	}
+	// Put the employee with the larger id first in the file.
+	firstNIP, secondNIP := f.anaNIP, f.budiNIP
+	if f.ana < f.budi {
+		firstNIP, secondNIP = secondNIP, firstNIP
+	}
+	setCell(t, x, "A", min(ar, br), firstNIP)
+	setCell(t, x, "A", max(ar, br), secondNIP)
+	file := fileBytes(t, x)
+	fp := h.importStep(t, f, "preview", nil, file).data()["fingerprint"].(string)
+	expect(t, h.importStep(t, f, "commit", map[string]string{"fingerprint": fp}, file), 200, "")
+	order := h.scalar(`SELECT string_agg(entity_id::text, ',' ORDER BY ctid) FROM audit.audit_log
+		WHERE action = 'leave_balance.import' AND entity_id IN ($1, $2)`, f.ana, f.budi)
+	if want := min(f.ana, f.budi) + "," + max(f.ana, f.budi); order != want {
+		t.Fatalf("lock/audit order %s, want %s", order, want)
+	}
+}
+
+// Final review 7 + 8: an unknown step and an oversized upload are 400s.
+func TestLeaveBalanceImportStepAndSize(t *testing.T) {
+	h := newHarness(t)
+	f := h.saldoImportFixture()
+	_, x := h.saldoTemplate(&f.hr, "?year=2026&branch_id="+f.branch)
+	file := fileBytes(t, x)
+	expect(t, h.importStep(t, f, "hapus", nil, file), 400, "Langkah import tidak dikenal")
+	expect(t, h.importStep(t, f, "Commit", nil, file), 400, "Langkah import tidak dikenal")
+	big := make([]byte, 17<<20+1)
+	rec, c := h.saldoUpload(t, &f.hr, "saldo-cuti.xlsx", map[string]string{"year": "2026", "branch_id": f.branch, "step": "preview"}, big)
+	if rec.Code != 400 || !strings.Contains(c.raw, "terlalu besar") {
+		t.Fatalf("oversized upload: %d %s", rec.Code, c.raw)
+	}
 }

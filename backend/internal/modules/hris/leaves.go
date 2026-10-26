@@ -36,7 +36,7 @@ type LeaveRepo interface {
 	LeaveForDecision(ctx context.Context, id string) (*Row, error)
 	LeaveDecided(ctx context.Context, id string) (*Row, error)
 	PlainLeave(ctx context.Context, id string) (*Row, error)
-	CancelLeave(ctx context.Context, id string, refund *quotaMove) error
+	CancelLeave(ctx context.Context, id, fromStatus string, refund *quotaMove) error
 	UpdateLeave(ctx context.Context, id string, f fields) (*Row, error)
 	DeleteLeave(ctx context.Context, id string) error
 	// DecideLeave writes the verdict of a pending request; errNoRow when it
@@ -313,7 +313,11 @@ func (s *Service) UpdateLeave(ctx context.Context, a *Actor, id string, in leave
 			refund = &quotaMove{EmployeeID: leave.Str("employee_id"), Year: dateYear(leave, "start_date"),
 				Days: leave.Str("total_days"), CarryDays: leave.Str("carry_over_days_used")}
 		}
-		if err := s.repo.InTx(ctx, func(r Repository) error { return r.CancelLeave(ctx, id, refund) }); err != nil {
+		err := s.repo.InTx(ctx, func(r Repository) error { return r.CancelLeave(ctx, id, status, refund) })
+		if errors.Is(err, errNoRow) {
+			return nil, httpx.Conflict("Pengajuan sudah berubah, muat ulang halaman")
+		}
+		if err != nil {
 			return nil, err
 		}
 		if refund != nil {

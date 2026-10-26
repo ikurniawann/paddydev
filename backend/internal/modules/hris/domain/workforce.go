@@ -109,7 +109,10 @@ func isInt(f float64) bool { return IsFinite(f) && f == float64(int64(f)) }
 /* ── Leave (lib/hris/leave-balances-repo, leave-wa, recruitment/wa) ────── */
 
 // DefaultAnnualLeave is the default annual-leave quota of an employee for
-// year (EPIC-068 R1), mirrored by SQL hris.default_annual_leave. Leave is
+// year (EPIC-068 R1). It is the Go twin of the SQL function
+// hris.default_annual_leave, and the parity test
+// TestDefaultAnnualLeaveSQLMatchesGo pins the two together: change both or
+// neither. Leave is
 // earned after 12 months of service: with A = join + 12 months, A after 31
 // Dec of year gives 0, A on or before 1 Jan gives 12, otherwise 12 × days
 // from A to 31 Dec (inclusive) / days in year, floored to a multiple of 0.5.

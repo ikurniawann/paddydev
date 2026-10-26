@@ -30,6 +30,9 @@ const (
 	leaveInfoSheet = "Info"
 	// maxLeaveChanges bounds the changes listed in a preview.
 	maxLeaveChanges = 500
+	// maxLeaveUpload is the largest .xlsx accepted; the request body may add
+	// 1 MB of form fields on top.
+	maxLeaveUpload = 16 << 20
 )
 
 type leaveScope struct {
@@ -290,20 +293,26 @@ func leaveUploadContext(ctx context.Context, q database.Querier, sc leaveScope, 
 	return c, byID, rows.Err()
 }
 
-// leaveFingerprint is the md5 of the balance rows of the employees in the
-// file: a commit is refused when any of them changed since the preview.
-func leaveFingerprint(ids []string, byID map[string]LeaveBalanceView) string {
+// leaveFingerprint is the md5 of the uploaded file and of the fields the
+// commit writes or validates (jatah, penyesuaian, sisa bawaan, kedaluwarsa and
+// bawaan terpakai) of the employees in it: a commit is refused when another
+// file is sent or any of those changed since the preview. "Terpakai" is left
+// out on purpose, an approval moves it often and the commit re-checks the
+// rules against it under the row lock.
+func leaveFingerprint(fileData []byte, ids []string, byID map[string]LeaveBalanceView) string {
 	sorted := append([]string{}, ids...)
 	sort.Strings(sorted)
+	fileSum := md5.Sum(fileData)
 	var b strings.Builder
+	fmt.Fprintf(&b, "%x\n", fileSum)
 	for _, id := range sorted {
 		v := byID[id]
 		expires := ""
 		if v.CarryOverExpiresOn != nil {
 			expires = *v.CarryOverExpiresOn
 		}
-		fmt.Fprintf(&b, "%s|%t|%g|%g|%g|%g|%g|%s\n", id, v.Exists, v.AnnualLeaveTotal, v.AnnualLeaveAdjust,
-			v.AnnualLeaveUsed, v.CarryOverDays, v.CarryOverUsed, expires)
+		fmt.Fprintf(&b, "%s|%g|%g|%g|%g|%s\n", id, v.AnnualLeaveTotal, v.AnnualLeaveAdjust,
+			v.CarryOverDays, v.CarryOverUsed, expires)
 	}
 	sum := md5.Sum([]byte(b.String()))
 	return hex.EncodeToString(sum[:])
@@ -314,6 +323,11 @@ func leaveFingerprint(ids []string, byID map[string]LeaveBalanceView) string {
 // transaction (any error or a stale fingerprint writes nothing); error_file
 // returns the upload with a "Keterangan Error" column.
 func (s *Service) ImportLeaveBalances(ctx context.Context, a *Actor, in leaveImportInput) (map[string]any, *exportFile, error) {
+	switch in.Step {
+	case "preview", "commit", "error_file":
+	default:
+		return nil, nil, httpx.BadRequest("Langkah import tidak dikenal")
+	}
 	if !strings.HasSuffix(strings.ToLower(in.FileName), ".xlsx") {
 		return nil, nil, httpx.BadRequest("Unggah file .xlsx dari template Saldo Cuti")
 	}
@@ -377,7 +391,7 @@ func (s *Service) ImportLeaveBalances(ctx context.Context, a *Actor, in leaveImp
 					Before: figuresOf(c.Before), After: figuresOf(c.After), Reason: c.Reason})
 			}
 		}
-		fp := leaveFingerprint(res.EmployeeIDs, byID)
+		fp := leaveFingerprint(in.Data, res.EmployeeIDs, byID)
 		if in.Step != "commit" {
 			out = map[string]any{"summary": sum, "errors": res.Errors, "warnings": res.Warnings, "fingerprint": fp, "changes": changes}
 			return nil
@@ -391,7 +405,10 @@ func (s *Service) ImportLeaveBalances(ctx context.Context, a *Actor, in leaveImp
 			return httpx.Conflict("Saldo cuti sudah diubah orang lain sejak preview — unggah ulang file")
 		}
 		check := leaveCheck(nowYear)
-		for _, c := range res.Changes {
+		// Lock in a fixed order so two imports never wait on each other.
+		ordered := append([]domain.LeaveBalanceChange{}, res.Changes...)
+		sort.SliceStable(ordered, func(i, j int) bool { return ordered[i].EmployeeID < ordered[j].EmployeeID })
+		for _, c := range ordered {
 			if err := ensureLeaveBalance(ctx, q, c.EmployeeID, sc.Year); err != nil {
 				return err
 			}
@@ -462,7 +479,12 @@ func (h handlers) leaveBalanceTemplate(w http.ResponseWriter, r *http.Request, _
 // POST /api/hris/leave-balances/import (multipart): file, year, branch_id,
 // step = preview | commit | error_file, fingerprint, ack_warnings.
 func (h handlers) importLeaveBalances(w http.ResponseWriter, r *http.Request, a *Actor) error {
+	r.Body = http.MaxBytesReader(w, r.Body, maxLeaveUpload+1<<20)
 	if err := r.ParseMultipartForm(16 << 20); err != nil {
+		var tooBig *http.MaxBytesError
+		if errors.As(err, &tooBig) {
+			return httpx.BadRequest("File terlalu besar — maksimal 16 MB")
+		}
 		return httpx.BadRequest("Unggah file .xlsx dari template Saldo Cuti")
 	}
 	file, header, err := r.FormFile("file")
@@ -470,9 +492,12 @@ func (h handlers) importLeaveBalances(w http.ResponseWriter, r *http.Request, a 
 		return httpx.BadRequest("Unggah file .xlsx dari template Saldo Cuti")
 	}
 	defer file.Close()
-	data, err := io.ReadAll(io.LimitReader(file, 16<<20))
+	data, err := io.ReadAll(io.LimitReader(file, maxLeaveUpload+1))
 	if err != nil {
 		return err
+	}
+	if len(data) > maxLeaveUpload {
+		return httpx.BadRequest("File terlalu besar — maksimal 16 MB")
 	}
 	year := domain.NowWIB(h.svc.now()).Year()
 	if raw := strings.TrimSpace(r.FormValue("year")); raw != "" {

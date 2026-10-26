@@ -1,6 +1,7 @@
 package hris
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -418,5 +419,156 @@ func TestMeLeaveBalanceIsTheSharedView(t *testing.T) {
 	b, _ := home.data()["leave_balance"].(map[string]any)
 	if b["available"] != 10.5 || b["carry_over_remaining"] != 2.0 || b["annual_leave_adjustment"] != 1.0 {
 		t.Fatalf("beranda leave_balance = %s", home.raw)
+	}
+}
+
+// racingRepo lets a test run a competing write right after the service has
+// read the leave, which is the window a concurrent request would hit.
+type racingRepo struct {
+	Repository
+	afterRead func()
+}
+
+func (r racingRepo) PlainLeave(ctx context.Context, id string) (*Row, error) {
+	row, err := r.Repository.PlainLeave(ctx, id)
+	if r.afterRead != nil {
+		r.afterRead()
+	}
+	return row, err
+}
+
+// approvedSplitLeave is an approved annual leave whose 2 days came 1 from the
+// carry-over and 1 from the annual quota (used 1 + carry 1 at the start).
+func (h *harness) approvedSplitLeave(f leaveFixture) string {
+	h.t.Helper()
+	h.setBalance(f.id, 2026, 12, 0, 1, 3, 1, "2026-12-31")
+	return h.scalar(`INSERT INTO hris.leaves (employee_id, leave_type, start_date, end_date, total_days, reason, status,
+			decided_as, carry_over_days_used)
+		VALUES ($1, 'annual', '2026-11-09', '2026-11-10', 2, 'Cuti', 'approved', 'hr', 1) RETURNING id::text`, f.id)
+}
+
+// Final review 1: two cancels that both read "approved" refund once; the
+// loser gets a 409 and the balance keeps the single refund.
+func TestCancelLeaveRefundsOnce(t *testing.T) {
+	h := newHarness(t)
+	f := h.leaveFixture("2024-01-10")
+	id := h.approvedSplitLeave(f)
+
+	rival := true
+	h.svc.repo = racingRepo{Repository: h.svc.repo, afterRead: func() {
+		if !rival {
+			return
+		}
+		rival = false
+		// A competing cancel commits between our read and our write.
+		h.exec(`UPDATE hris.leaves SET status = 'cancelled' WHERE id = $1`, id)
+		h.exec(`UPDATE hris.leave_balances SET annual_leave_used = 0, carry_over_used = 0
+			WHERE employee_id = $1 AND year = 2026`, f.id)
+	}}
+	expect(t, h.do(&f.hr, "PUT", "/api/hris/leaves/"+id, map[string]any{"status": "cancelled"}), 409,
+		"Pengajuan sudah berubah, muat ulang halaman")
+	if used, carry := h.balanceOf(f.id, 2026); used != "0.00" || carry != "0.00" {
+		t.Fatalf("used %s carry %s: the loser refunded again", used, carry)
+	}
+	// And sequentially a second cancel is refused without touching the balance.
+	h.setBalance(f.id, 2026, 12, 0, 3, 3, 2, "2026-12-31")
+	expect(t, h.do(&f.hr, "PUT", "/api/hris/leaves/"+id, map[string]any{"status": "cancelled"}), 403, "")
+	if used, carry := h.balanceOf(f.id, 2026); used != "3.00" || carry != "2.00" {
+		t.Fatalf("used %s carry %s", used, carry)
+	}
+}
+
+// Final review 1: the owner cancels a request they read as pending while an
+// approval lands; the days the approval consumed must not be lost.
+func TestCancelRacingApprovalKeepsDays(t *testing.T) {
+	h := newHarness(t)
+	f := h.leaveFixture("2024-01-10")
+	h.setBalance(f.id, 2026, 12, 0, 0, 0, 0, nil)
+	req := h.request(f, "2026-11-09", "2026-11-10")
+	expect(t, req, 200, "")
+	id := req.data()["id"].(string)
+
+	raced := false
+	h.svc.repo = racingRepo{Repository: h.svc.repo, afterRead: func() {
+		if raced {
+			return
+		}
+		raced = true
+		h.exec(`UPDATE hris.leaves SET status = 'approved', decided_as = 'manager' WHERE id = $1`, id)
+		h.exec(`UPDATE hris.leave_balances SET annual_leave_used = 2 WHERE employee_id = $1 AND year = 2026`, f.id)
+	}}
+	expect(t, h.do(&f.staff, "PUT", "/api/hris/leaves/"+id, map[string]any{"status": "cancelled"}), 409,
+		"Pengajuan sudah berubah, muat ulang halaman")
+	if st := h.scalar(`SELECT status::text FROM hris.leaves WHERE id = $1`, id); st != "approved" {
+		t.Fatalf("status = %s: the approval was overwritten", st)
+	}
+	if used, _ := h.balanceOf(f.id, 2026); used != "2.00" {
+		t.Fatalf("used %s: days lost", used)
+	}
+}
+
+// Final review 10: a read only writes the row of an active employee for this
+// or next year; otherwise it shows the default allocation without writing.
+func TestGetLeaveBalanceWritesOnlyWhenItShould(t *testing.T) {
+	h := newHarness(t)
+	reader, _ := h.saldoStaff("pos", false, "read")
+	_, active := h.staff("pos", nil, true, emp{name: "Aktif Baca", join: "2024-01-10"})
+	_, gone := h.staff("pos", nil, true, emp{name: "Keluar Baca", join: "2024-01-10", inactive: true})
+	rows := func(id string, year int) string {
+		return h.scalar(`SELECT count(*)::text FROM hris.leave_balances WHERE employee_id = $1 AND year = $2`, id, year)
+	}
+
+	h.exec(`DELETE FROM hris.leave_balances WHERE employee_id = $1 AND year IN (2026, 2028)`, gone)
+	got := h.do(&reader, "GET", "/api/hris/leave-balances/"+gone+"?year=2026", nil)
+	expect(t, got, 200, "")
+	if d := got.data(); d["exists"] != false || d["annual_leave_total"] != 12.0 || d["full_name"] != "Keluar Baca" {
+		t.Fatalf("inactive = %s", got.raw)
+	}
+	if n := rows(gone, 2026); n != "0" {
+		t.Fatalf("an inactive employee got a row (%s)", n)
+	}
+
+	h.exec(`DELETE FROM hris.leave_balances WHERE employee_id = $1 AND year = 2028`, active)
+	got = h.do(&reader, "GET", "/api/hris/leave-balances/"+active+"?year=2028", nil)
+	expect(t, got, 200, "")
+	if got.data()["exists"] != false || rows(active, 2028) != "0" {
+		t.Fatalf("2028 = %s rows %s", got.raw, rows(active, 2028))
+	}
+	// Next year (2027) still creates the row.
+	h.exec(`DELETE FROM hris.leave_balances WHERE employee_id = $1 AND year = 2027`, active)
+	expect(t, h.do(&reader, "GET", "/api/hris/leave-balances/"+active+"?year=2027", nil), 200, "")
+	if n := rows(active, 2027); n != "1" {
+		t.Fatalf("2027 rows = %s", n)
+	}
+}
+
+// beforeTxRepo runs a competing write just before the service opens its
+// transaction, i.e. after anything the handler read earlier.
+type beforeTxRepo struct {
+	Repository
+	hook func()
+}
+
+func (r beforeTxRepo) InTx(ctx context.Context, fn func(Repository) error) error {
+	if r.hook != nil {
+		r.hook()
+	}
+	return r.Repository.InTx(ctx, fn)
+}
+
+// Final review 9: a figure left out of the PUT keeps the value stored when
+// the row is locked, not the one read before a concurrent edit.
+func TestPutLeaveBalanceKeepsOmittedFigureUnderLock(t *testing.T) {
+	h := newHarness(t)
+	editor, _ := h.saldoStaff("pos", true, "read", "update")
+	_, id := h.staff("pos", nil, true, emp{name: "Parsial Saldo", join: "2024-01-10"})
+	h.setBalance(id, 2026, 12, 0, 0, 0, 0, nil)
+	h.svc.repo = beforeTxRepo{Repository: h.svc.repo, hook: func() {
+		h.exec(`UPDATE hris.leave_balances SET annual_leave_total = 20 WHERE employee_id = $1 AND year = 2026`, id)
+	}}
+	expect(t, h.do(&editor, "PUT", "/api/hris/leave-balances/"+id,
+		map[string]any{"year": 2026, "carry_over_days": 1, "reason": "Hanya bawaan"}), 200, "")
+	if got := h.scalar(`SELECT concat_ws('|', annual_leave_total, carry_over_days) FROM hris.leave_balances WHERE employee_id = $1 AND year = 2026`, id); got != "20.00|1.00" {
+		t.Fatalf("balance = %s: the concurrent edit of the total was overwritten", got)
 	}
 }

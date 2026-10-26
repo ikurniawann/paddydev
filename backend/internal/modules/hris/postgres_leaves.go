@@ -125,10 +125,16 @@ func (s *store) PlainLeave(ctx context.Context, id string) (*Row, error) {
 	return row, ignoreBadInput(err)
 }
 
-// CancelLeave cancels and refunds the quota (call inside a transaction).
-func (s *store) CancelLeave(ctx context.Context, id string, refund *quotaMove) error {
-	if _, err := s.db.Exec(ctx, `UPDATE hris.leaves SET status = 'cancelled' WHERE id = $1`, id); err != nil {
+// CancelLeave cancels a leave still in fromStatus and refunds the quota (call
+// inside a transaction). errNoRow when the status changed since it was read,
+// so a lost race neither refunds twice nor loses days an approval consumed.
+func (s *store) CancelLeave(ctx context.Context, id, fromStatus string, refund *quotaMove) error {
+	tag, err := s.db.Exec(ctx, `UPDATE hris.leaves SET status = 'cancelled' WHERE id = $1 AND status = $2`, id, fromStatus)
+	if err != nil {
 		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return errNoRow
 	}
 	if refund == nil {
 		return nil
@@ -139,7 +145,7 @@ func (s *store) CancelLeave(ctx context.Context, id string, refund *quotaMove) e
 	if carry == "" {
 		carry = "0"
 	}
-	_, err := s.db.Exec(ctx, `UPDATE hris.leave_balances
+	_, err = s.db.Exec(ctx, `UPDATE hris.leave_balances
 		SET annual_leave_used = GREATEST(annual_leave_used - ($3::numeric - $4::numeric), 0),
 		    carry_over_used = GREATEST(carry_over_used - $4::numeric, 0), updated_at = now()
 		WHERE employee_id = $1 AND year = $2`, refund.EmployeeID, refund.Year, refund.Days, carry)

@@ -60,6 +60,9 @@ type LeaveBalanceInput struct {
 	Total, Adjustment, CarryDays float64
 	CarryExpires                 *string
 	Reason                       string
+	// Keep* mark a figure the caller left out: UpdateLeaveBalanceManual takes
+	// the stored value under the row lock instead of a possibly stale read.
+	KeepTotal, KeepAdjustment, KeepCarryDays, KeepCarryExpires bool
 }
 
 // balanceRaw is the editable part of a stored balance plus its usage.
@@ -286,17 +289,36 @@ func mayReadLeaveBalance(a *Actor, employeeID string) bool {
 }
 
 // LeaveBalanceView is the balance of one employee for year (R12). The row is
-// created with the default allocation on first read (R1) when the year can
-// hold one; the reader must be the owner, hold "read" on Saldo Cuti or a
+// created with the default allocation on first read (R1) for an active
+// employee and a year up to next year; the reader must be the owner, hold "read" on Saldo Cuti or a
 // Karyawan menu.
 func (s *Service) LeaveBalanceView(ctx context.Context, a *Actor, employeeID string, year int) (LeaveBalanceView, error) {
 	if !mayReadLeaveBalance(a, employeeID) {
 		return LeaveBalanceView{}, httpx.Forbidden("Forbidden: Can only view own leave balance")
 	}
+	v, found, err := s.leaveBalanceOf(ctx, employeeID, year)
+	if err != nil {
+		return LeaveBalanceView{}, err
+	}
+	if !found {
+		return LeaveBalanceView{}, httpx.NotFound("Employee not found")
+	}
+	if v.Exists {
+		return v, nil
+	}
+	// Only an active employee gets a row, and only for this or next year; any
+	// other read shows the default allocation without writing it.
+	emp, err := s.repo.LeaveEmployee(ctx, employeeID)
+	if err != nil {
+		return LeaveBalanceView{}, err
+	}
+	if emp == nil || !emp.Bool("is_active") || year > domain.NowWIB(s.now()).Year()+1 {
+		return v, nil
+	}
 	if err := s.EnsureLeaveBalance(ctx, s.repo.querier(), employeeID, year); err != nil {
 		return LeaveBalanceView{}, err
 	}
-	v, found, err := s.leaveBalanceOf(ctx, employeeID, year)
+	v, found, err = s.leaveBalanceOf(ctx, employeeID, year)
 	if err != nil {
 		return LeaveBalanceView{}, err
 	}
@@ -352,6 +374,18 @@ func (s *Service) UpdateLeaveBalanceManual(ctx context.Context, a *Actor, employ
 		}
 		if was == nil {
 			return httpx.NotFound("Karyawan tidak ditemukan")
+		}
+		if in.KeepTotal {
+			in.Total = was.Total
+		}
+		if in.KeepAdjustment {
+			in.Adjustment = was.Adjustment
+		}
+		if in.KeepCarryDays {
+			in.CarryDays = was.CarryDays
+		}
+		if in.KeepCarryExpires {
+			in.CarryExpires = was.CarryExpires
 		}
 		if err := validateLeaveBalance(in, was.Used, was.CarryUsed, emp.Bool("is_active"), nowYear); err != nil {
 			return err
@@ -484,13 +518,11 @@ func (h handlers) putLeaveBalance(w http.ResponseWriter, r *http.Request, a *Act
 	if err != nil {
 		return err
 	}
-	// Figures left out keep the stored value (the defaults when no row yet).
-	cur, _, err := h.svc.leaveBalanceOf(r.Context(), id, year)
-	if err != nil {
-		return err
-	}
-	in := LeaveBalanceInput{Year: year, Total: cur.AnnualLeaveTotal, Adjustment: cur.AnnualLeaveAdjust,
-		CarryDays: cur.CarryOverDays, CarryExpires: cur.CarryOverExpiresOn, Reason: reason}
+	// Figures left out keep the stored value, read under the row lock (the
+	// defaults when there is no row yet).
+	in := LeaveBalanceInput{Year: year, Reason: reason,
+		KeepTotal: !(total.Sent && total.Val != nil), KeepAdjustment: !(adjust.Sent && adjust.Val != nil),
+		KeepCarryDays: !(carry.Sent && carry.Val != nil), KeepCarryExpires: !expires.Sent}
 	if total.Sent && total.Val != nil {
 		in.Total = *total.Val
 	}

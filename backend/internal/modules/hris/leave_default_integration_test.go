@@ -87,7 +87,7 @@ func TestNewEmployeeLeaveBalanceRows(t *testing.T) {
 		h.expectDBError(t, name, `UPDATE hris.leave_balances SET `+set+` WHERE employee_id = $1 AND year = $2`, id, curYear)
 	}
 	h.exec(`UPDATE hris.leave_balances SET annual_leave_adjustment = -2.5, carry_over_days = 2, carry_over_used = 1.5,
-		carry_over_expires_on = '2026-03-31' WHERE employee_id = $1 AND year = $2`, id, curYear)
+		carry_over_expires_on = $3::date WHERE employee_id = $1 AND year = $2`, id, curYear, fmt.Sprintf("%d-03-31", curYear))
 }
 
 // expectDBError runs sql and fails the test unless the database rejects it;

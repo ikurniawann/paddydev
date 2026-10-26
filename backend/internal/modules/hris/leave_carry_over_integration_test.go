@@ -3,6 +3,7 @@ package hris
 import (
 	"context"
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -228,8 +229,14 @@ func TestLeaveCarryOverRollsBackClaim(t *testing.T) {
 	h.exec(`CREATE TRIGGER fail_carry_audit BEFORE INSERT ON audit.audit_log FOR EACH ROW
 		WHEN (NEW.action = 'leave_balance.carry_over') EXECUTE FUNCTION pg_temp.fail_carry_audit()`)
 
-	if err := h.svc.RunLeaveCarryOver(context.Background(), jan1(2027)); err == nil {
-		t.Fatal("run succeeded although the audit failed")
+	// Never leave the trigger behind, even when the test fails early.
+	t.Cleanup(func() {
+		_, _ = h.tx.Exec(context.Background(), `DROP TRIGGER IF EXISTS fail_carry_audit ON audit.audit_log`)
+	})
+
+	err := h.svc.RunLeaveCarryOver(context.Background(), jan1(2027))
+	if err == nil || !strings.Contains(err.Error(), "audit gagal") {
+		t.Fatalf("run error = %v, want the injected audit failure", err)
 	}
 	if h.scalar(`SELECT count(*)::text FROM hris.leave_carry_over_runs WHERE year = 2027`) != "0" {
 		t.Fatal("the claim survived a failed run")
