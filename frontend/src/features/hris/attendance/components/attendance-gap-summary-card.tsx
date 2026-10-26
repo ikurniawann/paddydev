@@ -17,8 +17,12 @@ import { useAttendanceGapSummary } from "../queries";
  * (hari libur, cuti, dinas, dan pengajuan yang menunggu tidak dihitung).
  * Karyawan tanpa jadwal ditampilkan terpisah dan tidak dihitung belum absen.
  */
+/** Batas server: tanggal paling lama 62 hari ke belakang (WIB). */
+const MAX_DAYS_BACK = 62;
+
 export function AttendanceGapSummaryCard() {
-  const yesterday = addDays(todayWib(), -1);
+  const today = todayWib();
+  const yesterday = addDays(today, -1);
   const [date, setDate] = useState(yesterday);
   const [open, setOpen] = useState(false);
   const query = useAttendanceGapSummary(date);
@@ -44,7 +48,9 @@ export function AttendanceGapSummaryCard() {
               type="date"
               className="h-8 w-auto bg-white"
               value={date}
-              max={todayWib()}
+              min={addDays(today, -MAX_DAYS_BACK)}
+              // Hari ini masih berjalan: pilihan berhenti di kemarin (server tetap menerima hari ini).
+              max={yesterday}
               onChange={(e) => {
                 if (e.target.value) {
                   setDate(e.target.value);

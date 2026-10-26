@@ -2,11 +2,15 @@ package hris
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"sort"
 
+	"github.com/jackc/pgx/v5"
+
 	"nuhabit/backend/internal/modules/hris/domain"
 	"nuhabit/backend/internal/platform/auth"
+	"nuhabit/backend/internal/platform/database"
 	"nuhabit/backend/internal/platform/httpx"
 )
 
@@ -59,10 +63,13 @@ type GapSummary struct {
 	Employees    []GapSummaryEmployee `json:"employees"`
 }
 
+// gapSummaryMaxDaysBack bounds how far back the HR summary may be asked.
+const gapSummaryMaxDaysBack = 62
+
 // AttendanceGapSummary summarizes the gaps of date ("YYYY-MM-DD") on r, the
-// module's store or the Repository of the caller's InTx. PeriodClosed comes
-// from periodContaining, which materializes the period and auto-closes it
-// past its closing date like every other period read.
+// module's store or the Repository of the caller's InTx. It only reads:
+// PeriodClosed comes from periodClosedOn, never from periodContaining (which
+// materializes and auto-closes periods).
 func (s *Service) AttendanceGapSummary(ctx context.Context, r Repository, date string) (*GapSummary, error) {
 	q := r.querier()
 	admins, err := s.directory.SuperAdminUserIDs(ctx, q)
@@ -93,7 +100,7 @@ func (s *Service) AttendanceGapSummary(ctx context.Context, r Repository, date s
 	if err != nil {
 		return nil, err
 	}
-	period, err := periodContaining(ctx, q, date, domain.TodayWIB(s.now()))
+	closed, err := periodClosedOn(ctx, q, date, domain.TodayWIB(s.now()))
 	if err != nil {
 		return nil, err
 	}
@@ -119,7 +126,7 @@ func (s *Service) AttendanceGapSummary(ctx context.Context, r Repository, date s
 	waiting := idSet(pending)
 	isHoliday := len(holidays) > 0
 
-	out := &GapSummary{Date: date, PeriodClosed: period.Closed(), Employees: []GapSummaryEmployee{}}
+	out := &GapSummary{Date: date, PeriodClosed: closed, Employees: []GapSummaryEmployee{}}
 	for _, e := range employees {
 		id := e.Str("id")
 		in := domain.GapInput{Start: date, End: date, Schedule: schedules[id],
@@ -151,6 +158,22 @@ func (s *Service) AttendanceGapSummary(ctx context.Context, r Repository, date s
 		return a.Name < b.Name
 	})
 	return out, nil
+}
+
+// periodClosedOn reports, read-only, whether an existing attendance period
+// holding date is closed: status closed, or still open past its closing date
+// (locked; the next period read auto-closes it). No row means not closed.
+func periodClosedOn(ctx context.Context, q database.Querier, date, today string) (bool, error) {
+	var status, closing string
+	err := q.QueryRow(ctx, `SELECT status, closing_date::text FROM hris.attendance_periods
+		WHERE $1::date BETWEEN start_date AND end_date ORDER BY range_frozen DESC LIMIT 1`, date).Scan(&status, &closing)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return status == periodClosed || (status == periodOpen && domain.PeriodLocked(closing, today)), nil
 }
 
 func idSet(ids []string) map[string]bool {
@@ -221,7 +244,7 @@ func queryIDs(ctx context.Context, s *store, sql string, args ...any) ([]string,
 /* ── HTTP ────────────────────────────────────────────────────────────── */
 
 // GET /api/hris/attendance/gap-summary?date=YYYY-MM-DD (R9): yesterday (WIB)
-// when date is empty.
+// when date is empty; today at the latest, 62 days back at the earliest.
 func (h handlers) attendanceGapSummary(w http.ResponseWriter, r *http.Request, _ *auth.User) error {
 	today := domain.TodayWIB(h.svc.now())
 	date := r.URL.Query().Get("date")
@@ -233,6 +256,9 @@ func (h handlers) attendanceGapSummary(w http.ResponseWriter, r *http.Request, _
 	}
 	if date > today {
 		return httpx.BadRequest("Tanggal tidak boleh di masa depan")
+	}
+	if date < domain.AddDaysISO(today, -gapSummaryMaxDaysBack) {
+		return httpx.BadRequest("Tanggal maksimal 62 hari ke belakang")
 	}
 	out, err := h.svc.AttendanceGapSummary(r.Context(), h.svc.repo, date)
 	if err != nil {

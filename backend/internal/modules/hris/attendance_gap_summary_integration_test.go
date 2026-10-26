@@ -3,6 +3,7 @@ package hris
 import (
 	"context"
 	"testing"
+	"time"
 
 	"nuhabit/backend/internal/platform/database"
 )
@@ -140,7 +141,11 @@ func TestAttendanceGapSummary(t *testing.T) {
 	h.exec(`INSERT INTO hris.public_holidays (holiday_date, name) VALUES ($1, 'Libur Uji Ringkasan')`, d)
 	counts("holiday", summary(d), 0, 2, 2, false)
 
-	// Periode D ditutup: hanya informasi.
+	// Periode D ditutup: hanya informasi. GET tidak lagi membuat baris periode
+	// (B1), jadi baris periode D dibuat dulu lewat jalur baca periode biasa.
+	if _, err := periodContaining(ctx, h.tx, d, "2026-10-05"); err != nil {
+		t.Fatal(err)
+	}
 	h.exec(`UPDATE hris.attendance_periods SET status = 'closed', closed_at = now(), close_mode = 'manual', closed_by_name = 'Uji'
 		WHERE $1::date BETWEEN start_date AND end_date`, d)
 	counts("closed", summary(d), 0, 2, 2, true)
@@ -157,4 +162,87 @@ func TestAttendanceGapSummary(t *testing.T) {
 	expect(t, h.do(&hr, "GET", url+"?date=2026-10-05", nil), 200, "")
 	expect(t, h.do(&plain, "GET", url+"?date="+d, nil), 403, "")
 	expect(t, h.do(nil, "GET", url+"?date="+d, nil), 401, "")
+}
+
+// EPIC-067 B1: GET ringkasan hanya membaca. Status periode dibaca dari baris
+// yang sudah ada (tidak ada baris → belum ditutup), tidak ada periode,
+// event, atau audit yang ditulis, dan tanggal dibatasi 62 hari ke belakang.
+func TestAttendanceGapSummaryReadOnly(t *testing.T) {
+	h := newHarness(t)
+	ctx := context.Background()
+	h.exec(`UPDATE hris.attendance_settings SET cutoff_day = 0, closing_offset_days = 3`)
+	h.exec(`DELETE FROM hris.attendance_periods WHERE start_date <= '2026-10-31' AND end_date >= '2026-07-01'`)
+	hr, _ := h.staff("hrd", []string{"hris.workforce.attendance"}, false)
+	const url = "/api/hris/attendance/gap-summary"
+	state := func() string {
+		return h.scalar(`SELECT concat_ws('|', (SELECT count(*) FROM hris.attendance_periods),
+			(SELECT count(*) FROM hris.attendance_period_events),
+			(SELECT count(*) FROM audit.audit_log WHERE entity = 'hris.attendance_periods'))`)
+	}
+	before := state()
+
+	// Tanpa baris periode: false, dan tidak ada yang ditulis.
+	got := h.do(&hr, "GET", url+"?date=2026-08-10", nil)
+	expect(t, got, 200, "")
+	if got.data()["period_closed"] != false {
+		t.Fatalf("no period row = %s", got.raw)
+	}
+	if after := state(); after != before {
+		t.Fatalf("GET wrote periods/events/audit: %s → %s", before, after)
+	}
+
+	// Batas 62 hari (fixedNow = Sen 5 Okt 2026): 4 Agu boleh, 3 Agu tidak.
+	expect(t, h.do(&hr, "GET", url+"?date=2026-08-04", nil), 200, "")
+	expect(t, h.do(&hr, "GET", url+"?date=2026-08-03", nil), 400, "Tanggal maksimal 62 hari ke belakang")
+	expect(t, h.do(&hr, "GET", url+"?date=0002-01-01", nil), 400, "Tanggal maksimal 62 hari ke belakang")
+	expect(t, h.do(&hr, "GET", url+"?date=2026-13-01", nil), 400, "Tanggal tidak valid")
+	expect(t, h.do(&hr, "GET", url+"?date=2026-10-06", nil), 400, "Tanggal tidak boleh di masa depan")
+	if after := state(); after != before {
+		t.Fatalf("GETs wrote periods/events/audit: %s → %s", before, after)
+	}
+
+	// Baris tertutup → true.
+	h.exec(`INSERT INTO hris.attendance_periods (period_year, period_month, start_date, end_date, closing_date,
+		status, closed_at, close_mode, closed_by_name)
+		VALUES (2026, 8, '2026-08-01', '2026-08-31', '2026-09-03', 'closed', now(), 'manual', 'Uji')`)
+	got = h.do(&hr, "GET", url+"?date=2026-08-10", nil)
+	expect(t, got, 200, "")
+	if got.data()["period_closed"] != true {
+		t.Fatalf("closed row = %s", got.raw)
+	}
+	// Baris terbuka sebelum tanggal closing → false.
+	h.exec(`INSERT INTO hris.attendance_periods (period_year, period_month, start_date, end_date, closing_date)
+		VALUES (2026, 10, '2026-10-01', '2026-10-31', '2026-11-03')`)
+	got = h.do(&hr, "GET", url+"?date=2026-10-01", nil)
+	expect(t, got, 200, "")
+	if got.data()["period_closed"] != false {
+		t.Fatalf("open row = %s", got.raw)
+	}
+	// Baris terbuka yang tanggal closing-nya lewat: terkunci, dibaca true
+	// tanpa menutupnya (tutup otomatis tetap milik jalur baca periode).
+	h.exec(`INSERT INTO hris.attendance_periods (period_year, period_month, start_date, end_date, closing_date)
+		VALUES (2026, 9, '2026-09-01', '2026-09-30', '2026-10-03')`)
+	before = state()
+	got = h.do(&hr, "GET", url+"?date=2026-09-15", nil)
+	expect(t, got, 200, "")
+	if got.data()["period_closed"] != true {
+		t.Fatalf("locked open row = %s", got.raw)
+	}
+	if status := h.scalar(`SELECT status FROM hris.attendance_periods WHERE period_year = 2026 AND period_month = 9`); status != "open" {
+		t.Fatalf("GET auto-closed the period: %s", status)
+	}
+	if after := state(); after != before {
+		t.Fatalf("locked GET wrote periods/events/audit: %s → %s", before, after)
+	}
+
+	// Digest juga tidak membuat baris periode (tanggal tanpa baris: 31 Jul).
+	h.exec(`DELETE FROM hris.attendance_periods WHERE start_date <= '2026-07-31' AND end_date >= '2026-07-31'`)
+	before = state()
+	res, err := h.svc.RunGapDigest(ctx, time.Date(2026, 8, 1, 2, 0, 0, 0, time.UTC)) // 09.00 WIB
+	if err != nil || res == nil || res.Date != "2026-07-31" || res.Summary.PeriodClosed {
+		t.Fatalf("digest = %+v, %v", res, err)
+	}
+	if after := state(); after != before {
+		t.Fatalf("digest wrote periods/events/audit: %s → %s", before, after)
+	}
 }

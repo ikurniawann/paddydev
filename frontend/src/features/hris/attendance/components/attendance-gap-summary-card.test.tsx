@@ -107,4 +107,19 @@ describe("AttendanceGapSummaryCard", () => {
       vi.useRealTimers();
     }
   });
+
+  it("input tanggal dibatasi 62 hari ke belakang sampai kemarin (WIB)", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    // 26 Okt 2026 01.00 WIB (25 Okt UTC): hari ini WIB tetap 26 Okt.
+    vi.setSystemTime(new Date("2026-10-25T18:00:00Z"));
+    try {
+      state = { data: summary(), isLoading: false, isError: false };
+      render(<AttendanceGapSummaryCard />);
+      const input = screen.getByLabelText("Tanggal absen terlewat") as HTMLInputElement;
+      expect(input.getAttribute("max")).toBe("2026-10-25");
+      expect(input.getAttribute("min")).toBe("2026-08-25");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
