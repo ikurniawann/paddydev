@@ -2287,6 +2287,31 @@
   {
     "module": "hris",
     "method": "GET",
+    "path": "/api/hris/leave-balances"
+  },
+  {
+    "module": "hris",
+    "method": "POST",
+    "path": "/api/hris/leave-balances/import"
+  },
+  {
+    "module": "hris",
+    "method": "GET",
+    "path": "/api/hris/leave-balances/reviews"
+  },
+  {
+    "module": "hris",
+    "method": "POST",
+    "path": "/api/hris/leave-balances/reviews/{id}/resolve"
+  },
+  {
+    "module": "hris",
+    "method": "GET",
+    "path": "/api/hris/leave-balances/template"
+  },
+  {
+    "module": "hris",
+    "method": "GET",
     "path": "/api/hris/leave-balances/{employee_id}"
   },
   {
@@ -2298,6 +2323,21 @@
     "module": "hris",
     "method": "GET",
     "path": "/api/hris/leave-quota"
+  },
+  {
+    "module": "hris",
+    "method": "GET",
+    "path": "/api/hris/leave-settings"
+  },
+  {
+    "module": "hris",
+    "method": "PUT",
+    "path": "/api/hris/leave-settings"
+  },
+  {
+    "module": "hris",
+    "method": "POST",
+    "path": "/api/hris/leave-settings/preview"
   },
   {
     "module": "hris",
@@ -2403,6 +2443,11 @@
     "module": "hris",
     "method": "GET",
     "path": "/api/hris/me/beranda"
+  },
+  {
+    "module": "hris",
+    "method": "GET",
+    "path": "/api/hris/me/leave-balance-access"
   },
   {
     "module": "hris",

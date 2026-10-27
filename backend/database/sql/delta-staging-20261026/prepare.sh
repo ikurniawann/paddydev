@@ -52,11 +52,10 @@ psql "${T}postgres" -Xq -c 'DROP DATABASE IF EXISTS delta_rehearsal' -c 'CREATE 
 local_ok=$(psql "${T}delta_rehearsal" -X -v ON_ERROR_STOP=1 -q -f "$OUT.sql" 2>&1 | grep -oE 'delta staging OK.*' || true)
 test -n "$local_ok" || { echo "Gladi lokal GAGAL" >&2; psql "${T}delta_rehearsal" -X -v ON_ERROR_STOP=1 -q -f "$OUT.sql" >&2 || true; exit 1; }
 rerun=$(psql "${T}delta_rehearsal" -X -v ON_ERROR_STOP=1 -q -f "$OUT.sql" 2>&1 | grep -oE 'ERROR: .*' | head -1 || true)
-IMG="$(docker inspect --format '{{.Config.Image}}' paddydev-api)"
-envs=()
-while IFS= read -r kv; do envs+=(-e "$kv"); done < <(grep -E '^(MIGRATIONS_DIR|TZ)=' "$HOME/.config/paddydev/api.env")
-verify=$(docker run --rm --network host -e DATABASE_URL="${T}delta_rehearsal?sslmode=disable" "${envs[@]}" \
-  --entrypoint /usr/local/bin/migrate "$IMG" -allow-remote -verify 2>&1 | tail -1)
+# Delta hanya menulis data: skema salinan production sebelum dan sesudah delta harus identik.
+# (migrate -verify tidak dipakai: image lokal bisa lebih baru dari production dan selalu "drift".)
+schema() { docker run --rm --network host postgres:16-alpine pg_dump --schema-only --no-owner --no-acl "$T$1" | grep -vE '^(--|\\(un)?restrict)' | md5sum | cut -d' ' -f1; }
+if [ "$(schema delta_prod)" = "$(schema delta_rehearsal)" ]; then verify="identik dengan salinan production sebelum delta"; else verify="BERBEDA dari salinan production sebelum delta"; fi
 
 log "Gladi di VPS"
 vps=$(bash "$REPO/tools/vps/apply-delta.sh" rehearse "$OUT.sql" "$OUT.files.tgz" 2>&1 | grep -E 'delta staging OK|ERROR|file|Gladi' || true)

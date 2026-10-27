@@ -39,6 +39,17 @@ if [ "$MODE" = rehearse ]; then
   pg -d postgres -c 'DROP DATABASE IF EXISTS delta_rehearsal WITH (FORCE)'
   existing=$(docker run --rm -i -v paddydev-storage:/s:ro alpine sh -c 'n=0; while read -r f; do [ -e "/s/$f" ] && n=$((n+1)); done; echo $n' < ~/delta/files.list)
   echo "file yang sudah ada di production (tidak akan ditimpa): $existing"
+  # Uji salin file di volume sementara dengan perintah yang sama seperti execute.
+  docker volume rm -f delta-rehearsal-storage >/dev/null 2>&1 || true
+  docker volume create delta-rehearsal-storage >/dev/null
+  docker run --rm -i -v delta-rehearsal-storage:/s alpine sh -c '
+    set -e; mkdir -p /s/private /tmp/x; tar -C /tmp/x -xzf -; cd /tmp/x; n=0
+    for f in $(find private -type f); do mkdir -p "/s/$(dirname "$f")"; cp -p "$f" "/s/$f"; n=$((n+1)); done
+    echo "uji salin file: $n"' < ~/delta/files.tgz
+  missing=$(docker run --rm -i -v delta-rehearsal-storage:/s:ro alpine sh -c 'm=0; while read -r f; do [ -f "/s/$f" ] || m=$((m+1)); done; echo $m' < ~/delta/files.list)
+  docker volume rm delta-rehearsal-storage >/dev/null
+  echo "uji salin file hilang: $missing"
+  [ "$missing" = 0 ] || status=1
   exit "$status"
 fi
 
@@ -47,8 +58,14 @@ docker exec paddydev-db sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc
 docker exec -i paddydev-db pg_restore -l < ~/backups/prod-db-before-delta-"$STAMP".dump > /dev/null
 ls -la ~/backups/prod-db-before-delta-"$STAMP".dump
 pg -d "$PROD_DB" < ~/delta/delta.sql
-docker run --rm -i -v paddydev-storage:/s alpine sh -c \
-  'mkdir /tmp/x && tar -C /tmp/x -xzf - && cp -rn /tmp/x/private/. /s/private/ && chown -R 1001:1001 /s/private' < ~/delta/files.tgz
+# Salin per file tanpa menimpa. (busybox `cp -rn` melewati direktori tujuan yang sudah ada
+# beserta seluruh isinya, dan `tar -k` berhenti di file pertama yang sudah ada.)
+docker run --rm -i -v paddydev-storage:/s alpine sh -c '
+  set -e; mkdir /tmp/x; tar -C /tmp/x -xzf -; cd /tmp/x; n=0; s=0
+  for f in $(find private -type f); do
+    if [ -e "/s/$f" ]; then s=$((s+1)); else mkdir -p "/s/$(dirname "$f")"; cp -p "$f" "/s/$f"; n=$((n+1)); fi
+  done
+  chown -R 1001:1001 /s/private; echo "file disalin: $n, sudah ada (dilewati): $s"' < ~/delta/files.tgz
 docker run --rm -i -v paddydev-storage:/s:ro alpine sh -c \
   'm=0; while read -r f; do [ -f "/s/$f" ] || { echo "HILANG $f"; m=$((m+1)); }; done; echo "file hilang: $m"; [ "$m" = 0 ]' < ~/delta/files.list
 REMOTE

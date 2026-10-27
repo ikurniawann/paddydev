@@ -11,6 +11,7 @@ import (
 	contracts "nuhabit/backend/internal/contracts/hris"
 	"nuhabit/backend/internal/modules/hris/domain"
 	"nuhabit/backend/internal/platform/audit"
+	"nuhabit/backend/internal/platform/auth"
 	"nuhabit/backend/internal/platform/httpx"
 	"nuhabit/backend/internal/platform/iam"
 	"nuhabit/backend/internal/platform/outbox"
@@ -31,24 +32,18 @@ type LeaveRepo interface {
 	LeavePage(ctx context.Context, f leaveFilter, page, limit int) ([]*Row, int64, error)
 	LeaveEmployee(ctx context.Context, id string) (*Row, error)
 	ActiveHolidays(ctx context.Context, start, end string) ([]domain.Holiday, error)
-	AnnualRemaining(ctx context.Context, employeeID string, year int) (*Row, error)
 	InsertLeave(ctx context.Context, f fields) (*Row, error)
 	LeaveDetail(ctx context.Context, id string) (*Row, error)
 	LeaveForDecision(ctx context.Context, id string) (*Row, error)
 	LeaveDecided(ctx context.Context, id string) (*Row, error)
 	PlainLeave(ctx context.Context, id string) (*Row, error)
-	CancelLeave(ctx context.Context, id string, refund *quotaMove) error
+	CancelLeave(ctx context.Context, id, fromStatus string, refund *quotaMove) error
 	UpdateLeave(ctx context.Context, id string, f fields) (*Row, error)
 	DeleteLeave(ctx context.Context, id string) error
 	// DecideLeave writes the verdict of a pending request; errNoRow when it
 	// is no longer pending (decided meanwhile).
 	DecideLeave(ctx context.Context, id string, v leaveVerdict, credit *quotaMove) error
 	LeavesForExport(ctx context.Context, f leaveFilter) ([]*Row, error)
-	LeaveBalance(ctx context.Context, employeeID string, year int) (*Row, error)
-	EmployeeJoinDate(ctx context.Context, id string) (*string, bool, error)
-	InsertLeaveBalance(ctx context.Context, f fields) (*Row, error)
-	LeaveBalanceID(ctx context.Context, employeeID string, year int) (*string, error)
-	UpdateLeaveBalance(ctx context.Context, id string, f fields) (*Row, error)
 	Publish(ctx context.Context, topic, key string, payload any) error
 	ManagerContact(ctx context.Context, employeeID string) (name string, phone *string, found bool, err error)
 	// EmployeePositionLevel is the level of the employee's position ("" without
@@ -65,11 +60,21 @@ type LeaveRepo interface {
 	MonthlyLeaveUse(ctx context.Context, employeeID, from, to string) (map[string]float64, error)
 }
 
-// quotaMove adds (or refunds) days of a year's annual leave.
+// quotaMove adds (or refunds) days of a year's annual leave (EPIC-068 R5).
 type quotaMove struct {
 	EmployeeID string
 	Year       int
 	Days       string // numeric text of total_days
+	// StartDate (YYYY-MM-DD) of the leave: the carry-over counts only when it
+	// has not expired by then. Used when consuming.
+	StartDate string
+	// CarryDays is the part of Days taken from the carry-over at approval
+	// (hris.leaves.carry_over_days_used); a refund returns it to the
+	// carry-over and the rest to the annual quota. Used when refunding.
+	CarryDays string
+	// Actor is who approved (nil: the system); a carry-over recalculated for a
+	// row this approval creates is audited under it.
+	Actor *auth.User
 }
 
 // leaveVerdict is what DecideLeave writes (EPIC-063 R1).
@@ -169,13 +174,19 @@ func (s *Service) CreateLeave(ctx context.Context, a *Actor, in leaveRequest) (*
 		return nil, httpx.BadRequest(domain.NoWorkingDayMessage(excluded))
 	}
 	if in.LeaveType == "annual" {
-		balance, err := s.repo.AnnualRemaining(ctx, *employeeID, yearOf(in.StartDate))
+		// R6: the year's row is created from the default rule when missing,
+		// then the request must fit what is available on its start date
+		// (annual remainder plus a carry-over that has not expired by then).
+		year := yearOf(in.StartDate)
+		if err := s.EnsureLeaveBalance(ctx, *employeeID, year); err != nil {
+			return nil, err
+		}
+		available, found, err := s.repo.AnnualAvailable(ctx, *employeeID, year, in.StartDate)
 		if err != nil {
 			return nil, err
 		}
-		if balance != nil && balance.Num("annual_leave_remaining") < float64(totalDays) {
-			return nil, httpx.BadRequest("Insufficient annual leave balance",
-				obj("remaining", balance.Get("annual_leave_remaining"), "requested", totalDays))
+		if found && available < float64(totalDays) {
+			return nil, httpx.BadRequest("Sisa cuti tahunan tidak cukup", obj("remaining", available, "requested", totalDays))
 		}
 	}
 
@@ -303,9 +314,24 @@ func (s *Service) UpdateLeave(ctx context.Context, a *Actor, id string, in leave
 		}
 		var refund *quotaMove
 		if approved && leave.Str("leave_type") == "annual" {
-			refund = &quotaMove{EmployeeID: leave.Str("employee_id"), Year: dateYear(leave, "start_date"), Days: leave.Str("total_days")}
+			refund = &quotaMove{EmployeeID: leave.Str("employee_id"), Year: dateYear(leave, "start_date"),
+				Days: leave.Str("total_days"), CarryDays: leave.Str("carry_over_days_used")}
 		}
-		if err := s.repo.InTx(ctx, func(r Repository) error { return r.CancelLeave(ctx, id, refund) }); err != nil {
+		err := s.repo.InTx(ctx, func(r Repository) error {
+			if err := r.CancelLeave(ctx, id, status, refund); err != nil {
+				return err
+			}
+			if refund == nil {
+				return nil
+			}
+			// The refund changed the year's balance: next year's carry follows.
+			return afterBalanceChange(ctx, r.querier(), refund.EmployeeID, refund.Year,
+				carryCause{Type: causeLeaveCancel, LeaveID: id}, userOf(a))
+		})
+		if errors.Is(err, errNoRow) {
+			return nil, httpx.Conflict("Pengajuan sudah berubah, muat ulang halaman")
+		}
+		if err != nil {
 			return nil, err
 		}
 		if refund != nil {
@@ -395,7 +421,8 @@ func (s *Service) DecideLeave(ctx context.Context, a *Actor, in leaveDecision, m
 	if approve {
 		status, rejection = "approved", nil
 		if leave.Str("leave_type") == "annual" {
-			credit = &quotaMove{EmployeeID: leave.Str("employee_id"), Year: dateYear(leave, "start_date"), Days: leave.Str("total_days")}
+			credit = &quotaMove{EmployeeID: leave.Str("employee_id"), Year: dateYear(leave, "start_date"),
+				Days: leave.Str("total_days"), StartDate: dateText(leave, "start_date"), Actor: userOf(a)}
 		}
 	}
 	verdict := leaveVerdict{Status: status, ApproverID: a.EmployeeID, Rejection: rejection,
@@ -407,6 +434,15 @@ func (s *Service) DecideLeave(ctx context.Context, a *Actor, in leaveDecision, m
 	err = s.repo.InTx(ctx, func(r Repository) error {
 		if err := r.DecideLeave(ctx, in.LeaveID, verdict, credit); err != nil {
 			return err
+		}
+		// Approving annual leave used up the year's balance: next year's carry
+		// follows. A rejection (credit nil) moves no balance, so there is
+		// nothing to recalculate (causeLeaveReject is documented, never run).
+		if credit != nil {
+			if err := afterBalanceChange(ctx, r.querier(), credit.EmployeeID, credit.Year,
+				carryCause{Type: causeLeaveApprove, LeaveID: in.LeaveID}, userOf(a)); err != nil {
+				return err
+			}
 		}
 		return auditDecision(ctx, r.querier(), a, "leave."+in.Action, "hris.leaves", in.LeaveID, label, nil,
 			map[string]any{"status": status, "decided_as": decidedAs, "rejection_reason": rejection}, meta)
@@ -488,37 +524,6 @@ func (s *Service) LeavesCSV(ctx context.Context, f leaveFilter) (string, error) 
 
 func isLineManagerRole(role string) bool { return role == "hiring_manager" || role == "hrd" }
 
-// LeaveBalance is getLeaveBalance: the owner, HRD or a manager; the year's
-// row is created (prorated quota) on first read.
-func (s *Service) LeaveBalance(ctx context.Context, a *Actor, employeeID string, year int) (*Row, error) {
-	isOwner := a.EmployeeID != nil && employeeID == *a.EmployeeID
-	if !isOwner && !isLineManagerRole(a.Role) {
-		return nil, httpx.Forbidden("Forbidden: Can only view own leave balance")
-	}
-	row, err := s.repo.LeaveBalance(ctx, employeeID, year)
-	if err != nil {
-		return nil, asPlainError(err)
-	}
-	if row != nil {
-		return row, nil
-	}
-	join, found, err := s.repo.EmployeeJoinDate(ctx, employeeID)
-	if err != nil {
-		return nil, err
-	}
-	if !found {
-		return nil, httpx.NotFound("Employee not found")
-	}
-	var f fields
-	f.add("employee_id", employeeID)
-	f.add("year", year)
-	f.add("annual_leave_total", domain.ProratedAnnualQuota(join, year))
-	for _, col := range []string{"annual_leave_used", "sick_leave_used", "unpaid_leave_used", "maternity_leave_used", "paternity_leave_used"} {
-		f.add(col, 0)
-	}
-	return s.repo.InsertLeaveBalance(ctx, f)
-}
-
 // LeaveQuota is the monthly quota of Izin Pribadi / Izin Leader (EPIC-058):
 // the employee themself, or an HR account holding the Cuti menu. It carries
 // days only, never salary amounts.
@@ -567,23 +572,4 @@ func (s *Service) LeaveQuota(ctx context.Context, a *Actor, employeeID *string, 
 	}
 	return obj("employee_id", *target, "month", month, "position_level", level,
 		"employment_status", status, "leader_eligible", eligible, "types", types), nil
-}
-
-// UpdateLeaveBalance lets HRD set a balance; a new row starts at 12 days.
-func (s *Service) UpdateLeaveBalance(ctx context.Context, a *Actor, employeeID string, year int, in fields) (*Row, error) {
-	if a.Role != "hrd" {
-		return nil, httpx.Forbidden("Forbidden: Only HRD can update leave balances")
-	}
-	id, err := s.repo.LeaveBalanceID(ctx, employeeID, year)
-	if err != nil {
-		return nil, err
-	}
-	if id != nil {
-		return s.repo.UpdateLeaveBalance(ctx, *id, in)
-	}
-	f := fields{{"employee_id", employeeID}, {"year", year}, {"annual_leave_total", 12}}
-	for _, c := range in {
-		f.set(c.col, c.val)
-	}
-	return s.repo.InsertLeaveBalance(ctx, f)
 }

@@ -84,6 +84,8 @@ func New(deps module.Deps, ports Ports) module.Module {
 	// app.Routes() (`api -routes`, generate) builds it without a database.
 	if deps.DB != nil && deps.Config.AppEnv != "test" {
 		go svc.GapDigestLoop(context.Background(), GapDigestEvery)
+		// The 1 January leave carry-over (EPIC-068 R9).
+		go svc.LeaveCarryOverLoop(context.Background(), LeaveCarryOverEvery)
 	}
 	return mod{handlers{svc: svc, auth: deps.Auth}}
 }

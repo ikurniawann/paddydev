@@ -16,7 +16,6 @@ import (
 // SelfServiceRepo is the ESS storage.
 type SelfServiceRepo interface {
 	EmployeeCard(ctx context.Context, employeeID string) (*Row, error)
-	CurrentLeaveBalance(ctx context.Context, employeeID string) (*Row, error)
 	ESSSchedule(ctx context.Context, employeeID string) ([]domain.ESSScheduleRow, error)
 	AttendanceSummary(ctx context.Context, employeeID string, month, year int) (*Row, error)
 	RecentLeaves(ctx context.Context, employeeID string) ([]*Row, error)
@@ -49,15 +48,27 @@ func (s *Service) essBasics(ctx context.Context, employeeID string) (any, any, [
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	balance, err := s.repo.CurrentLeaveBalance(ctx, employeeID)
-	if err != nil {
-		return nil, nil, nil, err
+	// R13: this year's balance as the shared view (R12); the row is created
+	// from the default rule when the employee has none yet. No fallback quota.
+	var balance any
+	if card != nil {
+		year := domain.NowWIB(s.now()).Year()
+		if err := s.EnsureLeaveBalance(ctx, employeeID, year); err != nil {
+			return nil, nil, nil, err
+		}
+		view, found, err := s.leaveBalanceOf(ctx, employeeID, year)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		if found {
+			balance = view
+		}
 	}
 	schedule, err := s.repo.ESSSchedule(ctx, employeeID)
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	return nullable(card), nullable(balance), schedule, nil
+	return nullable(card), balance, schedule, nil
 }
 
 // nullable turns a nil *Row into a JSON null.
@@ -329,12 +340,6 @@ func (s *store) EmployeeCard(ctx context.Context, employeeID string) (*Row, erro
 		LEFT JOIN hris.positions p ON p.id = e.job_title_id
 		LEFT JOIN hris.departments d ON d.id = e.department_id
 		WHERE e.id = $1`, employeeID)
-}
-
-func (s *store) CurrentLeaveBalance(ctx context.Context, employeeID string) (*Row, error) {
-	return queryRow(ctx, s.db, `SELECT year, annual_leave_total, annual_leave_used, annual_leave_remaining
-		FROM hris.leave_balances
-		WHERE employee_id = $1 AND year = date_part('year', now())::int`, employeeID)
 }
 
 func (s *store) ESSSchedule(ctx context.Context, employeeID string) ([]domain.ESSScheduleRow, error) {

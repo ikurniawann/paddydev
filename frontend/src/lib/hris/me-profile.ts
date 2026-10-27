@@ -170,18 +170,47 @@ function loadEmployeeCard(employeeId: string) {
   );
 }
 
-function loadCurrentLeaveBalance(employeeId: string) {
-  return queryOne<{
-    year: number;
-    annual_leave_total: string;
-    annual_leave_used: string;
-    annual_leave_remaining: string;
-  }>(
-    `SELECT year, annual_leave_total, annual_leave_used, annual_leave_remaining
+interface LeaveBalanceRow {
+  year: number;
+  annual_leave_total: string;
+  annual_leave_adjustment: string;
+  annual_leave_used: string;
+  annual_leave_remaining: string;
+  carry_over_days: string;
+  carry_over_used: string;
+  carry_over_expires_on: string | null;
+}
+
+/** Baris saldo → bentuk yang sama dengan respons Go (EPIC-068 R12): angka, bawaan, dan `available` (R4). */
+export function essLeaveBalanceOf(row: LeaveBalanceRow, today: string) {
+  // Dihitung ulang bisa di bawah terpakai (tinjauan HR terbuka): tampil 0, bukan negatif.
+  const carryRemaining = Math.max(Number(row.carry_over_days) - Number(row.carry_over_used), 0);
+  const carryActive = !!row.carry_over_expires_on && row.carry_over_expires_on >= today;
+  const remaining = Number(row.annual_leave_remaining);
+  return {
+    year: row.year,
+    annual_leave_total: Number(row.annual_leave_total),
+    annual_leave_adjustment: Number(row.annual_leave_adjustment),
+    annual_leave_used: Number(row.annual_leave_used),
+    annual_leave_remaining: remaining,
+    carry_over_days: Number(row.carry_over_days),
+    carry_over_used: Number(row.carry_over_used),
+    carry_over_remaining: carryRemaining,
+    carry_over_expires_on: row.carry_over_expires_on,
+    carry_over_active: carryActive,
+    available: remaining + (carryActive ? carryRemaining : 0),
+  };
+}
+
+async function loadCurrentLeaveBalance(employeeId: string) {
+  const row = await queryOne<LeaveBalanceRow>(
+    `SELECT year, annual_leave_total, annual_leave_adjustment, annual_leave_used, annual_leave_remaining,
+            carry_over_days, carry_over_used, carry_over_expires_on::text
      FROM hris.leave_balances
      WHERE employee_id = $1 AND year = date_part('year', now())::int`,
     [employeeId]
   );
+  return row ? essLeaveBalanceOf(row, todayWibIso()) : null;
 }
 
 function loadScheduleRows(employeeId: string) {

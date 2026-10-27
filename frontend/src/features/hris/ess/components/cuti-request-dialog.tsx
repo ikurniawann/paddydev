@@ -13,11 +13,13 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { formatDate } from "@/lib/format";
 import { describeLeaveDays } from "@/lib/hris/holidays";
 import { todayWib } from "@/lib/dates";
 import { applySingleDay, effectiveLeaveType, leaveFormNote } from "@/lib/hris/leave-form";
 import { leaveTypeInfo, leaveTypeOptions } from "@/lib/hris/leave-types";
 import { useHolidayIndex } from "@/features/hris/attendance/queries";
+import { formatDays, previewBalance } from "@/features/hris/leave-balances/balance-math";
 import { useLeaveQuota } from "@/features/hris/leaves/queries";
 import { useSubmitMyLeave } from "../mutations";
 import type { EssLeaveBalance, EssLeaveForm } from "../types";
@@ -192,9 +194,7 @@ export function CutiRequestDialog({ open, onOpenChange, balance }: CutiRequestDi
             <p className="rounded-lg bg-sky-50 px-3 py-2 text-xs text-sky-700">{quotaNote}</p>
           )}
           {form.leave_type === "annual" && balance && (
-            <p className="rounded-lg bg-sky-50 px-3 py-2 text-xs text-sky-700">
-              Sisa kuota cuti tahunan Anda: {Number(balance.annual_leave_remaining)} hari.
-            </p>
+            <AnnualBalanceNote balance={balance} startDate={form.start_date} />
           )}
         </div>
         <DialogFooter>
@@ -207,5 +207,43 @@ export function CutiRequestDialog({ open, onOpenChange, balance }: CutiRequestDi
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/**
+ * Sisa cuti tahunan pada tanggal mulai (EPIC-068 R4/R6): sisa jatah + sisa bawaan yang masih
+ * berlaku pada tanggal itu; sisa bawaan dipakai lebih dulu. Server menghitung ulang saat kirim.
+ * Untuk tahun lain dari saldo yang dimuat, angkanya tidak ditebak.
+ */
+function AnnualBalanceNote({ balance, startDate }: { balance: EssLeaveBalance; startDate: string }) {
+  const startYear = startDate ? Number(startDate.slice(0, 4)) : balance.year;
+  if (startYear !== balance.year) {
+    return (
+      <p className="rounded-lg bg-sky-50 px-3 py-2 text-xs text-sky-700">
+        Saldo tahun {startYear} dihitung saat pengajuan.
+      </p>
+    );
+  }
+  const onDate = startDate || todayWib();
+  const p = previewBalance({
+    total: balance.annual_leave_total,
+    adjustment: balance.annual_leave_adjustment,
+    used: balance.annual_leave_used,
+    carryDays: balance.carry_over_days,
+    carryUsed: balance.carry_over_used,
+    expiresOn: balance.carry_over_expires_on,
+    today: onDate,
+  });
+  return (
+    <p className="rounded-lg bg-sky-50 px-3 py-2 text-xs text-sky-700">
+      Sisa cuti tahunan Anda{startDate ? " pada tanggal itu" : ""}: {formatDays(p.available)} hari.
+      {p.carryActive && p.carryRemaining > 0 && (
+        <>
+          {" "}
+          {formatDays(p.carryRemaining)} hari di antaranya sisa bawaan, dipakai lebih dulu, berlaku s/d{" "}
+          {formatDate(balance.carry_over_expires_on)}.
+        </>
+      )}
+    </p>
   );
 }

@@ -221,7 +221,7 @@ export function OnboardingPage({ params }: OnboardingPageProps) {
             </Button>
 
             <Button variant="outline" asChild>
-              <Link href={`/dashboard/hris/leave-balances/${employeeId}`}>
+              <Link href={`/dashboard/employees/${employeeId}?tab=leave`}>
                 Lihat Saldo Cuti
               </Link>
             </Button>

@@ -105,6 +105,16 @@ func (h handlers) actorFor(ctx context.Context, u *auth.User) (*Actor, error) {
 			a.Approves = append(a.Approves, leaf)
 		}
 	}
+	for _, action := range leaveBalanceActions {
+		if iam.HasGrantedAction(granted, saldoCuti, action) {
+			a.LeaveBalanceActions = append(a.LeaveBalanceActions, action)
+		}
+	}
+	codes := make([]string, 0, len(granted))
+	for code := range granted {
+		codes = append(codes, code)
+	}
+	a.EmployeeRecords = iam.HasAnyMenuPrefix(codes, employeeRecordManagers)
 	return a, nil
 }
 

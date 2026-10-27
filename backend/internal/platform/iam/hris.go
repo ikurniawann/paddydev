@@ -37,6 +37,11 @@ var HrisDeleteLeaves = []string{
 // endpoint, so it is not in HrisDeleteLeaves.
 const LeafLembur = "hris.kepegawaian.overtime"
 
+// LeafSaldoCuti is the HR leave-balance leaf (EPIC-068 R7): read lists and
+// reads balances, update edits one balance, import/export run the Excel
+// template. It has no delete endpoint, so it is not in HrisDeleteLeaves.
+const LeafSaldoCuti = "hris.workforce.leave-balances"
+
 // HrisApproveLeaves are the leaves whose "approve" action gives the HR side
 // of a decision (EPIC-067 R10): Absensi for attendance requests and
 // Perjalanan Dinas, Cuti for leaves, Lembur for overtime. Each decision
