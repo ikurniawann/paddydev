@@ -283,8 +283,13 @@ type businessChanged struct {
 	Tree businessTree `json:"tree"`
 }
 
+// businessTreeReaders read the tree: Business settings, and account managers
+// (Manajemen User) who pick a login's data scope from it in Buat Akun Login.
+// Writes stay Business settings only.
+var businessTreeReaders = append(append([]string{}, iam.SettingsBusiness...), iam.SettingsUsers...)
+
 func (h *handler) getBusiness(w http.ResponseWriter, r *http.Request) error {
-	if _, err := h.d.Auth.RequireMenuPrefix(r, iam.SettingsBusiness...); err != nil {
+	if _, err := h.d.Auth.RequireMenuPrefix(r, businessTreeReaders...); err != nil {
 		return err
 	}
 	tree, err := fetchBusinessTree(r.Context(), h.db)
