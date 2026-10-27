@@ -15,8 +15,9 @@ const createSchema = z.object({
   is_active: z.boolean().optional(),
 });
 
+// Manajemen User ikut membaca pohon ini untuk memilih scope akun di Buat Akun Login.
 export const GET = apiHandler(async () => {
-  await requireIamMenuPrefix(IAM.settingsBusiness);
+  await requireIamMenuPrefix([...IAM.settingsBusiness, ...IAM.settingsUsers]);
   return NextResponse.json({ data: await fetchBusinessTree() });
 }, "GET /api/settings/business");
 

@@ -105,3 +105,14 @@ func TestBusinessTree(t *testing.T) {
 		t.Fatal("holding delete cascades")
 	}
 }
+
+// The Buat Akun Login dialog picks the account's data scope from this tree:
+// account managers (Manajemen User) read it, only Business settings writes.
+func TestBusinessTreeReadableByAccountManagers(t *testing.T) {
+	users := staff(t, "settings.users")
+	none := staff(t)
+	e := newEnv(t)
+	expect(t, e.do(&users, "GET", "/api/settings/business", nil), 200, "")
+	expect(t, e.do(&none, "GET", "/api/settings/business", nil), 403, "")
+	expect(t, e.do(&users, "POST", "/api/settings/business", map[string]any{"type": "holding", "name": "Tidak Boleh"}), 403, "")
+}
