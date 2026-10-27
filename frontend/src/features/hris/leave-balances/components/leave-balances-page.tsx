@@ -16,7 +16,10 @@ import { useLeaveBalanceAccess, useLeaveBalances } from "../queries";
 import type { LeaveBalanceView } from "../types";
 import { LeaveBalanceEditDialog } from "./leave-balance-edit-dialog";
 import { LeaveBalanceUploadDialog } from "./leave-balance-upload-dialog";
+import { LeaveCarryReviewsCard } from "./leave-carry-reviews-card";
 import { LeaveSettingsCard } from "./leave-settings-card";
+
+const SOURCE_LABEL = { auto: "Otomatis", manual: "Manual" } as const;
 
 function carryCell(b: LeaveBalanceView) {
   if (b.carry_over_days <= 0) return <span className="text-gray-400">0</span>;
@@ -62,6 +65,8 @@ export function LeaveBalancesPage() {
           dengan jatah default.
         </p>
       </div>
+
+      {access?.read === true ? <LeaveCarryReviewsCard year={year} canUpdate={access.update} canCorrect={canEdit} /> : null}
 
       {access?.read === true ? <LeaveSettingsCard canUpdate={access.update} /> : null}
 
@@ -141,6 +146,7 @@ export function LeaveBalancesPage() {
                 <TableHead className="text-right">Terpakai</TableHead>
                 <TableHead className="text-right">Sisa jatah</TableHead>
                 <TableHead>Sisa bawaan</TableHead>
+                <TableHead>Sumber</TableHead>
                 <TableHead className="text-right">Tersedia</TableHead>
                 {canEdit ? <TableHead className="w-20" /> : null}
               </TableRow>
@@ -166,6 +172,7 @@ export function LeaveBalancesPage() {
                   <TableCell className="text-right">{formatDays(b.annual_leave_used)}</TableCell>
                   <TableCell className="text-right">{formatDays(b.annual_leave_remaining)}</TableCell>
                   <TableCell>{carryCell(b)}</TableCell>
+                  <TableCell className="text-gray-600">{b.carry_over_days > 0 ? (SOURCE_LABEL[b.carry_over_source] ?? "–") : "–"}</TableCell>
                   <TableCell className="text-right font-semibold text-gray-900">{formatDays(b.available)}</TableCell>
                   {canEdit ? (
                     <TableCell className="text-right">

@@ -44,6 +44,14 @@ describe("previewBalance (R4)", () => {
     expect(previewBalance({ ...base, expiresOn: "2026-10-25" })).toMatchObject({ carryActive: false, available: 9 });
     expect(previewBalance({ ...base, expiresOn: "2026-10-26" })).toMatchObject({ carryActive: true, available: 10.5 });
   });
+  it("bawaan di bawah yang terpakai (dihitung ulang) dihitung 0, tidak negatif", () => {
+    expect(previewBalance({ ...base, carryDays: 1, carryUsed: 3 })).toEqual({
+      remaining: 9,
+      carryRemaining: 0,
+      carryActive: true,
+      available: 9,
+    });
+  });
   it("tanpa tanggal kedaluwarsa bawaan tidak berlaku", () => {
     expect(previewBalance({ ...base, expiresOn: "" })).toMatchObject({ carryActive: false, available: 9 });
     expect(previewBalance({ ...base, expiresOn: null })).toMatchObject({ carryActive: false, available: 9 });

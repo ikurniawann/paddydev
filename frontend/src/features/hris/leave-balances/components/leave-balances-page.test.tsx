@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LeaveBalanceView } from "../types";
 import { LeaveBalancesPage } from "./leave-balances-page";
@@ -32,6 +32,11 @@ vi.mock("@/components/ui/combobox", () => ({
 vi.mock("./leave-settings-card", () => ({
   LeaveSettingsCard: ({ canUpdate }: { canUpdate: boolean }) => <div>kartu-pengaturan-{canUpdate ? "ubah" : "baca"}</div>,
 }));
+vi.mock("./leave-carry-reviews-card", () => ({
+  LeaveCarryReviewsCard: (p: { year: number; canUpdate: boolean; canCorrect: boolean }) => (
+    <div>{`kartu-tinjauan-${p.year}-${p.canUpdate ? "ubah" : "baca"}-${p.canCorrect ? "koreksi" : "tanpa-koreksi"}`}</div>
+  ),
+}));
 vi.mock("./leave-balance-upload-dialog", () => ({
   LeaveBalanceUploadDialog: (p: { year: number; branchId: string; branchName: string }) => (
     <div>{`dialog-import-${p.year}-${p.branchId || "semua"}-${p.branchName}`}</div>
@@ -56,6 +61,7 @@ const row = (over: Partial<LeaveBalanceView>): LeaveBalanceView => ({
   carry_over_remaining: 1.5,
   carry_over_expires_on: "2027-03-31",
   carry_over_active: true,
+  carry_over_source: "auto",
   available: 10.5,
   updated_at: null,
   exists: true,
@@ -68,7 +74,7 @@ beforeEach(() => {
   hooks.useLeaveBalances.mockReset();
   hooks.useLeaveBalanceAccess.mockReset();
   hooks.useLeaveBalances.mockReturnValue({
-    data: [row({}), row({ employee_id: "e2", nip: "2025002", full_name: "Budi", exists: false, annual_leave_used: 0, annual_leave_remaining: 9.5, annual_leave_total: 9.5, carry_over_days: 0, carry_over_used: 0, carry_over_remaining: 0, carry_over_expires_on: null, carry_over_active: false, available: 9.5 })],
+    data: [row({}), row({ employee_id: "e2", nip: "2025002", full_name: "Budi", exists: false, annual_leave_used: 0, annual_leave_remaining: 9.5, annual_leave_total: 9.5, carry_over_days: 0, carry_over_used: 0, carry_over_remaining: 0, carry_over_expires_on: null, carry_over_active: false, carry_over_source: "manual", available: 9.5 })],
     isLoading: false,
     isError: false,
   });
@@ -96,6 +102,39 @@ describe("LeaveBalancesPage", () => {
     expect(hooks.useLeaveBalances).toHaveBeenLastCalledWith({ year: 2027, branch_id: "b2", q: "" });
     fireEvent.change(screen.getByLabelText("Cari karyawan"), { target: { value: " ana " } });
     expect(hooks.useLeaveBalances).toHaveBeenLastCalledWith({ year: 2027, branch_id: "b2", q: "ana" });
+  });
+
+  it("kolom Sumber menandai sisa bawaan Otomatis atau Manual, dan menampilkan – bila tidak ada sisa bawaan", () => {
+    const rows3 = hooks.useLeaveBalances().data as LeaveBalanceView[];
+    hooks.useLeaveBalances.mockReturnValue({
+      data: [...rows3, row({ employee_id: "e3", nip: "2025003", full_name: "Citra", carry_over_days: 3, carry_over_source: "manual" })],
+      isLoading: false,
+      isError: false,
+    });
+    render(<LeaveBalancesPage />);
+    const header = screen.getByRole("columnheader", { name: "Sumber" });
+    expect(header).toBeTruthy();
+    const idx = screen.getAllByRole("columnheader").indexOf(header);
+    const rows = screen.getAllByRole("row");
+    expect(within(rows[1]).getAllByRole("cell")[idx].textContent).toBe("Otomatis");
+    // Budi has no carry-over: the source ("manual" in the data) is not shown.
+    expect(within(rows[2]).getAllByRole("cell")[idx].textContent).toBe("–");
+    expect(within(rows[3]).getAllByRole("cell")[idx].textContent).toBe("Manual");
+  });
+
+  it("kartu tinjauan tampil untuk akun read, mengikuti tahun terpilih, dan hak koreksi hanya tahun berjalan/depan", () => {
+    render(<LeaveBalancesPage />);
+    expect(screen.getByText("kartu-tinjauan-2026-ubah-koreksi")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Tahun"), { target: { value: "2025" } });
+    expect(screen.getByText("kartu-tinjauan-2025-ubah-tanpa-koreksi")).toBeTruthy();
+    cleanup();
+    hooks.useLeaveBalanceAccess.mockReturnValue({ data: { read: true, update: false, import: false, export: false } });
+    render(<LeaveBalancesPage />);
+    expect(screen.getByText("kartu-tinjauan-2026-baca-tanpa-koreksi")).toBeTruthy();
+    cleanup();
+    hooks.useLeaveBalanceAccess.mockReturnValue({ data: undefined });
+    render(<LeaveBalancesPage />);
+    expect(screen.queryByText(/^kartu-tinjauan/)).toBeNull();
   });
 
   it("baris tanpa data tersimpan diberi tanda jatah default", () => {

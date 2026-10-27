@@ -1,6 +1,7 @@
-import { apiGet, apiPut, buildListUrl } from "@/lib/api-client";
+import { apiGet, apiPost, apiPut, buildListUrl } from "@/lib/api-client";
 import { downloadBlob } from "@/lib/purchasing/report-ui-shared";
 import type {
+  CarryReview,
   LeaveBalanceAccess,
   LeaveBalanceImportPreview,
   LeaveBalanceImportScope,
@@ -8,7 +9,9 @@ import type {
   LeaveBalancePayload,
   LeaveBalanceView,
   LeaveSettings,
+  LeaveSettingsImpact,
   LeaveSettingsPatch,
+  LeaveSettingsSavePatch,
 } from "./types";
 
 /** Daftar karyawan aktif dalam cakupan; baris yang belum ada tampil dengan jatah default (`exists: false`). */
@@ -29,8 +32,23 @@ export const fetchLeaveBalanceAccess = () => apiGet<LeaveBalanceAccess>("/api/hr
 export const fetchLeaveSettings = () =>
   apiGet<{ data: LeaveSettings }>("/api/hris/leave-settings").then((res) => res.data);
 
-export const saveLeaveSettings = (patch: LeaveSettingsPatch) =>
+/** Menyimpan butuh alasan; server menolak (400) tanpa alasan. */
+export const saveLeaveSettings = (patch: LeaveSettingsSavePatch) =>
   apiPut<{ data: LeaveSettings; message: string }>("/api/hris/leave-settings", patch);
+
+/** Hitung dampak patch pada sisa bawaan tahun berjalan tanpa menyimpan (butuh hak update). */
+export const previewLeaveSettings = (patch: LeaveSettingsPatch) =>
+  apiPost<{ data: LeaveSettingsImpact }>("/api/hris/leave-settings/preview", patch).then((res) => res.data);
+
+/** Tinjauan sisa bawaan satu tahun; default hanya yang masih terbuka. */
+export const fetchCarryReviews = (year: number, status: "open" | "all" = "open") =>
+  apiGet<{ data: CarryReview[] }>(
+    buildListUrl("/api/hris/leave-balances/reviews", { year, status: status === "all" ? "all" : undefined })
+  ).then((res) => res.data ?? []);
+
+/** Tandai tinjauan selesai; catatan wajib (maks 500 karakter). */
+export const resolveCarryReview = (id: string, note: string) =>
+  apiPost<{ data: CarryReview; message: string }>(`/api/hris/leave-balances/reviews/${id}/resolve`, { note });
 
 /** Unduh template Excel (butuh `export`); branch_id kosong = semua cabang. */
 export const leaveBalanceTemplateUrl = (p: LeaveBalanceImportScope) =>

@@ -229,7 +229,7 @@ func leaveCheck(nowYear int) func(domain.LeaveBalanceCheck) string {
 		if c.Values.CarryExpires != "" {
 			in.CarryExpires = &c.Values.CarryExpires
 		}
-		err := validateLeaveBalance(in, c.Used, c.CarryUsed, c.Active, nowYear)
+		err := validateLeaveBalance(in, c.Used, c.CarryUsed, c.Active, c.CarryChanged, nowYear)
 		if err == nil {
 			return ""
 		}
@@ -409,7 +409,10 @@ func (s *Service) ImportLeaveBalances(ctx context.Context, a *Actor, in leaveImp
 		ordered := append([]domain.LeaveBalanceChange{}, res.Changes...)
 		sort.SliceStable(ordered, func(i, j int) bool { return ordered[i].EmployeeID < ordered[j].EmployeeID })
 		for _, c := range ordered {
-			if err := ensureLeaveBalance(ctx, q, c.EmployeeID, sc.Year); err != nil {
+			if err := lockPreviousBalance(ctx, q, c.EmployeeID, sc.Year); err != nil {
+				return err
+			}
+			if err := ensureLeaveBalanceCarry(ctx, q, c.EmployeeID, sc.Year, carryCause{Type: causeImport}, userOf(a)); err != nil {
 				return err
 			}
 			was, err := r.LockLeaveBalance(ctx, c.EmployeeID, sc.Year)
@@ -426,7 +429,8 @@ func (s *Service) ImportLeaveBalances(ctx context.Context, a *Actor, in leaveImp
 			}
 			// The rules again under the row lock, with the figures it holds now.
 			if m := check(domain.LeaveBalanceCheck{Year: sc.Year, Values: c.After, Reason: c.Reason,
-				Used: was.Used, CarryUsed: was.CarryUsed, Active: true}); m != "" {
+				Used: was.Used, CarryUsed: was.CarryUsed, Active: true,
+				CarryChanged: c.After.CarryDays != was.CarryDays || !sameText(li.CarryExpires, was.CarryExpires)}); m != "" {
 				return httpx.BadRequest(c.Name + ": " + m)
 			}
 			if err := r.SetLeaveBalance(ctx, c.EmployeeID, sc.Year, li); err != nil {
@@ -440,9 +444,13 @@ func (s *Service) ImportLeaveBalances(ctx context.Context, a *Actor, in leaveImp
 			entry.Before = balanceAudit(sc.Year, *was)
 			after := *was
 			after.Total, after.Adjustment, after.CarryDays, after.CarryExpires = li.Total, li.Adjustment, li.CarryDays, li.CarryExpires
+			after.Source = nextCarrySource(*was, li.CarryDays, li.CarryExpires)
 			entry.After = balanceAudit(sc.Year, after)
 			entry.Reason = &reason
 			if err := audit.Write(ctx, q, entry); err != nil {
+				return err
+			}
+			if err := s.carryAfterHRInput(ctx, q, c.EmployeeID, li, *was, userOf(a), carryCause{Type: causeImport}); err != nil {
 				return err
 			}
 		}

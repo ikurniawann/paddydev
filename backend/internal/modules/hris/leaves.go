@@ -11,6 +11,7 @@ import (
 	contracts "nuhabit/backend/internal/contracts/hris"
 	"nuhabit/backend/internal/modules/hris/domain"
 	"nuhabit/backend/internal/platform/audit"
+	"nuhabit/backend/internal/platform/auth"
 	"nuhabit/backend/internal/platform/httpx"
 	"nuhabit/backend/internal/platform/iam"
 	"nuhabit/backend/internal/platform/outbox"
@@ -71,6 +72,9 @@ type quotaMove struct {
 	// (hris.leaves.carry_over_days_used); a refund returns it to the
 	// carry-over and the rest to the annual quota. Used when refunding.
 	CarryDays string
+	// Actor is who approved (nil: the system); a carry-over recalculated for a
+	// row this approval creates is audited under it.
+	Actor *auth.User
 }
 
 // leaveVerdict is what DecideLeave writes (EPIC-063 R1).
@@ -174,7 +178,7 @@ func (s *Service) CreateLeave(ctx context.Context, a *Actor, in leaveRequest) (*
 		// then the request must fit what is available on its start date
 		// (annual remainder plus a carry-over that has not expired by then).
 		year := yearOf(in.StartDate)
-		if err := s.EnsureLeaveBalance(ctx, s.repo.querier(), *employeeID, year); err != nil {
+		if err := s.EnsureLeaveBalance(ctx, *employeeID, year); err != nil {
 			return nil, err
 		}
 		available, found, err := s.repo.AnnualAvailable(ctx, *employeeID, year, in.StartDate)
@@ -313,7 +317,17 @@ func (s *Service) UpdateLeave(ctx context.Context, a *Actor, id string, in leave
 			refund = &quotaMove{EmployeeID: leave.Str("employee_id"), Year: dateYear(leave, "start_date"),
 				Days: leave.Str("total_days"), CarryDays: leave.Str("carry_over_days_used")}
 		}
-		err := s.repo.InTx(ctx, func(r Repository) error { return r.CancelLeave(ctx, id, status, refund) })
+		err := s.repo.InTx(ctx, func(r Repository) error {
+			if err := r.CancelLeave(ctx, id, status, refund); err != nil {
+				return err
+			}
+			if refund == nil {
+				return nil
+			}
+			// The refund changed the year's balance: next year's carry follows.
+			return afterBalanceChange(ctx, r.querier(), refund.EmployeeID, refund.Year,
+				carryCause{Type: causeLeaveCancel, LeaveID: id}, userOf(a))
+		})
 		if errors.Is(err, errNoRow) {
 			return nil, httpx.Conflict("Pengajuan sudah berubah, muat ulang halaman")
 		}
@@ -408,7 +422,7 @@ func (s *Service) DecideLeave(ctx context.Context, a *Actor, in leaveDecision, m
 		status, rejection = "approved", nil
 		if leave.Str("leave_type") == "annual" {
 			credit = &quotaMove{EmployeeID: leave.Str("employee_id"), Year: dateYear(leave, "start_date"),
-				Days: leave.Str("total_days"), StartDate: dateText(leave, "start_date")}
+				Days: leave.Str("total_days"), StartDate: dateText(leave, "start_date"), Actor: userOf(a)}
 		}
 	}
 	verdict := leaveVerdict{Status: status, ApproverID: a.EmployeeID, Rejection: rejection,
@@ -420,6 +434,15 @@ func (s *Service) DecideLeave(ctx context.Context, a *Actor, in leaveDecision, m
 	err = s.repo.InTx(ctx, func(r Repository) error {
 		if err := r.DecideLeave(ctx, in.LeaveID, verdict, credit); err != nil {
 			return err
+		}
+		// Approving annual leave used up the year's balance: next year's carry
+		// follows. A rejection (credit nil) moves no balance, so there is
+		// nothing to recalculate (causeLeaveReject is documented, never run).
+		if credit != nil {
+			if err := afterBalanceChange(ctx, r.querier(), credit.EmployeeID, credit.Year,
+				carryCause{Type: causeLeaveApprove, LeaveID: in.LeaveID}, userOf(a)); err != nil {
+				return err
+			}
 		}
 		return auditDecision(ctx, r.querier(), a, "leave."+in.Action, "hris.leaves", in.LeaveID, label, nil,
 			map[string]any{"status": status, "decided_as": decidedAs, "rejection_reason": rejection}, meta)

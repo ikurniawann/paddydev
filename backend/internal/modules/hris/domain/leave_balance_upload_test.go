@@ -19,7 +19,7 @@ func checkLike(c LeaveBalanceCheck) string {
 		return "Jatah harus kelipatan 0,5"
 	case c.Values.Total+c.Values.Adjustment-c.Used < 0:
 		return "Sisa jatah tidak boleh kurang dari 0"
-	case c.Values.CarryDays < c.CarryUsed:
+	case c.CarryChanged && c.Values.CarryDays < c.CarryUsed:
 		return "Sisa bawaan tidak boleh kurang dari bawaan yang sudah terpakai"
 	}
 	return ""
@@ -37,6 +37,9 @@ func leaveCtx() LeaveBalanceUploadContext {
 			"444": {ID: "e4", Name: "Dodi", Active: true, InScope: false, Current: LeaveBalanceValues{Total: 12}},
 			"555": {ID: "e5", Name: "Eka", Active: true, InScope: true, Exists: true,
 				Current: LeaveBalanceValues{Total: 12, CarryDays: 2, CarryExpires: "2027-03-31"}, Used: 0, CarryUsed: 1.5},
+			// Fani: the recalculation left the carry (1) below what is used (1.5).
+			"666": {ID: "e6", Name: "Fani", Active: true, InScope: true, Exists: true,
+				Current: LeaveBalanceValues{Total: 12, CarryDays: 1, CarryExpires: "2027-03-31"}, Used: 0, CarryUsed: 1.5},
 		},
 	}
 }
@@ -125,6 +128,24 @@ func TestValidateLeaveBalanceUploadChanges(t *testing.T) {
 	if c.NIP != "555" || c.Name != "Eka" || c.New || c.Reason != "Koreksi" || c.Line != 5 ||
 		c.After != (LeaveBalanceValues{Total: 14, Adjustment: 1, CarryDays: 2, CarryExpires: "2027-03-31"}) {
 		t.Fatalf("change = %+v", c)
+	}
+}
+
+// A row below used can still have its jatah edited; the carry-over rule applies
+// only to a row that changes the carry-over days or expiry.
+func TestValidateLeaveBalanceUploadBelowUsedCarry(t *testing.T) {
+	res := ValidateLeaveBalanceUpload(readLeave(t, []string{"666", "13", "0", "1", "2027-03-31", "Jatah naik"}), leaveCtx())
+	if len(res.Errors) != 0 || len(res.Changes) != 1 || res.Changes[0].After.Total != 13 {
+		t.Fatalf("jatah only: %+v", res)
+	}
+	for _, row := range [][]string{
+		{"666", "13", "0", "0.5", "2027-03-31", "x"}, // carry changed, still below used
+		{"666", "13", "0", "1", "2027-06-30", "x"},   // expiry changed while below used
+	} {
+		res = ValidateLeaveBalanceUpload(readLeave(t, row), leaveCtx())
+		if len(res.Errors) != 1 || !hasLeaveIssue(res.Errors, 3, "Sisa bawaan tidak boleh kurang dari bawaan yang sudah terpakai") {
+			t.Fatalf("%v: errors %v", row, res.Errors)
+		}
 	}
 }
 

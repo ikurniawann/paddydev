@@ -190,12 +190,15 @@ func (s *store) consumeAnnualLeave(ctx context.Context, leaveID string, m *quota
 	if err != nil {
 		return err
 	}
-	if err := ensureLeaveBalance(ctx, s.db, m.EmployeeID, m.Year); err != nil {
+	// A row created here gets the formula's carry-over before the read below,
+	// so the carry-over is used first (final review I1).
+	if err := ensureLeaveBalanceCarry(ctx, s.db, m.EmployeeID, m.Year,
+		carryCause{Type: causeLeaveApprove, LeaveID: leaveID}, m.Actor); err != nil {
 		return err
 	}
 	var remaining, carryAvailable float64
 	err = s.db.QueryRow(ctx, `SELECT annual_leave_remaining::float8,
-		(CASE WHEN carry_over_expires_on >= $3::date THEN carry_over_days - carry_over_used ELSE 0 END)::float8
+		(CASE WHEN carry_over_expires_on >= $3::date THEN GREATEST(carry_over_days - carry_over_used, 0) ELSE 0 END)::float8
 		FROM hris.leave_balances WHERE employee_id = $1 AND year = $2 FOR UPDATE`,
 		m.EmployeeID, m.Year, m.StartDate).Scan(&remaining, &carryAvailable)
 	if database.IsNoRows(err) {

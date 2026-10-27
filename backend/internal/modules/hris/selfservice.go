@@ -53,7 +53,7 @@ func (s *Service) essBasics(ctx context.Context, employeeID string) (any, any, [
 	var balance any
 	if card != nil {
 		year := domain.NowWIB(s.now()).Year()
-		if err := s.EnsureLeaveBalance(ctx, s.repo.querier(), employeeID, year); err != nil {
+		if err := s.EnsureLeaveBalance(ctx, employeeID, year); err != nil {
 			return nil, nil, nil, err
 		}
 		view, found, err := s.leaveBalanceOf(ctx, employeeID, year)

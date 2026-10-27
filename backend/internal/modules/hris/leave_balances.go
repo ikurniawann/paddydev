@@ -34,23 +34,26 @@ const maxLeaveDays = 366
 // GET, the list, ESS and the PUT answer. Rows that do not exist yet carry
 // the default allocation and Exists false.
 type LeaveBalanceView struct {
-	EmployeeID           string     `json:"employee_id"`
-	NIP                  *string    `json:"nip"`
-	FullName             string     `json:"full_name"`
-	BranchName           *string    `json:"branch_name"`
-	Year                 int        `json:"year"`
-	AnnualLeaveTotal     float64    `json:"annual_leave_total"`
-	AnnualLeaveAdjust    float64    `json:"annual_leave_adjustment"`
-	AnnualLeaveUsed      float64    `json:"annual_leave_used"`
-	AnnualLeaveRemaining float64    `json:"annual_leave_remaining"`
-	CarryOverDays        float64    `json:"carry_over_days"`
-	CarryOverUsed        float64    `json:"carry_over_used"`
-	CarryOverRemaining   float64    `json:"carry_over_remaining"`
-	CarryOverExpiresOn   *string    `json:"carry_over_expires_on"`
-	CarryOverActive      bool       `json:"carry_over_active"`
-	Available            float64    `json:"available"`
-	UpdatedAt            *time.Time `json:"updated_at"`
-	Exists               bool       `json:"exists"`
+	EmployeeID           string  `json:"employee_id"`
+	NIP                  *string `json:"nip"`
+	FullName             string  `json:"full_name"`
+	BranchName           *string `json:"branch_name"`
+	Year                 int     `json:"year"`
+	AnnualLeaveTotal     float64 `json:"annual_leave_total"`
+	AnnualLeaveAdjust    float64 `json:"annual_leave_adjustment"`
+	AnnualLeaveUsed      float64 `json:"annual_leave_used"`
+	AnnualLeaveRemaining float64 `json:"annual_leave_remaining"`
+	CarryOverDays        float64 `json:"carry_over_days"`
+	CarryOverUsed        float64 `json:"carry_over_used"`
+	CarryOverRemaining   float64 `json:"carry_over_remaining"`
+	CarryOverExpiresOn   *string `json:"carry_over_expires_on"`
+	// CarryOverSource is 'auto' (kept by the formula) or 'manual' (HR input or
+	// import); a row that does not exist yet is 'auto'.
+	CarryOverSource string     `json:"carry_over_source"`
+	CarryOverActive bool       `json:"carry_over_active"`
+	Available       float64    `json:"available"`
+	UpdatedAt       *time.Time `json:"updated_at"`
+	Exists          bool       `json:"exists"`
 }
 
 // LeaveBalanceInput is what HR sets on one balance (R11); Used is never
@@ -69,6 +72,8 @@ type LeaveBalanceInput struct {
 type balanceRaw struct {
 	Total, Adjustment, Used, CarryDays, CarryUsed float64
 	CarryExpires                                  *string
+	// Source is carry_over_source: 'auto' (recalculated) or 'manual' (HR).
+	Source string
 }
 
 // LeaveBalanceRepo is the leave-balance storage.
@@ -100,9 +105,10 @@ const (
 		ON CONFLICT (employee_id, year) DO NOTHING`
 
 	// availableSQL is R4: remaining plus the carry-over that has not expired
-	// on $3 (no expiry date: the carry-over does not apply).
+	// on $3 (no expiry date: the carry-over does not apply). A carry-over
+	// recalculated below what is used counts as 0, never negative.
 	availableSQL = `SELECT (annual_leave_remaining + CASE WHEN carry_over_expires_on >= $3::date
-			THEN carry_over_days - carry_over_used ELSE 0 END)::float8
+			THEN GREATEST(carry_over_days - carry_over_used, 0) ELSE 0 END)::float8
 		FROM hris.leave_balances WHERE employee_id = $1 AND year = $2`
 )
 
@@ -112,18 +118,41 @@ const minBalanceYear = 2020
 // ensureLeaveBalance creates the employee's row for year with the default
 // allocation (R1) unless it exists; a missing employee creates nothing.
 func ensureLeaveBalance(ctx context.Context, q database.Querier, employeeID string, year int) error {
+	_, err := insertLeaveBalance(ctx, q, employeeID, year)
+	return err
+}
+
+// insertLeaveBalance is ensureLeaveBalance that also says whether it created
+// the row (false: it existed, or the employee or year is not valid).
+func insertLeaveBalance(ctx context.Context, q database.Querier, employeeID string, year int) (bool, error) {
 	if year < minBalanceYear {
-		return nil
+		return false, nil
 	}
-	_, err := q.Exec(ctx, ensureBalanceSQL, employeeID, year)
-	return ignoreBadInput(err)
+	tag, err := q.Exec(ctx, ensureBalanceSQL, employeeID, year)
+	if err = ignoreBadInput(err); err != nil {
+		return false, err
+	}
+	return tag.RowsAffected() == 1, nil
 }
 
 // EnsureLeaveBalance makes sure the employee has a balance row for year,
-// created with the default allocation (R1) when missing. Existing rows are
-// never recomputed (R2). q is the caller's pool or transaction.
-func (s *Service) EnsureLeaveBalance(ctx context.Context, q database.Querier, employeeID string, year int) error {
-	return ensureLeaveBalance(ctx, q, employeeID, year)
+// created with the default allocation (R1) when missing; a row it creates
+// gets the carry-over of the formula in the same transaction (cause
+// 'row_created', audited as the system). Existing rows are never recomputed
+// here (R2).
+func (s *Service) EnsureLeaveBalance(ctx context.Context, employeeID string, year int) error {
+	if year < minBalanceYear {
+		return nil
+	}
+	q := s.repo.querier()
+	var exists bool
+	if err := q.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM hris.leave_balances WHERE employee_id = $1 AND year = $2)`,
+		employeeID, year).Scan(&exists); err != nil || exists {
+		return ignoreBadInput(err)
+	}
+	return s.repo.InTx(ctx, func(r Repository) error {
+		return ensureLeaveBalanceCarry(ctx, r.querier(), employeeID, year, carryCause{Type: causeRowCreated}, nil)
+	})
 }
 
 /* ── Storage ─────────────────────────────────────────────────────────── */
@@ -161,7 +190,7 @@ func leaveBalanceViews(ctx context.Context, q database.Querier, f balanceFilter)
 		COALESCE(b.annual_leave_used, 0)::float8,
 		COALESCE(b.annual_leave_remaining, hris.default_annual_leave(e.join_date, $1::int))::float8,
 		COALESCE(b.carry_over_days, 0)::float8, COALESCE(b.carry_over_used, 0)::float8,
-		b.carry_over_expires_on::text, b.updated_at
+		b.carry_over_expires_on::text, COALESCE(b.carry_over_source, 'auto'), b.updated_at
 		FROM hris.employees e
 		LEFT JOIN hris.leave_balances b ON b.employee_id = e.id AND b.year = $1::int
 		LEFT JOIN LATERAL (SELECT ep.branch_id, br.name AS branch_name
@@ -181,7 +210,7 @@ func leaveBalanceViews(ctx context.Context, q database.Querier, f balanceFilter)
 		v := LeaveBalanceView{Year: f.Year}
 		if err := rows.Scan(&v.EmployeeID, &v.NIP, &v.FullName, &v.BranchName, &v.Exists,
 			&v.AnnualLeaveTotal, &v.AnnualLeaveAdjust, &v.AnnualLeaveUsed, &v.AnnualLeaveRemaining,
-			&v.CarryOverDays, &v.CarryOverUsed, &v.CarryOverExpiresOn, &v.UpdatedAt); err != nil {
+			&v.CarryOverDays, &v.CarryOverUsed, &v.CarryOverExpiresOn, &v.CarryOverSource, &v.UpdatedAt); err != nil {
 			return nil, err
 		}
 		v.finish(f.Today)
@@ -193,7 +222,7 @@ func leaveBalanceViews(ctx context.Context, q database.Querier, f balanceFilter)
 // finish derives the carry-over remainder, whether it still applies on today
 // and the available quota (R4).
 func (v *LeaveBalanceView) finish(today string) {
-	v.CarryOverRemaining = v.CarryOverDays - v.CarryOverUsed
+	v.CarryOverRemaining = max(v.CarryOverDays-v.CarryOverUsed, 0) // below used (a review is open): 0, not negative
 	v.CarryOverActive = v.CarryOverExpiresOn != nil && *v.CarryOverExpiresOn >= today
 	v.Available = v.AnnualLeaveRemaining
 	if v.CarryOverActive {
@@ -204,19 +233,26 @@ func (v *LeaveBalanceView) finish(today string) {
 func (s *store) LockLeaveBalance(ctx context.Context, employeeID string, year int) (*balanceRaw, error) {
 	var b balanceRaw
 	err := s.db.QueryRow(ctx, `SELECT annual_leave_total::float8, annual_leave_adjustment::float8, annual_leave_used::float8,
-		carry_over_days::float8, carry_over_used::float8, carry_over_expires_on::text
+		carry_over_days::float8, carry_over_used::float8, carry_over_expires_on::text, carry_over_source
 		FROM hris.leave_balances WHERE employee_id = $1 AND year = $2 FOR UPDATE`, employeeID, year).
-		Scan(&b.Total, &b.Adjustment, &b.Used, &b.CarryDays, &b.CarryUsed, &b.CarryExpires)
+		Scan(&b.Total, &b.Adjustment, &b.Used, &b.CarryDays, &b.CarryUsed, &b.CarryExpires, &b.Source)
 	if database.IsNoRows(err) {
 		return nil, nil
 	}
 	return &b, err
 }
 
+// SetLeaveBalance also keeps carry_over_source: a carry-over or expiry HR
+// changes becomes 'manual' (the recalculation leaves it alone); clearing both
+// (0 and no expiry) hands the row back to the formula ('auto').
 func (s *store) SetLeaveBalance(ctx context.Context, employeeID string, year int, in LeaveBalanceInput) error {
 	_, err := s.db.Exec(ctx, `UPDATE hris.leave_balances
-		SET annual_leave_total = $3, annual_leave_adjustment = $4, carry_over_days = $5,
-		    carry_over_expires_on = $6::date, updated_at = now()
+		SET annual_leave_total = $3, annual_leave_adjustment = $4,
+		    carry_over_source = CASE
+		      WHEN $5::numeric = 0 AND $6::date IS NULL THEN 'auto'
+		      WHEN $5::numeric IS DISTINCT FROM carry_over_days OR $6::date IS DISTINCT FROM carry_over_expires_on THEN 'manual'
+		      ELSE carry_over_source END,
+		    carry_over_days = $5::numeric, carry_over_expires_on = $6::date, updated_at = now()
 		WHERE employee_id = $1 AND year = $2`,
 		employeeID, year, in.Total, in.Adjustment, in.CarryDays, in.CarryExpires)
 	return err
@@ -235,8 +271,11 @@ func isHalfStep(v float64) bool { return math.Mod(v*2, 1) == 0 }
 // Excel import): the employee is active, the year is this year or next
 // (nowYear is the WIB year), a reason is given, every figure is a multiple
 // of 0,5, and neither the annual remainder nor the carry-over falls below
-// what is already used.
-func validateLeaveBalance(in LeaveBalanceInput, used, carryUsed float64, active bool, nowYear int) error {
+// what is already used. The carry-over rule applies only when the request
+// changes the carry-over days or expiry (carryChanged): a row the automatic
+// recalculation left below used (a review is open) can still have its total or
+// adjustment edited.
+func validateLeaveBalance(in LeaveBalanceInput, used, carryUsed float64, active, carryChanged bool, nowYear int) error {
 	if !active {
 		return httpx.BadRequest("Karyawan nonaktif — saldo cuti tidak bisa diubah")
 	}
@@ -268,7 +307,7 @@ func validateLeaveBalance(in LeaveBalanceInput, used, carryUsed float64, active 
 		return httpx.BadRequest(fmt.Sprintf("Sisa jatah tidak boleh kurang dari 0 (jatah %s + penyesuaian %s − terpakai %s = %s)",
 			daysText(in.Total), daysText(in.Adjustment), daysText(used), daysText(remaining)))
 	}
-	if in.CarryDays < carryUsed {
+	if carryChanged && in.CarryDays < carryUsed {
 		return httpx.BadRequest(fmt.Sprintf("Sisa bawaan (%s) tidak boleh kurang dari bawaan yang sudah terpakai (%s)",
 			daysText(in.CarryDays), daysText(carryUsed)))
 	}
@@ -315,7 +354,7 @@ func (s *Service) LeaveBalanceView(ctx context.Context, a *Actor, employeeID str
 	if emp == nil || !emp.Bool("is_active") || year > domain.NowWIB(s.now()).Year()+1 {
 		return v, nil
 	}
-	if err := s.EnsureLeaveBalance(ctx, s.repo.querier(), employeeID, year); err != nil {
+	if err := s.EnsureLeaveBalance(ctx, employeeID, year); err != nil {
 		return LeaveBalanceView{}, err
 	}
 	v, found, err = s.leaveBalanceOf(ctx, employeeID, year)
@@ -358,14 +397,18 @@ func (s *Service) UpdateLeaveBalanceManual(ctx context.Context, a *Actor, employ
 	}
 	nowYear := domain.NowWIB(s.now()).Year()
 	if in.Year < minBalanceYear { // the year check below refuses it; do not touch the table
-		return LeaveBalanceView{}, validateLeaveBalance(in, 0, 0, emp.Bool("is_active"), nowYear)
+		return LeaveBalanceView{}, validateLeaveBalance(in, 0, 0, emp.Bool("is_active"), false, nowYear)
 	}
 	var entry audit.Entry
 	if len(meta) > 0 {
 		entry = meta[0]
 	}
 	err = s.repo.InTx(ctx, func(r Repository) error {
-		if err := ensureLeaveBalance(ctx, r.querier(), employeeID, in.Year); err != nil {
+		// Ascending lock order (previous year, this year, next year).
+		if err := lockPreviousBalance(ctx, r.querier(), employeeID, in.Year); err != nil {
+			return err
+		}
+		if err := ensureLeaveBalanceCarry(ctx, r.querier(), employeeID, in.Year, carryCause{Type: causeHRUpdate}, userOf(a)); err != nil {
 			return err
 		}
 		was, err := r.LockLeaveBalance(ctx, employeeID, in.Year)
@@ -387,7 +430,8 @@ func (s *Service) UpdateLeaveBalanceManual(ctx context.Context, a *Actor, employ
 		if in.KeepCarryExpires {
 			in.CarryExpires = was.CarryExpires
 		}
-		if err := validateLeaveBalance(in, was.Used, was.CarryUsed, emp.Bool("is_active"), nowYear); err != nil {
+		if err := validateLeaveBalance(in, was.Used, was.CarryUsed, emp.Bool("is_active"),
+			in.CarryDays != was.CarryDays || !sameText(in.CarryExpires, was.CarryExpires), nowYear); err != nil {
 			return err
 		}
 		if err := r.SetLeaveBalance(ctx, employeeID, in.Year, in); err != nil {
@@ -400,9 +444,13 @@ func (s *Service) UpdateLeaveBalanceManual(ctx context.Context, a *Actor, employ
 		entry.Before = balanceAudit(in.Year, *was)
 		after := *was
 		after.Total, after.Adjustment, after.CarryDays, after.CarryExpires = in.Total, in.Adjustment, in.CarryDays, in.CarryExpires
+		after.Source = nextCarrySource(*was, in.CarryDays, in.CarryExpires)
 		entry.After = balanceAudit(in.Year, after)
 		entry.Reason = &reason
-		return audit.Write(ctx, r.querier(), entry)
+		if err := audit.Write(ctx, r.querier(), entry); err != nil {
+			return err
+		}
+		return s.carryAfterHRInput(ctx, r.querier(), employeeID, in, *was, userOf(a), carryCause{Type: causeHRUpdate})
 	})
 	if err != nil {
 		return LeaveBalanceView{}, err
@@ -411,10 +459,31 @@ func (s *Service) UpdateLeaveBalanceManual(ctx context.Context, a *Actor, employ
 	return v, err
 }
 
+// carryAfterHRInput keeps the carry-overs in step after HR set a year's row
+// (the PUT and the import): the row's open review follows its figures (it closes
+// once carry covers the used days; a save that leaves carry untouched may leave
+// it below used, so the review can stay open), a row HR just cleared goes back
+// to the formula and is recalculated at once, and next year's row follows this
+// year's remainder.
+func (s *Service) carryAfterHRInput(ctx context.Context, q database.Querier, employeeID string, in LeaveBalanceInput,
+	was balanceRaw, actor *auth.User, cause carryCause) error {
+	// Clearing a carry-over that was stored (auto or manual) puts the row back
+	// on the formula: recalculate it now, or it would sit at 0 until some
+	// unrelated hook restored it with a misleading cause.
+	if in.CarryDays == 0 && in.CarryExpires == nil && (was.CarryDays != 0 || was.CarryExpires != nil) {
+		if _, err := recomputeCarryOver(ctx, q, employeeID, in.Year, carryCause{Type: cause.Type,
+			Label: cause.reason() + " — sisa bawaan dikembalikan ke perhitungan otomatis"}, actor); err != nil {
+			return err
+		}
+	}
+	return afterBalanceChange(ctx, q, employeeID, in.Year, cause, actor)
+}
+
 // balanceAudit is the before/after snapshot of a balance in the audit trail.
 func balanceAudit(year int, b balanceRaw) map[string]any {
 	return map[string]any{"year": year, "annual_leave_total": b.Total, "annual_leave_adjustment": b.Adjustment,
 		"annual_leave_used": b.Used, "carry_over_days": b.CarryDays, "carry_over_used": b.CarryUsed,
+		"carry_over_source":     b.Source,
 		"carry_over_expires_on": b.CarryExpires}
 }
 

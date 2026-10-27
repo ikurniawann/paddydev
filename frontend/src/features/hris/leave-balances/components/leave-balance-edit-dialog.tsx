@@ -97,7 +97,10 @@ export function LeaveBalanceEditDialog({
       `Sisa jatah tidak boleh kurang dari 0 (jatah ${formatDays(total.value)} + penyesuaian ${formatDays(adjustment.value)} − terpakai ${formatDays(used)} = ${formatDays(preview.remaining)})`
     );
   }
-  if (carry.value !== null && carry.value < carryUsed) {
+  // Only a changed carry-over (days or expiry) must cover what is used: a row the
+  // server recalculated below its used days stays editable for other fields.
+  const carryChanged = carry.value !== (balance.carry_over_days ?? 0) || (form.expiresOn || null) !== (balance.carry_over_expires_on ?? null);
+  if (carry.value !== null && carryChanged && carry.value < carryUsed) {
     errors.push(`Sisa bawaan tidak boleh kurang dari yang sudah terpakai (${formatDays(carryUsed)})`);
   }
   if (reason.length > REASON_MAX) errors.push(`Alasan maksimal ${REASON_MAX} karakter`);
@@ -190,6 +193,9 @@ export function LeaveBalanceEditDialog({
                 value={form.expiresOn}
                 onChange={(e) => set("expiresOn", e.target.value)}
               />
+              <p className="mt-1 text-xs text-gray-500">
+                0 tanpa kedaluwarsa = dihitung otomatis; isi kedaluwarsa untuk menetapkan 0.
+              </p>
             </div>
           </div>
           {noExpiryWarning ? (

@@ -55,6 +55,9 @@ type LeaveBalanceCheck struct {
 	Reason          string
 	Used, CarryUsed float64
 	Active          bool
+	// CarryChanged: the request changes the carry-over days or expiry; the
+	// carry-over may not fall below CarryUsed only then.
+	CarryChanged bool
 }
 
 // LeaveBalanceUploadContext is everything the pure validation needs.
@@ -284,7 +287,8 @@ func ValidateLeaveBalanceUpload(f LeaveBalanceFile, c LeaveBalanceUploadContext)
 		}
 		if c.Check != nil {
 			if msg := c.Check(LeaveBalanceCheck{Year: c.Year, Values: after, Reason: row.Reason,
-				Used: e.Used, CarryUsed: e.CarryUsed, Active: e.Active}); msg != "" {
+				Used: e.Used, CarryUsed: e.CarryUsed, Active: e.Active,
+				CarryChanged: after.CarryDays != e.Current.CarryDays || after.CarryExpires != e.Current.CarryExpires}); msg != "" {
 				fail(row.Line, "", e.Name, msg)
 				continue
 			}

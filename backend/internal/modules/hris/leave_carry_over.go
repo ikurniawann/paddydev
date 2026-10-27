@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"nuhabit/backend/internal/modules/hris/domain"
-	"nuhabit/backend/internal/platform/audit"
 )
 
 // Job sisa bawaan 1 Januari (EPIC-068 R9).
@@ -47,12 +46,6 @@ func (s *Service) RunLeaveCarryOver(ctx context.Context, now time.Time) error {
 	return err
 }
 
-type carryCandidate struct {
-	employeeID, name string
-	prevRemaining    float64
-	row              balanceRaw
-}
-
 func (s *Service) runLeaveCarryOver(ctx context.Context, now time.Time) (*carryOverResult, error) {
 	year := domain.NowWIB(now).Year()
 	if year < minBalanceYear+1 {
@@ -66,7 +59,9 @@ func (s *Service) runLeaveCarryOver(ctx context.Context, now time.Time) (*carryO
 		if err != nil || tag.RowsAffected() == 0 {
 			return err
 		}
-		settings, err := loadLeaveSettings(ctx, q, false)
+		// Settings first (locked), then the balance rows: the order the settings
+		// save uses, so the two never wait on each other in a cycle.
+		settings, err := loadLeaveSettings(ctx, q, true)
 		if err != nil {
 			return err
 		}
@@ -95,57 +90,19 @@ func (s *Service) runLeaveCarryOver(ctx context.Context, now time.Time) (*carryO
 		}
 		res := &carryOverResult{Year: year, Employees: len(ids)}
 
+		// Every auto row of the year is recalculated with the same formula the
+		// live hooks use, so a rerun after the claim was deleted gives the same
+		// result (and no audit for an unchanged value). A row HR filled by hand
+		// is left alone; an inactive employee has no row here.
 		if settings.CarryOverEnabled && settings.CarryOverReady {
-			// A row HR already filled (carry-over or expiry set) is left alone.
-			rows, err := q.Query(ctx, `SELECT e.id::text, e.full_name, p.annual_leave_remaining::float8,
-					c.annual_leave_total::float8, c.annual_leave_adjustment::float8, c.annual_leave_used::float8
-				FROM hris.employees e
-				JOIN hris.leave_balances p ON p.employee_id = e.id AND p.year = $1 - 1
-				JOIN hris.leave_balances c ON c.employee_id = e.id AND c.year = $1
-				WHERE e.is_active AND p.annual_leave_remaining > 0
-				  AND c.carry_over_days = 0 AND c.carry_over_expires_on IS NULL
-				ORDER BY e.id
-				FOR UPDATE OF c`, year)
-			if err != nil {
-				return err
-			}
-			var cands []carryCandidate
-			for rows.Next() {
-				var c carryCandidate
-				if err := rows.Scan(&c.employeeID, &c.name, &c.prevRemaining, &c.row.Total, &c.row.Adjustment, &c.row.Used); err != nil {
-					rows.Close()
+			for _, id := range ids {
+				r, err := recomputeCarryOverOpts(ctx, q, settings, id, year, carryCause{Type: causeJob}, nil, true)
+				if err != nil {
 					return err
 				}
-				cands = append(cands, c)
-			}
-			rows.Close()
-			if err := rows.Err(); err != nil {
-				return err
-			}
-			expires := fmt.Sprintf("%04d-%02d-%02d", year, settings.CarryOverExpiryMonth, settings.CarryOverExpiryDay)
-			for _, c := range cands {
-				carry := carryAmount(c.prevRemaining, settings.CarryOverMaxDays)
-				if carry <= 0 {
-					continue
+				if r.Changed && r.Carry > 0 {
+					res.Carried++
 				}
-				if _, err := q.Exec(ctx, `UPDATE hris.leave_balances
-					SET carry_over_days = $3, carry_over_used = 0, carry_over_expires_on = $4::date
-					WHERE employee_id = $1 AND year = $2`, c.employeeID, year, carry, expires); err != nil {
-					return err
-				}
-				after := c.row
-				after.CarryDays, after.CarryUsed, after.CarryExpires = carry, 0, &expires
-				id := c.employeeID
-				reason := fmt.Sprintf("Sisa bawaan otomatis 1 Januari %d: %s hari dari sisa jatah %d (%s hari), berlaku sampai %s",
-					year, daysText(carry), year-1, daysText(c.prevRemaining), expires)
-				if err := audit.Write(ctx, q, audit.Entry{
-					ActorName: ptr(sistemName), Action: "leave_balance.carry_over", Entity: "hris.employees", EntityID: &id,
-					EntityLabel: ptr(fmt.Sprintf("%s · Saldo cuti %d", c.name, year)),
-					Before:      balanceAudit(year, c.row), After: balanceAudit(year, after), Reason: &reason,
-				}); err != nil {
-					return err
-				}
-				res.Carried++
 			}
 		}
 		if _, err := q.Exec(ctx, `UPDATE hris.leave_carry_over_runs SET employees = $2, carried = $3, finished_at = now()
