@@ -153,3 +153,24 @@ Lihat `docs/superpowers/plans/2026-10-26-alokasi-saldo-cuti.md` (Task 1–7, rul
     - import di jendela tanpa error dengan bawaan 2027 dihitung ulang, dan di luar jendela error.
 
     Gerbang: `go vet ./...`, `gofmt`, dan `go test -p 1 ./...` hijau di DB uji segar (564 migrasi). Frontend: `vitest`, `tsc`, dan `eslint` hijau.
+- 2026-10-27: **I3 merged dan dideploy.** PR #37 merged (`46078e44`), docs PR #36 merged (`bebb6569`); CI main 4/4 hijau.
+  - **Staging** image `local-20261027-115445`; backup `paddydev-db-before-epic068-i3-deploy-20261027-115438.dump`; tanpa migrasi baru, verify 0 beda.
+  - **QA staging dengan akun uji `qa068i3-*` (HR Manager + hanya-lihat, karyawan QA068I3 E join 2023): semua lulus.**
+    - Kedaluwarsa default 31/3: PUT 2025 ditolak dengan pesan lama.
+    - Kedaluwarsa diubah sementara ke 31/12 (setting tetap mati): PUT 2025 oleh hanya-lihat 403; oleh HR 200; PUT 2024 400 "Tahun saldo hanya boleh 2025 (tahun lalu, sampai 31-12-2026), 2026 (tahun berjalan), atau 2027 (tahun depan)" tanpa membuat baris 2024.
+    - Setting dinyalakan sementara: bawaan 2026 E = 12. Koreksi 2025 penyesuaian −3 → bawaan 2026 jadi 9 (audit `hr_update`). Import template 2025 (333 karyawan, 1 berubah: jatah 12→13) → bawaan 2026 jadi 10 (audit `import`).
+    - Setting dimatikan dan kedaluwarsa dikembalikan ke 31/3: PUT dan import 2025 ditolak lagi.
+    - Tidak ada efek ke karyawan nyata: 0 bawaan non-QA, 0 tinjauan non-QA, 0 audit saldo non-QA, 0 panic.
+    - Bersih-bersih: sesi dihapus, akun dan karyawan uji dinonaktifkan. `leave_settings.updated_by_name` staging kini "QA068I3 HR".
+  - **Production** (atas izin user, 12:13 WIB): pukul 12 di luar jam puncak, absen 30 menit terakhir 0, tidak ada deploy atau workflow lain berjalan.
+    - Backup: VPS `~/backups/prod-db-before-epic068-i3-20261027-121134.dump` (6,5 MB, 447 tabel data); source lama `~/paddydev-src.before-epic068-i3-20261027-121134`.
+    - Image `local-20261027-121301` = main `bebb6569`; rollback image `local-20261027-111744`. Log `~/backups/deploy-prod-epic068-i3-20261027-121134.log`.
+    - Durasi: build 3 menit 46 detik (12:13:01–12:16:47); tanpa migrasi baru; verify 13 detik (10705 objek, 0 beda); total 4 menit 6 detik.
+    - Downtime publik: sekitar 6 detik (502 mulai 12:17:01,5, normal lagi 12:17:07,1).
+    - Verifikasi:
+      - `/api/ready` dan `/login` 200, kedua container healthy;
+      - 0 panic dan 0 error di log 10 menit pertama;
+      - `carry_over_enabled=false`, batas kosong, kedaluwarsa 31/3;
+      - 564 migrasi, tabel tinjauan 0 baris;
+      - 380 saldo dengan md5 identik sebelum dan sesudah; akses Saldo Cuti identik sebelum dan sesudah.
+    - **Koreksi 2025 tertolak:** batas koreksi 2025 = 31-03-2026 sudah lewat (hari ini 27-10-2026), dan kode production identik dengan yang diuji di staging. PUT 2025 dengan login HR tidak diuji langsung di production karena tidak ada sesi HR untuk uji; tanpa login 401.
