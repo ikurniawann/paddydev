@@ -73,8 +73,13 @@ func (h handlers) routes() []module.Route {
 		r("GET /api/hris/leaves/{id}", h.withActor(h.getLeave)),
 		r("PUT /api/hris/leaves/{id}", h.withActor(h.updateLeave)),
 		r("DELETE /api/hris/leaves/{id}", h.withDelete(delLeave, h.withActor(h.deleteLeave))),
+		r("GET /api/hris/leave-balances", h.withLeaveBalanceAction("read", h.listLeaveBalances)),
+		r("GET /api/hris/leave-settings", h.withLeaveBalanceAction("read", h.getLeaveSettings)),
+		r("PUT /api/hris/leave-settings", h.withLeaveBalanceAction("update", h.putLeaveSettings)),
+		r("GET /api/hris/leave-balances/template", h.withLeaveBalanceAction("export", h.leaveBalanceTemplate)),
+		r("POST /api/hris/leave-balances/import", h.withLeaveBalanceAction("import", h.importLeaveBalances)),
 		r("GET /api/hris/leave-balances/{employee_id}", h.withActor(h.getLeaveBalance)),
-		r("PUT /api/hris/leave-balances/{employee_id}", h.withActor(h.putLeaveBalance)),
+		r("PUT /api/hris/leave-balances/{employee_id}", h.withLeaveBalanceAction("update", h.putLeaveBalance)),
 		r("GET /api/hris/leave-quota", h.withActor(h.getLeaveQuota)),
 
 		// shifts and overtime
@@ -136,6 +141,7 @@ func (h handlers) routes() []module.Route {
 		r("GET /api/hris/me/attendance-gaps", h.withActor(h.myAttendanceGaps)),
 		// Keputusan HR yang boleh diambil akun (EPIC-067 R14).
 		r("GET /api/hris/me/approve-access", h.withActor(h.myApproveAccess)),
+		r("GET /api/hris/me/leave-balance-access", h.withActor(h.myLeaveBalanceAccess)),
 
 		// announcements (cover upload and files: fileRoutes)
 		r("GET /api/hris/announcements", h.withMenu(kepegawaian, h.listAnnouncements)),

@@ -170,18 +170,6 @@ func (h handlers) balanceYear(r *http.Request) (int, error) {
 	return year, nil
 }
 
-func (h handlers) getLeaveBalance(w http.ResponseWriter, r *http.Request, a *Actor) error {
-	year, err := h.balanceYear(r)
-	if err != nil {
-		return err
-	}
-	row, err := h.svc.LeaveBalance(r.Context(), a, r.PathValue("employee_id"), year)
-	if err != nil {
-		return err
-	}
-	return ok(w, dataOf(row))
-}
-
 func (h handlers) getLeaveQuota(w http.ResponseWriter, r *http.Request, a *Actor) error {
 	f := queryForm(r)
 	employeeID := f.Str("employee_id", optional, uuidOf)
@@ -199,29 +187,4 @@ func (h handlers) getLeaveQuota(w http.ResponseWriter, r *http.Request, a *Actor
 		return err
 	}
 	return ok(w, dataOf(row))
-}
-
-func (h handlers) putLeaveBalance(w http.ResponseWriter, r *http.Request, a *Actor) error {
-	f, err := readForm(r, "")
-	if err != nil {
-		return err
-	}
-	var in fields
-	for _, col := range []string{"annual_leave_total", "annual_leave_used", "sick_leave_used", "unpaid_leave_used"} {
-		if v := number(f, col, optional, validate.NumOpts{Min: validate.Bound(0)}); v.Sent {
-			in.add(col, v.Val)
-		}
-	}
-	if err := formErr(f, ""); err != nil {
-		return err
-	}
-	year, err := h.balanceYear(r)
-	if err != nil {
-		return err
-	}
-	row, err := h.svc.UpdateLeaveBalance(r.Context(), a, r.PathValue("employee_id"), year, in)
-	if err != nil {
-		return err
-	}
-	return ok(w, obj("message", "Leave balance updated successfully", "data", row))
 }

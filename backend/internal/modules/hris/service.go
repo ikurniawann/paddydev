@@ -18,6 +18,7 @@ type Repository interface {
 	EmployeeRepo
 	AttendanceRepo
 	LeaveRepo
+	LeaveBalanceRepo
 	ScheduleRepo
 	OvertimeRepo
 	HolidayRepo
@@ -87,6 +88,11 @@ type Actor struct {
 	// Approves lists the iam.HrisApproveLeaves on which the account holds
 	// "approve" (EPIC-067 R10/R11); set by handlers.actorFor.
 	Approves []string
+	// LeaveBalanceActions lists the actions held on iam.LeafSaldoCuti
+	// (EPIC-068 R7) and EmployeeRecords says the account holds a Karyawan
+	// menu; both set by handlers.actorFor.
+	LeaveBalanceActions []string
+	EmployeeRecords     bool
 }
 
 // CanApprove reports whether the account holds "approve" on leaf (one of

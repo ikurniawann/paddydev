@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LeaveQuota } from "@/features/hris/leaves/types";
+import type { EssLeaveBalance } from "../types";
 import { CutiRequestDialog } from "./cuti-request-dialog";
 
 const mutate = vi.fn();
@@ -32,9 +33,23 @@ function quota(leaderEligible: boolean): LeaveQuota {
   };
 }
 
-function dialog() {
-  return <CutiRequestDialog open onOpenChange={() => {}} balance={null} />;
+function dialog(balance: EssLeaveBalance | null = null) {
+  return <CutiRequestDialog open onOpenChange={() => {}} balance={balance} />;
 }
+
+const withCarry: EssLeaveBalance = {
+  year: 2026,
+  annual_leave_total: 12,
+  annual_leave_adjustment: 0,
+  annual_leave_used: 3,
+  annual_leave_remaining: 9,
+  carry_over_days: 2,
+  carry_over_used: 0,
+  carry_over_remaining: 2,
+  carry_over_expires_on: "2026-03-31",
+  carry_over_active: true,
+  available: 11,
+};
 
 function openTypeOptions() {
   fireEvent.click(screen.getAllByRole("combobox")[0]);
@@ -110,5 +125,47 @@ describe("CutiRequestDialog", () => {
 
     expect(mutate).toHaveBeenCalledTimes(1);
     expect(mutate.mock.calls[0][0].form.leave_type).toBe("annual");
+  });
+
+  describe("sisa cuti tahunan", () => {
+    function setStart(value: string) {
+      fireEvent.change(dateInputs()[0], { target: { value } });
+    }
+
+    it("shows the available balance including carry-over, used first, with its expiry", () => {
+      render(dialog(withCarry));
+      setStart("2026-03-10");
+      expect(screen.getByText(/Sisa cuti tahunan Anda pada tanggal itu: 11 hari/)).toBeTruthy();
+      expect(screen.getByText(/2 hari di antaranya sisa bawaan, dipakai lebih dulu, berlaku s\/d/)).toBeTruthy();
+    });
+
+    it("does not count the carry-over when the leave starts after it expires", () => {
+      render(dialog(withCarry));
+      setStart("2026-04-10");
+      expect(screen.getByText(/Sisa cuti tahunan Anda pada tanggal itu: 9 hari/)).toBeTruthy();
+      expect(screen.queryByText(/sisa bawaan, dipakai lebih dulu/)).toBeNull();
+    });
+
+    it("shows a plain remaining line without carry-over", () => {
+      render(
+        dialog({ ...withCarry, carry_over_days: 0, carry_over_remaining: 0, carry_over_expires_on: null, carry_over_active: false, available: 9 })
+      );
+      setStart("2026-03-10");
+      expect(screen.getByText(/Sisa cuti tahunan Anda pada tanggal itu: 9 hari/)).toBeTruthy();
+      expect(screen.queryByText(/sisa bawaan/)).toBeNull();
+    });
+
+    it("does not guess the balance of another year", () => {
+      render(dialog(withCarry));
+      setStart("2027-01-05");
+      expect(screen.getByText(/Saldo tahun 2027 dihitung saat pengajuan/)).toBeTruthy();
+      expect(screen.queryByText(/pada tanggal itu: 11/)).toBeNull();
+    });
+
+    it("shows nothing about the balance when the employee has none", () => {
+      render(dialog(null));
+      setStart("2026-03-10");
+      expect(screen.queryByText(/Sisa cuti tahunan/)).toBeNull();
+    });
   });
 });

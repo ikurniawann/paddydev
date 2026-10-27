@@ -6,7 +6,9 @@ import { Button } from "@/components/ui/button";
 import { formatDate } from "@/lib/format";
 import { useEssMe, useMyLeaves } from "../queries";
 import { leaveTypeLabel } from "@/lib/hris/leave-types";
+import { formatDays } from "@/features/hris/leave-balances/balance-math";
 import { CutiRequestDialog } from "./cuti-request-dialog";
+import { LeaveBalanceBreakdown } from "./leave-balance-summary";
 import { EssLoading, EssNotLinked } from "./ess-states";
 
 /**
@@ -41,17 +43,22 @@ export function EssCutiPage() {
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="rounded-xl border border-gray-200/70 bg-white p-5 shadow-sm">
           <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-800">
-            <CalendarDaysIcon className="h-4 w-4 text-pink-500" /> Kuota Cuti Tahunan{" "}
-            {balance?.year ?? new Date().getFullYear()}
+            <CalendarDaysIcon className="h-4 w-4 text-pink-500" /> Kuota Cuti Tahunan
+            {balance ? ` ${balance.year}` : ""}
           </h3>
-          <p className="mt-3 text-3xl font-bold text-gray-900">
-            {balance ? Number(balance.annual_leave_remaining) : "12"}
-            <span className="ml-1 text-base font-normal text-gray-500">hari tersisa</span>
-          </p>
-          <p className="mt-1 text-xs text-gray-500">
-            Terpakai {balance ? Number(balance.annual_leave_used) : 0} dari{" "}
-            {balance ? Number(balance.annual_leave_total) : 12} hari
-          </p>
+          {balance ? (
+            <>
+              <p className="mt-3 text-3xl font-bold text-gray-900">
+                {formatDays(balance.available)}
+                <span className="ml-1 text-base font-normal text-gray-500">hari tersedia</span>
+              </p>
+              <LeaveBalanceBreakdown balance={balance} />
+            </>
+          ) : (
+            <p className="mt-3 rounded-lg bg-gray-50 px-3 py-4 text-sm text-gray-500">
+              Kuota cuti tahunan Anda belum tersedia. Hubungi HR bila data Anda seharusnya sudah ada.
+            </p>
+          )}
           <Button className="mt-4 w-full gap-2" onClick={() => setLeaveDialog(true)}>
             <PaperAirplaneIcon className="h-4 w-4" /> Ajukan Izin / Cuti
           </Button>

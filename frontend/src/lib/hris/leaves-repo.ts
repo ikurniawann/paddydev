@@ -129,6 +129,9 @@ export async function createLeave(actor: WorkforceActor, input: z.infer<typeof l
   // 0 hari kerja ditolak: memotong jatah untuk hari yang sudah libur itu bug.
   if (totalDays === 0) throw ApiError.badRequest(noWorkingDayMessage(excludedHolidays));
 
+// EPIC-068: fallback lama, tidak terjangkau. Pengajuan/persetujuan/pembatalan
+// cuti dilayani backend Go (go-routes.generated.json), yang juga mengenal
+// penyesuaian dan sisa bawaan (R4-R6); jalur saldo tahunan di sini tidak.
   if (input.leave_type === "annual") {
     const { data: balance } = await db
       .from("leave_balances")
@@ -230,6 +233,9 @@ export async function updateLeave(
       );
     }
 
+// EPIC-068: fallback lama, tidak terjangkau. Pengajuan/persetujuan/pembatalan
+// cuti dilayani backend Go (go-routes.generated.json), yang juga mengenal
+// penyesuaian dan sisa bawaan (R4-R6); jalur saldo tahunan di sini tidak.
     const refund = cancellableApproved && leave.leave_type === "annual";
     await withTransaction(async (client) => {
       await client.query(`UPDATE hris.leaves SET status = 'cancelled' WHERE id = $1`, [id]);
@@ -321,6 +327,9 @@ export async function decideLeave(actor: WorkforceActor, input: z.infer<typeof l
       [input.leave_id, status, actor.employeeId, rejection, capacity, decisionActorName(actor.fullName)]
     );
     if (updated.rowCount === 0) throw ApiError.conflict("Pengajuan sudah diproses oleh orang lain");
+// EPIC-068: fallback lama, tidak terjangkau. Pengajuan/persetujuan/pembatalan
+// cuti dilayani backend Go (go-routes.generated.json), yang juga mengenal
+// penyesuaian dan sisa bawaan (R4-R6); jalur saldo tahunan di sini tidak.
     if (isApprove && leave.leave_type === "annual") {
       await client.query(
         `INSERT INTO hris.leave_balances (employee_id, year, annual_leave_total, annual_leave_used)

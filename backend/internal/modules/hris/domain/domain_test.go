@@ -315,12 +315,6 @@ func TestOvertime(t *testing.T) {
 }
 
 func TestLeaveRules(t *testing.T) {
-	eq(t, ProratedAnnualQuota(sp("2024-05-10"), 2026), 12)
-	eq(t, ProratedAnnualQuota(nil, 2026), 12)
-	eq(t, ProratedAnnualQuota(sp("2026-01-20"), 2026), 12)
-	eq(t, ProratedAnnualQuota(sp("2026-07-01"), 2026), 6)
-	eq(t, ProratedAnnualQuota(sp("2026-12-15"), 2026), 1)
-
 	eq(t, LeaveTypeLabel("annual"), "Cuti Tahunan")
 	eq(t, LeaveTypeLabel("lainnya"), "lainnya")
 	msg := LeaveRequestWaMessage(LeaveRequestWa{EmployeeName: "Adi Suryaningrat", LeaveType: "annual",

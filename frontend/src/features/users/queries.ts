@@ -6,7 +6,6 @@ import {
   fetchEmployeeContracts,
   fetchEmployeeDocuments,
   fetchExpiringContracts,
-  fetchEmployeeLeaveBalances,
   fetchEmploymentHistory,
   fetchEmployeeLifecycle,
   fetchEmployeeRecruitmentDocs,
@@ -129,16 +128,6 @@ export const useEmployeeAttendance = (
     queryKey: usersQueryKeys.attendance(employeeId, month, year),
     queryFn: async () => {
       const res = await fetchEmployeeAttendance(employeeId, month, year);
-      return res.data ?? [];
-    },
-    enabled: !!employeeId,
-  });
-
-export const useEmployeeLeaveBalances = (employeeId: string) =>
-  useQuery({
-    queryKey: usersQueryKeys.leaveBalances(employeeId),
-    queryFn: async () => {
-      const res = await fetchEmployeeLeaveBalances(employeeId);
       return res.data ?? [];
     },
     enabled: !!employeeId,

@@ -212,7 +212,9 @@ describe("Go route manifest", () => {
       // Pengajuan absen manual/koreksi (EPIC-065): hanya di Go, tanpa fallback Next.
       "/api/hris/attendance-requests", "/api/hris/me/attendance-requests", "/api/hris/me/attendance-gaps",
       // Ringkasan absen terlewat HR dan hak keputusan HR per daun (EPIC-067): hanya di Go.
-      "/api/hris/attendance/gap-summary", "/api/hris/me/approve-access"];
+      "/api/hris/attendance/gap-summary", "/api/hris/me/approve-access",
+      // Alokasi saldo cuti (EPIC-068): daftar (tanpa route Next), template/impor Excel, pengaturan sisa bawaan, hak aksi: hanya di Go.
+      "/api/hris/leave-balances", "/api/hris/leave-settings", "/api/hris/me/leave-balance-access"];
     const goNative = (p: string) =>
       goNativePrefixes.some((n) => p === n || p.startsWith(`${n}/`));
     const missing = switched

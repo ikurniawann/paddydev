@@ -26,20 +26,3 @@ export function summarizeAttendance(rows: AttendanceLike[]) {
     totalHours: rows.reduce((sum, a) => sum + (a.work_hours || 0), 0),
   };
 }
-
-interface LeaveBalanceLike {
-  total_days?: number;
-  used_days?: number;
-  remaining_days?: number;
-  balance?: number;
-  quota?: number;
-  used?: number;
-}
-
-/** API saldo cuti punya dua bentuk kolom (baru *_days, lama balance/quota/used). */
-export function leaveBalanceUsage(row: LeaveBalanceLike) {
-  const total = row.total_days ?? row.quota;
-  const used = row.used_days ?? row.used;
-  const percent = Math.min(100, ((used ?? 0) / (total ?? 1)) * 100);
-  return { remaining: row.remaining_days ?? row.balance, total, used, percent };
-}
