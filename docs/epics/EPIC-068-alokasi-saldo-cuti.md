@@ -1,6 +1,6 @@
 # EPIC-068: Alokasi Saldo Cuti oleh HR — Manual, Massal, Sisa Bawaan (`MODULE-HRIS`)
 
-status: on-progress
+status: ready-for-qa
 environment: dev
 retries: 0
 
@@ -114,3 +114,24 @@ Lihat `docs/superpowers/plans/2026-10-26-alokasi-saldo-cuti.md` (Task 1–7, rul
     - Setelah deploy: periksa `SELECT carry_over_enabled FROM hris.leave_settings` bernilai `false`; selama jendela deploy HR tidak boleh membuka atau mengubah pengaturan Saldo Cuti.
     - Rollback binary ke PR #33 hanya aman bila setting masih `false` dan tabel `hris.leave_carry_over_reviews` kosong; lalu jalankan `DROP TABLE hris.leave_carry_over_reviews` agar kunci terpasang lagi (kode PR #33 membaca keberadaan tabel itu). Kolom `carry_over_source` dan pelepasan CHECK dibiarkan (kompatibel mundur).
     - Setelah setting dinyalakan, tabel berisi data dan baris saldo bisa memiliki bawaan di bawah terpakai; rollback binary tidak lagi cukup dan memerlukan rencana manual (matikan setting, selesaikan atau ekspor review terbuka, baru turunkan binary) yang disetujui user.
+- 2026-10-27: **PR #33, #34, #35 merged ke main** (`b2a1414d`, `fb5428e1`, `3b521b4c`; CI 4/4 hijau). Merge dilakukan dari akun gh `pemudakeyboard` (akun `andrsrjld` tidak punya hak tulis repo).
+- 2026-10-27: **Gladi ulang di salinan DB production** (dump 08:33 WIB pasca EPIC-067, main + #35): migrasi 562→564 dalam 1 detik, `migrate -verify` 0 beda (10705 objek), md5 254 saldo lama tidak berubah, baris 2026 menjadi 380 (backfill 126), `carry_over_enabled=false`, tabel tinjauan kosong, semua bawaan bersumber `auto` dan bernilai 0.
+- 2026-10-27: **Deploy staging** (paddydev.reddie.id) image `local-20261027-085551` = main `3b521b4c`; backup `paddydev-db-before-epic068-deploy-20261027-085225.dump`; rollback image `local-20261026-162614`. 564 migrasi, verify 0 beda, 0 panic. Deploy pertama gagal `permission denied` karena worktree deploy dibuat dengan `umask 077` (tidak ada migrasi yang sempat jalan); diulang setelah `chmod -R u=rwX,go=rX`.
+- 2026-10-27: **QA staging dengan akun uji `qa068-*`: 11/11 skenario lulus.**
+  - Akses: HR Manager 200, hanya-lihat 200, ESS 403, tanpa cookie 401; PUT oleh hanya-lihat/ESS 403.
+  - Saldo 2026 otomatis: join 2024 = 12, join Februari 2026 = 0, join Juli 2025 = 6,0 (prorata).
+  - PUT tahun 2025 ditolak 400 (sesuai desain, hanya tahun berjalan/depan); terpakai 2025 dibuat lewat persetujuan cuti, plus satu penyiapan SQL pada data qa068 (jatah 2025 10→12).
+  - Setting: tanpa alasan 400, hanya-lihat 403, pratinjau benar; hitung ulang otomatis bawaan 5→3 setelah persetujuan cuti 2025 (audit sebab `leave_approve`, aktor = penyetuju); bawaan dipakai lebih dulu (cuti 10–11 Maret: `carry_over_used` 2, terpakai jatah 0).
+  - Tinjauan HR: bawaan 1 < terpakai 2 muncul di daftar, sisa tidak negatif, catatan "otomatis" 400, catatan sah menyelesaikan.
+  - Bawaan manual: 0,5 < terpakai ditolak 400; bawaan 4 bersumber `manual` dan tidak ditimpa perubahan 2025.
+  - Import: template 200 (HR) / 403 (hanya-lihat), pratinjau 200. Halaman UI 200 dengan cookie, 307 ke login tanpa cookie. 0 panic.
+  - Bersih-bersih: setting kembali `false`, sesi qa068 dihapus, 4 akun dan karyawan qa068 dinonaktifkan (baris disimpan untuk jejak audit); `leave_settings.updated_by_name` staging tertinggal "QA068 HR".
+  - **Temuan minor (belum diperbaiki):** pratinjau dampak ikut menghitung bawaan yang sudah kedaluwarsa (contoh: +5 hari untuk bawaan 2026 yang kedaluwarsa 31-03-2026). Menyalakan setting di akhir 2026 membuat bawaan 2026 langsung kedaluwarsa; bawaan yang bermakna adalah baris 2027 yang dibuat job 1 Januari.
+- 2026-10-27: **Deploy production** (paddyadorable.biz.id) atas izin user, slot sepi 11:17 WIB. Puncak absen dari data 30 hari: 07–08, 13, 16–17, 21 WIB; jam 11 rata-rata 5,6 absen/jam.
+  - Backup: VPS `~/backups/prod-db-before-epic068-20261027-111613.dump` (6,5 MB, 444 tabel data). Source lama: `~/paddydev-src.before-epic068-20261027-111613`.
+  - Image `local-20261027-111744` = main `3b521b4c`; rollback image `local-20261027-000933` (EPIC-067). Log: `~/backups/deploy-prod-epic068-20261027-111613.log`.
+  - Durasi: build 6 menit 28 detik (11:17:44–11:24:12), migrasi 1 detik (2 migrasi `[ok]`), verify 16 detik (10705 objek, 0 beda), total 6 menit 51 detik. Container lama tetap melayani selama build dan migrasi.
+  - Downtime (dicek publik tiap ±0,7 detik): 502 mulai 11:24:29,9, login normal 11:24:35,4, `/api/ready` normal 11:24:36,1, sekitar 6 detik.
+  - Verifikasi: 564 migrasi; `carry_over_enabled=false`, batas kosong; tabel tinjauan 0 baris; baris 2026 = 380, bawaan > 0 = 0, sumber `auto`; menu `hris.workforce.leave-balances` aktif; endpoint baru tanpa cookie 401, halaman Saldo Cuti 307 ke login; 0 panic dan 0 error di log 10 menit pertama.
+  - Akses (sebelum vs sesudah, akun aktif): hanya menu Saldo Cuti yang bertambah. admin@ dan super@ dapat aksi penuh, paddyhumanresources@ read/update/import/export, paddy.peopledevelopment@ dan paddyhroperation@ read. Tidak ada akun yang kehilangan akses.
+  - **Sisa:** QA manusia dengan akun HR nyata; setting sisa bawaan tetap mati sampai user mengizinkan (sekaligus memutuskan batas maks); keputusan I3; temuan minor pratinjau bawaan kedaluwarsa.
