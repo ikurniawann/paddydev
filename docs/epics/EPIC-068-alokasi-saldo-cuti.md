@@ -173,4 +173,9 @@ Lihat `docs/superpowers/plans/2026-10-26-alokasi-saldo-cuti.md` (Task 1–7, rul
       - `carry_over_enabled=false`, batas kosong, kedaluwarsa 31/3;
       - 564 migrasi, tabel tinjauan 0 baris;
       - 380 saldo dengan md5 identik sebelum dan sesudah; akses Saldo Cuti identik sebelum dan sesudah.
-    - **Koreksi 2025 tertolak:** batas koreksi 2025 = 31-03-2026 sudah lewat (hari ini 27-10-2026), dan kode production identik dengan yang diuji di staging. PUT 2025 dengan login HR tidak diuji langsung di production karena tidak ada sesi HR untuk uji; tanpa login 401.
+    - **Jendela koreksi 2025 (cek read-only, 12:2x WIB):** sesuai instruksi user, tidak dibuat sesi atau akun sementara di production. Cek memakai `SET default_transaction_read_only = on` di DB production:
+      - `carry_over_enabled = false` (mati), batas maks kosong;
+      - kedaluwarsa masih default **31 Maret**; setting belum pernah diubah orang (`updated_at` 27-10 11:24:12 WIB = saat migrasi, `updated_by_name` kosong);
+      - batas koreksi 2025 = 31-03-2026; hari ini 27-10-2026, jadi **jendela koreksi 2025 TERTUTUP**. PUT dan import 2025 ditolak dengan pesan "Tahun saldo hanya boleh 2026 (tahun berjalan) atau 2027 (tahun depan)". Perilaku ini sudah diuji di staging dengan kode identik.
+      - Penolakan di layar (tahun 2025 tanpa tombol Ubah) **dicek HR saat QA akun asli**.
+      - Tanpa login, PUT dibalas 401.
