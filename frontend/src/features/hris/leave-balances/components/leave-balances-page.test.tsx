@@ -6,6 +6,7 @@ import { LeaveBalancesPage } from "./leave-balances-page";
 const hooks = vi.hoisted(() => ({
   useLeaveBalances: vi.fn(),
   useLeaveBalanceAccess: vi.fn(),
+  useLeaveSettings: vi.fn(),
 }));
 vi.mock("../queries", () => hooks);
 vi.mock("@/hooks/use-debounced-value", () => ({ useDebouncedValue: <T,>(v: T) => v }));
@@ -73,6 +74,8 @@ beforeEach(() => {
   vi.setSystemTime(new Date("2026-10-26T03:00:00Z"));
   hooks.useLeaveBalances.mockReset();
   hooks.useLeaveBalanceAccess.mockReset();
+  hooks.useLeaveSettings.mockReset();
+  hooks.useLeaveSettings.mockReturnValue({ data: { carry_over_expiry_month: 3, carry_over_expiry_day: 31 } });
   hooks.useLeaveBalances.mockReturnValue({
     data: [row({}), row({ employee_id: "e2", nip: "2025002", full_name: "Budi", exists: false, annual_leave_used: 0, annual_leave_remaining: 9.5, annual_leave_total: 9.5, carry_over_days: 0, carry_over_used: 0, carry_over_remaining: 0, carry_over_expires_on: null, carry_over_active: false, carry_over_source: "manual", available: 9.5 })],
     isLoading: false,
@@ -154,10 +157,48 @@ describe("LeaveBalancesPage", () => {
     fireEvent.change(screen.getByLabelText("Tahun"), { target: { value: "2025" } });
   });
 
-  it("tahun lalu hanya dilihat", () => {
+  it("tahun lalu hanya dilihat setelah tanggal kedaluwarsa sisa bawaan", () => {
     render(<LeaveBalancesPage />);
     fireEvent.change(screen.getByLabelText("Tahun"), { target: { value: "2025" } });
     expect(screen.queryByRole("button", { name: "Ubah" })).toBeNull();
+    expect(screen.queryByText(/masih bisa dikoreksi/)).toBeNull();
+  });
+
+  it("tahun lalu bisa dikoreksi sampai tanggal kedaluwarsa sisa bawaan (I3)", () => {
+    vi.setSystemTime(new Date("2027-03-31T10:00:00Z")); // 31 Mar 2027 17.00 WIB
+    render(<LeaveBalancesPage />);
+    fireEvent.change(screen.getByLabelText("Tahun"), { target: { value: "2026" } });
+    expect(screen.getAllByRole("button", { name: "Ubah" }).length).toBeGreaterThan(0);
+    expect(screen.getByText("kartu-tinjauan-2026-ubah-koreksi")).toBeTruthy();
+    expect(screen.getByText(/Saldo 2026 masih bisa dikoreksi sampai/)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Tahun"), { target: { value: "2025" } });
+    expect(screen.queryByRole("button", { name: "Ubah" })).toBeNull();
+    cleanup();
+
+    vi.setSystemTime(new Date("2027-03-31T17:30:00Z")); // 1 Apr 2027 00.30 WIB
+    render(<LeaveBalancesPage />);
+    fireEvent.change(screen.getByLabelText("Tahun"), { target: { value: "2026" } });
+    expect(screen.queryByRole("button", { name: "Ubah" })).toBeNull();
+    cleanup();
+
+    hooks.useLeaveSettings.mockReturnValue({ data: { carry_over_expiry_month: 4, carry_over_expiry_day: 30 } });
+    render(<LeaveBalancesPage />);
+    fireEvent.change(screen.getByLabelText("Tahun"), { target: { value: "2026" } });
+    expect(screen.getAllByRole("button", { name: "Ubah" }).length).toBeGreaterThan(0);
+    cleanup();
+
+    // Tanpa pengaturan (belum termuat) tahun lalu tidak dibuka; akun tanpa update juga tidak.
+    hooks.useLeaveSettings.mockReturnValue({ data: undefined });
+    render(<LeaveBalancesPage />);
+    fireEvent.change(screen.getByLabelText("Tahun"), { target: { value: "2026" } });
+    expect(screen.queryByRole("button", { name: "Ubah" })).toBeNull();
+    cleanup();
+    hooks.useLeaveSettings.mockReturnValue({ data: { carry_over_expiry_month: 4, carry_over_expiry_day: 30 } });
+    hooks.useLeaveBalanceAccess.mockReturnValue({ data: { read: true, update: false, import: false, export: false } });
+    render(<LeaveBalancesPage />);
+    fireEvent.change(screen.getByLabelText("Tahun"), { target: { value: "2026" } });
+    expect(screen.queryByRole("button", { name: "Ubah" })).toBeNull();
+    expect(screen.queryByText(/masih bisa dikoreksi/)).toBeNull();
   });
 
   it("kartu pengaturan memakai hak update; tempat tombol Import tersedia untuk akun import", () => {
