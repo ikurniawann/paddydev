@@ -31,4 +31,15 @@ describe("summarizeAttendance", () => {
       ])
     ).toEqual({ present: 2, late: 1, absent: 1, totalHours: 15.5 });
   });
+
+  it("jam kerja dari API berupa teks numeric tetap dijumlah sebagai angka", () => {
+    const summary = summarizeAttendance([
+      { status: "present", work_hours: "11.71" },
+      { status: "present", work_hours: null },
+      { status: "present", work_hours: "0.00" },
+      { status: "present", work_hours: "8.29" },
+    ]);
+    expect(summary.totalHours).toBe(20);
+    expect(summary.totalHours.toFixed(1)).toBe("20.0");
+  });
 });
