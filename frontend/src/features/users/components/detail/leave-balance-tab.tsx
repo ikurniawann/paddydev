@@ -6,9 +6,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { formatDays } from "@/features/hris/leave-balances/balance-math";
 import { LeaveBalanceEditDialog } from "@/features/hris/leave-balances/components/leave-balance-edit-dialog";
+import { useEditableBalanceYears } from "@/features/hris/leave-balances/editable-years";
 import { useLeaveBalance, useLeaveBalanceAccess } from "@/features/hris/leave-balances/queries";
 import type { LeaveBalanceView } from "@/features/hris/leave-balances/types";
-import { todayWib } from "@/lib/dates";
 import { formatDate } from "@/lib/format";
 import { EmptyTabCard, TabSpinner } from "./tab-states";
 
@@ -35,15 +35,16 @@ function carryNote(b: LeaveBalanceView): string | null {
 /**
  * Saldo cuti tahunan satu karyawan (EPIC-068). Go membalas satu objek saldo
  * per tahun; tombol Ubah hanya untuk akun dengan aksi `update` dan tahun
- * berjalan/depan (tahun lalu hanya dibaca).
+ * berjalan/depan, atau tahun lalu sampai tanggal kedaluwarsa sisa bawaan (I3).
  */
 export function LeaveBalanceTab({ employeeId }: { employeeId: string }) {
-  const thisYear = Number(todayWib().slice(0, 4));
+  const access = useLeaveBalanceAccess().data;
+  const editable = useEditableBalanceYears(access?.update === true);
+  const { thisYear } = editable;
   const [year, setYear] = useState(thisYear);
   const [editing, setEditing] = useState(false);
   const { data: balance, isLoading, isError, error } = useLeaveBalance(employeeId, year);
-  const access = useLeaveBalanceAccess().data;
-  const canEdit = access?.update === true && year >= thisYear;
+  const canEdit = editable.canEdit(year);
 
   return (
     <div className="space-y-4">

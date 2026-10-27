@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatDays, isHalfStep, parseDays, previewBalance } from "./balance-math";
+import { formatDays, isHalfStep, parseDays, previewBalance, previousYearEditableUntil } from "./balance-math";
 
 describe("parseDays", () => {
   it("menerima titik dan koma desimal, spasi, dan negatif", () => {
@@ -55,5 +55,12 @@ describe("previewBalance (R4)", () => {
   it("tanpa tanggal kedaluwarsa bawaan tidak berlaku", () => {
     expect(previewBalance({ ...base, expiresOn: "" })).toMatchObject({ carryActive: false, available: 9 });
     expect(previewBalance({ ...base, expiresOn: null })).toMatchObject({ carryActive: false, available: 9 });
+  });
+});
+
+describe("previousYearEditableUntil", () => {
+  it("tanggal kedaluwarsa sisa bawaan di tahun berjalan, dua digit", () => {
+    expect(previousYearEditableUntil({ carry_over_expiry_month: 3, carry_over_expiry_day: 31 }, 2027)).toBe("2027-03-31");
+    expect(previousYearEditableUntil({ carry_over_expiry_month: 6, carry_over_expiry_day: 5 }, 2028)).toBe("2028-06-05");
   });
 });

@@ -20,7 +20,7 @@ HR bisa mengatur saldo Cuti Tahunan karyawan dengan aman dan tercatat:
    - sisa ≥ 0;
    - kelipatan 0,5;
    - hanya karyawan aktif;
-   - hanya tahun berjalan atau tahun depan.
+   - hanya tahun berjalan atau tahun depan; tahun lalu boleh dikoreksi sampai tanggal kedaluwarsa sisa bawaan tahun berjalan (I3, keputusan user 27-10-2026).
 6. **Audit log** per karyawan: sebelum → sesudah + alasan, terlihat di Riwayat Perubahan karyawan.
 7. **ESS** menampilkan dan memakai saldo baru (jatah + penyesuaian − terpakai + sisa bawaan yang belum kedaluwarsa).
 
@@ -108,9 +108,27 @@ Lihat `docs/superpowers/plans/2026-10-26-alokasi-saldo-cuti.md` (Task 1–7, rul
 - 2026-10-27: **Gelombang perbaikan review akhir seluruh branch "sisa bawaan dihitung ulang otomatis"** (TDD; `go vet`, `gofmt`, `go test -p 1 ./internal/modules/hris/...` hijau kecuali 4 kegagalan lama yang identik di basis; `vitest` 672 lulus, `tsc`, `eslint`). **Belum deploy.**
   - **Backend:** baris tahun baru yang dibuat oleh pengajuan cuti, persetujuan, PUT, atau import langsung dihitung sisa bawaannya (`ensureLeaveBalanceCarry`; audit sebab `row_created` oleh Sistem untuk baris yang dibuat saat pengajuan/baca saldo), sehingga bawaan dipakai lebih dulu (sebelumnya baris tahun depan lahir dengan bawaan 0); job 1 Januari mengunci baris setting (urutan setting lalu saldo sama dengan simpan setting) dan memperbarui tanggal kedaluwarsa baris otomatis ke tanggal setting tahun itu; review yang tertutup otomatis menyimpan `resolved_by` NULL dan nama `Sistem`; catatan penyelesaian "otomatis" (tanpa membedakan huruf besar) ditolak 400.
   - **Frontend:** dialog ubah saldo menerapkan aturan "bawaan ≥ terpakai" hanya bila bawaan atau kedaluwarsa diubah, pratinjau menjepit sisa bawaan ke minimal 0, dan menampilkan petunjuk "0 tanpa kedaluwarsa = dihitung otomatis; isi kedaluwarsa untuk menetapkan 0"; kartu tinjauan menampilkan status memuat dan galat (Coba lagi) serta memuat ulang daftar saat tandai selesai mendapat 404/409; kolom Sumber hanya berisi label bila ada sisa bawaan.
-  - **Belum diputuskan (I3):** koreksi HR atas tahun lalu setelah 1 Januari tidak bisa lewat PUT/import (hanya tahun berjalan dan depan). Menunggu keputusan user.
+  - ~~**Belum diputuskan (I3):** koreksi HR atas tahun lalu setelah 1 Januari tidak bisa lewat PUT/import (hanya tahun berjalan dan depan). Menunggu keputusan user.~~ **Diputuskan 27-10-2026:** boleh sampai tanggal kedaluwarsa sisa bawaan (entri I3 di bawah).
   - **Runbook deploy dan rollback pembuka kunci (wajib):**
     - Migrasi `20261029090000_leave_carry_over_recalc.sql` membuat tabel `hris.leave_carry_over_reviews`; keberadaan tabel itulah yang membuka kunci setting. Setting `carry_over_enabled` harus tetap `false` setelah deploy.
     - Setelah deploy: periksa `SELECT carry_over_enabled FROM hris.leave_settings` bernilai `false`; selama jendela deploy HR tidak boleh membuka atau mengubah pengaturan Saldo Cuti.
     - Rollback binary ke PR #33 hanya aman bila setting masih `false` dan tabel `hris.leave_carry_over_reviews` kosong; lalu jalankan `DROP TABLE hris.leave_carry_over_reviews` agar kunci terpasang lagi (kode PR #33 membaca keberadaan tabel itu). Kolom `carry_over_source` dan pelepasan CHECK dibiarkan (kompatibel mundur).
     - Setelah setting dinyalakan, tabel berisi data dan baris saldo bisa memiliki bawaan di bawah terpakai; rollback binary tidak lagi cukup dan memerlukan rencana manual (matikan setting, selesaikan atau ekspor review terbuka, baru turunkan binary) yang disetujui user.
+- 2026-10-27: **I3 diputuskan dan dikerjakan: koreksi saldo tahun lalu sampai kedaluwarsa sisa bawaan** (branch `feat/epic068-koreksi-tahun-lalu`; rencana `docs/superpowers/plans/2026-10-27-koreksi-saldo-tahun-lalu.md`). **Belum deploy.**
+  - **Keputusan user (27-10-2026):** HR boleh mengoreksi saldo cuti tahun lalu setelah 1 Januari sampai tanggal kedaluwarsa sisa bawaan (diatur admin HRIS, default 31 Maret).
+  - **Aturan:** PUT `/api/hris/leave-balances/{id}` dan import Excel menerima tahun N-1 selama hari ini (WIB) ≤ tanggal kedaluwarsa setting di tahun N (tanggal itu sendiri masih boleh). Tahun N-2 dan sebelumnya tetap ditolak. Setelah tanggal itu sisa bawaan N tidak bisa dipakai lagi, sehingga koreksi N-1 tidak berdampak ke karyawan.
+  - **Dampak ke sisa bawaan:** koreksi N-1 memakai jalur hitung ulang yang sudah ada (`carryAfterHRInput` → `recomputeCarryOver(N)`, audit sebab `hr_update`/`import`). Hanya baris `auto` dan hanya bila setting menyala; bawaan baru di bawah terpakai membuka tinjauan HR.
+  - **Implementasi:**
+    - backend `balanceYears` (`leave_balances.go`): tahun yang diizinkan dibaca dari setting di dalam transaksi; PUT menolak tahun di luar jendela sebelum membuat atau mengunci baris.
+    - Pesan tolak saat jendela tertutup tidak berubah. Saat terbuka: "Tahun saldo hanya boleh N-1 (tahun lalu, sampai DD-MM-YYYY), N (tahun berjalan), atau N+1 (tahun depan)".
+    - Teks Info template import diperbarui.
+    - frontend `useEditableBalanceYears` dipakai halaman Saldo Cuti dan tab Saldo Cuti karyawan; tombol Ubah dan koreksi di kartu tinjauan terbuka untuk tahun lalu di dalam jendela, dengan petunjuk batas tanggal. Pengaturan hanya dibaca untuk akun `update`.
+  - **Bukti:** `TestPutPreviousYearUntilCarryExpiry` dan `TestImportPreviousYearUntilCarryExpiry` mencakup:
+    - 10-02-2027 diterima, sisa bawaan 2027 8→6 dengan audit;
+    - 31-03-2027 23.00 diterima;
+    - 01-04-2027 ditolak;
+    - kedaluwarsa setting 30-04 memperpanjang jendela;
+    - 2025 ditolak;
+    - import di jendela tanpa error dengan bawaan 2027 dihitung ulang, dan di luar jendela error.
+
+    Gerbang: `go vet ./...`, `gofmt`, dan `go test -p 1 ./...` hijau di DB uji segar (564 migrasi). Frontend: `vitest`, `tsc`, dan `eslint` hijau.
