@@ -15,7 +15,8 @@ export function calculateTenure(joinDate: string, now: Date = new Date()): strin
 interface AttendanceLike {
   status?: string | null;
   is_late?: boolean;
-  work_hours?: number | null;
+  /** Go mengirim kolom numeric sebagai teks ("11.71"). */
+  work_hours?: number | string | null;
 }
 
 export function summarizeAttendance(rows: AttendanceLike[]) {
@@ -23,6 +24,6 @@ export function summarizeAttendance(rows: AttendanceLike[]) {
     present: rows.filter((a) => a.status === "present").length,
     late: rows.filter((a) => a.is_late).length,
     absent: rows.filter((a) => a.status === "absent").length,
-    totalHours: rows.reduce((sum, a) => sum + (a.work_hours || 0), 0),
+    totalHours: rows.reduce((sum, a) => sum + (Number(a.work_hours) || 0), 0),
   };
 }
