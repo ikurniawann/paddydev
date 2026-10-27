@@ -65,3 +65,23 @@ func TestSettingsUsersReadOnlyWritesNothing(t *testing.T) {
 		wantError(t, code, body, 403, "Insufficient permissions")
 	}
 }
+
+// Buat Akun Login di profil karyawan memakai PUT (aksi "update"): pemegang
+// baca + ubah (hr_user_admin) bisa memberi akun login karyawan yang belum
+// punya akun, meski tidak bisa menambah karyawan baru.
+func TestSettingsUsersUpdateProvisionsLogin(t *testing.T) {
+	e := setup(t, map[string][]string{"settings.users": {"read", "update"}})
+	var id string
+	if err := e.tx.QueryRow(context.Background(), `INSERT INTO hris.employees (full_name, nip, email, phone, join_date)
+		VALUES ('Karyawan Baru', $1, $2, '08', '2026-01-01') RETURNING id::text`,
+		"ACP-"+uniqueEmail()[:8], uniqueEmail()).Scan(&id); err != nil {
+		t.Fatal(err)
+	}
+	code, body, raw := e.do("PUT", "/api/users/"+id, map[string]any{
+		"is_access_app": true, "password": "rahasia123", "role": "employee",
+		"business_scope": "holding", "holding_id": e.holding(),
+	})
+	if code != 200 || body["data"].(map[string]any)["appAccount"] == nil {
+		t.Fatalf("Buat Akun Login with read+update = %d %s", code, raw)
+	}
+}
