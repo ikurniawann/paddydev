@@ -37,8 +37,9 @@ export const useLeaveBalanceAccess = () =>
     retry: 1,
   });
 
-export const useLeaveSettings = () =>
-  useQuery({ queryKey: leaveBalanceQueryKeys.settings(), queryFn: fetchLeaveSettings });
+/** `enabled` false = tanpa hak baca Saldo Cuti (mis. tab karyawan untuk akun tanpa aksi update). */
+export const useLeaveSettings = (enabled = true) =>
+  useQuery({ queryKey: leaveBalanceQueryKeys.settings(), queryFn: fetchLeaveSettings, enabled });
 
 /** Tinjauan sisa bawaan yang masih terbuka pada tahun itu; `enabled` false = tanpa hak baca. */
 export const useCarryReviews = (year: number, enabled = true) =>

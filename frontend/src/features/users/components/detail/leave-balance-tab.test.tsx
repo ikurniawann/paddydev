@@ -6,6 +6,7 @@ import { LeaveBalanceTab } from "./leave-balance-tab";
 const hooks = vi.hoisted(() => ({
   useLeaveBalance: vi.fn(),
   useLeaveBalanceAccess: vi.fn(),
+  useLeaveSettings: vi.fn(),
 }));
 vi.mock("@/features/hris/leave-balances/queries", () => hooks);
 vi.mock("@/features/hris/leave-balances/components/leave-balance-edit-dialog", () => ({
@@ -38,6 +39,8 @@ beforeEach(() => {
   vi.setSystemTime(new Date("2026-10-26T03:00:00Z"));
   hooks.useLeaveBalance.mockReset();
   hooks.useLeaveBalanceAccess.mockReset();
+  hooks.useLeaveSettings.mockReset();
+  hooks.useLeaveSettings.mockReturnValue({ data: { carry_over_expiry_month: 3, carry_over_expiry_day: 31 } });
   hooks.useLeaveBalance.mockReturnValue({ data: view, isLoading: false, isError: false });
   hooks.useLeaveBalanceAccess.mockReturnValue({ data: { read: true, update: true, import: false, export: false } });
 });
@@ -83,11 +86,24 @@ describe("LeaveBalanceTab", () => {
     expect(screen.queryByRole("button", { name: "Ubah saldo" })).toBeNull();
   });
 
-  it("tahun lalu hanya dilihat: tombol Ubah tidak ada", () => {
+  it("tahun lalu hanya dilihat setelah kedaluwarsa sisa bawaan: tombol Ubah tidak ada", () => {
     render(<LeaveBalanceTab employeeId="e1" />);
     fireEvent.change(screen.getByLabelText("Tahun"), { target: { value: "2025" } });
     expect(hooks.useLeaveBalance).toHaveBeenLastCalledWith("e1", 2025);
     expect(screen.queryByRole("button", { name: "Ubah saldo" })).toBeNull();
+  });
+
+  it("tahun lalu bisa diubah sampai tanggal kedaluwarsa sisa bawaan (I3); pengaturan dibaca hanya untuk akun update", () => {
+    vi.setSystemTime(new Date("2027-02-10T03:00:00Z"));
+    render(<LeaveBalanceTab employeeId="e1" />);
+    fireEvent.change(screen.getByLabelText("Tahun"), { target: { value: "2026" } });
+    fireEvent.click(screen.getByRole("button", { name: "Ubah saldo" }));
+    expect(screen.getByText("dialog-ubah-2026")).toBeTruthy();
+    expect(hooks.useLeaveSettings).toHaveBeenLastCalledWith(true);
+    cleanup();
+    hooks.useLeaveBalanceAccess.mockReturnValue({ data: { read: true, update: false, import: false, export: false } });
+    render(<LeaveBalanceTab employeeId="e1" />);
+    expect(hooks.useLeaveSettings).toHaveBeenLastCalledWith(false);
   });
 
   it("menampilkan galat dan keadaan memuat", () => {

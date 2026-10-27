@@ -1,4 +1,5 @@
 import { formatNumber } from "@/lib/format";
+import type { LeaveSettings } from "./types";
 
 /** "9,5" / "9.5" / "-1" → angka; kosong atau bukan angka → null. */
 export function parseDays(text: string): number | null {
@@ -39,4 +40,17 @@ export function previewBalance(f: BalanceFigures) {
   const carryRemaining = Math.max(f.carryDays - f.carryUsed, 0);
   const carryActive = !!f.expiresOn && f.expiresOn >= f.today;
   return { remaining, carryRemaining, carryActive, available: remaining + (carryActive ? carryRemaining : 0) };
+}
+
+/**
+ * Batas koreksi saldo tahun lalu (I3): tanggal kedaluwarsa sisa bawaan dari
+ * pengaturan di tahun berjalan (YYYY-MM-DD). Sama dengan aturan backend
+ * `balanceYears`: tahun lalu bisa diubah selama hari ini (WIB) ≤ tanggal ini.
+ */
+export function previousYearEditableUntil(
+  settings: Pick<LeaveSettings, "carry_over_expiry_month" | "carry_over_expiry_day">,
+  thisYear: number,
+): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${thisYear}-${pad(settings.carry_over_expiry_month)}-${pad(settings.carry_over_expiry_day)}`;
 }

@@ -141,7 +141,7 @@ func (s *Service) LeaveBalanceTemplate(ctx context.Context, year int, branchID s
 		{"Aturan angka:"},
 		{"- Jatah, Penyesuaian, dan Sisa Bawaan kelipatan 0,5 hari."},
 		{"- Sisa jatah (Jatah + Penyesuaian − Terpakai) tidak boleh kurang dari 0; Sisa Bawaan tidak boleh kurang dari bawaan yang sudah terpakai."},
-		{"- Hanya saldo tahun berjalan dan tahun depan yang bisa diubah."},
+		{"- Hanya saldo tahun berjalan dan tahun depan yang bisa diubah; saldo tahun lalu bisa dikoreksi sampai tanggal kedaluwarsa sisa bawaan (default 31 Maret)."},
 		{""},
 		{"File akan ditolak bila:"},
 		{"- file bukan template tahun/cabang yang dipilih"},
@@ -222,14 +222,14 @@ type leaveChange struct {
 
 // leaveCheck adapts validateLeaveBalance to the pure upload validation: the
 // message of its 400, or "".
-func leaveCheck(nowYear int) func(domain.LeaveBalanceCheck) string {
+func leaveCheck(years balanceYears) func(domain.LeaveBalanceCheck) string {
 	return func(c domain.LeaveBalanceCheck) string {
 		in := LeaveBalanceInput{Year: c.Year, Total: c.Values.Total, Adjustment: c.Values.Adjustment,
 			CarryDays: c.Values.CarryDays, Reason: c.Reason}
 		if c.Values.CarryExpires != "" {
 			in.CarryExpires = &c.Values.CarryExpires
 		}
-		err := validateLeaveBalance(in, c.Used, c.CarryUsed, c.Active, c.CarryChanged, nowYear)
+		err := validateLeaveBalance(in, c.Used, c.CarryUsed, c.Active, c.CarryChanged, years)
 		if err == nil {
 			return ""
 		}
@@ -243,10 +243,10 @@ func leaveCheck(nowYear int) func(domain.LeaveBalanceCheck) string {
 
 // leaveUploadContext gathers the balances of the scope and what is known of
 // the NIPs in the file.
-func leaveUploadContext(ctx context.Context, q database.Querier, sc leaveScope, today string, nowYear int,
+func leaveUploadContext(ctx context.Context, q database.Querier, sc leaveScope, today string, years balanceYears,
 	nips []string) (domain.LeaveBalanceUploadContext, map[string]LeaveBalanceView, error) {
 	c := domain.LeaveBalanceUploadContext{Year: sc.Year, BranchID: sc.branchID(), Today: today,
-		Employees: map[string]domain.LeaveBalanceEmployee{}, Check: leaveCheck(nowYear)}
+		Employees: map[string]domain.LeaveBalanceEmployee{}, Check: leaveCheck(years)}
 	if sc.Branch != nil {
 		c.BranchName = sc.Branch.Name
 	}
@@ -343,7 +343,6 @@ func (s *Service) ImportLeaveBalances(ctx context.Context, a *Actor, in leaveImp
 	if msg != "" {
 		return nil, nil, httpx.BadRequest(msg)
 	}
-	nowYear := domain.NowWIB(s.now()).Year()
 	today := domain.TodayWIB(s.now())
 	nips := make([]string, 0, len(file.Rows))
 	for _, row := range file.Rows {
@@ -359,7 +358,11 @@ func (s *Service) ImportLeaveBalances(ctx context.Context, a *Actor, in leaveImp
 		if err != nil {
 			return err
 		}
-		uctx, byID, err := leaveUploadContext(ctx, q, sc, today, nowYear, nips)
+		years, err := balanceYearsOf(ctx, q, s.now())
+		if err != nil {
+			return err
+		}
+		uctx, byID, err := leaveUploadContext(ctx, q, sc, today, years, nips)
 		if err != nil {
 			return err
 		}
@@ -404,7 +407,7 @@ func (s *Service) ImportLeaveBalances(ctx context.Context, a *Actor, in leaveImp
 		case fp != in.Fingerprint:
 			return httpx.Conflict("Saldo cuti sudah diubah orang lain sejak preview — unggah ulang file")
 		}
-		check := leaveCheck(nowYear)
+		check := leaveCheck(years)
 		// Lock in a fixed order so two imports never wait on each other.
 		ordered := append([]domain.LeaveBalanceChange{}, res.Changes...)
 		sort.SliceStable(ordered, func(i, j int) bool { return ordered[i].EmployeeID < ordered[j].EmployeeID })

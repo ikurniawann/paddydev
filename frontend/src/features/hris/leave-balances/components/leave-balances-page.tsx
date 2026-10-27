@@ -8,10 +8,10 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useStoreBranches } from "@/features/hris/placements/queries";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
-import { todayWib } from "@/lib/dates";
 import { formatDate } from "@/lib/format";
 import { leaveBalanceTemplateUrl } from "../api";
 import { formatDays } from "../balance-math";
+import { useEditableBalanceYears } from "../editable-years";
 import { useLeaveBalanceAccess, useLeaveBalances } from "../queries";
 import type { LeaveBalanceView } from "../types";
 import { LeaveBalanceEditDialog } from "./leave-balance-edit-dialog";
@@ -43,7 +43,9 @@ function carryCell(b: LeaveBalanceView) {
  * mengikuti hak akun di daun Saldo Cuti (read / update / import / export).
  */
 export function LeaveBalancesPage() {
-  const thisYear = Number(todayWib().slice(0, 4));
+  const access = useLeaveBalanceAccess().data;
+  const editable = useEditableBalanceYears(access?.update === true);
+  const { thisYear, previousUntil } = editable;
   const [year, setYear] = useState(thisYear);
   const [branchId, setBranchId] = useState("");
   const [search, setSearch] = useState("");
@@ -51,10 +53,9 @@ export function LeaveBalancesPage() {
   const [uploadOpen, setUploadOpen] = useState(false);
   const q = useDebouncedValue(search, 300).trim();
   const branches = useStoreBranches();
-  const access = useLeaveBalanceAccess().data;
   const list = useLeaveBalances({ year, branch_id: branchId, q });
   const rows = list.data ?? [];
-  const canEdit = access?.update === true && year >= thisYear;
+  const canEdit = editable.canEdit(year);
 
   return (
     <div className="space-y-5">
@@ -122,6 +123,13 @@ export function LeaveBalancesPage() {
           </div>
         ) : null}
       </div>
+
+      {canEdit && year === thisYear - 1 && previousUntil ? (
+        <p className="text-sm text-gray-500">
+          Saldo {year} masih bisa dikoreksi sampai {formatDate(previousUntil)} (kedaluwarsa sisa bawaan). Koreksi ikut
+          menghitung ulang sisa bawaan {thisYear}.
+        </p>
+      ) : null}
 
       {list.isLoading ? (
         <div className="flex justify-center py-14">

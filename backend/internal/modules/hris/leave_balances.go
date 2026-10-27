@@ -267,20 +267,60 @@ func daysText(v float64) string {
 
 func isHalfStep(v float64) bool { return math.Mod(v*2, 1) == 0 }
 
+// balanceYears is which years HR may set (manual PUT and the Excel import):
+// this year and next, and last year while today (WIB) is on or before this
+// year's carry-over expiry date from the settings (I3, user 27-10-2026). After
+// that date this year's carry-over can no longer be used, so a correction of
+// last year would change nothing for the employee.
+type balanceYears struct {
+	Now       int
+	Today     string // YYYY-MM-DD, WIB
+	PrevUntil string // YYYY-MM-DD; "" keeps last year closed
+}
+
+func (y balanceYears) allows(year int) bool {
+	return year == y.Now || year == y.Now+1 || (year == y.Now-1 && y.prevOpen())
+}
+
+func (y balanceYears) prevOpen() bool { return y.PrevUntil != "" && y.Today <= y.PrevUntil }
+
+func (y balanceYears) refusal() string {
+	if !y.prevOpen() {
+		return fmt.Sprintf("Tahun saldo hanya boleh %d (tahun berjalan) atau %d (tahun depan)", y.Now, y.Now+1)
+	}
+	until := y.PrevUntil
+	if t, ok := domain.ParseDate(until); ok {
+		until = t.Format("02-01-2006")
+	}
+	return fmt.Sprintf("Tahun saldo hanya boleh %d (tahun lalu, sampai %s), %d (tahun berjalan), atau %d (tahun depan)",
+		y.Now-1, until, y.Now, y.Now+1)
+}
+
+// balanceYearsOf reads the expiry date from the settings as of now.
+func balanceYearsOf(ctx context.Context, q database.Querier, now time.Time) (balanceYears, error) {
+	set, err := loadLeaveSettings(ctx, q, false)
+	if err != nil {
+		return balanceYears{}, err
+	}
+	y := domain.NowWIB(now).Year()
+	return balanceYears{Now: y, Today: domain.TodayWIB(now),
+		PrevUntil: fmt.Sprintf("%04d-%02d-%02d", y, set.CarryOverExpiryMonth, set.CarryOverExpiryDay)}, nil
+}
+
 // validateLeaveBalance checks an HR-entered allocation (manual PUT and the
-// Excel import): the employee is active, the year is this year or next
-// (nowYear is the WIB year), a reason is given, every figure is a multiple
+// Excel import): the employee is active, the year is one balanceYears allows,
+// a reason is given, every figure is a multiple
 // of 0,5, and neither the annual remainder nor the carry-over falls below
 // what is already used. The carry-over rule applies only when the request
 // changes the carry-over days or expiry (carryChanged): a row the automatic
 // recalculation left below used (a review is open) can still have its total or
 // adjustment edited.
-func validateLeaveBalance(in LeaveBalanceInput, used, carryUsed float64, active, carryChanged bool, nowYear int) error {
+func validateLeaveBalance(in LeaveBalanceInput, used, carryUsed float64, active, carryChanged bool, years balanceYears) error {
 	if !active {
 		return httpx.BadRequest("Karyawan nonaktif — saldo cuti tidak bisa diubah")
 	}
-	if in.Year != nowYear && in.Year != nowYear+1 {
-		return httpx.BadRequest(fmt.Sprintf("Tahun saldo hanya boleh %d (tahun berjalan) atau %d (tahun depan)", nowYear, nowYear+1))
+	if !years.allows(in.Year) {
+		return httpx.BadRequest(years.refusal())
 	}
 	if strings.TrimSpace(in.Reason) == "" {
 		return httpx.BadRequest("Alasan perubahan wajib diisi")
@@ -395,15 +435,22 @@ func (s *Service) UpdateLeaveBalanceManual(ctx context.Context, a *Actor, employ
 	if emp == nil {
 		return LeaveBalanceView{}, httpx.NotFound("Karyawan tidak ditemukan")
 	}
-	nowYear := domain.NowWIB(s.now()).Year()
 	if in.Year < minBalanceYear { // the year check below refuses it; do not touch the table
-		return LeaveBalanceView{}, validateLeaveBalance(in, 0, 0, emp.Bool("is_active"), false, nowYear)
+		years := balanceYears{Now: domain.NowWIB(s.now()).Year()}
+		return LeaveBalanceView{}, validateLeaveBalance(in, 0, 0, emp.Bool("is_active"), false, years)
 	}
 	var entry audit.Entry
 	if len(meta) > 0 {
 		entry = meta[0]
 	}
 	err = s.repo.InTx(ctx, func(r Repository) error {
+		years, err := balanceYearsOf(ctx, r.querier(), s.now())
+		if err != nil {
+			return err
+		}
+		if !years.allows(in.Year) { // refuse before creating or locking any row
+			return validateLeaveBalance(in, 0, 0, emp.Bool("is_active"), false, years)
+		}
 		// Ascending lock order (previous year, this year, next year).
 		if err := lockPreviousBalance(ctx, r.querier(), employeeID, in.Year); err != nil {
 			return err
@@ -431,7 +478,7 @@ func (s *Service) UpdateLeaveBalanceManual(ctx context.Context, a *Actor, employ
 			in.CarryExpires = was.CarryExpires
 		}
 		if err := validateLeaveBalance(in, was.Used, was.CarryUsed, emp.Bool("is_active"),
-			in.CarryDays != was.CarryDays || !sameText(in.CarryExpires, was.CarryExpires), nowYear); err != nil {
+			in.CarryDays != was.CarryDays || !sameText(in.CarryExpires, was.CarryExpires), years); err != nil {
 			return err
 		}
 		if err := r.SetLeaveBalance(ctx, employeeID, in.Year, in); err != nil {
