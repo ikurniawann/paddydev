@@ -1,6 +1,6 @@
 # EPIC-069: Work Location Toko — Lengkapi Profil, Tambah Toko Baru, Benahi Penempatan (`MODULE-HRIS`)
 
-status: on-progress
+status: ready-for-qa
 environment: dev
 retries: 0
 
@@ -28,35 +28,57 @@ Data toko di production (`configuration.branches`) sesuai Excel HR "20261001 - W
 - [x] T1 Selidiki read-only: Excel vs production (53 cabang, 631 karyawan, 336 penempatan aktif).
 - [x] T2 Skrip `backend/database/sql/fixes/2026-10-28_work_location_toko.sql` (satu transaksi, pratinjau read-only, `RAISE EXCEPTION`, audit).
 - [x] T3 Gladi di salinan production 28-10 12:14.
-- [ ] T4 PR + CI hijau + merge.
-- [ ] T5 Eksekusi production atas izin user (backup → pratinjau → terapkan → verifikasi).
-- [ ] T6 Catat hasil di log ini + acuan AB-01; serahkan daftar tindak lanjut ke HR.
+- [x] T4 PR #43 CI hijau 4/4, merged 28-10 (`515a7b29`).
+- [x] T5 Eksekusi production 28-10 12:38 WIB atas izin user.
+- [x] T6 Catat hasil di log ini + acuan AB-01. Daftar tindak lanjut di bawah diserahkan ke HR.
 
 ## Penempatan yang dipindah (22)
 | NIP | Nama | Sekarang | Baru (Excel) |
 |---|---|---|---|
-| 202405059 | Ricky Pratama Sidik | MIZU-BANDUNG | PPGA |
-| 202412128 | Gritt Alvrin | MIZU-BANDUNG | PPTN |
-| 202501138 | Azka Hanifah Hamidah | MIZU-BANDUNG | PLRM |
-| 202502168 | Syifa Listia | MBIP | PPBA |
-| 202503192 | Ivan Sendina | MCPZ | PPGA |
-| 202503225 | Devina Hanida | PPVJ | PPGA |
-| 202507358 | Irvan Ramadhana Putra | MIZU-BANDUNG | PPYA |
-| 202509413 | Diandra Pradnadya | PPAY | PLAY |
-| 202509414 | Siti Maudi | PPAY | PLAY |
-| 202510442 | Farhan Farras Prawira | MIZU-BANDUNG | PPJA |
-| 202512505 | Riswandi | MIZU-BANDUNG | PBSA |
-| 202601521 | Muhammad Taufik Hidayat | MPVJ | PBSA |
-| 202601522 | Riki Juliana | MIZU-BANDUNG | PBSA |
-| 202601523 | Gaza Fiqih Aulia | EVENT-PVJ | PBSA |
-| 202601524 | Tya Nur Azizah | EVENT-PVJ | PPVJ |
-| 202601525 | Muhamad Daniel | PPLN | PLPK |
-| 202601528 | Ryan Fazar | PPLN | PLBM |
-| 202602545 | Jusmiati | MIZU-BANDUNG | PPMR |
-| 202603552 | Annisa Rahma | MBIP | MTSM |
-| 202604591 | Stevendino Marselino | PPVJ | PBSA |
-| 202605596 | Adelia Puspita Sari | PPMR | PLMR |
-| 202607626 | Lala Oliviana | PPPA | MDTS |
+| 202405059 | Ricky Pratama Sidik | MIZU-BANDUNG | PPGA
+ |
+| 202412128 | Gritt Alvrin | MIZU-BANDUNG | PPTN
+ |
+| 202501138 | Azka Hanifah Hamidah | MIZU-BANDUNG | PLRM
+ |
+| 202502168 | Syifa Listia | MBIP | PPBA
+ |
+| 202503192 | Ivan Sendina | MCPZ | PPGA
+ |
+| 202503225 | Devina Hanida | PPVJ | PPGA
+ |
+| 202507358 | Irvan Ramadhana Putra | MIZU-BANDUNG | PPYA
+ |
+| 202509413 | Diandra Pradnadya | PPAY | PLAY
+ |
+| 202509414 | Siti Maudi | PPAY | PLAY
+ |
+| 202510442 | Farhan Farras Prawira | MIZU-BANDUNG | PPJA
+ |
+| 202512505 | Riswandi | MIZU-BANDUNG | PBSA
+ |
+| 202601521 | Muhammad Taufik Hidayat | MPVJ | PBSA
+ |
+| 202601522 | Riki Juliana | MIZU-BANDUNG | PBSA
+ |
+| 202601523 | Gaza Fiqih Aulia | EVENT-PVJ | PBSA
+ |
+| 202601524 | Tya Nur Azizah | EVENT-PVJ | PPVJ
+ |
+| 202601525 | Muhamad Daniel | PPLN | PLPK
+ |
+| 202601528 | Ryan Fazar | PPLN | PLBM
+ |
+| 202602545 | Jusmiati | MIZU-BANDUNG | PPMR
+ |
+| 202603552 | Annisa Rahma | MBIP | MTSM
+ |
+| 202604591 | Stevendino Marselino | PPVJ | PBSA
+ |
+| 202605596 | Adelia Puspita Sari | PPMR | PLMR
+ |
+| 202607626 | Lala Oliviana | PPPA | MDTS
+ |
 
 ## Tindak lanjut HR (di luar skrip)
 - Pin koordinat 5 toko lewat Lokasi Toko: MUBM, TWSP, MBRM, TWEM, TWLK.
@@ -75,3 +97,15 @@ Data toko di production (`configuration.branches`) sesuai Excel HR "20261001 - W
 ## Automation Log
 - 2026-10-28: **Instruksi user:** "ada worklocation / store paddy coba lengkapi dan tambah jika tidak ada di list store nya cek pada paddy-prod dulu sebelum eksekusi … sebelum jadi epic". Keputusan di atas (satu kali tanya jawab, semua opsi rekomendasi).
 - 2026-10-28: **Gladi** di salinan production `~/Desktop/paddydev-backups/prod-copy-epic069-20261028-121446.dump` (DB uji `e069_prod` di 55499, pg_restore pg16): pratinjau sesuai; terapkan 0,13 dtk → toko baru 3, dilengkapi 41, dipindah 22, audit 44 + 22, brand 53→56, gudang 55→58, penempatan 629→651; jadwal shift mendatang di toko lama 0. Jalur gagal: jalankan ulang → "3 toko baru sudah ada", `expected_stores=43` → batal, tanpa `-v` → berhenti.
+- 2026-10-28: **Instruksi user:** "Jalankan sekarang" (izin merge PR #43 + eksekusi production saat itu juga).
+- 2026-10-28: **Production DIEKSEKUSI 12:38:49–12:38:50 WIB** dari main `515a7b29` (sha256 skrip sama dengan gladi):
+  - backup VPS `~/backups/prod-db-before-epic069-20261028-123821.dump` (6,5 MB); log `~/backups/epic069-execute-20261028-123821.log`;
+  - pratinjau production = gladi (44 toko, 22 pindah, penempatan sekarang = kolom "dari" semuanya, jadwal shift mendatang di toko lama 0);
+  - terapkan: toko baru 3, dilengkapi 41, dipindah 22, tanpa downtime (tanpa deploy).
+- 2026-10-28: **Verifikasi read-only production:**
+  - audit `branch.work_location_import` 44 + `placement.work_location_moved` 22;
+  - TWSP/TWMS/TWEM aktif, masing-masing punya 1 gudang bawaan + 1 brand; brand 56, gudang 58, cabang 56;
+  - cabang aktif berkoordinat 39 dari 56;
+  - 22 karyawan punya penempatan utama aktif di toko Excel; karyawan dengan >1 penempatan aktif 0;
+  - HTTP `/` 302 (ke login), `/api/hris/branches` 401; error API 10 menit terakhir 0.
+- Rollback: restore `~/backups/prod-db-before-epic069-20261028-123821.dump`, atau balikkan per entri audit (`before`).
