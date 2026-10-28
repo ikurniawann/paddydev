@@ -141,6 +141,9 @@ export function useSaveEmployeeShiftPattern(employeeId: string) {
       qc.invalidateQueries({
         queryKey: usersQueryKeys.shiftSchedule(employeeId),
       });
+      // Pola mingguan menentukan jadwal: grid jadwal & halaman penempatan ikut segar.
+      qc.invalidateQueries({ queryKey: ["hris", "schedules"] });
+      qc.invalidateQueries({ queryKey: ["hris", "placements"] });
     },
   });
 }
