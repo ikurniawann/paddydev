@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"nuhabit/backend/internal/platform/hrisdel"
+	"nuhabit/backend/internal/platform/iam"
 	"nuhabit/backend/internal/platform/testutil"
 )
 
@@ -157,4 +158,24 @@ func TestScheduleCellsRejects(t *testing.T) {
 	expect(t, h.do(&hr, http.MethodPost, cellsPath, wide), http.StatusBadRequest, "Rentang tanggal maksimal 62 hari")
 	bad := cellsBody(branch, "preview", anaCell(ana, "2026-02-31", "DEF"))
 	expect(t, h.do(&hr, http.MethodPost, cellsPath, bad), http.StatusBadRequest, "Tanggal 2026-02-31 tidak valid")
+}
+
+// Reading Jadwal Kerja is not enough to save cells: without "update" on the
+// leaf both steps answer 403 and nothing is written.
+func TestScheduleCellsNeedUpdate(t *testing.T) {
+	h := newHarness(t)
+	reader := h.staffActions("hrd", map[string][]string{
+		"hris.kepegawaian":  {"read"},
+		iam.LeafJadwalKerja: {"read", "export"},
+	})
+	branch, ana, _ := scheduleFixture(h)
+	for _, step := range []string{"preview", "commit"} {
+		body := cellsBody(branch, step, anaCell(ana, "2026-10-06", "DEF"))
+		expect(t, h.do(&reader, http.MethodPost, cellsPath, body), http.StatusForbidden, "")
+	}
+	if n := h.scalar(`SELECT count(*)::text FROM hris.employee_shift_days WHERE employee_id = $1`, ana); n != "0" {
+		t.Fatalf("read-only user wrote %s schedule rows", n)
+	}
+	// The grid itself stays readable.
+	expect(t, h.do(&reader, http.MethodGet, "/api/hris/schedules?branch_id="+branch+"&from=2026-10-05&to=2026-10-11", nil), http.StatusOK, "")
 }

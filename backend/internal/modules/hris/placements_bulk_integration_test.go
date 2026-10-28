@@ -198,4 +198,12 @@ func TestBulkPlacementEnd(t *testing.T) {
 	all := h.do(&hr, "POST", path, map[string]any{"employee_ids": []string{a}, "end_date": "2026-10-08", "step": "commit"})
 	expect(t, all, 200, "")
 	expectBulk(t, all, a, "ended", nil, "Be70 Toko X@2026-10-08", "Be70 Toko Y@2026-10-08")
+
+	// Without the placement menu: 403, nothing ends.
+	staff, _ := h.staff("pos", nil, true, emp{name: "Be70 Zaki Crew"})
+	expect(t, h.do(&staff, "POST", path, map[string]any{"employee_ids": []string{c}, "end_date": "2026-10-08", "step": "preview"}), 403, "")
+	expect(t, h.do(&staff, "POST", path, map[string]any{"employee_ids": []string{c}, "end_date": "2026-10-08", "step": "commit"}), 403, "")
+	if got := h.scalar(`SELECT count(*)::text FROM hris.employee_placements WHERE employee_id = $1 AND end_date IS NOT NULL`, c); got != "0" {
+		t.Fatalf("forbidden bulk-end ended %s placements", got)
+	}
 }
