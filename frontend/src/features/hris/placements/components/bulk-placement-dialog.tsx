@@ -53,6 +53,8 @@ const COPY: Record<BulkPlacementAction, { title: (n: number) => string; descript
   },
 };
 
+const PAST_DATE_WARNING = "Tanggal sebelum hari ini — riwayat penempatan dan pembagian biaya gaji ikut berubah.";
+
 const OUTCOME: Record<BulkOutcome, { label: string; summary: string; className: string }> = {
   moved: { label: "Dipindah", summary: "dipindah", className: "bg-blue-50 text-blue-700" },
   created: { label: "Ditambah", summary: "ditambah", className: "bg-green-50 text-green-700" },
@@ -97,7 +99,8 @@ function BulkPlacementForm({
   const bulk = useBulkPlacement();
   const bulkEnd = useBulkEndPlacement();
   const [branchId, setBranchId] = useState("");
-  const [date, setDate] = useState(() => todayWib());
+  const [today] = useState(() => todayWib());
+  const [date, setDate] = useState(today);
   const [primary, setPrimary] = useState(false);
   const [notes, setNotes] = useState("");
   const [preview, setPreview] = useState<BulkPlacementResponse["data"] | null>(null);
@@ -155,6 +158,8 @@ function BulkPlacementForm({
 
   const results = preview?.results ?? [];
   const willChange = results.some((r) => r.outcome !== "skipped");
+  // Tanggal lampau tetap boleh (koreksi), tapi mengubah riwayat dan biaya gaji per toko.
+  const pastDateNote = date && date < today ? <p className="text-xs text-amber-700">{PAST_DATE_WARNING}</p> : null;
 
   return (
     <>
@@ -198,6 +203,7 @@ function BulkPlacementForm({
           {!willChange && (
             <p className="text-xs text-amber-700">Semua karyawan dilewati, tidak ada yang bisa disimpan.</p>
           )}
+          {pastDateNote}
         </div>
       ) : (
         <div className="space-y-3">
@@ -236,6 +242,7 @@ function BulkPlacementForm({
               value={date}
               onChange={(e) => edit(setDate)(e.target.value)}
             />
+            {pastDateNote && <div className="mt-1">{pastDateNote}</div>}
           </div>
           {mode === "add" && (
             <label className="flex items-start gap-2 text-sm text-gray-700">

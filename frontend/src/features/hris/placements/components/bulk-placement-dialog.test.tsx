@@ -12,6 +12,10 @@ const api = vi.hoisted(() => ({
 const toast = vi.hoisted(() => ({ error: vi.fn(), success: vi.fn() }));
 vi.mock("../api", () => api);
 vi.mock("sonner", () => ({ toast }));
+vi.mock("@/lib/dates", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/dates")>()),
+  todayWib: () => "2026-11-04",
+}));
 vi.mock("@/components/ui/combobox", () => ({
   Combobox: ({
     options,
@@ -180,6 +184,31 @@ describe("BulkPlacementDialog", () => {
     fireEvent.click(screen.getByRole("button", { name: "Ubah isian" }));
     expect(screen.queryByRole("button", { name: "Simpan" })).toBeNull();
     expect(screen.getByRole("button", { name: "Lihat pratinjau" })).toBeTruthy();
+  });
+
+  it.each([
+    ["move", "Tanggal pindah"],
+    ["add", "Tanggal mulai"],
+    ["end", "Tanggal terakhir bekerja"],
+  ] as const)("%s: tanggal sebelum hari ini diberi peringatan tanpa menghalangi simpan", async (mode, label) => {
+    const warning = "Tanggal sebelum hari ini — riwayat penempatan dan pembagian biaya gaji ikut berubah.";
+    const { onDone } = renderDialog({ mode });
+    expect(screen.queryByText(warning)).toBeNull(); // bawaan = hari ini
+    if (mode !== "end") await chooseStore("Pilih toko", "PVJ - Paddy PVJ");
+    fireEvent.change(screen.getByLabelText(label), { target: { value: "2026-11-03" } });
+    expect(screen.getByText(warning)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Lihat pratinjau" }));
+    await screen.findByText("Ani");
+    expect(screen.getByText(warning)).toBeTruthy(); // tetap terlihat saat memutuskan simpan
+    fireEvent.click(screen.getByRole("button", { name: "Simpan" }));
+    await waitFor(() => expect(onDone).toHaveBeenCalledTimes(1));
+  });
+
+  it("tanggal hari ini atau nanti tanpa peringatan", () => {
+    renderDialog({ mode: "move" });
+    fireEvent.change(screen.getByLabelText("Tanggal pindah"), { target: { value: "2026-11-05" } });
+    expect(screen.queryByText(/Tanggal sebelum hari ini/)).toBeNull();
   });
 
   it("lebih dari 500 karyawan tidak bisa diproses", async () => {
