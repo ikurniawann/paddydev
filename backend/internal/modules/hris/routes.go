@@ -38,6 +38,7 @@ func (h handlers) routes() []module.Route {
 		r("GET /api/hris/employee-placements/search", h.withMenu(placementManagers, h.searchPlacements)),
 		r("GET /api/hris/employee-placements/ids", h.withMenu(placementManagers, h.placementIDs)),
 		r("POST /api/hris/employee-placements/bulk", h.withMenu(placementManagers, h.bulkPlacement)),
+		r("POST /api/hris/employee-placements/bulk-end", h.withMenu(placementManagers, h.bulkEndPlacement)),
 		r("PATCH /api/hris/employee-placements/{id}", h.withMenu(placementManagers, h.updatePlacement)),
 		r("DELETE /api/hris/employee-placements/{id}", h.withDelete(delPlacement, h.withMenu(placementManagers, h.deletePlacement))),
 		r("GET /api/hris/me/placements", h.withActor(h.myPlacements)),
