@@ -8,6 +8,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { downloadScheduleErrors, importScheduleFile } from "../api";
+import { dayLabel, dm } from "../schedule-range";
 import type { ScheduleIssue, SchedulePreview } from "../types";
 import { retryWithReason } from "@/lib/hris/delete-reason";
 
@@ -19,7 +20,6 @@ interface Props {
   onSaved: () => void;
 }
 
-const dm = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
 const shown = (code: string) => code || "—";
 
 function issueTitle(i: ScheduleIssue): string {
@@ -117,6 +117,9 @@ export function ScheduleUploadDialog({ open, onOpenChange, range, branchName, on
             <DialogTitle>Unggah jadwal — {branchName}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 text-sm">
+            <p className="text-gray-600">
+              Rentang jadwal: {dayLabel(range.from)} – {dayLabel(range.to, true)}. Unduh template untuk rentang yang sama.
+            </p>
             <label className="block">
               <span className="mb-1 block text-xs font-medium text-gray-600">File jadwal (.xlsx)</span>
               <Input

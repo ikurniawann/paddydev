@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 	"nuhabit/backend/internal/platform/auth"
 	"nuhabit/backend/internal/platform/database"
 	"nuhabit/backend/internal/platform/httpx"
+	"nuhabit/backend/internal/platform/validate"
 	"nuhabit/backend/internal/platform/xlsx"
 )
 
@@ -36,6 +38,11 @@ func parseScheduleRange(ctx context.Context, q database.Querier, branchID, from,
 	if msg != "" {
 		return nil, httpx.BadRequest(msg)
 	}
+	return scheduleBranchRange(ctx, q, branchID, dates)
+}
+
+// scheduleBranchRange checks that the branch exists.
+func scheduleBranchRange(ctx context.Context, q database.Querier, branchID string, dates []string) (*scheduleRange, error) {
 	if !domain.UUIDRe.MatchString(branchID) {
 		return nil, httpx.BadRequest("Pilih cabang")
 	}
@@ -440,10 +447,13 @@ func colName(i int) (string, error) {
 
 /* ── Upload ──────────────────────────────────────────────────────────── */
 
-func uploadContext(ctx context.Context, q database.Querier, rng *scheduleRange, today string, nips []string) (domain.ScheduleUploadContext, map[string]string, error) {
+// uploadContext loads what the upload and per-cell rules read for the
+// branch and dates: the employees placed there plus those named by NIP
+// (upload) or ID (cells) who are not, keyed both ways.
+func uploadContext(ctx context.Context, q database.Querier, rng *scheduleRange, today string, nips, ids []string) (domain.ScheduleUploadContext, map[string]string, error) {
 	c := domain.ScheduleUploadContext{
 		BranchID: rng.Branch.ID, BranchName: rng.Branch.Name, Dates: rng.Dates, Today: today,
-		Employees: map[string]domain.UploadEmployee{}, Shifts: map[string]domain.UploadShift{},
+		Employees: map[string]domain.UploadEmployee{}, EmployeesByID: map[string]domain.UploadEmployee{}, Shifts: map[string]domain.UploadShift{},
 		ClosedDates: map[string]bool{}, OnLeave: map[string]map[string]bool{}, ClockedIn: map[string]map[string]bool{},
 	}
 	names := map[string]string{} // employee id → name
@@ -452,12 +462,14 @@ func uploadContext(ctx context.Context, q database.Querier, rng *scheduleRange, 
 		return c, nil, err
 	}
 	for _, e := range emps {
-		c.Employees[e.NIP] = domain.UploadEmployee{ID: e.ID, NIP: e.NIP, Name: e.Name, Position: e.Position,
+		u := domain.UploadEmployee{ID: e.ID, NIP: e.NIP, Name: e.Name, Position: e.Position,
 			ScheduleType: e.ScheduleType, Active: e.Active, Placed: e.Placed}
+		c.Employees[e.NIP], c.EmployeesByID[e.ID] = u, u
 		names[e.ID] = e.Name
 	}
-	if len(nips) > 0 {
-		rows, err := q.Query(ctx, `SELECT id::text, nip, full_name, schedule_type, is_active FROM hris.employees WHERE nip = ANY($1)`, nips)
+	if len(nips) > 0 || len(ids) > 0 {
+		rows, err := q.Query(ctx, `SELECT id::text, nip, full_name, schedule_type, is_active FROM hris.employees
+			WHERE nip = ANY($1) OR id = ANY($2::uuid[])`, nips, ids)
 		if err != nil {
 			return c, nil, err
 		}
@@ -467,9 +479,9 @@ func uploadContext(ctx context.Context, q database.Querier, rng *scheduleRange, 
 				rows.Close()
 				return c, nil, err
 			}
-			if _, placed := c.Employees[e.NIP]; !placed {
+			if _, placed := c.EmployeesByID[e.ID]; !placed {
 				e.Placed = map[string]bool{}
-				c.Employees[e.NIP] = e
+				c.Employees[e.NIP], c.EmployeesByID[e.ID] = e, e
 				names[e.ID] = e.Name
 			}
 		}
@@ -609,7 +621,7 @@ func (s *Service) ImportSchedule(ctx context.Context, actor *auth.User, in sched
 				nips = append(nips, nip)
 			}
 		}
-		uctx, names, err := uploadContext(ctx, q, rng, today, nips)
+		uctx, names, err := uploadContext(ctx, q, rng, today, nips, nil)
 		if err != nil {
 			return err
 		}
@@ -797,6 +809,289 @@ func (h handlers) importSchedules(w http.ResponseWriter, r *http.Request, u *aut
 	}
 	if errFile != nil {
 		return writeFile(w, errFile)
+	}
+	if in.Step == "commit" {
+		msg, _ := out["message"].(string)
+		return ok(w, dataMsg(map[string]any{"summary": out["summary"]}, msg))
+	}
+	return ok(w, dataOf(out))
+}
+
+/* ── Per-cell save (EPIC-070) ────────────────────────────────────────── */
+
+const (
+	maxScheduleCells    = 6000
+	maxScheduleCellDays = 62
+)
+
+type scheduleCellsInput struct {
+	BranchID, Step, Fingerprint string
+	AckWarnings                 bool
+	Cells                       []domain.ScheduleCellInput
+	Guard                       clearGuard
+}
+
+type cellsSummary struct {
+	Employees int `json:"employees"`
+	New       int `json:"new"`
+	Changed   int `json:"changed"`
+	Same      int `json:"same"`
+	Cleared   int `json:"cleared"`
+}
+
+// cellDates are the sorted unique dates of the cells: 1–62 of them, at
+// most 62 days from first to last.
+func cellDates(cells []domain.ScheduleCellInput) ([]string, error) {
+	if len(cells) == 0 {
+		return nil, httpx.BadRequest("Tidak ada jadwal yang diubah")
+	}
+	seen := map[string]bool{}
+	var dates []string
+	for _, c := range cells {
+		if seen[c.Date] {
+			continue
+		}
+		if _, err := time.Parse(domain.DateLayout, c.Date); err != nil {
+			return nil, httpx.BadRequest("Tanggal " + c.Date + " tidak valid")
+		}
+		seen[c.Date] = true
+		dates = append(dates, c.Date)
+	}
+	sort.Strings(dates)
+	first, _ := time.Parse(domain.DateLayout, dates[0])
+	last, _ := time.Parse(domain.DateLayout, dates[len(dates)-1])
+	if int(last.Sub(first).Hours()/24)+1 > maxScheduleCellDays {
+		return nil, httpx.BadRequest(fmt.Sprintf("Rentang tanggal maksimal %d hari", maxScheduleCellDays))
+	}
+	return dates, nil
+}
+
+// currentCells resolves the schedule that applies today for the employees
+// over the window around the edited dates (domain.ScheduleCellWindow).
+func currentCells(ctx context.Context, q database.Querier, branchID string, window []string, ids map[string]bool) (map[string]map[string]resolvedCell, error) {
+	emps, err := branchEmployees(ctx, q, branchID, window)
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]map[string]resolvedCell{}
+	for _, e := range emps {
+		if !ids[e.ID] {
+			continue
+		}
+		cells, err := resolveCells(ctx, q, e, window)
+		if err != nil {
+			return nil, err
+		}
+		out[e.ID] = map[string]resolvedCell{}
+		for _, c := range cells {
+			out[e.ID][c.Date] = c
+		}
+	}
+	return out, nil
+}
+
+// SaveScheduleCells writes edited grid cells as per-date rows with the
+// upload rules: preview, then commit with the preview fingerprint.
+func (s *Service) SaveScheduleCells(ctx context.Context, actor *auth.User, in scheduleCellsInput) (map[string]any, error) {
+	dates, err := cellDates(in.Cells)
+	if err != nil {
+		return nil, err
+	}
+	ids := map[string]bool{}
+	var idList []string
+	for _, c := range in.Cells {
+		if !ids[c.EmployeeID] {
+			ids[c.EmployeeID] = true
+			idList = append(idList, c.EmployeeID)
+		}
+	}
+	if len(idList) > domain.MaxScheduleRows {
+		return nil, httpx.BadRequest(fmt.Sprintf("Maksimal %d karyawan per simpan", domain.MaxScheduleRows))
+	}
+	today := domain.TodayWIB(s.clock())
+	var out map[string]any
+	err = s.repo.InTx(ctx, func(r Repository) error {
+		q := r.querier()
+		rng, err := scheduleBranchRange(ctx, q, in.BranchID, dates)
+		if err != nil {
+			return err
+		}
+		uctx, names, err := uploadContext(ctx, q, rng, today, nil, idList)
+		if err != nil {
+			return err
+		}
+		cur, err := currentCells(ctx, q, rng.Branch.ID, domain.ScheduleCellWindow(dates), ids)
+		if err != nil {
+			return err
+		}
+		uctx.Current = map[string]map[string]string{}
+		for id, cells := range cur {
+			uctx.Current[id] = map[string]string{}
+			for d, c := range cells {
+				uctx.Current[id][d] = c.Code
+			}
+		}
+		res := domain.ValidateScheduleCells(uctx, in.Cells)
+		if res.Errors == nil {
+			res.Errors = []domain.UploadIssue{}
+		}
+		if res.Warnings == nil {
+			res.Warnings = []domain.UploadIssue{}
+		}
+		summary, changes := cellsDiff(uctx, names, res, cur)
+		fp, err := scheduleFingerprint(ctx, q, res.Assignments)
+		if err != nil {
+			return err
+		}
+		var sets, clears []domain.ScheduleAssignment
+		for _, a := range res.Assignments {
+			if a.Clear {
+				clears = append(clears, a)
+			} else {
+				sets = append(sets, a)
+			}
+		}
+		replaced, err := replacedScheduleDays(ctx, q, sets)
+		if err != nil {
+			return err
+		}
+		cleared, err := existingScheduleDays(ctx, q, clears)
+		if err != nil {
+			return err
+		}
+		replaced += cleared
+		if in.Step != "commit" {
+			out = map[string]any{"summary": summary, "errors": res.Errors, "warnings": res.Warnings,
+				"fingerprint": fp, "changes": changes, "replaced_days": replaced}
+			return nil
+		}
+		switch {
+		case len(res.Errors) > 0:
+			return httpx.BadRequest("Jadwal masih punya error — perbaiki dulu sebelum menyimpan")
+		case len(res.Warnings) > 0 && !in.AckWarnings:
+			return httpx.BadRequest(`Centang "Saya sudah memeriksa peringatan" sebelum menyimpan`)
+		case fp != in.Fingerprint:
+			return httpx.Conflict("Jadwal sudah diubah orang lain sejak preview — muat ulang jadwal")
+		}
+		if err := in.Guard.check(replaced); err != nil {
+			return err
+		}
+		var batch string
+		if err := q.QueryRow(ctx, `SELECT gen_random_uuid()::text`).Scan(&batch); err != nil {
+			return err
+		}
+		keyIDs, keyDates := assignmentKeys(res.Assignments)
+		if _, err := q.Exec(ctx, `DELETE FROM hris.employee_shift_days d
+			USING unnest($1::uuid[], $2::date[]) AS k(employee_id, work_date)
+			WHERE d.employee_id = k.employee_id AND d.work_date = k.work_date`, keyIDs, keyDates); err != nil {
+			return err
+		}
+		days, clearedOf := map[string]int{}, map[string]int{}
+		for _, a := range clears {
+			clearedOf[a.EmployeeID]++
+		}
+		for _, a := range sets {
+			if _, err := q.Exec(ctx, `INSERT INTO hris.employee_shift_days
+				(employee_id, work_date, shift_id, branch_id, batch_id, created_by_name)
+				VALUES ($1, $2::date, $3, $4, $5, $6)`, a.EmployeeID, a.Date, a.ShiftID, rng.Branch.ID, batch, actor.FullName); err != nil {
+				return err
+			}
+			days[a.EmployeeID]++
+		}
+		for _, id := range res.EmployeeIDs {
+			if err := writeEmployeeAudit(ctx, q, actor, "schedule.cells_update", id, names[id], nil, map[string]any{
+				"branch": rng.Branch.Name, "from": rng.from(), "to": rng.to(), "batch_id": batch,
+				"days": days[id], "cleared": clearedOf[id]}); err != nil {
+				return err
+			}
+		}
+		if err := in.Guard.audit(ctx, q, actor, "hris.schedule.replace", batch, map[string]any{
+			"replaced_days": replaced, "branch": rng.Branch.Name, "from": rng.from(), "to": rng.to()}, replaced); err != nil {
+			return err
+		}
+		out = map[string]any{"summary": summary, "message": fmt.Sprintf("Jadwal %d karyawan disimpan", len(res.EmployeeIDs))}
+		return nil
+	})
+	return out, err
+}
+
+// cellsDiff compares the edited cells with the schedule that applies
+// today. Clearing a date without a per-date row changes nothing (same);
+// a cleared change has After "" (back to the weekly pattern).
+func cellsDiff(c domain.ScheduleUploadContext, names map[string]string, res domain.ScheduleUploadResult,
+	cur map[string]map[string]resolvedCell) (cellsSummary, []scheduleChange) {
+	sum := cellsSummary{Employees: len(res.EmployeeIDs)}
+	changes := []scheduleChange{}
+	codeOf := map[string]string{}
+	for _, sh := range c.Shifts {
+		codeOf[sh.ID] = sh.Code
+	}
+	for _, a := range res.Assignments {
+		before := cur[a.EmployeeID][a.Date]
+		after := ""
+		switch {
+		case a.Clear:
+			if before.Source != "day" {
+				sum.Same++
+				continue
+			}
+			sum.Cleared++
+		default:
+			after = domain.ScheduleOff
+			if a.ShiftID != nil {
+				after = codeOf[*a.ShiftID]
+			}
+			switch before.Code {
+			case "":
+				sum.New++
+			case after:
+				sum.Same++
+				continue
+			default:
+				sum.Changed++
+			}
+		}
+		if len(changes) < maxScheduleChanges {
+			changes = append(changes, scheduleChange{NIP: c.EmployeesByID[a.EmployeeID].NIP, Name: names[a.EmployeeID],
+				Date: a.Date, Before: before.Code, After: after})
+		}
+	}
+	return sum, changes
+}
+
+func (h handlers) saveScheduleCells(w http.ResponseWriter, r *http.Request, u *auth.User) error {
+	f, err := readForm(r, "")
+	if err != nil {
+		return err
+	}
+	branch := reqStr(f, "branch_id", "Pilih cabang", validate.StrOpts{Check: validate.UUIDCheck})
+	step := f.Enum("step", validate.Rule{}, []string{"preview", "commit"})
+	fp := f.Str("fingerprint", nullish, validate.StrOpts{Max: 64})
+	ack := f.Bool("ack_warnings", nullish)
+	reason := f.Str("reason", nullish, validate.StrOpts{Max: 500})
+	cells := []domain.ScheduleCellInput{}
+	f.List("cells", validate.Rule{}, maxScheduleCells, func(sub *validate.Form, i int, v any) {
+		item := sub.Item(i, v)
+		if item.Fields() == nil {
+			return
+		}
+		id := item.Str("employee_id", validate.Rule{}, validate.StrOpts{Check: validate.UUIDCheck})
+		date := item.Str("date", validate.Rule{}, dateOpts)
+		code := item.Str("code", nullish, validate.StrOpts{Max: 20})
+		cells = append(cells, domain.ScheduleCellInput{EmployeeID: strOr(id), Date: strOr(date), Code: strOr(code)})
+	})
+	if err := formErr(f, ""); err != nil {
+		return err
+	}
+	g, err := h.clearGuardFor(r, u, strings.TrimSpace(strOr(reason)))
+	if err != nil {
+		return err
+	}
+	in := scheduleCellsInput{BranchID: *branch, Step: *step, Fingerprint: strOr(fp),
+		AckWarnings: ack != nil && *ack, Cells: cells, Guard: g}
+	out, err := h.svc.SaveScheduleCells(r.Context(), u, in)
+	if err != nil {
+		return err
 	}
 	if in.Step == "commit" {
 		msg, _ := out["message"].(string)

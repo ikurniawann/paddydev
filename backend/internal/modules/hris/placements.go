@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgconn"
@@ -33,12 +35,23 @@ var placementManagers = slices.Concat(employeeRecordManagers, iam.HrisPlacements
 type PlacementRepo interface {
 	PlacementsOf(ctx context.Context, employeeID string) ([]*Row, error)
 	PlacementOverview(ctx context.Context, f placementFilter) ([]*Row, error)
+	// PlacementSearch is one page of the overview with the schedule status
+	// (EPIC-070); PlacementIDs the matching employee ids (at most limit);
+	// PlacementCounts the status chip counts, ignoring f.Status.
+	PlacementSearch(ctx context.Context, f placementFilter, limit, offset int) ([]*Row, error)
+	PlacementIDs(ctx context.Context, f placementFilter, limit int) ([]string, error)
+	PlacementCounts(ctx context.Context, f placementFilter) (*Row, error)
 	ActivePlacements(ctx context.Context, employeeID, date string) ([]*Row, error)
 	PlacementByID(ctx context.Context, id string) (*Row, error)
 	InsertPlacement(ctx context.Context, f fields) (*Row, error)
 	UpdatePlacement(ctx context.Context, id string, f fields) (*Row, error)
 	DeletePlacement(ctx context.Context, id string) (bool, error)
 	ClearOtherPrimary(ctx context.Context, employeeID, exceptID, start string, end *string) error
+	// PlacementEmployees are the id, full_name and nip of the employees;
+	// PlacementSpans all their placements (bulk actions, EPIC-070).
+	PlacementEmployees(ctx context.Context, ids []string) ([]*Row, error)
+	PlacementSpans(ctx context.Context, employeeIDs []string) ([]*Row, error)
+	EndPlacement(ctx context.Context, id, end string) error
 	ActiveBranches(ctx context.Context) ([]*Row, error)
 	BranchExists(ctx context.Context, id string) (bool, error)
 	// BranchGeofence is the store's name, coordinates and radius override
@@ -63,44 +76,128 @@ func (s *store) PlacementsOf(ctx context.Context, employeeID string) ([]*Row, er
 }
 
 // placementFilter narrows the overview: Branch keeps employees placed at
-// the store, Unplaced keeps those without any running placement, Search
-// matches name/NIP, All includes ended placements.
+// the store, Department/Position match the employee record, Search matches
+// name/NIP, Status keeps one chip (placementStatuses), All includes ended
+// placements in the placements column.
 type placementFilter struct {
-	Branch, Search string
-	Unplaced, All  bool
-	Today          string
+	Branch, Department, Position, Search, Status string
+	All                                          bool
+	Today                                        string
 }
 
-func (s *store) PlacementOverview(ctx context.Context, f placementFilter) ([]*Row, error) {
-	running := `(ep.end_date IS NULL OR ep.end_date >= $1::date)`
-	where := []string{"e.is_active"}
+// The overview conditions; $1 is always Today. A placement is running when
+// it has not ended by today. Schedule (R5): a per-date row or weekly
+// pattern in effect today..today+6; only Shift employees need one.
+const (
+	placementRunning  = `(ep.end_date IS NULL OR ep.end_date >= $1::date)`
+	placementPlaced   = `EXISTS (SELECT 1 FROM hris.employee_placements ep WHERE ep.employee_id = e.id AND ` + placementRunning + `)`
+	placementMulti    = `(SELECT count(*) FROM hris.employee_placements ep WHERE ep.employee_id = e.id AND ` + placementRunning + `) > 1`
+	placementSchedule = `EXISTS (SELECT 1 FROM hris.v_employee_schedule es WHERE es.employee_id = e.id
+		AND es.effective_from <= $1::date + 6 AND (es.effective_to IS NULL OR es.effective_to >= $1::date))`
+	placementNoSchedule = `(e.schedule_type = 'shift' AND NOT ` + placementSchedule + `)`
+)
+
+// placementStatuses are the status filters of the search page.
+var placementStatuses = map[string]string{
+	"":            "true",
+	"unplaced":    "NOT " + placementPlaced,
+	"no_schedule": placementNoSchedule,
+	"multi":       placementMulti,
+	"placed":      placementPlaced,
+}
+
+// placementWhere is the employee condition shared by the overview, search,
+// ids and counts, with its arguments ($1 = Today).
+func placementWhere(f placementFilter) (string, []any) {
+	// $1::date types today when no filter compares with it (PostgreSQL
+	// rejects an untyped unused parameter).
+	where := []string{"e.is_active", "$1::date IS NOT NULL"}
 	args := []any{f.Today}
 	if f.Branch != "" {
 		args = append(args, f.Branch)
 		where = append(where, fmt.Sprintf(`EXISTS (SELECT 1 FROM hris.employee_placements ep
-			WHERE ep.employee_id = e.id AND ep.branch_id = $%d AND %s)`, len(args), running))
+			WHERE ep.employee_id = e.id AND ep.branch_id = $%d AND %s)`, len(args), placementRunning))
 	}
-	if f.Unplaced {
-		where = append(where, `NOT EXISTS (SELECT 1 FROM hris.employee_placements ep WHERE ep.employee_id = e.id AND `+running+`)`)
+	if f.Department != "" {
+		args = append(args, f.Department)
+		where = append(where, fmt.Sprintf(`e.department_id = $%d`, len(args)))
+	}
+	if f.Position != "" {
+		args = append(args, f.Position)
+		where = append(where, fmt.Sprintf(`e.job_title_id = $%d`, len(args)))
 	}
 	if q := strings.TrimSpace(f.Search); q != "" {
 		args = append(args, "%"+q+"%")
 		where = append(where, fmt.Sprintf(`(e.full_name ILIKE $%d OR e.nip ILIKE $%d)`, len(args), len(args)))
 	}
-	placementCond := running
+	if f.Status != "" {
+		where = append(where, placementStatuses[f.Status])
+	}
+	return strings.Join(where, " AND "), args
+}
+
+// placementEmployeeSelect is the overview row: the employee with the
+// running (or, with All, every) placements.
+func placementEmployeeSelect(f placementFilter) string {
+	placementCond := placementRunning
 	if f.All {
 		placementCond = "true"
 	}
-	return queryRows(ctx, s.db, `SELECT e.id AS employee_id, e.full_name, e.nip, e.photo_url,
+	return `SELECT e.id AS employee_id, e.full_name, e.nip, e.photo_url,
 		d.name AS department_name, p.title AS position_title,
 		COALESCE((SELECT json_agg(x ORDER BY x.is_primary DESC, x.branch_name) FROM (
-		   SELECT `+placementColumns+placementFrom+`
-		    WHERE ep.employee_id = e.id AND `+placementCond+`) x), '[]'::json) AS placements
+		   SELECT ` + placementColumns + placementFrom + `
+		    WHERE ep.employee_id = e.id AND ` + placementCond + `) x), '[]'::json) AS placements`
+}
+
+const placementEmployeeFrom = `
 		FROM hris.employees e
 		LEFT JOIN hris.departments d ON d.id = e.department_id
-		LEFT JOIN hris.positions p ON p.id = e.job_title_id
-		WHERE `+strings.Join(where, " AND ")+`
+		LEFT JOIN hris.positions p ON p.id = e.job_title_id`
+
+func (s *store) PlacementOverview(ctx context.Context, f placementFilter) ([]*Row, error) {
+	where, args := placementWhere(f)
+	return queryRows(ctx, s.db, placementEmployeeSelect(f)+placementEmployeeFrom+`
+		WHERE `+where+`
 		ORDER BY e.full_name`, args...)
+}
+
+// PlacementSearch adds the record ids and schedule status to the overview
+// row: has_schedule (R5) and schedule_until, the last per-date row from
+// today on.
+func (s *store) PlacementSearch(ctx context.Context, f placementFilter, limit, offset int) ([]*Row, error) {
+	where, args := placementWhere(f)
+	args = append(args, limit, offset)
+	return queryRows(ctx, s.db, placementEmployeeSelect(f)+`,
+		e.department_id, e.job_title_id AS position_id, e.schedule_type,
+		`+placementSchedule+` AS has_schedule,
+		(SELECT max(sd.work_date)::text FROM hris.employee_shift_days sd
+		  WHERE sd.employee_id = e.id AND sd.work_date >= $1::date) AS schedule_until`+placementEmployeeFrom+`
+		WHERE `+where+fmt.Sprintf(`
+		ORDER BY e.full_name, e.id
+		LIMIT $%d OFFSET $%d`, len(args)-1, len(args)), args...)
+}
+
+func (s *store) PlacementIDs(ctx context.Context, f placementFilter, limit int) ([]string, error) {
+	where, args := placementWhere(f)
+	args = append(args, limit)
+	rows, err := queryRows(ctx, s.db, `SELECT e.id FROM hris.employees e WHERE `+where+
+		fmt.Sprintf(` ORDER BY e.full_name, e.id LIMIT $%d`, len(args)), args...)
+	ids := make([]string, 0, len(rows))
+	for _, r := range rows {
+		ids = append(ids, r.Str("id"))
+	}
+	return ids, err
+}
+
+func (s *store) PlacementCounts(ctx context.Context, f placementFilter) (*Row, error) {
+	f.Status = ""
+	where, args := placementWhere(f)
+	return queryRow(ctx, s.db, `SELECT count(*)::int AS "all",
+		count(*) FILTER (WHERE `+placementStatuses["unplaced"]+`)::int AS unplaced,
+		count(*) FILTER (WHERE `+placementStatuses["no_schedule"]+`)::int AS no_schedule,
+		count(*) FILTER (WHERE `+placementStatuses["multi"]+`)::int AS multi
+		FROM hris.employees e WHERE `+where, args...)
 }
 
 func (s *store) ActivePlacements(ctx context.Context, employeeID, date string) ([]*Row, error) {
@@ -143,6 +240,23 @@ func (s *store) ClearOtherPrimary(ctx context.Context, employeeID, exceptID, sta
 		WHERE employee_id = $1 AND is_primary AND ($2 = '' OR id::text <> $2)
 		  AND daterange(start_date, end_date, '[]') && daterange($3::date, $4::date, '[]')`,
 		employeeID, exceptID, start, end)
+	return err
+}
+
+func (s *store) PlacementEmployees(ctx context.Context, ids []string) ([]*Row, error) {
+	return queryRows(ctx, s.db, `SELECT id::text AS id, full_name, nip FROM hris.employees
+		WHERE id = ANY($1::text[]::uuid[])`, ids)
+}
+
+func (s *store) PlacementSpans(ctx context.Context, employeeIDs []string) ([]*Row, error) {
+	return queryRows(ctx, s.db, `SELECT ep.id::text AS id, ep.employee_id::text AS employee_id, ep.branch_id::text AS branch_id,
+		b.name AS branch_name, ep.start_date::text AS start_date, ep.end_date::text AS end_date`+placementFrom+`
+		WHERE ep.employee_id = ANY($1::text[]::uuid[])
+		ORDER BY ep.start_date, b.name`, employeeIDs)
+}
+
+func (s *store) EndPlacement(ctx context.Context, id, end string) error {
+	_, err := s.db.Exec(ctx, `UPDATE hris.employee_placements SET end_date = $2::date WHERE id = $1`, id, end)
 	return err
 }
 
@@ -340,6 +454,270 @@ func (s *Service) BulkPlacement(ctx context.Context, userID, branchID string, em
 	return created, skipped, nil
 }
 
+// Bulk placement actions with preview (EPIC-070): move (R4), add and end
+// placements of up to 500 employees. Commit runs every employee in one
+// transaction; preview runs the same writes and rolls them back, so it
+// answers exactly what commit would do.
+
+const (
+	bulkMove = "move"
+	bulkAdd  = "add"
+
+	bulkPreview = "preview"
+	bulkCommit  = "commit"
+)
+
+// errBulkPreview rolls the preview transaction back.
+var errBulkPreview = errors.New("bulk placement preview")
+
+// bulkPlacementRequest is a bulk move/add (mode set).
+type bulkPlacementRequest struct {
+	Mode, Step, BranchID string
+	EmployeeIDs          []string
+	Primary              bool
+	Start                string
+	End, Notes           *string
+}
+
+// bulkPlacementTarget is an employee of a bulk action with their placements.
+type bulkPlacementTarget struct {
+	emp   *Row
+	spans []domain.PlacementSpan
+}
+
+// loadBulkPlacements reads the employees (nil when not found) and their
+// placements; ids are deduplicated, keeping the order.
+func loadBulkPlacements(ctx context.Context, r Repository, ids []string) ([]string, map[string]*bulkPlacementTarget, error) {
+	uniq := make([]string, 0, len(ids))
+	seen := map[string]bool{}
+	for _, id := range ids {
+		id = strings.ToLower(id) // as PostgreSQL reads the ids back
+		if !seen[id] {
+			seen[id] = true
+			uniq = append(uniq, id)
+		}
+	}
+	emps, err := r.PlacementEmployees(ctx, uniq)
+	if err != nil {
+		return nil, nil, err
+	}
+	out := map[string]*bulkPlacementTarget{}
+	for _, e := range emps {
+		out[e.Str("id")] = &bulkPlacementTarget{emp: e}
+	}
+	spans, err := r.PlacementSpans(ctx, uniq)
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, p := range spans {
+		if t := out[p.Str("employee_id")]; t != nil {
+			t.spans = append(t.spans, domain.PlacementSpan{ID: p.Str("id"), BranchID: p.Str("branch_id"),
+				BranchName: p.Str("branch_name"), Start: p.Str("start_date"), End: p.StrPtr("end_date")})
+		}
+	}
+	return uniq, out, nil
+}
+
+// bulkPlacementResult is one employee's line of the response.
+func bulkPlacementResult(id string, t *bulkPlacementTarget, outcome, reason string, ended []domain.PlacementSpan, endDate string) *Row {
+	var name, nip any
+	if t != nil {
+		name, nip = t.emp.Get("full_name"), t.emp.Get("nip")
+	}
+	endedRows := make([]*Row, 0, len(ended))
+	for _, p := range ended {
+		endedRows = append(endedRows, obj("branch_name", p.BranchName, "end_date", endDate))
+	}
+	return obj("employee_id", id, "name", name, "nip", nip, "outcome", outcome, "reason", nilIfEmpty(&reason), "ended", endedRows)
+}
+
+// runningBranches names the placements running on date (audit "before").
+func runningBranches(spans []domain.PlacementSpan, date string) []string {
+	names := []string{}
+	for _, p := range spans {
+		if p.RunningOn(date) {
+			names = append(names, p.BranchName)
+		}
+	}
+	return names
+}
+
+// bulkCount is one part of a bulk message: "3 dipindahkan".
+type bulkCount struct {
+	n     int
+	label string
+}
+
+// bulkPlacementMessage joins the non-zero counts: "N dipindahkan, M
+// ditambahkan, K dilewati".
+func bulkPlacementMessage(counts ...bulkCount) string {
+	parts := []string{}
+	for _, c := range counts {
+		if c.n > 0 {
+			parts = append(parts, fmt.Sprintf("%d %s", c.n, c.label))
+		}
+	}
+	return strings.Join(parts, ", ")
+}
+
+// runBulkPlacement runs fn in one transaction, rolled back for a preview.
+func (s *Service) runBulkPlacement(ctx context.Context, step string, fn func(Repository) error) error {
+	err := s.repo.InTx(ctx, func(r Repository) error {
+		if err := fn(r); err != nil {
+			return err
+		}
+		if step == bulkPreview {
+			return errBulkPreview
+		}
+		return nil
+	})
+	if errors.Is(err, errBulkPreview) {
+		return nil
+	}
+	return placementError(err)
+}
+
+// BulkPlacementPlan moves (R4) or adds the employees to a store; see the
+// domain planners for the skip rules. Each processed employee is audited.
+func (s *Service) BulkPlacementPlan(ctx context.Context, actor *auth.User, in bulkPlacementRequest) (*Row, error) {
+	start := in.Start
+	if start == "" {
+		start = domain.TodayWIB(s.now())
+	}
+	primary := in.Primary || in.Mode == bulkMove
+	if in.End != nil && *in.End < start {
+		return nil, httpx.BadRequest("Tanggal selesai tidak boleh sebelum tanggal mulai")
+	}
+	action := "placement.bulk_add"
+	if in.Mode == bulkMove {
+		action = "placement.bulk_move"
+	}
+	var out *Row
+	err := s.runBulkPlacement(ctx, in.Step, func(r Repository) error {
+		branch, err := r.BranchGeofence(ctx, in.BranchID)
+		if err != nil {
+			return err
+		}
+		if branch == nil {
+			return httpx.NotFound("Toko tidak ditemukan")
+		}
+		ids, targets, err := loadBulkPlacements(ctx, r, in.EmployeeIDs)
+		if err != nil {
+			return err
+		}
+		results := make([]*Row, 0, len(ids))
+		counts := map[string]int{}
+		for _, id := range ids {
+			t := targets[id]
+			if t == nil {
+				counts[domain.PlacementSkipped]++
+				results = append(results, bulkPlacementResult(id, nil, domain.PlacementSkipped, "Karyawan tidak ditemukan", nil, ""))
+				continue
+			}
+			var plan domain.MoveDecision
+			if in.Mode == bulkMove {
+				plan = domain.PlanPlacementMove(t.spans, in.BranchID, start)
+			} else if reason := domain.PlanPlacementAdd(t.spans, in.BranchID, start, in.End); reason != "" {
+				plan = domain.MoveDecision{Outcome: domain.PlacementSkipped, Reason: reason}
+			} else {
+				plan = domain.MoveDecision{Outcome: domain.PlacementCreated}
+			}
+			counts[plan.Outcome]++
+			results = append(results, bulkPlacementResult(id, t, plan.Outcome, plan.Reason, plan.End, plan.EndDate))
+			if plan.Outcome == domain.PlacementSkipped {
+				continue
+			}
+			for _, p := range plan.End {
+				if err := r.EndPlacement(ctx, p.ID, plan.EndDate); err != nil {
+					return err
+				}
+			}
+			if primary {
+				if err := r.ClearOtherPrimary(ctx, id, "", start, in.End); err != nil {
+					return err
+				}
+			}
+			var f fields
+			f.add("employee_id", id)
+			f.add("branch_id", in.BranchID)
+			f.add("is_primary", primary)
+			f.add("start_date", start)
+			f.add("end_date", nilIfEmpty(in.End))
+			f.add("notes", nilIfEmpty(in.Notes))
+			f.add("created_by", nilIfEmpty(&actor.ID))
+			if _, err := r.InsertPlacement(ctx, f); err != nil {
+				return err
+			}
+			after := map[string]any{"branch": branch.Str("name"), "start_date": start, "is_primary": primary}
+			if in.End != nil {
+				after["end_date"] = *in.End
+			}
+			if err := writeEmployeeAudit(ctx, r.querier(), actor, action, id, t.emp.Str("full_name"),
+				map[string]any{"branches": runningBranches(t.spans, start)}, after); err != nil {
+				return err
+			}
+		}
+		moved, created, skipped := counts[domain.PlacementMoved], counts[domain.PlacementCreated], counts[domain.PlacementSkipped]
+		out = dataMsg(obj("step", in.Step, "created", created, "moved", moved, "skipped", skipped, "results", results),
+			bulkPlacementMessage(bulkCount{moved, "dipindahkan"}, bulkCount{created, "ditambahkan"}, bulkCount{skipped, "dilewati"}))
+		return nil
+	})
+	return out, err
+}
+
+// BulkEndPlacement ends the running placements (all, or only at branchID)
+// of the employees on end; see domain.PlanPlacementEnd for the skips.
+func (s *Service) BulkEndPlacement(ctx context.Context, actor *auth.User, step string, employeeIDs []string, end, branchID string) (*Row, error) {
+	var out *Row
+	err := s.runBulkPlacement(ctx, step, func(r Repository) error {
+		if branchID != "" {
+			branch, err := r.BranchGeofence(ctx, branchID)
+			if err != nil {
+				return err
+			}
+			if branch == nil {
+				return httpx.NotFound("Toko tidak ditemukan")
+			}
+		}
+		ids, targets, err := loadBulkPlacements(ctx, r, employeeIDs)
+		if err != nil {
+			return err
+		}
+		results := make([]*Row, 0, len(ids))
+		counts := map[string]int{}
+		for _, id := range ids {
+			t := targets[id]
+			if t == nil {
+				counts[domain.PlacementSkipped]++
+				results = append(results, bulkPlacementResult(id, nil, domain.PlacementSkipped, "Karyawan tidak ditemukan", nil, ""))
+				continue
+			}
+			plan := domain.PlanPlacementEnd(t.spans, branchID, end)
+			counts[plan.Outcome]++
+			results = append(results, bulkPlacementResult(id, t, plan.Outcome, plan.Reason, plan.End, end))
+			if plan.Outcome == domain.PlacementSkipped {
+				continue
+			}
+			names := make([]string, 0, len(plan.End))
+			for _, p := range plan.End {
+				if err := r.EndPlacement(ctx, p.ID, end); err != nil {
+					return err
+				}
+				names = append(names, p.BranchName)
+			}
+			if err := writeEmployeeAudit(ctx, r.querier(), actor, "placement.bulk_end", id, t.emp.Str("full_name"),
+				map[string]any{"branches": names}, map[string]any{"ended": names, "end_date": end}); err != nil {
+				return err
+			}
+		}
+		ended, skipped := counts[domain.PlacementEnded], counts[domain.PlacementSkipped]
+		out = dataMsg(obj("step", step, "ended", ended, "skipped", skipped, "results", results),
+			bulkPlacementMessage(bulkCount{ended, "diakhiri"}, bulkCount{skipped, "dilewati"}))
+		return nil
+	})
+	return out, err
+}
+
 // ClockPlacements is the store choice of a clock-in: the active placements
 // on date (primary first) and the default store (primary, else the only or
 // first placement); nil default without any placement.
@@ -389,12 +767,97 @@ func (h handlers) listPlacementOverview(w http.ResponseWriter, r *http.Request, 
 	if branch != "" && !domain.IsUUID(branch) {
 		return httpx.BadRequest("ID toko tidak valid")
 	}
-	rows, err := h.svc.repo.PlacementOverview(r.Context(), placementFilter{Branch: branch, Search: q.Get("q"),
-		Unplaced: q.Get("unplaced") == "true", All: q.Get("include_ended") == "true", Today: domain.TodayWIB(h.svc.now())})
+	f := placementFilter{Branch: branch, Search: q.Get("q"), All: q.Get("include_ended") == "true", Today: domain.TodayWIB(h.svc.now())}
+	if q.Get("unplaced") == "true" {
+		f.Status = "unplaced"
+	}
+	rows, err := h.svc.repo.PlacementOverview(r.Context(), f)
 	if err != nil {
 		return err
 	}
 	return ok(w, dataOf(rows))
+}
+
+// placementSearchFilter reads the search/ids filter:
+// q&branch_id&department_id&position_id&status&include_ended.
+func (h handlers) placementSearchFilter(q url.Values) (placementFilter, error) {
+	f := placementFilter{Branch: q.Get("branch_id"), Department: q.Get("department_id"), Position: q.Get("position_id"),
+		Search: q.Get("q"), Status: q.Get("status"), All: q.Get("include_ended") == "true", Today: domain.TodayWIB(h.svc.now())}
+	for _, id := range []struct{ val, msg string }{
+		{f.Branch, "ID toko tidak valid"}, {f.Department, "ID departemen tidak valid"}, {f.Position, "ID jabatan tidak valid"},
+	} {
+		if id.val != "" && !domain.IsUUID(id.val) {
+			return f, httpx.BadRequest(id.msg)
+		}
+	}
+	if _, known := placementStatuses[f.Status]; !known {
+		return f, httpx.BadRequest("Status tidak valid")
+	}
+	return f, nil
+}
+
+// placementTotal is the number of employees matching the status, read
+// from the chip counts (placed = all - unplaced).
+func placementTotal(counts *Row, status string) int {
+	switch status {
+	case "":
+		return int(counts.Num("all"))
+	case "placed":
+		return int(counts.Num("all") - counts.Num("unplaced"))
+	}
+	return int(counts.Num(status))
+}
+
+// GET /api/hris/employee-placements/search?q&branch_id&department_id&position_id&status&page&page_size&include_ended
+// → { rows, total, page, page_size, counts: { all, unplaced, no_schedule, multi } }
+func (h handlers) searchPlacements(w http.ResponseWriter, r *http.Request, _ *auth.User) error {
+	q := r.URL.Query()
+	f, err := h.placementSearchFilter(q)
+	if err != nil {
+		return err
+	}
+	page, size := 1, 25
+	if v := q.Get("page"); v != "" {
+		if page, err = strconv.Atoi(v); err != nil || page < 1 || page > 100000 {
+			return httpx.BadRequest("Halaman tidak valid")
+		}
+	}
+	if v := q.Get("page_size"); v != "" {
+		if size, err = strconv.Atoi(v); err != nil || (size != 25 && size != 50 && size != 100) {
+			return httpx.BadRequest("Jumlah per halaman harus 25, 50, atau 100")
+		}
+	}
+	counts, err := h.svc.repo.PlacementCounts(r.Context(), f)
+	if err != nil {
+		return err
+	}
+	rows, err := h.svc.repo.PlacementSearch(r.Context(), f, size, (page-1)*size)
+	if err != nil {
+		return err
+	}
+	return ok(w, dataOf(obj("rows", rows, "total", placementTotal(counts, f.Status), "page", page, "page_size", size,
+		"counts", counts)))
+}
+
+// placementIDLimit caps "pilih semua hasil filter".
+const placementIDLimit = 2000
+
+// GET /api/hris/employee-placements/ids?<search filter> → { ids, total, truncated }
+func (h handlers) placementIDs(w http.ResponseWriter, r *http.Request, _ *auth.User) error {
+	f, err := h.placementSearchFilter(r.URL.Query())
+	if err != nil {
+		return err
+	}
+	counts, err := h.svc.repo.PlacementCounts(r.Context(), f)
+	if err != nil {
+		return err
+	}
+	ids, err := h.svc.repo.PlacementIDs(r.Context(), f, placementIDLimit)
+	if err != nil {
+		return err
+	}
+	total := placementTotal(counts, f.Status)
+	return ok(w, dataOf(obj("ids", ids, "total", total, "truncated", total > len(ids))))
 }
 
 // GET /api/hris/employees/{id}/placements
@@ -467,7 +930,14 @@ func (h handlers) deletePlacement(w http.ResponseWriter, r *http.Request, _ *aut
 	return ok(w, msgOf("Penempatan dihapus"))
 }
 
+// bulkSteps are the step values of the bulk actions.
+var bulkSteps = []string{bulkPreview, bulkCommit}
+
 // POST /api/hris/employee-placements/bulk { branch_id, employee_ids[], is_primary?, start_date?, end_date? }
+// With mode ("add"|"move", EPIC-070) it also takes step ("preview", the
+// default, | "commit") and notes, and answers
+// { step, created, moved, skipped, results[] }; without it the legacy
+// { created, skipped } (R6).
 func (h handlers) bulkPlacement(w http.ResponseWriter, r *http.Request, u *auth.User) error {
 	f, err := readForm(r, "")
 	if err != nil {
@@ -478,11 +948,30 @@ func (h handlers) bulkPlacement(w http.ResponseWriter, r *http.Request, u *auth.
 	primary := f.Bool("is_primary", optional)
 	start := f.Str("start_date", optional, dateOpts)
 	end := f.Str("end_date", nullish, dateOpts)
+	var mode, step, notes *string
+	withMode := sent(f, "mode")
+	if withMode {
+		mode = f.Enum("mode", validate.Rule{}, []string{bulkAdd, bulkMove})
+		step = f.Enum("step", optional, bulkSteps)
+		notes = f.Str("notes", nullish, validate.StrOpts{Max: 500})
+	}
 	if err := formErr(f, ""); err != nil {
 		return err
 	}
 	if len(ids) == 0 {
 		return httpx.BadRequest("Pilih minimal satu karyawan")
+	}
+	if withMode {
+		in := bulkPlacementRequest{Mode: *mode, Step: bulkPreview, BranchID: *branch, EmployeeIDs: ids,
+			Primary: primary != nil && *primary, Start: strOr(start), End: nilIfEmpty(end), Notes: nilIfEmpty(notes)}
+		if step != nil {
+			in.Step = *step
+		}
+		out, err := h.svc.BulkPlacementPlan(r.Context(), u, in)
+		if err != nil {
+			return err
+		}
+		return ok(w, out)
 	}
 	created, skipped, err := h.svc.BulkPlacement(r.Context(), u.ID, *branch, ids, primary != nil && *primary, strOr(start), nilIfEmpty(end))
 	if err != nil {
@@ -493,6 +982,30 @@ func (h handlers) bulkPlacement(w http.ResponseWriter, r *http.Request, u *auth.
 		msg += fmt.Sprintf(", %d dilewati (sudah ditempatkan / tidak valid)", skipped)
 	}
 	return ok(w, dataMsg(obj("created", created, "skipped", skipped), msg))
+}
+
+// POST /api/hris/employee-placements/bulk-end { employee_ids[], end_date, branch_id?, step }
+// → { step, ended, skipped, results[] }
+func (h handlers) bulkEndPlacement(w http.ResponseWriter, r *http.Request, u *auth.User) error {
+	f, err := readForm(r, "")
+	if err != nil {
+		return err
+	}
+	ids := f.Strings("employee_ids", validate.Rule{}, 500, validate.StrOpts{Check: validate.UUIDCheck})
+	end := reqStr(f, "end_date", "Tanggal akhir wajib diisi", dateOpts)
+	branch := f.Str("branch_id", nullish, validate.StrOpts{Check: validate.UUIDCheck})
+	step := f.Enum("step", validate.Rule{}, bulkSteps)
+	if err := formErr(f, ""); err != nil {
+		return err
+	}
+	if len(ids) == 0 {
+		return httpx.BadRequest("Pilih minimal satu karyawan")
+	}
+	out, err := h.svc.BulkEndPlacement(r.Context(), u, *step, ids, *end, strOr(branch))
+	if err != nil {
+		return err
+	}
+	return ok(w, out)
 }
 
 // GET /api/hris/me/placements?employee_id&date: the stores a clock-in can

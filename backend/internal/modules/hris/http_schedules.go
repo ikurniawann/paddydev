@@ -23,7 +23,7 @@ const (
 )
 
 func (h handlers) listShifts(w http.ResponseWriter, r *http.Request, _ *Actor) error {
-	rows, err := h.svc.Shifts(r.Context())
+	rows, err := h.svc.Shifts(r.Context(), r.URL.Query().Get("with_usage") == "true")
 	if err != nil {
 		return err
 	}

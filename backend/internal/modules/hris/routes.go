@@ -35,7 +35,10 @@ func (h handlers) routes() []module.Route {
 
 		// placements (Penempatan Karyawan: stores an employee works at)
 		r("GET /api/hris/employee-placements", h.withMenu(placementManagers, h.listPlacementOverview)),
+		r("GET /api/hris/employee-placements/search", h.withMenu(placementManagers, h.searchPlacements)),
+		r("GET /api/hris/employee-placements/ids", h.withMenu(placementManagers, h.placementIDs)),
 		r("POST /api/hris/employee-placements/bulk", h.withMenu(placementManagers, h.bulkPlacement)),
+		r("POST /api/hris/employee-placements/bulk-end", h.withMenu(placementManagers, h.bulkEndPlacement)),
 		r("PATCH /api/hris/employee-placements/{id}", h.withMenu(placementManagers, h.updatePlacement)),
 		r("DELETE /api/hris/employee-placements/{id}", h.withDelete(delPlacement, h.withMenu(placementManagers, h.deletePlacement))),
 		r("GET /api/hris/me/placements", h.withActor(h.myPlacements)),
@@ -94,6 +97,7 @@ func (h handlers) routes() []module.Route {
 		r("GET /api/hris/schedules", h.withMenu(kepegawaian, h.getSchedules)),
 		r("GET /api/hris/schedules/template", h.withMenu(kepegawaian, h.getScheduleTemplate)),
 		r("POST /api/hris/schedules/import", h.withAction("update", scheduleManagers, h.importSchedules)),
+		r("POST /api/hris/schedules/cells", h.withAction("update", scheduleManagers, h.saveScheduleCells)),
 		r("GET /api/hris/overtime", h.withActor(h.listOvertime)),
 		r("POST /api/hris/overtime", h.withActor(h.createOvertime)),
 		r("POST /api/hris/overtime/decide", h.withActor(h.decideOvertime)),

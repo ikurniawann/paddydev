@@ -424,6 +424,26 @@ func (s *store) ListShifts(ctx context.Context) ([]*Row, error) {
 	return queryRows(ctx, s.db, `SELECT `+shiftColumns+` FROM hris.shifts ORDER BY sort_order ASC, name ASC`)
 }
 
+// ListShiftsWithUsage is ListShifts plus employees_using: the distinct
+// employees holding the shift on a per-date row from today on, or in a weekly
+// pattern still running (or starting later). It mirrors guardShiftDeactivate
+// (inactive employees included), so employees_using > 0 exactly when the
+// server refuses to deactivate or delete the shift. One aggregate query, no N+1.
+func (s *store) ListShiftsWithUsage(ctx context.Context, today string) ([]*Row, error) {
+	return queryRows(ctx, s.db, `SELECT `+shiftColumns+`, COALESCE(u.n, 0)::int AS employees_using
+		FROM hris.shifts
+		LEFT JOIN (
+		  SELECT shift_id, count(DISTINCT employee_id) AS n FROM (
+		    SELECT d.shift_id, d.employee_id FROM hris.employee_shift_days d WHERE d.work_date >= $1::date
+		    UNION ALL
+		    SELECT w.shift_id, w.employee_id FROM hris.employee_shifts w WHERE w.effective_to IS NULL OR w.effective_to >= $1::date
+		  ) src
+		  WHERE shift_id IS NOT NULL
+		  GROUP BY shift_id
+		) u ON u.shift_id = shifts.id
+		ORDER BY sort_order ASC, name ASC`, today)
+}
+
 func (s *store) CreateShift(ctx context.Context, in shiftInput) (*Row, error) {
 	row, err := queryRow(ctx, s.db, `INSERT INTO hris.shifts
 		(code, name, start_time, end_time, break_minutes, late_tolerance_minutes, is_overnight, sort_order)
@@ -484,6 +504,7 @@ func (s *store) DeleteShift(ctx context.Context, id string) (string, error) {
 // ScheduleRepo is the shift master storage.
 type ScheduleRepo interface {
 	ListShifts(ctx context.Context) ([]*Row, error)
+	ListShiftsWithUsage(ctx context.Context, today string) ([]*Row, error)
 	CreateShift(ctx context.Context, in shiftInput) (*Row, error)
 	UpdateShift(ctx context.Context, id string, in shiftInput) (bool, error)
 	DeleteShift(ctx context.Context, id string) (string, error)
@@ -496,7 +517,14 @@ type shiftInput struct {
 	IsOvernight, IsActive                  *bool
 }
 
-func (s *Service) Shifts(ctx context.Context) ([]*Row, error) { return s.repo.ListShifts(ctx) }
+// Shifts lists the shift master; withUsage adds employees_using per shift
+// (counted from today, WIB).
+func (s *Service) Shifts(ctx context.Context, withUsage bool) ([]*Row, error) {
+	if withUsage {
+		return s.repo.ListShiftsWithUsage(ctx, domain.TodayWIB(s.now()))
+	}
+	return s.repo.ListShifts(ctx)
+}
 
 func (s *Service) CreateShift(ctx context.Context, in shiftInput) (*Row, error) {
 	return s.repo.CreateShift(ctx, in)
