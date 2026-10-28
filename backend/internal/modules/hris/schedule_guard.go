@@ -76,3 +76,14 @@ func replacedScheduleDays(ctx context.Context, q database.Querier, as []domain.S
 		WHERE d.shift_id IS DISTINCT FROM NULLIF(k.shift_id, '')::uuid`, ids, dates, shifts).Scan(&n)
 	return n, err
 }
+
+// existingScheduleDays counts the per-date rows present for the keys (the
+// rows a per-cell clear removes).
+func existingScheduleDays(ctx context.Context, q database.Querier, as []domain.ScheduleAssignment) (int, error) {
+	ids, dates := assignmentKeys(as)
+	var n int
+	err := q.QueryRow(ctx, `SELECT count(*) FROM hris.employee_shift_days d
+		JOIN unnest($1::uuid[], $2::date[]) AS k(employee_id, work_date)
+		  ON k.employee_id = d.employee_id AND k.work_date = d.work_date`, ids, dates).Scan(&n)
+	return n, err
+}
