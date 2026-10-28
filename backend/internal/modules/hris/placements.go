@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgconn"
@@ -33,6 +35,12 @@ var placementManagers = slices.Concat(employeeRecordManagers, iam.HrisPlacements
 type PlacementRepo interface {
 	PlacementsOf(ctx context.Context, employeeID string) ([]*Row, error)
 	PlacementOverview(ctx context.Context, f placementFilter) ([]*Row, error)
+	// PlacementSearch is one page of the overview with the schedule status
+	// (EPIC-070); PlacementIDs the matching employee ids (at most limit);
+	// PlacementCounts the status chip counts, ignoring f.Status.
+	PlacementSearch(ctx context.Context, f placementFilter, limit, offset int) ([]*Row, error)
+	PlacementIDs(ctx context.Context, f placementFilter, limit int) ([]string, error)
+	PlacementCounts(ctx context.Context, f placementFilter) (*Row, error)
 	ActivePlacements(ctx context.Context, employeeID, date string) ([]*Row, error)
 	PlacementByID(ctx context.Context, id string) (*Row, error)
 	InsertPlacement(ctx context.Context, f fields) (*Row, error)
@@ -63,44 +71,128 @@ func (s *store) PlacementsOf(ctx context.Context, employeeID string) ([]*Row, er
 }
 
 // placementFilter narrows the overview: Branch keeps employees placed at
-// the store, Unplaced keeps those without any running placement, Search
-// matches name/NIP, All includes ended placements.
+// the store, Department/Position match the employee record, Search matches
+// name/NIP, Status keeps one chip (placementStatuses), All includes ended
+// placements in the placements column.
 type placementFilter struct {
-	Branch, Search string
-	Unplaced, All  bool
-	Today          string
+	Branch, Department, Position, Search, Status string
+	All                                          bool
+	Today                                        string
 }
 
-func (s *store) PlacementOverview(ctx context.Context, f placementFilter) ([]*Row, error) {
-	running := `(ep.end_date IS NULL OR ep.end_date >= $1::date)`
-	where := []string{"e.is_active"}
+// The overview conditions; $1 is always Today. A placement is running when
+// it has not ended by today. Schedule (R5): a per-date row or weekly
+// pattern in effect today..today+6; only Shift employees need one.
+const (
+	placementRunning  = `(ep.end_date IS NULL OR ep.end_date >= $1::date)`
+	placementPlaced   = `EXISTS (SELECT 1 FROM hris.employee_placements ep WHERE ep.employee_id = e.id AND ` + placementRunning + `)`
+	placementMulti    = `(SELECT count(*) FROM hris.employee_placements ep WHERE ep.employee_id = e.id AND ` + placementRunning + `) > 1`
+	placementSchedule = `EXISTS (SELECT 1 FROM hris.v_employee_schedule es WHERE es.employee_id = e.id
+		AND es.effective_from <= $1::date + 6 AND (es.effective_to IS NULL OR es.effective_to >= $1::date))`
+	placementNoSchedule = `(e.schedule_type = 'shift' AND NOT ` + placementSchedule + `)`
+)
+
+// placementStatuses are the status filters of the search page.
+var placementStatuses = map[string]string{
+	"":            "true",
+	"unplaced":    "NOT " + placementPlaced,
+	"no_schedule": placementNoSchedule,
+	"multi":       placementMulti,
+	"placed":      placementPlaced,
+}
+
+// placementWhere is the employee condition shared by the overview, search,
+// ids and counts, with its arguments ($1 = Today).
+func placementWhere(f placementFilter) (string, []any) {
+	// $1::date types today when no filter compares with it (PostgreSQL
+	// rejects an untyped unused parameter).
+	where := []string{"e.is_active", "$1::date IS NOT NULL"}
 	args := []any{f.Today}
 	if f.Branch != "" {
 		args = append(args, f.Branch)
 		where = append(where, fmt.Sprintf(`EXISTS (SELECT 1 FROM hris.employee_placements ep
-			WHERE ep.employee_id = e.id AND ep.branch_id = $%d AND %s)`, len(args), running))
+			WHERE ep.employee_id = e.id AND ep.branch_id = $%d AND %s)`, len(args), placementRunning))
 	}
-	if f.Unplaced {
-		where = append(where, `NOT EXISTS (SELECT 1 FROM hris.employee_placements ep WHERE ep.employee_id = e.id AND `+running+`)`)
+	if f.Department != "" {
+		args = append(args, f.Department)
+		where = append(where, fmt.Sprintf(`e.department_id = $%d`, len(args)))
+	}
+	if f.Position != "" {
+		args = append(args, f.Position)
+		where = append(where, fmt.Sprintf(`e.job_title_id = $%d`, len(args)))
 	}
 	if q := strings.TrimSpace(f.Search); q != "" {
 		args = append(args, "%"+q+"%")
 		where = append(where, fmt.Sprintf(`(e.full_name ILIKE $%d OR e.nip ILIKE $%d)`, len(args), len(args)))
 	}
-	placementCond := running
+	if f.Status != "" {
+		where = append(where, placementStatuses[f.Status])
+	}
+	return strings.Join(where, " AND "), args
+}
+
+// placementEmployeeSelect is the overview row: the employee with the
+// running (or, with All, every) placements.
+func placementEmployeeSelect(f placementFilter) string {
+	placementCond := placementRunning
 	if f.All {
 		placementCond = "true"
 	}
-	return queryRows(ctx, s.db, `SELECT e.id AS employee_id, e.full_name, e.nip, e.photo_url,
+	return `SELECT e.id AS employee_id, e.full_name, e.nip, e.photo_url,
 		d.name AS department_name, p.title AS position_title,
 		COALESCE((SELECT json_agg(x ORDER BY x.is_primary DESC, x.branch_name) FROM (
-		   SELECT `+placementColumns+placementFrom+`
-		    WHERE ep.employee_id = e.id AND `+placementCond+`) x), '[]'::json) AS placements
+		   SELECT ` + placementColumns + placementFrom + `
+		    WHERE ep.employee_id = e.id AND ` + placementCond + `) x), '[]'::json) AS placements`
+}
+
+const placementEmployeeFrom = `
 		FROM hris.employees e
 		LEFT JOIN hris.departments d ON d.id = e.department_id
-		LEFT JOIN hris.positions p ON p.id = e.job_title_id
-		WHERE `+strings.Join(where, " AND ")+`
+		LEFT JOIN hris.positions p ON p.id = e.job_title_id`
+
+func (s *store) PlacementOverview(ctx context.Context, f placementFilter) ([]*Row, error) {
+	where, args := placementWhere(f)
+	return queryRows(ctx, s.db, placementEmployeeSelect(f)+placementEmployeeFrom+`
+		WHERE `+where+`
 		ORDER BY e.full_name`, args...)
+}
+
+// PlacementSearch adds the record ids and schedule status to the overview
+// row: has_schedule (R5) and schedule_until, the last per-date row from
+// today on.
+func (s *store) PlacementSearch(ctx context.Context, f placementFilter, limit, offset int) ([]*Row, error) {
+	where, args := placementWhere(f)
+	args = append(args, limit, offset)
+	return queryRows(ctx, s.db, placementEmployeeSelect(f)+`,
+		e.department_id, e.job_title_id AS position_id, e.schedule_type,
+		`+placementSchedule+` AS has_schedule,
+		(SELECT max(sd.work_date)::text FROM hris.employee_shift_days sd
+		  WHERE sd.employee_id = e.id AND sd.work_date >= $1::date) AS schedule_until`+placementEmployeeFrom+`
+		WHERE `+where+fmt.Sprintf(`
+		ORDER BY e.full_name, e.id
+		LIMIT $%d OFFSET $%d`, len(args)-1, len(args)), args...)
+}
+
+func (s *store) PlacementIDs(ctx context.Context, f placementFilter, limit int) ([]string, error) {
+	where, args := placementWhere(f)
+	args = append(args, limit)
+	rows, err := queryRows(ctx, s.db, `SELECT e.id FROM hris.employees e WHERE `+where+
+		fmt.Sprintf(` ORDER BY e.full_name, e.id LIMIT $%d`, len(args)), args...)
+	ids := make([]string, 0, len(rows))
+	for _, r := range rows {
+		ids = append(ids, r.Str("id"))
+	}
+	return ids, err
+}
+
+func (s *store) PlacementCounts(ctx context.Context, f placementFilter) (*Row, error) {
+	f.Status = ""
+	where, args := placementWhere(f)
+	return queryRow(ctx, s.db, `SELECT count(*)::int AS "all",
+		count(*) FILTER (WHERE `+placementStatuses["unplaced"]+`)::int AS unplaced,
+		count(*) FILTER (WHERE `+placementStatuses["no_schedule"]+`)::int AS no_schedule,
+		count(*) FILTER (WHERE `+placementStatuses["multi"]+`)::int AS multi
+		FROM hris.employees e WHERE `+where, args...)
 }
 
 func (s *store) ActivePlacements(ctx context.Context, employeeID, date string) ([]*Row, error) {
@@ -389,12 +481,97 @@ func (h handlers) listPlacementOverview(w http.ResponseWriter, r *http.Request, 
 	if branch != "" && !domain.IsUUID(branch) {
 		return httpx.BadRequest("ID toko tidak valid")
 	}
-	rows, err := h.svc.repo.PlacementOverview(r.Context(), placementFilter{Branch: branch, Search: q.Get("q"),
-		Unplaced: q.Get("unplaced") == "true", All: q.Get("include_ended") == "true", Today: domain.TodayWIB(h.svc.now())})
+	f := placementFilter{Branch: branch, Search: q.Get("q"), All: q.Get("include_ended") == "true", Today: domain.TodayWIB(h.svc.now())}
+	if q.Get("unplaced") == "true" {
+		f.Status = "unplaced"
+	}
+	rows, err := h.svc.repo.PlacementOverview(r.Context(), f)
 	if err != nil {
 		return err
 	}
 	return ok(w, dataOf(rows))
+}
+
+// placementSearchFilter reads the search/ids filter:
+// q&branch_id&department_id&position_id&status&include_ended.
+func (h handlers) placementSearchFilter(q url.Values) (placementFilter, error) {
+	f := placementFilter{Branch: q.Get("branch_id"), Department: q.Get("department_id"), Position: q.Get("position_id"),
+		Search: q.Get("q"), Status: q.Get("status"), All: q.Get("include_ended") == "true", Today: domain.TodayWIB(h.svc.now())}
+	for _, id := range []struct{ val, msg string }{
+		{f.Branch, "ID toko tidak valid"}, {f.Department, "ID departemen tidak valid"}, {f.Position, "ID jabatan tidak valid"},
+	} {
+		if id.val != "" && !domain.IsUUID(id.val) {
+			return f, httpx.BadRequest(id.msg)
+		}
+	}
+	if _, known := placementStatuses[f.Status]; !known {
+		return f, httpx.BadRequest("Status tidak valid")
+	}
+	return f, nil
+}
+
+// placementTotal is the number of employees matching the status, read
+// from the chip counts (placed = all - unplaced).
+func placementTotal(counts *Row, status string) int {
+	switch status {
+	case "":
+		return int(counts.Num("all"))
+	case "placed":
+		return int(counts.Num("all") - counts.Num("unplaced"))
+	}
+	return int(counts.Num(status))
+}
+
+// GET /api/hris/employee-placements/search?q&branch_id&department_id&position_id&status&page&page_size&include_ended
+// → { rows, total, page, page_size, counts: { all, unplaced, no_schedule, multi } }
+func (h handlers) searchPlacements(w http.ResponseWriter, r *http.Request, _ *auth.User) error {
+	q := r.URL.Query()
+	f, err := h.placementSearchFilter(q)
+	if err != nil {
+		return err
+	}
+	page, size := 1, 25
+	if v := q.Get("page"); v != "" {
+		if page, err = strconv.Atoi(v); err != nil || page < 1 || page > 100000 {
+			return httpx.BadRequest("Halaman tidak valid")
+		}
+	}
+	if v := q.Get("page_size"); v != "" {
+		if size, err = strconv.Atoi(v); err != nil || (size != 25 && size != 50 && size != 100) {
+			return httpx.BadRequest("Jumlah per halaman harus 25, 50, atau 100")
+		}
+	}
+	counts, err := h.svc.repo.PlacementCounts(r.Context(), f)
+	if err != nil {
+		return err
+	}
+	rows, err := h.svc.repo.PlacementSearch(r.Context(), f, size, (page-1)*size)
+	if err != nil {
+		return err
+	}
+	return ok(w, dataOf(obj("rows", rows, "total", placementTotal(counts, f.Status), "page", page, "page_size", size,
+		"counts", counts)))
+}
+
+// placementIDLimit caps "pilih semua hasil filter".
+const placementIDLimit = 2000
+
+// GET /api/hris/employee-placements/ids?<search filter> → { ids, total, truncated }
+func (h handlers) placementIDs(w http.ResponseWriter, r *http.Request, _ *auth.User) error {
+	f, err := h.placementSearchFilter(r.URL.Query())
+	if err != nil {
+		return err
+	}
+	counts, err := h.svc.repo.PlacementCounts(r.Context(), f)
+	if err != nil {
+		return err
+	}
+	ids, err := h.svc.repo.PlacementIDs(r.Context(), f, placementIDLimit)
+	if err != nil {
+		return err
+	}
+	total := placementTotal(counts, f.Status)
+	return ok(w, dataOf(obj("ids", ids, "total", total, "truncated", total > len(ids))))
 }
 
 // GET /api/hris/employees/{id}/placements
