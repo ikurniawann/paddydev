@@ -47,7 +47,7 @@ export function ShiftsPage() {
   function handleDelete(shift: ShiftRow) {
     if (!confirm(`Hapus shift "${shift.name}"?`)) return;
     remove.mutate(shift.id, {
-      onSuccess: () => toast.success("Shift dihapus / dinonaktifkan"),
+      onSuccess: (res) => toast.success(res?.message || "Shift dihapus / dinonaktifkan"),
       onError: (error) => toast.error(error.message || "Gagal menghapus"),
     });
   }
@@ -126,6 +126,7 @@ export function ShiftsPage() {
                     onDelete={() => handleDelete(shift)}
                     onDeactivate={() => setDeactivating(shift)}
                     onActivate={() => setActive(shift, true)}
+                    busy={save.isPending}
                   />
                 )),
               ])}
@@ -148,7 +149,7 @@ export function ShiftsPage() {
         open={!!deactivating}
         onOpenChange={(open) => !open && setDeactivating(null)}
         title={deactivating ? `Nonaktifkan shift ${deactivating.code}?` : "Nonaktifkan shift?"}
-        description="Shift yang nonaktif tidak muncul lagi di pilihan jadwal. Bisa diaktifkan kembali kapan saja."
+        description="Shift yang nonaktif tidak muncul lagi di pilihan jadwal. Tombol Aktifkan mengembalikannya."
         confirmLabel="Ya, nonaktifkan"
         loading={save.isPending}
         onConfirm={() => deactivating && setActive(deactivating, false, () => setDeactivating(null))}
@@ -163,9 +164,10 @@ interface ShiftTableRowProps {
   onDelete: () => void;
   onDeactivate: () => void;
   onActivate: () => void;
+  busy: boolean;
 }
 
-function ShiftTableRow({ shift, onEdit, onDelete, onDeactivate, onActivate }: ShiftTableRowProps) {
+function ShiftTableRow({ shift, onEdit, onDelete, onDeactivate, onActivate, busy }: ShiftTableRowProps) {
   const used = shift.employees_using ?? 0;
   const locked = isProtectedShiftCode(shift.code);
   return (
@@ -201,12 +203,18 @@ function ShiftTableRow({ shift, onEdit, onDelete, onDeactivate, onActivate }: Sh
             <PencilIcon className="h-4 w-4" />
           </Button>
           {!locked && shift.is_active && used > 0 && (
-            <Button size="sm" variant="ghost" onClick={onDeactivate}>
+            // Server menolak nonaktif/hapus selama masih ada jadwal dari hari ini: jangan tawarkan tombol yang pasti gagal.
+            <span className="max-w-44 self-center text-right text-xs leading-tight text-gray-500">
+              Ganti dulu jadwal karyawan yang memakainya
+            </span>
+          )}
+          {!locked && shift.is_active && used === 0 && (
+            <Button size="sm" variant="ghost" disabled={busy} onClick={onDeactivate}>
               Nonaktifkan
             </Button>
           )}
           {!locked && !shift.is_active && (
-            <Button size="sm" variant="ghost" onClick={onActivate}>
+            <Button size="sm" variant="ghost" disabled={busy} onClick={onActivate}>
               Aktifkan
             </Button>
           )}

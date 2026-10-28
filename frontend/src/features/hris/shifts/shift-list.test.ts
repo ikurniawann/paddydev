@@ -25,6 +25,9 @@ describe("shiftSummary", () => {
 });
 
 describe("suggestShiftName", () => {
+  it("memakai tanda hubung seperti data yang sudah ada", () => {
+    expect(suggestShiftName("pagi8", "07:00", "15:00")).toBe("PAGI8 07:00-15:00");
+  });
   it("kosong bila kode belum diisi", () => {
     expect(suggestShiftName("  ", "08:00", "16:00")).toBe("");
   });

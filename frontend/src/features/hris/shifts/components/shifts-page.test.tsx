@@ -12,6 +12,12 @@ const api = vi.hoisted(() => ({
 const toast = vi.hoisted(() => ({ error: vi.fn(), success: vi.fn() }));
 vi.mock("../api", () => api);
 vi.mock("sonner", () => ({ toast }));
+vi.mock("@/lib/hris/delete-reason", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/hris/delete-reason")>()),
+  // dialog alasan global tidak dipasang di test: langsung beri alasan
+  withDeleteReason: (_title: string, fn: (arg: string, reason: string) => Promise<unknown>) => (arg: string) =>
+    fn(arg, "alasan uji coba"),
+}));
 vi.mock("./shift-form-dialog", () => ({ ShiftFormDialog: () => null }));
 
 const shift = (over: Partial<ShiftRow>): ShiftRow => ({
@@ -87,12 +93,6 @@ describe("ShiftsPage", () => {
     expect(within(rowOf("MLM")).getByLabelText("Lewat tengah malam")).toBeTruthy();
   });
 
-  it("meminta daftar dengan jumlah pemakai", async () => {
-    renderPage();
-    await screen.findByText("SPG13");
-    expect(api.fetchShifts).toHaveBeenCalled();
-  });
-
   it("pencarian menyaring kode, nama, dan jam", async () => {
     renderPage();
     await screen.findByText("SPG13");
@@ -114,21 +114,33 @@ describe("ShiftsPage", () => {
     expect(screen.getByText(/Tidak ada shift yang cocok/)).toBeTruthy();
   });
 
-  it("shift yang dipakai: tombol hapus disembunyikan, diganti Nonaktifkan", async () => {
+  it("shift yang dipakai: tanpa tombol Hapus/Nonaktifkan, ada petunjuk ganti jadwal dulu", async () => {
     renderPage();
     await screen.findByText("SPG13");
     const spg = rowOf("SPG13");
-    expect(within(spg).queryByRole("button", { name: /Hapus/ })).toBeNull();
-    expect(within(spg).getByRole("button", { name: "Nonaktifkan" })).toBeTruthy();
-    // belum dipakai: boleh dihapus
-    expect(within(rowOf("PAGI8")).getByRole("button", { name: /Hapus/ })).toBeTruthy();
-    // nonaktif: bisa diaktifkan lagi
-    expect(within(rowOf("PAGI2")).getByRole("button", { name: "Aktifkan" })).toBeTruthy();
+    expect(within(spg).queryByRole("button", { name: /Hapus|Nonaktifkan/ })).toBeNull();
+    expect(within(spg).getByText("Ganti dulu jadwal karyawan yang memakainya")).toBeTruthy();
   });
 
-  it("DEF dan NS tidak bisa dihapus atau dinonaktifkan", async () => {
+  it("shift aktif yang belum dipakai bisa dihapus atau dinonaktifkan; yang nonaktif bisa diaktifkan", async () => {
     renderPage();
     await screen.findByText("SPG13");
+    const pagi8 = rowOf("PAGI8");
+    expect(within(pagi8).getByRole("button", { name: /Hapus/ })).toBeTruthy();
+    expect(within(pagi8).getByRole("button", { name: "Nonaktifkan" })).toBeTruthy();
+    expect(within(pagi8).queryByText(/Ganti dulu jadwal/)).toBeNull();
+    const pagi2 = rowOf("PAGI2");
+    expect(within(pagi2).getByRole("button", { name: "Aktifkan" })).toBeTruthy();
+    expect(within(pagi2).queryByRole("button", { name: /Hapus|Nonaktifkan/ })).toBeNull();
+  });
+
+  it("DEF dan NS tidak bisa dihapus atau dinonaktifkan, walau belum dipakai siapa pun", async () => {
+    api.fetchShifts.mockResolvedValue([
+      shift({ code: "DEF", name: "Default", is_default: true, employees_using: 0 }),
+      shift({ code: "NS", name: "Non-Shift", is_default: true, employees_using: 0 }),
+    ]);
+    renderPage();
+    await screen.findByText("DEF");
     for (const code of ["DEF", "NS"]) {
       const tr = rowOf(code);
       expect(within(tr).queryByRole("button", { name: /Hapus|Nonaktifkan/ })).toBeNull();
@@ -139,11 +151,11 @@ describe("ShiftsPage", () => {
   it("Nonaktifkan meminta konfirmasi lalu menyimpan is_active=false dan menyegarkan data", async () => {
     const client = renderPage();
     const invalidate = vi.spyOn(client, "invalidateQueries");
-    await screen.findByText("SPG13");
-    fireEvent.click(within(rowOf("SPG13")).getByRole("button", { name: "Nonaktifkan" }));
+    await screen.findByText("PAGI8");
+    fireEvent.click(within(rowOf("PAGI8")).getByRole("button", { name: "Nonaktifkan" }));
     expect(api.saveShift).not.toHaveBeenCalled();
     fireEvent.click(await screen.findByRole("button", { name: "Ya, nonaktifkan" }));
-    await waitFor(() => expect(api.saveShift).toHaveBeenCalledWith({ is_active: false }, "SPG13"));
+    await waitFor(() => expect(api.saveShift).toHaveBeenCalledWith({ is_active: false }, "PAGI8"));
     await waitFor(() => expect(toast.success).toHaveBeenCalled());
     const keys = invalidate.mock.calls.map((c) => (c[0] as { queryKey: unknown[] }).queryKey);
     expect(keys).toContainEqual(["hris", "shifts"]);
@@ -154,10 +166,37 @@ describe("ShiftsPage", () => {
   it("menampilkan pesan server bila shift tak bisa dinonaktifkan", async () => {
     api.saveShift.mockRejectedValue(new Error("Shift masih dipakai jadwal 3 karyawan"));
     renderPage();
-    await screen.findByText("SPG13");
-    fireEvent.click(within(rowOf("SPG13")).getByRole("button", { name: "Nonaktifkan" }));
+    await screen.findByText("PAGI8");
+    fireEvent.click(within(rowOf("PAGI8")).getByRole("button", { name: "Nonaktifkan" }));
     fireEvent.click(await screen.findByRole("button", { name: "Ya, nonaktifkan" }));
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Shift masih dipakai jadwal 3 karyawan"));
+  });
+
+  it("hapus memakai pesan server pada toast sukses, dengan cadangan teks bila kosong", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    api.deleteShift.mockResolvedValueOnce({ message: "Shift PAGI8 dihapus" });
+    renderPage();
+    await screen.findByText("PAGI8");
+    fireEvent.click(within(rowOf("PAGI8")).getByRole("button", { name: /Hapus/ }));
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith("Shift PAGI8 dihapus"));
+    expect(api.deleteShift).toHaveBeenCalledWith("PAGI8", "alasan uji coba");
+
+    api.deleteShift.mockResolvedValueOnce({});
+    fireEvent.click(within(rowOf("PAGI8")).getByRole("button", { name: /Hapus/ }));
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith("Shift dihapus / dinonaktifkan"));
+  });
+
+  it("Aktifkan tidak bisa dikirim dua kali selagi menyimpan", async () => {
+    let resolve!: (v: unknown) => void;
+    api.saveShift.mockReturnValue(new Promise((r) => (resolve = r)));
+    renderPage();
+    await screen.findByText("PAGI2");
+    const btn = within(rowOf("PAGI2")).getByRole("button", { name: "Aktifkan" }) as HTMLButtonElement;
+    fireEvent.click(btn);
+    await waitFor(() => expect(btn.disabled).toBe(true));
+    fireEvent.click(btn);
+    expect(api.saveShift).toHaveBeenCalledTimes(1);
+    resolve({});
   });
 
   it("Aktifkan langsung menyimpan is_active=true", async () => {

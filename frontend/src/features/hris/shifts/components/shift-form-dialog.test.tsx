@@ -75,10 +75,10 @@ describe("ShiftFormDialog", () => {
     fireEvent.change(screen.getByLabelText("Jam selesai"), { target: { value: "15:00" } });
     const name = screen.getByLabelText("Nama shift") as HTMLInputElement;
     expect(name.value).toBe("");
-    expect(name.placeholder).toContain("PAGI8 07:00–15:00");
+    expect(name.placeholder).toContain("PAGI8 07:00-15:00");
     fireEvent.click(screen.getByRole("button", { name: "Simpan" }));
     await waitFor(() => expect(api.saveShift).toHaveBeenCalled());
-    expect(api.saveShift.mock.calls[0][0]).toMatchObject({ code: "PAGI8", name: "PAGI8 07:00–15:00" });
+    expect(api.saveShift.mock.calls[0][0]).toMatchObject({ code: "PAGI8", name: "PAGI8 07:00-15:00" });
     expect(api.saveShift.mock.calls[0][1]).toBeUndefined();
   });
 

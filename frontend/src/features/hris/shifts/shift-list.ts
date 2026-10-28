@@ -67,9 +67,9 @@ export function shiftSummary(startTime: string, endTime: string, toleranceMinute
   }`;
 }
 
-/** Saran nama dari kode + jam, mis. "PAGI8 07:00–15:00"; kosong bila kode/jam belum ada. */
+/** Saran nama dari kode + jam, mis. "PAGI8 07:00-15:00"; kosong bila kode/jam belum ada. */
 export function suggestShiftName(code: string, startTime: string, endTime: string): string {
   const c = code.trim().toUpperCase();
   if (!c || toMinutes(startTime) === null || toMinutes(endTime) === null) return "";
-  return `${c} ${hhmm(startTime)}–${hhmm(endTime)}`;
+  return `${c} ${hhmm(startTime)}-${hhmm(endTime)}`;
 }
