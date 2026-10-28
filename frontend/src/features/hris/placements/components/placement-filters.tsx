@@ -72,6 +72,7 @@ export interface PlacementFilterValues {
   branchId: string;
   departmentId: string;
   positionId: string;
+  includeEnded: boolean;
 }
 
 /** Filter 4 kolom: cari, toko, departemen, jabatan. */
@@ -124,6 +125,14 @@ export function PlacementFilters({
         onChange={(positionId) => onChange({ positionId })}
         options={(positions.data ?? []).map((p) => ({ value: p.id, label: p.title, description: p.department || undefined }))}
       />
+      <label className="flex items-center gap-2 text-sm text-gray-600 sm:col-span-2 lg:col-span-4">
+        <input
+          type="checkbox"
+          checked={values.includeEnded}
+          onChange={(e) => onChange({ includeEnded: e.target.checked })}
+        />
+        Tampilkan penempatan yang sudah berakhir
+      </label>
     </div>
   );
 }

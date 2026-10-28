@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight, Loader2, MapPin } from "lucide-react";
 import { toast } from "sonner";
@@ -36,7 +36,13 @@ export function PlacementsPage() {
   const router = useRouter();
   const canManage = useIamAccess().hasPrefix(PLACEMENT_MANAGERS);
   const [status, setStatus] = useState<PlacementStatusFilter>("");
-  const [filters, setFilters] = useState<PlacementFilterValues>({ search: "", branchId: "", departmentId: "", positionId: "" });
+  const [filters, setFilters] = useState<PlacementFilterValues>({
+    search: "",
+    branchId: "",
+    departmentId: "",
+    positionId: "",
+    includeEnded: false,
+  });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<PageSize>(25);
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
@@ -44,7 +50,7 @@ export function PlacementsPage() {
   const [action, setAction] = useState<BulkPlacementAction | null>(null);
   const [locationOpen, setLocationOpen] = useState(false);
   const [managing, setManaging] = useState<PlacementSearchRow | null>(null);
-  // Toko utama karyawan yang pernah dicentang, untuk tujuan "Atur jadwal".
+  // Toko utama setiap karyawan dari halaman yang pernah termuat, untuk tujuan "Atur jadwal".
   const branchOf = useRef(new Map<string, string>());
   const search = useDebouncedValue(filters.search.trim(), 300);
   const today = todayWib();
@@ -57,16 +63,28 @@ export function PlacementsPage() {
     department_id: filters.departmentId || undefined,
     position_id: filters.positionId || undefined,
     status: status || undefined,
+    include_ended: filters.includeEnded || undefined,
   };
   const result = usePlacementSearch({ ...baseFilter, page, page_size: pageSize });
   const data = result.data;
   const rows = data?.rows ?? [];
   const total = data?.total ?? 0;
-  const shownPage = data?.page ?? page;
   const shownSize = data?.page_size ?? pageSize;
+  const lastPage = Math.max(1, Math.ceil(total / shownSize));
+  // Hasil bisa menyusut (mis. sesudah aksi massal) saat berada di halaman akhir.
+  const shownPage = Math.min(data?.page ?? page, lastPage);
   const from = total === 0 ? 0 : (shownPage - 1) * shownSize + 1;
   const to = Math.min(shownPage * shownSize, total);
-  const lastPage = Math.max(1, Math.ceil(total / shownSize));
+
+  useEffect(() => {
+    for (const row of data?.rows ?? []) {
+      const main = mainPlacement(row, today);
+      if (main) branchOf.current.set(row.employee_id, main.branch_id);
+    }
+  }, [data?.rows, today]);
+
+  // Sesuaikan state saat render (bukan effect) supaya tidak ada render ganda.
+  if (data && page > lastPage) setPage(lastPage);
 
   const changeFilters = (patch: Partial<PlacementFilterValues>) => {
     setFilters((prev) => ({ ...prev, ...patch }));
@@ -77,12 +95,7 @@ export function PlacementsPage() {
     setPage(1);
   };
 
-  const remember = (row: PlacementSearchRow) => {
-    const main = mainPlacement(row, today);
-    if (main) branchOf.current.set(row.employee_id, main.branch_id);
-  };
   const toggle = (row: PlacementSearchRow) => {
-    remember(row);
     setSelected((prev) => {
       const next = new Set(prev);
       if (next.has(row.employee_id)) next.delete(row.employee_id);
@@ -92,7 +105,6 @@ export function PlacementsPage() {
   };
   const togglePage = () => {
     const all = rows.every((r) => selected.has(r.employee_id));
-    rows.forEach(remember);
     setSelected((prev) => {
       const next = new Set(prev);
       for (const r of rows) {

@@ -50,13 +50,6 @@ export interface PlacementOverviewRow {
   placements: Placement[];
 }
 
-export interface PlacementOverviewFilter {
-  branch_id?: string;
-  unplaced?: boolean;
-  q?: string;
-  include_ended?: boolean;
-}
-
 export interface PlacementPayload {
   branch_id?: string;
   is_primary?: boolean;

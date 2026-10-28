@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PlacementSearchRow, StoreBranch } from "../types";
 import { PlacementsPage } from "./placements-page";
@@ -97,20 +97,23 @@ const rows: PlacementSearchRow[] = [
 
 function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
+  render(
     <QueryClientProvider client={client}>
       <PlacementsPage />
     </QueryClientProvider>
   );
+  return client;
 }
 
 const lastFilter = () => api.searchPlacements.mock.calls.at(-1)?.[0];
+let total = 60;
 
 beforeEach(() => {
+  total = 60;
   api.fetchStoreBranches.mockResolvedValue(branches);
   api.searchPlacements.mockImplementation(async (f: { page?: number; page_size?: number }) => ({
     rows,
-    total: 60,
+    total,
     page: f.page ?? 1,
     page_size: f.page_size ?? 25,
     counts: { all: 60, unplaced: 7, no_schedule: 5, multi: 3 },
@@ -216,6 +219,61 @@ describe("PlacementsPage", () => {
     fireEvent.click(screen.getByLabelText("Pilih Dodi"));
     fireEvent.click(screen.getByRole("button", { name: "Atur jadwal" }));
     expect(push).toHaveBeenCalledWith("/dashboard/hris/schedules?branch_id=b2&employees=e1,e3,e4");
+  });
+
+  it("Atur jadwal sesudah Pilih semua hasil filter memakai toko utama dari baris yang termuat", async () => {
+    api.fetchPlacementIds.mockResolvedValue({ ids: ["e1", "e2", "e3", "e4"], total: 4, truncated: false });
+    renderPage();
+    await screen.findByText("Ani");
+    fireEvent.click(screen.getByLabelText("Pilih Ani"));
+    fireEvent.click(screen.getByRole("button", { name: "Pilih semua hasil filter (60)" }));
+    await screen.findByText("4 karyawan dipilih");
+    fireEvent.click(screen.getByRole("button", { name: "Atur jadwal" }));
+    expect(push).toHaveBeenCalledWith("/dashboard/hris/schedules?branch_id=b2&employees=e1,e2,e3,e4");
+  });
+
+  it("Atur jadwal tanpa toko yang diketahui dan tanpa filter toko tidak mengirim branch_id", async () => {
+    api.fetchPlacementIds.mockResolvedValue({ ids: ["x1", "x2"], total: 2, truncated: false });
+    renderPage();
+    await screen.findByText("Ani");
+    fireEvent.click(screen.getByLabelText("Pilih Budi"));
+    fireEvent.click(screen.getByRole("button", { name: "Pilih semua hasil filter (60)" }));
+    await screen.findByText("2 karyawan dipilih");
+    fireEvent.click(screen.getByRole("button", { name: "Atur jadwal" }));
+    expect(push).toHaveBeenCalledWith("/dashboard/hris/schedules?employees=x1,x2");
+  });
+
+  it("halaman mundur ke halaman terakhir bila hasil menyusut", async () => {
+    const client = renderPage();
+    await screen.findByText("Ani");
+    fireEvent.click(screen.getByRole("button", { name: "Halaman berikutnya" }));
+    await screen.findByText("26–50 dari 60");
+    fireEvent.click(screen.getByRole("button", { name: "Halaman berikutnya" }));
+    await screen.findByText("51–60 dari 60");
+    total = 40;
+    await act(() => client.invalidateQueries());
+    await waitFor(() => expect(lastFilter()).toMatchObject({ page: 2 }));
+    expect(await screen.findByText("26–40 dari 40")).toBeTruthy();
+    expect(screen.queryByText(/51–40/)).toBeNull();
+  });
+
+  it("centang penempatan berakhir mengirim include_ended dan menampilkannya abu-abu", async () => {
+    renderPage();
+    await screen.findByText("Ani");
+    api.searchPlacements.mockImplementation(async (f: { page?: number; page_size?: number; include_ended?: boolean }) => ({
+      rows: f.include_ended
+        ? [row({ placements: [placement("pl1", "e1", branches[0], true), { ...placement("pl9", "e1", branches[1], false, "2025-01-01"), end_date: "2025-12-31" }] })]
+        : rows,
+      total: 60,
+      page: f.page ?? 1,
+      page_size: f.page_size ?? 25,
+      counts: { all: 60, unplaced: 7, no_schedule: 5, multi: 3 },
+    }));
+    fireEvent.click(screen.getByLabelText("Tampilkan penempatan yang sudah berakhir"));
+    await waitFor(() => expect(lastFilter()).toMatchObject({ include_ended: true, page: 1 }));
+    const ended = await screen.findByText("KPO - Paddy Kopo · berakhir 31 Des 2025");
+    expect(ended.className).toContain("text-gray-400");
+    expect(within(screen.getByText("Ani").closest("tr")!).queryByText("+1 toko lain")).toBeNull();
   });
 
   it("Pindahkan ke toko membuka dialog untuk karyawan terpilih", async () => {

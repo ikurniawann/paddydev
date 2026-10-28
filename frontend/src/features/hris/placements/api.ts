@@ -8,8 +8,6 @@ import type {
   BulkPlacementResponse,
   ClockPlacements,
   Placement,
-  PlacementOverviewFilter,
-  PlacementOverviewRow,
   PlacementIdsResult,
   PlacementPayload,
   PlacementSearchFilter,
@@ -36,16 +34,6 @@ export const saveBranchMinWorkHours = (id: string, payload: { min_work_hours: nu
 
 export const fetchEmployeePlacements = (employeeId: string) =>
   apiGet<{ data: Placement[] }>(`/api/hris/employees/${employeeId}/placements`).then((res) => res.data ?? []);
-
-export const fetchPlacementOverview = (filter: PlacementOverviewFilter) =>
-  apiGet<{ data: PlacementOverviewRow[] }>(
-    buildListUrl("/api/hris/employee-placements", {
-      branch_id: filter.branch_id,
-      unplaced: filter.unplaced ? "true" : undefined,
-      q: filter.q,
-      include_ended: filter.include_ended ? "true" : undefined,
-    })
-  ).then((res) => res.data ?? []);
 
 export const createPlacement = (employeeId: string, payload: PlacementPayload) =>
   apiPost<{ data: Placement; message?: string }>(`/api/hris/employees/${employeeId}/placements`, payload);

@@ -73,6 +73,8 @@ export function PlacementsTable({ rows, today, canManage, selected, onToggle, on
         <tbody>
           {rows.map((row) => {
             const main = mainPlacement(row, today);
+            // Hanya terisi bila "Tampilkan penempatan yang sudah berakhir" dicentang.
+            const ended = row.placements.filter((p) => placementStatus(p, today) === "berakhir");
             const others = new Set(runningPlacements(row, today).map((p) => p.branch_id)).size - 1;
             const schedule = scheduleStatus(row, today);
             const subtitle = [row.nip, row.position_title].filter(Boolean).join(" · ");
@@ -112,6 +114,11 @@ export function PlacementsTable({ rows, today, canManage, selected, onToggle, on
                   ) : (
                     <span className="text-gray-400">—</span>
                   )}
+                  {ended.map((p) => (
+                    <p key={p.id} className="text-xs text-gray-400">
+                      {`${p.branch_name} · berakhir ${p.end_date ? shortDateId(p.end_date) : ""}`}
+                    </p>
+                  ))}
                 </td>
                 <td className="whitespace-nowrap p-3 text-gray-600">{main ? shortDateId(main.start_date) : "—"}</td>
                 <td className="p-3">
