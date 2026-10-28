@@ -72,7 +72,7 @@ deploying-dev · ready-for-qa · blocked · done).
 | [EPIC-067](./EPIC-067-absensi-tindak-lanjut.md) | HRIS Absensi — Tindak Lanjut: Export Kurang Jam, Ringkasan Absen Terlewat HR, Approve per Menu Daun (`MODULE-HRIS`) | ready-for-qa | 2026-10-27 |
 | [EPIC-068](./EPIC-068-alokasi-saldo-cuti.md) | Alokasi Saldo Cuti oleh HR — Manual, Massal, Sisa Bawaan (`MODULE-HRIS`) | ready-for-qa | 2026-10-26 |
 | [EPIC-069](./EPIC-069-work-location-toko.md) | Work Location Toko — Lengkapi Profil, Tambah Toko Baru, Benahi Penempatan (`MODULE-HRIS`) | ready-for-qa | 2026-10-28 |
-| [EPIC-070](./EPIC-070-penempatan-jadwal-massal.md) | Penempatan & Jadwal Shift — Massal, Manual, Lebih Jelas (`MODULE-HRIS`) | coding | 2026-10-29 |
+| [EPIC-070](./EPIC-070-penempatan-jadwal-massal.md) | Penempatan & Jadwal Shift — Massal, Manual, Lebih Jelas (`MODULE-HRIS`) | review | 2026-10-29 |
 
 Aturan:
 - Epic + registry ini adalah sumber kebenaran status pekerjaan (canonical).
