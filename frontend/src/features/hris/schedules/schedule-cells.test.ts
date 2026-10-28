@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { addDays } from "./schedule-range";
 import {
-  addDays,
   cellKey,
   copyWeek,
   coverChunks,
@@ -8,7 +8,6 @@ import {
   expandPattern,
   fillCells,
   mergeGrids,
-  mondayOf,
   rowRange,
   shiftTone,
 } from "./schedule-cells";
@@ -35,15 +34,7 @@ function grid(from: string, n: number, rows: Record<string, Record<string, strin
   };
 }
 
-describe("tanggal", () => {
-  it("addDays dan mondayOf", () => {
-    expect(addDays("2026-11-02", 7)).toBe("2026-11-09");
-    expect(addDays("2026-11-02", -1)).toBe("2026-11-01");
-    expect(mondayOf("2026-10-29")).toBe("2026-10-26"); // Kamis → Senin
-    expect(mondayOf("2026-11-01")).toBe("2026-10-26"); // Minggu → Senin sebelumnya
-    expect(mondayOf("2026-11-02")).toBe("2026-11-02");
-  });
-
+describe("potongan grid", () => {
   it("coverChunks memecah rentang jadi potongan 7–45 hari", () => {
     expect(coverChunks("2026-11-02", "2026-11-03")).toEqual([{ from: "2026-11-02", to: "2026-11-08" }]);
     expect(coverChunks("2026-11-02", "2026-11-29")).toEqual([{ from: "2026-11-02", to: "2026-11-29" }]);

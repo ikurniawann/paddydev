@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { toast } from "sonner";
 import { ApiError } from "@/lib/api-client";
-import { addDays } from "../schedule-cells";
+import { addDays } from "../schedule-range";
 import type { CellsPreview, ScheduleGrid as Grid } from "../types";
 import { ScheduleGrid } from "./schedule-grid";
 

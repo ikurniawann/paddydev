@@ -7,8 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { fetchScheduleGrid } from "../api";
-import { CELLS_EMPLOYEE_LIMIT, CELLS_EMPLOYEE_LIMIT_MESSAGE, useScheduleCellsSave } from "../mutations";
-import { addDays, coverChunks, dayDiff, expandPattern, mergeGrids } from "../schedule-cells";
+import { CELLS_EMPLOYEE_LIMIT, CELLS_EMPLOYEE_LIMIT_MESSAGE, CELLS_LIMIT, useScheduleCellsSave } from "../mutations";
+import { coverChunks, expandPattern, mergeGrids } from "../schedule-cells";
+import { addDays, dayDiff } from "../schedule-range";
 import type { ScheduleShift } from "../types";
 import { CellsReviewPanel } from "./cells-confirm-dialog";
 import { hhmm } from "./shift-picker";
@@ -57,7 +58,10 @@ export function PatternDialog({ open, onOpenChange, branchId, employees, shifts,
   const problem = rangeProblem(from, to, today);
   const tooMany = employees.length > CELLS_EMPLOYEE_LIMIT;
   const busy = loading || saver.busy;
-  const ready = !problem && !tooMany && pattern.every(Boolean) && !busy;
+  // Perkiraan atas (sebelum kotak "-" dilewati) supaya ditolak sebelum memuat apa pun.
+  const cellCount = problem ? 0 : employees.length * (dayDiff(from, to) + 1);
+  const tooManyCells = cellCount > CELLS_LIMIT;
+  const ready = !problem && !tooMany && !tooManyCells && pattern.every(Boolean) && !busy;
   const names = employees.slice(0, 5).map((e) => e.name).join(", ") + (employees.length > 5 ? `, dan ${employees.length - 5} lainnya` : "");
 
   async function apply() {
@@ -152,6 +156,11 @@ export function PatternDialog({ open, onOpenChange, branchId, employees, shifts,
               </label>
             </div>
             {problem ? <p className="text-sm text-danger">{problem}</p> : null}
+            {!tooMany && tooManyCells ? (
+              <p className="text-sm text-danger">
+                {`${employees.length} karyawan × ${dayDiff(from, to) + 1} hari = ${cellCount} kotak, maksimal ${CELLS_LIMIT} sekali simpan. Perkecil rentang tanggal atau jumlah karyawan.`}
+              </p>
+            ) : null}
             <p className="text-xs text-gray-500">
               Tanggal saat karyawan tidak ditempatkan di cabang ini dilewati. Maksimal {PATTERN_MAX_DAYS} hari sekali simpan.
             </p>

@@ -6,9 +6,9 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { MIN_DELETE_REASON } from "@/lib/hris/delete-reason";
 import type { ScheduleCellsSaver } from "../mutations";
+import { dm } from "../schedule-range";
 import type { CellsPreview, ScheduleIssue } from "../types";
 
-const dm = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
 const before = (code: string) => code || "Belum ada";
 const after = (code: string) => code || "Ikut pola mingguan";
 
@@ -48,7 +48,7 @@ interface PanelProps {
   onReason: (reason: string) => void;
 }
 
-/** Ringkasan pratinjau kotak jadwal: error, peringatan, dan jadwal yang tertimpa. */
+/** Ringkasan pratinjau kotak jadwal: masalah, peringatan, dan jadwal yang tertimpa. */
 export function CellsReviewPanel({ preview, ack, onAck, reason, onReason }: PanelProps) {
   const { summary, errors, warnings, changes, replaced_days: replaced } = preview;
   const replacedChanges = changes.filter((c) => c.before !== "");
@@ -60,7 +60,7 @@ export function CellsReviewPanel({ preview, ack, onAck, reason, onReason }: Pane
       </p>
       {errors.length > 0 ? (
         <div className="space-y-2">
-          <p className="font-semibold text-danger">{errors.length} error — jadwal belum bisa disimpan</p>
+          <p className="font-semibold text-danger">{errors.length} masalah — jadwal belum bisa disimpan</p>
           <IssueList issues={errors} tone="danger" />
         </div>
       ) : null}

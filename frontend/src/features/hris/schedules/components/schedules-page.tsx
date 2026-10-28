@@ -9,7 +9,7 @@ import { useStoreBranches } from "@/features/hris/placements/queries";
 import { todayWib } from "@/lib/dates";
 import { scheduleTemplateUrl } from "../api";
 import { useScheduleGrid } from "../queries";
-import { addDays, mondayOf } from "../schedule-cells";
+import { addDays, dayLabel, mondayOf, uploadRange } from "../schedule-range";
 import { FixedScheduleDialog } from "./fixed-schedule-dialog";
 import { ScheduleGrid } from "./schedule-grid";
 import { ScheduleUploadDialog } from "./schedule-upload-dialog";
@@ -21,14 +21,6 @@ const VIEWS = [
   { days: 28, label: "4 minggu" },
 ] as const;
 
-const fmt = (iso: string, withYear = false) =>
-  new Date(`${iso}T00:00:00Z`).toLocaleDateString("id-ID", {
-    day: "numeric",
-    month: "short",
-    ...(withYear ? { year: "numeric" } : {}),
-    timeZone: "UTC",
-  });
-
 interface Props {
   /** Dari tautan Atur jadwal di Penempatan: `?branch_id=…&employees=a,b`. */
   initialBranchId?: string;
@@ -39,17 +31,27 @@ interface Props {
 export function SchedulesPage({ initialBranchId = "", initialEmployeeIds = [] }: Props) {
   const today = todayWib();
   const [branchId, setBranchId] = useState(initialBranchId);
+  /** Cabang yang menerima centang awal; "" = cabang pertama yang dipilih, null = sudah dipakai. */
+  const [prefillBranch, setPrefillBranch] = useState<string | null>(initialBranchId);
   const [start, setStart] = useState(() => mondayOf(today));
   const [days, setDays] = useState<number>(14);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [fixedOpen, setFixedOpen] = useState(false);
   const branches = useStoreBranches();
   const params = { branch_id: branchId, from: start, to: addDays(start, days - 1) };
+  // Template & unggah tidak boleh memuat tanggal lewat (server menolak).
+  const fileRange = { branch_id: branchId, ...uploadRange(params.from, params.to, today) };
   const grid = useScheduleGrid(params);
   const branchName = branches.data?.find((b) => b.id === branchId)?.name ?? "";
   const ready = !!branchId;
-  // Centang awal hanya untuk cabang dari tautan (atau cabang pertama yang dipilih bila tautan tanpa cabang).
-  const prefill = !initialBranchId || branchId === initialBranchId ? initialEmployeeIds : undefined;
+  // Centang awal dipakai sekali: untuk cabang dari tautan (atau cabang pertama yang dipilih).
+  const prefill = prefillBranch !== null && branchId === prefillBranch ? initialEmployeeIds : undefined;
+
+  function changeBranch(next: string) {
+    if (prefillBranch === "") setPrefillBranch(next);
+    else if (prefillBranch !== null && next !== prefillBranch) setPrefillBranch(null);
+    setBranchId(next);
+  }
 
   return (
     <div className="space-y-5">
@@ -64,7 +66,7 @@ export function SchedulesPage({ initialBranchId = "", initialEmployeeIds = [] }:
           <Combobox
             options={(branches.data ?? []).map((b) => ({ value: b.id, label: b.name, description: b.code }))}
             value={branchId}
-            onChange={setBranchId}
+            onChange={changeBranch}
             placeholder="Pilih cabang"
             searchPlaceholder="Cari cabang..."
             emptyMessage="Cabang tidak ditemukan"
@@ -72,7 +74,7 @@ export function SchedulesPage({ initialBranchId = "", initialEmployeeIds = [] }:
         </div>
         <div>
           <p className="mb-1 text-xs font-medium text-gray-600">
-            {fmt(params.from)} – {fmt(params.to, true)}
+            {dayLabel(params.from)} – {dayLabel(params.to, true)}
           </p>
           <div className="flex items-center gap-1">
             <Button variant="outline" size="icon" aria-label="Minggu sebelumnya" onClick={() => setStart((s) => addDays(s, -7))}>
@@ -105,7 +107,7 @@ export function SchedulesPage({ initialBranchId = "", initialEmployeeIds = [] }:
         <div className="ml-auto flex flex-wrap gap-2">
           {ready ? (
             <Button asChild variant="outline">
-              <a href={scheduleTemplateUrl(params)}>Unduh template</a>
+              <a href={scheduleTemplateUrl(fileRange)}>Unduh template</a>
             </Button>
           ) : (
             <Button variant="outline" disabled>
@@ -152,7 +154,14 @@ export function SchedulesPage({ initialBranchId = "", initialEmployeeIds = [] }:
               </Link>
             </p>
           ) : (
-            <ScheduleGrid key={branchId} grid={grid.data} branchId={branchId} today={today} initialChecked={prefill} />
+            <ScheduleGrid
+              key={branchId}
+              grid={grid.data}
+              branchId={branchId}
+              today={today}
+              initialChecked={prefill}
+              loading={grid.isPlaceholderData}
+            />
           )}
         </div>
       ) : null}
@@ -161,7 +170,7 @@ export function SchedulesPage({ initialBranchId = "", initialEmployeeIds = [] }:
         <ScheduleUploadDialog
           open
           onOpenChange={setUploadOpen}
-          range={params}
+          range={fileRange}
           branchName={branchName}
           onSaved={() => void grid.refetch()}
         />

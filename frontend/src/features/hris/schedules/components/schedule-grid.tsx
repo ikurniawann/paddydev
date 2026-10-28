@@ -6,13 +6,13 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { fetchScheduleGrid } from "../api";
 import { CELLS_EMPLOYEE_LIMIT, CELLS_EMPLOYEE_LIMIT_MESSAGE, useScheduleCellsSave } from "../mutations";
-import { addDays, cellKey, copyWeek, fillCells, parseCellKey, rowRange, shiftTone } from "../schedule-cells";
+import { cellKey, copyWeek, fillCells, parseCellKey, rowRange, shiftTone } from "../schedule-cells";
+import { addDays, dm, weekdayIndex } from "../schedule-range";
 import type { ScheduleGrid as Grid } from "../types";
 import { CellsConfirmDialog } from "./cells-confirm-dialog";
 import { PatternDialog } from "./pattern-dialog";
 import { ShiftPicker, hhmm } from "./shift-picker";
 
-const dm = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
 const HATCH = { backgroundImage: "repeating-linear-gradient(135deg, rgb(229 231 235) 0 3px, transparent 3px 7px)" };
 
 interface Props {
@@ -21,6 +21,8 @@ interface Props {
   today: string;
   /** Karyawan yang dicentang dari halaman Penempatan (yang tidak ada di grid diabaikan). */
   initialChecked?: string[];
+  /** Grid minggu baru sedang dimuat (data lama masih tampil): kotak dikunci. */
+  loading?: boolean;
 }
 
 interface Picker {
@@ -34,7 +36,7 @@ interface Picker {
  * hari; Ctrl/Cmd-klik dan Shift-klik untuk memilih banyak kotak; centang
  * karyawan untuk Terapkan pola. Tanggal lewat dan kotak "-" tidak bisa diubah.
  */
-export function ScheduleGrid({ grid, branchId, today, initialChecked }: Props) {
+export function ScheduleGrid({ grid, branchId, today, initialChecked, loading = false }: Props) {
   const [checked, setChecked] = useState(() => new Set(initialChecked ?? []));
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [anchorKey, setAnchorKey] = useState<string | null>(null);
@@ -57,7 +59,7 @@ export function ScheduleGrid({ grid, branchId, today, initialChecked }: Props) {
   const allChecked = grid.employees.length > 0 && checkedRows.length === grid.employees.length;
   const missing = (initialChecked ?? []).filter((id) => !grid.employees.some((e) => e.id === id));
   const shiftByCode = new Map(grid.shifts.map((s) => [s.code, s]));
-  const busy = saver.busy || copying;
+  const busy = saver.busy || copying || loading;
 
   function toggleRow(id: string) {
     setChecked((prev) => {
@@ -131,7 +133,7 @@ export function ScheduleGrid({ grid, branchId, today, initialChecked }: Props) {
     }
   }
 
-  const offDay = (d: Grid["dates"][number]) => d.holiday !== null || new Date(`${d.date}T00:00:00Z`).getUTCDay() === 0;
+  const offDay = (d: Grid["dates"][number]) => d.holiday !== null || weekdayIndex(d.date) === 6;
   const tooMany = checkedRows.length > CELLS_EMPLOYEE_LIMIT;
   const hasSelection = checkedRows.length > 0 || selectedKeys.length > 0;
 
@@ -164,7 +166,8 @@ export function ScheduleGrid({ grid, branchId, today, initialChecked }: Props) {
         </Button>
       </div>
 
-      <p className="text-xs text-gray-500">
+      <p className="flex items-center gap-1.5 text-xs text-gray-500">
+        {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-label="Memuat jadwal" /> : null}
         Klik kotak untuk mengubah satu hari. Tahan Ctrl (Mac: Cmd) untuk memilih beberapa kotak, atau Shift untuk memilih rentang dalam satu baris.
       </p>
       {missing.length > 0 ? (

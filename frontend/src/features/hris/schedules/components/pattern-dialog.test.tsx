@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { addDays } from "../schedule-cells";
+import { addDays } from "../schedule-range";
 import type { ScheduleGrid } from "../types";
 import { PatternDialog } from "./pattern-dialog";
 
@@ -124,4 +124,18 @@ it("lebih dari 300 karyawan ditolak sebelum dikirim", () => {
   expect(screen.getByText("Maksimal 300 karyawan per simpan")).toBeTruthy();
   DAYS.forEach((d) => choose(d, "L"));
   expect((screen.getByRole("button", { name: "Terapkan" }) as HTMLButtonElement).disabled).toBe(true);
+});
+
+it("lebih dari 6000 kotak ditolak sebelum Terapkan", () => {
+  renderDialog({ employees: Array.from({ length: 250 }, (_, i) => ({ id: `e${i}`, name: `K${i}` })) });
+  DAYS.forEach((d) => choose(d, "L"));
+  const apply = screen.getByRole("button", { name: "Terapkan" }) as HTMLButtonElement;
+  expect(
+    screen.getByText("250 karyawan × 28 hari = 7000 kotak, maksimal 6000 sekali simpan. Perkecil rentang tanggal atau jumlah karyawan.")
+  ).toBeTruthy();
+  expect(apply.disabled).toBe(true);
+  fireEvent.change(screen.getByLabelText("Sampai tanggal"), { target: { value: "2026-11-25" } }); // 24 hari = 6000
+  expect(screen.queryByText(/kotak, maksimal 6000/)).toBeNull();
+  expect(apply.disabled).toBe(false);
+  expect(api.fetchScheduleGrid).not.toHaveBeenCalled();
 });
