@@ -1951,6 +1951,21 @@
   },
   {
     "module": "hris",
+    "method": "POST",
+    "path": "/api/hris/employee-placements/bulk-end"
+  },
+  {
+    "module": "hris",
+    "method": "GET",
+    "path": "/api/hris/employee-placements/ids"
+  },
+  {
+    "module": "hris",
+    "method": "GET",
+    "path": "/api/hris/employee-placements/search"
+  },
+  {
+    "module": "hris",
     "method": "DELETE",
     "path": "/api/hris/employee-placements/{id}"
   },
@@ -2688,6 +2703,11 @@
     "module": "hris",
     "method": "GET",
     "path": "/api/hris/schedules"
+  },
+  {
+    "module": "hris",
+    "method": "POST",
+    "path": "/api/hris/schedules/cells"
   },
   {
     "module": "hris",

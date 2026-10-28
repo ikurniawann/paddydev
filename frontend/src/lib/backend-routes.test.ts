@@ -121,6 +121,17 @@ describe("goBackendTarget", () => {
       `http://go-api:8080${pathname}`,
     );
   });
+
+  it.each([
+    ["GET", "/api/hris/employee-placements/search"],
+    ["GET", "/api/hris/employee-placements/ids"],
+    ["POST", "/api/hris/employee-placements/bulk-end"],
+    ["POST", "/api/hris/schedules/cells"],
+  ])("forwards the EPIC-070 endpoint %s %s to Go", (method, pathname) => {
+    expect(goBackendTarget(pathname, method, { env })).toBe(
+      `http://go-api:8080${pathname}`,
+    );
+  });
 });
 
 describe("Go route manifest", () => {
