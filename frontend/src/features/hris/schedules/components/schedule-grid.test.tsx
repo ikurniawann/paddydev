@@ -102,7 +102,9 @@ describe("ScheduleGrid", () => {
     });
     await waitFor(() => expect(toast.success).toHaveBeenCalledWith("Jadwal 1 karyawan disimpan"));
     const keys = invalidate.mock.calls.map(([f]) => JSON.stringify(f?.queryKey));
-    expect(keys).toEqual(expect.arrayContaining(['["hris","schedules"]', '["hris","placements"]', '["users","shift-schedule"]']));
+    expect(keys).toEqual(
+      expect.arrayContaining(['["hris","schedules"]', '["hris","placements"]', '["users","shift-schedule"]', '["hris","ess","team"]'])
+    );
   });
 
   it("dengan peringatan → dialog konfirmasi; simpan setelah peringatan dicentang", async () => {

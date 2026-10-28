@@ -2,6 +2,7 @@
 
 import { useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { withDeleteReason } from "@/lib/hris/delete-reason";
+import { essQueryKeys } from "@/features/hris/ess/query-keys";
 import { usersQueryKeys } from "@/features/users/query-keys";
 import { deleteShift, saveShift } from "./api";
 import { shiftQueryKeys } from "./query-keys";
@@ -9,13 +10,14 @@ import type { ShiftSavePayload } from "./types";
 
 /**
  * Perubahan master shift langsung terlihat di halaman lain: pilihan shift di
- * form karyawan dan grid jadwal tidak boleh menunggu cache basi.
+ * form karyawan, grid jadwal, dan Shift Tim ESS tidak boleh menunggu cache basi.
  */
 function invalidateShiftDependents(qc: QueryClient) {
   return Promise.all([
     qc.invalidateQueries({ queryKey: shiftQueryKeys.all }),
     qc.invalidateQueries({ queryKey: usersQueryKeys.shiftOptions() }),
     qc.invalidateQueries({ queryKey: ["hris", "schedules"] }),
+    qc.invalidateQueries({ queryKey: essQueryKeys.team() }),
   ]);
 }
 

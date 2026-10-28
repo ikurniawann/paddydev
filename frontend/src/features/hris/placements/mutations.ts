@@ -8,9 +8,16 @@ import { bulkEndPlacement, bulkPlacement, createPlacement, deletePlacement, save
 import { placementQueryKeys } from "./query-keys";
 import type { BulkEndPlacementPayload, BulkPlacementPayload, PlacementPayload } from "./types";
 
+/** Jadwal Kerja ikut berubah (karyawan tanpa penempatan tidak bisa dijadwalkan). */
+const SCHEDULES_KEY = ["hris", "schedules"] as const;
+
 function useInvalidatePlacements() {
   const qc = useQueryClient();
-  return () => qc.invalidateQueries({ queryKey: placementQueryKeys.all });
+  return () =>
+    Promise.all([
+      qc.invalidateQueries({ queryKey: placementQueryKeys.all }),
+      qc.invalidateQueries({ queryKey: SCHEDULES_KEY }),
+    ]);
 }
 
 export function useCreatePlacement(employeeId: string) {
@@ -33,9 +40,6 @@ export function useDeletePlacement() {
   const onSuccess = useInvalidatePlacements();
   return useMutation({ mutationFn: withDeleteReason("Hapus penempatan", (id: string, reason) => deletePlacement(id, reason)), retry: false, onSuccess });
 }
-
-/** Jadwal Kerja ikut berubah (karyawan tanpa penempatan tidak bisa dijadwalkan). */
-const SCHEDULES_KEY = ["hris", "schedules"] as const;
 
 /** Invalidasi hanya setelah tersimpan; pratinjau tidak mengubah data. */
 function useInvalidateAfterCommit() {

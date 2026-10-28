@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { essQueryKeys } from "@/features/hris/ess/query-keys";
 import { ApiError } from "@/lib/api-client";
 import { DeleteCancelledError, isValidDeleteReason, retryWithReason } from "@/lib/hris/delete-reason";
 import { saveScheduleCells } from "./api";
@@ -15,8 +16,14 @@ export const CELLS_EMPLOYEE_LIMIT_MESSAGE = `Maksimal ${CELLS_EMPLOYEE_LIMIT} ka
 export const CELLS_LIMIT = 6000;
 export const CELLS_LIMIT_MESSAGE = `Maksimal ${CELLS_LIMIT} kotak per simpan — perkecil rentang tanggal atau jumlah karyawan`;
 
-/** Jadwal ikut terlihat di Penempatan (status jadwal) dan profil karyawan. */
-const AFFECTED_KEYS = [["hris", "schedules"], ["hris", "placements"], ["users", "shift-schedule"]] as const;
+/** Jadwal ikut terlihat di Penempatan (status jadwal), profil karyawan, dan Shift Tim ESS. */
+const AFFECTED_KEYS = [["hris", "schedules"], ["hris", "placements"], ["users", "shift-schedule"], essQueryKeys.team()] as const;
+
+/** Muat ulang semua tampilan jadwal setelah jadwal tersimpan (per kotak, unggah, jadwal tetap). */
+export function useInvalidateScheduleDependents() {
+  const qc = useQueryClient();
+  return () => Promise.all(AFFECTED_KEYS.map((queryKey) => qc.invalidateQueries({ queryKey: [...queryKey] })));
+}
 
 export interface CellsReview {
   cells: CellEdit[];
@@ -40,6 +47,7 @@ const message = (err: unknown, fallback: string) => (err instanceof Error && err
  */
 export function useScheduleCellsSave(branchId: string, onSaved?: () => void) {
   const qc = useQueryClient();
+  const invalidateDependents = useInvalidateScheduleDependents();
   const [review, setReview] = useState<CellsReview | null>(null);
   const [ack, setAck] = useState(false);
   const [reason, setReason] = useState("");
@@ -64,7 +72,7 @@ export function useScheduleCellsSave(branchId: string, onSaved?: () => void) {
           cells: target.cells,
         })
       );
-      for (const queryKey of AFFECTED_KEYS) void qc.invalidateQueries({ queryKey: [...queryKey] });
+      void invalidateDependents();
       toast.success(res.message ?? "Jadwal disimpan");
       openReview(null);
       onSaved?.();

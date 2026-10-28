@@ -5,6 +5,8 @@ import { addDays } from "../schedule-range";
 import type { ScheduleGrid } from "../types";
 import { SchedulesPage } from "./schedules-page";
 
+const usersApi = vi.hoisted(() => ({ applyFixedSchedule: vi.fn() }));
+vi.mock("@/features/users/api", () => usersApi);
 const api = vi.hoisted(() => ({
   fetchScheduleGrid: vi.fn(),
   saveScheduleCells: vi.fn(),
@@ -61,12 +63,20 @@ function grid(from: string, to: string): ScheduleGrid {
 }
 
 function renderPage(props: React.ComponentProps<typeof SchedulesPage>) {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const invalidate = vi.spyOn(qc, "invalidateQueries");
   render(
-    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+    <QueryClientProvider client={qc}>
       <SchedulesPage {...props} />
     </QueryClientProvider>
   );
+  return { invalidate };
 }
+
+/** Kunci yang dimuat ulang setelah jadwal berubah: grid, Penempatan (status jadwal), profil, Shift Tim ESS. */
+const SCHEDULE_DEPENDENTS = ['["hris","schedules"]', '["hris","placements"]', '["users","shift-schedule"]', '["hris","ess","team"]'];
+const invalidatedKeys = (invalidate: ReturnType<typeof renderPage>["invalidate"]) =>
+  invalidate.mock.calls.map(([f]) => JSON.stringify(f?.queryKey));
 
 const checkbox = (name: string) => screen.getByLabelText(`Pilih ${name}`) as HTMLInputElement;
 
@@ -107,4 +117,34 @@ it("centang tetap saat pindah minggu dan centang awal tidak dipasang ulang", asy
   expect(await screen.findByText("11-22")).toBeTruthy();
   expect(checkbox("Ana").checked).toBe(true);
   expect(checkbox("Budi").checked).toBe(false);
+});
+
+it("unggah tersimpan memuat ulang grid, Penempatan, profil, dan Shift Tim", async () => {
+  api.importScheduleFile
+    .mockResolvedValueOnce({
+      data: { summary: { employees: 1, new: 7, changed: 0, same: 0 }, errors: [], warnings: [], changes: [], fingerprint: "fp1" },
+    })
+    .mockResolvedValueOnce({ data: { summary: { employees: 1, new: 7, changed: 0, same: 0 } }, message: "Jadwal 1 karyawan disimpan" });
+  const { invalidate } = renderPage({ initialBranchId: "b1" });
+  await screen.findByLabelText("Pilih Ana");
+  fireEvent.click(screen.getByRole("button", { name: "Unggah jadwal" }));
+  fireEvent.change(await screen.findByLabelText("File jadwal (.xlsx)"), { target: { files: [new File(["x"], "j.xlsx")] } });
+  fireEvent.click(screen.getByRole("button", { name: "Periksa file" }));
+  const save = (await screen.findByRole("button", { name: "Simpan jadwal" })) as HTMLButtonElement;
+  await waitFor(() => expect(save.disabled).toBe(false));
+  fireEvent.click(save);
+  await waitFor(() => expect(api.importScheduleFile).toHaveBeenLastCalledWith(expect.objectContaining({ step: "commit" })));
+  await waitFor(() => expect(invalidatedKeys(invalidate)).toEqual(expect.arrayContaining(SCHEDULE_DEPENDENTS)));
+});
+
+it("jadwal tetap diterapkan memuat ulang grid, Penempatan, profil, dan Shift Tim", async () => {
+  api.fetchScheduleGrid.mockImplementation(async (p: { from: string; to: string }) => ({
+    data: { ...grid(p.from, p.to), non_shift_count: 2 },
+  }));
+  usersApi.applyFixedSchedule.mockResolvedValueOnce({ message: "Jadwal tetap diterapkan" });
+  const { invalidate } = renderPage({ initialBranchId: "b1" });
+  fireEvent.click(await screen.findByRole("button", { name: "Terapkan jadwal tetap (Non-Shift)" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Terapkan" }));
+  await waitFor(() => expect(usersApi.applyFixedSchedule).toHaveBeenCalled());
+  await waitFor(() => expect(invalidatedKeys(invalidate)).toEqual(expect.arrayContaining(SCHEDULE_DEPENDENTS)));
 });

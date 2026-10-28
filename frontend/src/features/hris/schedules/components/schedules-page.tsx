@@ -8,6 +8,7 @@ import { Combobox } from "@/components/ui/combobox";
 import { useStoreBranches } from "@/features/hris/placements/queries";
 import { todayWib } from "@/lib/dates";
 import { scheduleTemplateUrl } from "../api";
+import { useInvalidateScheduleDependents } from "../mutations";
 import { useScheduleGrid } from "../queries";
 import { addDays, dayLabel, mondayOf, uploadRange } from "../schedule-range";
 import { FixedScheduleDialog } from "./fixed-schedule-dialog";
@@ -42,6 +43,8 @@ export function SchedulesPage({ initialBranchId = "", initialEmployeeIds = [] }:
   // Template & unggah tidak boleh memuat tanggal lewat (server menolak).
   const fileRange = { branch_id: branchId, ...uploadRange(params.from, params.to, today) };
   const grid = useScheduleGrid(params);
+  // Unggah/jadwal tetap mengubah lebih dari grid ini: Penempatan, profil, Shift Tim ESS.
+  const invalidateSchedules = useInvalidateScheduleDependents();
   const branchName = branches.data?.find((b) => b.id === branchId)?.name ?? "";
   const ready = !!branchId;
   // Centang awal dipakai sekali: untuk cabang dari tautan (atau cabang pertama yang dipilih).
@@ -172,7 +175,7 @@ export function SchedulesPage({ initialBranchId = "", initialEmployeeIds = [] }:
           onOpenChange={setUploadOpen}
           range={fileRange}
           branchName={branchName}
-          onSaved={() => void grid.refetch()}
+          onSaved={() => void invalidateSchedules()}
         />
       ) : null}
       {fixedOpen ? (
@@ -182,7 +185,7 @@ export function SchedulesPage({ initialBranchId = "", initialEmployeeIds = [] }:
           branchId={branchId}
           branchName={branchName}
           today={today}
-          onDone={() => void grid.refetch()}
+          onDone={() => void invalidateSchedules()}
         />
       ) : null}
     </div>
