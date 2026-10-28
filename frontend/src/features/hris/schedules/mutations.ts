@@ -41,9 +41,10 @@ export function canCommit(preview: CellsPreview, ack: boolean, reason: string): 
 const message = (err: unknown, fallback: string) => (err instanceof Error && err.message ? err.message : fallback);
 
 /**
- * Simpan kotak jadwal: pratinjau dulu. Tanpa error/peringatan/timpaan langsung
- * disimpan (kecuali `confirm`); selain itu `review` terisi untuk dikonfirmasi
- * (centang peringatan, alasan bila ada jadwal yang tertimpa).
+ * Simpan kotak jadwal: pratinjau dulu. Tanpa perubahan (baru/ubah/kosongkan = 0)
+ * tidak disimpan. Tanpa error/peringatan/timpaan langsung disimpan (kecuali
+ * `confirm`); selain itu `review` terisi untuk dikonfirmasi (centang
+ * peringatan, alasan bila ada jadwal yang tertimpa).
  */
 export function useScheduleCellsSave(branchId: string, onSaved?: () => void) {
   const qc = useQueryClient();
@@ -115,6 +116,11 @@ export function useScheduleCellsSave(branchId: string, onSaved?: () => void) {
       return;
     } finally {
       setBusy(false);
+    }
+    const { new: added, changed, cleared } = preview.summary;
+    if (preview.errors.length === 0 && added + changed + cleared === 0) {
+      toast.info("Tidak ada perubahan");
+      return;
     }
     const target = { cells, preview };
     const clean = preview.errors.length === 0 && preview.warnings.length === 0 && !preview.replaced_days;

@@ -19,6 +19,7 @@ beforeEach(() => {
   api.fetchScheduleGrid.mockReset();
   vi.mocked(toast.success).mockReset();
   vi.mocked(toast.error).mockReset();
+  vi.mocked(toast.info).mockReset();
 });
 
 const shifts = [
@@ -105,6 +106,19 @@ describe("ScheduleGrid", () => {
     expect(keys).toEqual(
       expect.arrayContaining(['["hris","schedules"]', '["hris","placements"]', '["users","shift-schedule"]', '["hris","ess","team"]'])
     );
+  });
+
+  it("pratinjau tanpa perubahan → tidak disimpan, toast Tidak ada perubahan", async () => {
+    api.saveScheduleCells.mockResolvedValueOnce(
+      preview({ summary: { employees: 1, new: 0, changed: 0, same: 1, cleared: 0 } })
+    );
+    renderGrid();
+    fireEvent.click(screen.getByRole("button", { name: "Ana 03/11" }));
+    fireEvent.click(await screen.findByRole("button", { name: /^S · Siang/ }));
+    await waitFor(() => expect(toast.info).toHaveBeenCalledWith("Tidak ada perubahan"));
+    expect(api.saveScheduleCells).toHaveBeenCalledTimes(1);
+    expect(previewCall()).toBeTruthy();
+    expect(toast.success).not.toHaveBeenCalled();
   });
 
   it("dengan peringatan → dialog konfirmasi; simpan setelah peringatan dicentang", async () => {
