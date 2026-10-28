@@ -1,22 +1,195 @@
 "use client";
 
+import { useMemo, useState } from "react";
+import { CalendarRange, Copy, Eraser, Loader2, PaintBucket, X } from "lucide-react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { fetchScheduleGrid } from "../api";
+import { CELLS_EMPLOYEE_LIMIT, CELLS_EMPLOYEE_LIMIT_MESSAGE, useScheduleCellsSave } from "../mutations";
+import { addDays, cellKey, copyWeek, fillCells, parseCellKey, rowRange, shiftTone } from "../schedule-cells";
 import type { ScheduleGrid as Grid } from "../types";
+import { CellsConfirmDialog } from "./cells-confirm-dialog";
+import { PatternDialog } from "./pattern-dialog";
+import { ShiftPicker, hhmm } from "./shift-picker";
 
-/** Grid read-only karyawan × tanggal untuk satu cabang. */
-export function ScheduleGrid({ grid }: { grid: Grid }) {
+const dm = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
+const HATCH = { backgroundImage: "repeating-linear-gradient(135deg, rgb(229 231 235) 0 3px, transparent 3px 7px)" };
+
+interface Props {
+  grid: Grid;
+  branchId: string;
+  today: string;
+  /** Karyawan yang dicentang dari halaman Penempatan (yang tidak ada di grid diabaikan). */
+  initialChecked?: string[];
+}
+
+interface Picker {
+  anchor: Element;
+  title: string;
+  keys: string[];
+}
+
+/**
+ * Grid Jadwal Kerja yang bisa diedit (EPIC-070): klik kotak untuk ubah satu
+ * hari; Ctrl/Cmd-klik dan Shift-klik untuk memilih banyak kotak; centang
+ * karyawan untuk Terapkan pola. Tanggal lewat dan kotak "-" tidak bisa diubah.
+ */
+export function ScheduleGrid({ grid, branchId, today, initialChecked }: Props) {
+  const [checked, setChecked] = useState(() => new Set(initialChecked ?? []));
+  const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  const [anchorKey, setAnchorKey] = useState<string | null>(null);
+  const [picker, setPicker] = useState<Picker | null>(null);
+  const [patternOpen, setPatternOpen] = useState(false);
+  const [copying, setCopying] = useState(false);
+  const [reviewTitle, setReviewTitle] = useState("Periksa perubahan jadwal");
+  const saver = useScheduleCellsSave(branchId, () => setSelected(new Set()));
+
+  const dates = useMemo(() => grid.dates.map((d) => d.date), [grid.dates]);
+  /** Kotak yang bisa diubah, berurutan per baris lalu tanggal. */
+  const editableKeys = useMemo(() => {
+    const keys: string[] = [];
+    for (const e of grid.employees) for (const c of e.cells) if (c.code !== "-" && c.date >= today) keys.push(cellKey(e.id, c.date));
+    return keys;
+  }, [grid.employees, today]);
+  const editable = useMemo(() => new Set(editableKeys), [editableKeys]);
+  const selectedKeys = editableKeys.filter((k) => selected.has(k));
+  const checkedRows = grid.employees.filter((e) => checked.has(e.id));
+  const allChecked = grid.employees.length > 0 && checkedRows.length === grid.employees.length;
+  const missing = (initialChecked ?? []).filter((id) => !grid.employees.some((e) => e.id === id));
+  const shiftByCode = new Map(grid.shifts.map((s) => [s.code, s]));
+  const busy = saver.busy || copying;
+
+  function toggleRow(id: string) {
+    setChecked((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleAll() {
+    setChecked(allChecked ? new Set() : new Set(grid.employees.map((e) => e.id)));
+  }
+
+  function clearSelection() {
+    setSelected(new Set());
+    setChecked(new Set());
+    setAnchorKey(null);
+  }
+
+  function save(cells: Parameters<typeof saver.save>[0], title: string, confirm = false) {
+    setReviewTitle(title);
+    void saver.save(cells, { confirm });
+  }
+
+  function onCell(e: React.MouseEvent<HTMLButtonElement>, employee: Grid["employees"][number], date: string) {
+    const key = cellKey(employee.id, date);
+    const additive = e.ctrlKey || e.metaKey;
+    if (e.shiftKey && anchorKey && parseCellKey(anchorKey).employee_id === employee.id) {
+      const range = rowRange(employee.id, dates, parseCellKey(anchorKey).date, date).filter((k) => editable.has(k));
+      setSelected((prev) => new Set([...(additive ? prev : []), ...range]));
+      return;
+    }
+    setAnchorKey(key);
+    if (additive || e.shiftKey) {
+      setSelected((prev) => {
+        const next = new Set(prev);
+        if (next.has(key)) next.delete(key);
+        else next.add(key);
+        return next;
+      });
+      return;
+    }
+    setSelected(new Set());
+    setPicker({ anchor: e.currentTarget, title: `${employee.name} · ${dm(date)}`, keys: [key] });
+  }
+
+  function pick(code: string) {
+    if (!picker) return;
+    const many = picker.keys.length > 1;
+    setPicker(null);
+    save(fillCells(picker.keys, code), many ? `Isi ${picker.keys.length} kotak` : "Ubah jadwal");
+  }
+
+  async function copyLastWeek() {
+    const from = dates[0];
+    setCopying(true);
+    try {
+      const prev = await fetchScheduleGrid({ branch_id: branchId, from: addDays(from, -7), to: addDays(from, -1) });
+      const cells = copyWeek(prev.data, grid, today);
+      if (cells.length === 0) {
+        toast.info("Tidak ada jadwal minggu lalu yang perlu disalin");
+        return;
+      }
+      setReviewTitle(`Salin jadwal ${dm(addDays(from, -7))}–${dm(addDays(from, -1))}`);
+      await saver.save(cells, { confirm: true });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Gagal memuat jadwal minggu lalu");
+    } finally {
+      setCopying(false);
+    }
+  }
+
   const offDay = (d: Grid["dates"][number]) => d.holiday !== null || new Date(`${d.date}T00:00:00Z`).getUTCDay() === 0;
+  const tooMany = checkedRows.length > CELLS_EMPLOYEE_LIMIT;
+  const hasSelection = checkedRows.length > 0 || selectedKeys.length > 0;
+
   return (
     <div className="space-y-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <ul className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-gray-600">
+          {grid.shifts.map((s) => (
+            <li key={s.code} className="flex items-center gap-1.5">
+              <span className={`rounded px-1.5 py-0.5 font-mono font-semibold ${shiftTone(s.code)}`}>{s.code}</span>
+              {s.name} {hhmm(s.start_time)}–{hhmm(s.end_time)}
+            </li>
+          ))}
+          <li className="flex items-center gap-1.5">
+            <span className={`rounded px-1.5 py-0.5 font-mono font-semibold ${shiftTone("L")}`}>L</span>Libur
+          </li>
+          <li className="flex items-center gap-1.5">
+            <span className={`rounded px-1.5 py-0.5 ${shiftTone("")}`}>Belum ada</span>belum dijadwalkan
+          </li>
+          <li className="flex items-center gap-1.5">
+            <span className="inline-block h-4 w-6 rounded border border-gray-200" style={HATCH} />
+            tidak ditempatkan di cabang ini
+          </li>
+          <li className="flex items-center gap-1.5">
+            <span className="underline decoration-dotted">P</span>dari pola mingguan
+          </li>
+        </ul>
+        <Button variant="outline" size="sm" onClick={() => void copyLastWeek()} disabled={busy}>
+          {copying ? <Loader2 className="animate-spin" /> : <Copy />} Salin minggu lalu
+        </Button>
+      </div>
+
+      <p className="text-xs text-gray-500">
+        Klik kotak untuk mengubah satu hari. Tahan Ctrl (Mac: Cmd) untuk memilih beberapa kotak, atau Shift untuk memilih rentang dalam satu baris.
+      </p>
+      {missing.length > 0 ? (
+        <p className="rounded-lg bg-warning-soft px-3 py-2 text-sm text-warning">
+          {missing.length} karyawan yang dipilih dari Penempatan tidak tampil karena tidak ditempatkan di cabang ini pada tanggal ini.
+        </p>
+      ) : null}
+
       <div className="overflow-x-auto rounded-xl border border-gray-200/70 bg-white">
-        <table className="w-full text-xs">
+        <table className="w-full border-separate border-spacing-0 text-xs">
           <thead>
             <tr className="bg-gray-50 text-gray-500">
-              <th className="sticky left-0 z-10 bg-gray-50 px-3 py-2 text-left">Karyawan</th>
+              <th className="sticky left-0 z-10 min-w-56 border-b border-gray-200 bg-gray-50 px-3 py-2 text-left">
+                <label className="flex items-center gap-2 font-medium">
+                  <input type="checkbox" aria-label="Pilih semua karyawan" checked={allChecked} onChange={toggleAll} />
+                  Karyawan
+                </label>
+              </th>
               {grid.dates.map((d) => (
                 <th
                   key={d.date}
                   title={d.holiday ?? undefined}
-                  className={`whitespace-nowrap px-2 py-2 text-center font-medium ${offDay(d) ? "bg-danger-soft text-danger" : ""}`}
+                  className={`whitespace-nowrap border-b border-gray-200 px-1 py-2 text-center font-medium ${
+                    offDay(d) ? "bg-danger-soft text-danger" : ""
+                  } ${d.date < today ? "opacity-50" : ""} ${d.date === today ? "text-gray-900 underline underline-offset-4" : ""}`}
                 >
                   {d.label}
                 </th>
@@ -25,34 +198,116 @@ export function ScheduleGrid({ grid }: { grid: Grid }) {
           </thead>
           <tbody>
             {grid.employees.map((e) => (
-              <tr key={e.id} className="border-t border-gray-100">
-                <td className="sticky left-0 z-10 bg-white px-3 py-1.5">
-                  <p className="font-medium text-gray-800">{e.name}</p>
-                  <p className="text-[11px] text-gray-400">
-                    {e.nip}
-                    {e.position ? ` · ${e.position}` : ""}
-                  </p>
+              <tr key={e.id}>
+                <td className="sticky left-0 z-10 border-b border-gray-100 bg-white px-3 py-1.5">
+                  <label className="flex items-center gap-2">
+                    <input type="checkbox" aria-label={`Pilih ${e.name}`} checked={checked.has(e.id)} onChange={() => toggleRow(e.id)} />
+                    <span>
+                      <span className="block font-medium text-gray-800">{e.name}</span>
+                      <span className="block text-[11px] text-gray-400">
+                        {e.nip}
+                        {e.position ? ` · ${e.position}` : ""}
+                      </span>
+                    </span>
+                  </label>
                 </td>
-                {e.cells.map((c) => (
-                  <td
-                    key={c.date}
-                    title={c.code === "" ? "Belum ada jadwal" : c.source === "weekly" ? "Dari pola mingguan" : undefined}
-                    className={`px-2 py-1.5 text-center font-mono ${
-                      c.code === "L" ? "bg-gray-100 text-gray-500" : c.code === "-" ? "bg-gray-50 text-gray-300" : ""
-                    } ${c.source === "weekly" ? "underline decoration-dotted" : ""}`}
-                  >
-                    {c.code === "" ? <span className="text-danger">—</span> : c.code}
-                  </td>
-                ))}
+                {e.cells.map((c) => {
+                  const key = cellKey(e.id, c.date);
+                  const shift = shiftByCode.get(c.code);
+                  const meaning =
+                    c.code === "" ? "Belum ada jadwal" : c.code === "L" ? "Libur" : shift ? `${shift.name} ${hhmm(shift.start_time)}–${hhmm(shift.end_time)}` : c.code;
+                  const title = `${meaning}${c.source === "weekly" ? " (dari pola mingguan)" : ""}`;
+                  const content = c.code === "" ? <span className="text-[10px] font-sans">Belum ada</span> : c.code;
+                  const base = "flex h-8 w-full min-w-11 items-center justify-center rounded-md font-mono text-xs font-semibold";
+                  const weekly = c.source === "weekly" ? "underline decoration-dotted underline-offset-2" : "";
+                  return (
+                    <td key={c.date} className="border-b border-gray-100 p-0.5">
+                      {c.code === "-" ? (
+                        <span title="Tidak ditempatkan di cabang ini" className={`${base} text-transparent`} style={HATCH}>
+                          -
+                        </span>
+                      ) : !editable.has(key) ? (
+                        <span title={`${title} · tanggal sudah lewat`} className={`${base} ${shiftTone(c.code)} ${weekly} opacity-45`}>
+                          {content}
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          aria-label={`${e.name} ${dm(c.date)}`}
+                          aria-pressed={selected.has(key)}
+                          title={title}
+                          disabled={busy}
+                          onClick={(ev) => onCell(ev, e, c.date)}
+                          className={`${base} ${shiftTone(c.code)} ${weekly} cursor-pointer transition hover:ring-2 hover:ring-gray-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 ${
+                            selected.has(key) ? "ring-2 ring-gray-900 ring-offset-1" : ""
+                          }`}
+                        >
+                          {content}
+                        </button>
+                      )}
+                    </td>
+                  );
+                })}
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-      <p className="text-xs text-gray-500">
-        Kode: {grid.shifts.map((s) => `${s.code} ${s.start_time.slice(0, 5)}–${s.end_time.slice(0, 5)}`).join(" · ")} · L = Libur ·
-        - = tidak ditempatkan · garis titik = dari pola mingguan
-      </p>
+
+      {hasSelection ? (
+        <div className="sticky bottom-4 z-20 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-lg">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+            {checkedRows.length > 0 ? <span className="font-medium text-gray-900">{checkedRows.length} karyawan dicentang</span> : null}
+            {selectedKeys.length > 0 ? <span className="font-medium text-gray-900">{selectedKeys.length} kotak dipilih</span> : null}
+            {tooMany ? <span className="text-xs font-medium text-red-600">{CELLS_EMPLOYEE_LIMIT_MESSAGE}</span> : null}
+          </div>
+          <div className="ml-auto flex flex-wrap gap-2">
+            <Button size="sm" onClick={() => setPatternOpen(true)} disabled={checkedRows.length === 0 || tooMany || busy}>
+              <CalendarRange /> Terapkan pola
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={selectedKeys.length === 0 || busy}
+              onClick={(ev) => setPicker({ anchor: ev.currentTarget, title: `Isi ${selectedKeys.length} kotak dengan`, keys: selectedKeys })}
+            >
+              <PaintBucket /> Isi kotak terpilih
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={selectedKeys.length === 0 || busy}
+              onClick={() => save(fillCells(selectedKeys, ""), `Kosongkan ${selectedKeys.length} kotak`)}
+            >
+              <Eraser /> Kosongkan
+            </Button>
+            <Button size="sm" variant="ghost" onClick={clearSelection}>
+              <X /> Batal pilih
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
+      <ShiftPicker
+        anchor={picker?.anchor ?? null}
+        title={picker?.title ?? ""}
+        shifts={grid.shifts}
+        onPick={pick}
+        onClose={() => setPicker(null)}
+      />
+      <CellsConfirmDialog saver={saver} title={reviewTitle} />
+      {patternOpen ? (
+        <PatternDialog
+          open
+          onOpenChange={setPatternOpen}
+          branchId={branchId}
+          employees={checkedRows.map((e) => ({ id: e.id, name: e.name }))}
+          shifts={grid.shifts}
+          defaultFrom={dates[0] > today ? dates[0] : today}
+          today={today}
+          onSaved={() => setChecked(new Set())}
+        />
+      ) : null}
     </div>
   );
 }

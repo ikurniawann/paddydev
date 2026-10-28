@@ -1,10 +1,14 @@
-import { apiGet, buildListUrl } from "@/lib/api-client";
+import { apiGet, apiPost, buildListUrl } from "@/lib/api-client";
 import { downloadBlob } from "@/lib/purchasing/report-ui-shared";
-import type { ScheduleGrid, SchedulePreview } from "./types";
+import type { CellsPayload, CellsPreview, ScheduleGrid, SchedulePreview } from "./types";
 
 type Range = { branch_id: string; from: string; to: string };
 
 export const fetchScheduleGrid = (p: Range) => apiGet<{ data: ScheduleGrid }>(buildListUrl("/api/hris/schedules", p));
+
+/** Ubah kotak jadwal (EPIC-070): pratinjau lalu simpan, aturan sama dengan unggah Excel. */
+export const saveScheduleCells = (payload: CellsPayload) =>
+  apiPost<{ data: CellsPreview; message?: string }>("/api/hris/schedules/cells", payload);
 
 export const scheduleTemplateUrl = (p: Range) => buildListUrl("/api/hris/schedules/template", p);
 
