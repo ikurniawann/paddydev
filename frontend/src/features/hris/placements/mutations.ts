@@ -4,9 +4,9 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { attendanceQueryKeys } from "@/features/hris/attendance/query-keys";
 import { withDeleteReason } from "@/lib/hris/delete-reason";
 import type { BranchLocationPayload } from "@/lib/hris/geofence";
-import { bulkPlacement, createPlacement, deletePlacement, saveBranchLocation, saveBranchMinWorkHours, updatePlacement } from "./api";
+import { bulkEndPlacement, bulkPlacement, createPlacement, deletePlacement, saveBranchLocation, saveBranchMinWorkHours, updatePlacement } from "./api";
 import { placementQueryKeys } from "./query-keys";
-import type { BulkPlacementPayload, PlacementPayload } from "./types";
+import type { BulkEndPlacementPayload, BulkPlacementPayload, PlacementPayload } from "./types";
 
 function useInvalidatePlacements() {
   const qc = useQueryClient();
@@ -34,9 +34,34 @@ export function useDeletePlacement() {
   return useMutation({ mutationFn: withDeleteReason("Hapus penempatan", (id: string, reason) => deletePlacement(id, reason)), retry: false, onSuccess });
 }
 
+/** Jadwal Kerja ikut berubah (karyawan tanpa penempatan tidak bisa dijadwalkan). */
+const SCHEDULES_KEY = ["hris", "schedules"] as const;
+
+/** Invalidasi hanya setelah tersimpan; pratinjau tidak mengubah data. */
+function useInvalidateAfterCommit() {
+  const qc = useQueryClient();
+  return (step: string | undefined) => {
+    if (step === "preview") return;
+    void qc.invalidateQueries({ queryKey: placementQueryKeys.all });
+    void qc.invalidateQueries({ queryKey: SCHEDULES_KEY });
+  };
+}
+
 export function useBulkPlacement() {
-  const onSuccess = useInvalidatePlacements();
-  return useMutation({ mutationFn: (payload: BulkPlacementPayload) => bulkPlacement(payload), onSuccess });
+  const invalidate = useInvalidateAfterCommit();
+  return useMutation({
+    mutationFn: (payload: BulkPlacementPayload) => bulkPlacement(payload),
+    // Dengan mode tanpa step, server menganggapnya pratinjau.
+    onSuccess: (_res, payload) => invalidate(payload.mode && !payload.step ? "preview" : payload.step),
+  });
+}
+
+export function useBulkEndPlacement() {
+  const invalidate = useInvalidateAfterCommit();
+  return useMutation({
+    mutationFn: (payload: BulkEndPlacementPayload) => bulkEndPlacement(payload),
+    onSuccess: (_res, payload) => invalidate(payload.step),
+  });
 }
 
 export function useSaveBranchLocation() {

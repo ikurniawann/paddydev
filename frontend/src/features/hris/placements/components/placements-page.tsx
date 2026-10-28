@@ -1,255 +1,254 @@
 "use client";
 
-import { useState } from "react";
-import Link from "next/link";
-import { Building2, Loader2, MapPin, Search, Store, Users } from "lucide-react";
+import { useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { ChevronLeft, ChevronRight, Loader2, MapPin } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { PageHeader } from "@/components/ui/page-header";
-import { StatCard } from "@/components/ui/stat-card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useIamAccess } from "@/components/iam/iam-access-provider";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { todayWib } from "@/lib/dates";
-import { placementStatus } from "@/lib/hris/placements";
-import { usePlacementOverview, useStoreBranches } from "../queries";
-import type { PlacementOverviewRow } from "../types";
+import { fetchPlacementIds } from "../api";
+import { usePlacementSearch, useStoreBranches } from "../queries";
+import type { PlacementSearchFilter, PlacementSearchRow, PlacementStatusFilter } from "../types";
 import { BranchLocationDialog } from "./branch-location-dialog";
-import { BulkPlacementDialog } from "./bulk-placement-dialog";
+import { BulkActionBar } from "./bulk-action-bar";
+import { BulkPlacementDialog, type BulkPlacementAction } from "./bulk-placement-dialog";
 import { EmployeePlacementsTab, PLACEMENT_MANAGERS } from "./employee-placements-tab";
-import { PlacementBadges } from "./placement-badges";
+import { PlacementFilters, PlacementStatusChips, type PlacementFilterValues } from "./placement-filters";
+import { mainPlacement, PlacementsTable } from "./placements-table";
 
-const ALL = "all";
-const UNPLACED = "none";
+const PAGE_SIZES = [25, 50, 100] as const;
+type PageSize = (typeof PAGE_SIZES)[number];
+/** Batas karyawan yang dibawa ke Jadwal Kerja lewat URL. */
+const SCHEDULE_LINK_LIMIT = 50;
 
 /**
- * HRIS → Master Data → Penempatan Karyawan: siapa bekerja di toko mana.
- * Filter per toko, cari karyawan tanpa penempatan, dan tempatkan beberapa
- * karyawan sekaligus. Detail per karyawan sama dengan tab "Penempatan".
+ * HRIS → Master Data → Penempatan Karyawan (EPIC-070): siapa bekerja di toko
+ * mana. Chip "yang perlu diurus", filter, halaman dari server, dan aksi massal
+ * (pindah/tambah/akhiri dengan pratinjau, atur jadwal). Pilihan bertahan
+ * lintas halaman dan filter sampai dihapus.
  */
 export function PlacementsPage() {
+  const router = useRouter();
   const canManage = useIamAccess().hasPrefix(PLACEMENT_MANAGERS);
-  const [store, setStore] = useState(ALL);
-  const [search, setSearch] = useState("");
-  const [includeEnded, setIncludeEnded] = useState(false);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [bulkOpen, setBulkOpen] = useState(false);
+  const [status, setStatus] = useState<PlacementStatusFilter>("");
+  const [filters, setFilters] = useState<PlacementFilterValues>({ search: "", branchId: "", departmentId: "", positionId: "" });
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<PageSize>(25);
+  const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  const [selectingAll, setSelectingAll] = useState(false);
+  const [action, setAction] = useState<BulkPlacementAction | null>(null);
   const [locationOpen, setLocationOpen] = useState(false);
-  const [managing, setManaging] = useState<PlacementOverviewRow | null>(null);
-  const branches = useStoreBranches();
-  const overview = usePlacementOverview({ include_ended: includeEnded });
+  const [managing, setManaging] = useState<PlacementSearchRow | null>(null);
+  // Toko utama karyawan yang pernah dicentang, untuk tujuan "Atur jadwal".
+  const branchOf = useRef(new Map<string, string>());
+  const search = useDebouncedValue(filters.search.trim(), 300);
   const today = todayWib();
-  const all = overview.data ?? [];
+  const branches = useStoreBranches();
   const missingCoords = (branches.data ?? []).filter((b) => b.lat === null || b.lng === null).length;
 
-  const running = (row: PlacementOverviewRow) => row.placements.filter((p) => placementStatus(p, today) !== "berakhir");
-  const stats = (() => {
-    const perStore = new Map<string, number>();
-    let unplaced = 0;
-    let multi = 0;
-    for (const row of all) {
-      const active = row.placements.filter((p) => placementStatus(p, today) !== "berakhir");
-      if (active.length === 0) unplaced++;
-      if (new Set(active.map((p) => p.branch_id)).size > 1) multi++;
-      for (const id of new Set(active.map((p) => p.branch_id))) perStore.set(id, (perStore.get(id) ?? 0) + 1);
-    }
-    return { perStore, unplaced, multi };
-  })();
+  const baseFilter: PlacementSearchFilter = {
+    q: search || undefined,
+    branch_id: filters.branchId || undefined,
+    department_id: filters.departmentId || undefined,
+    position_id: filters.positionId || undefined,
+    status: status || undefined,
+  };
+  const result = usePlacementSearch({ ...baseFilter, page, page_size: pageSize });
+  const data = result.data;
+  const rows = data?.rows ?? [];
+  const total = data?.total ?? 0;
+  const shownPage = data?.page ?? page;
+  const shownSize = data?.page_size ?? pageSize;
+  const from = total === 0 ? 0 : (shownPage - 1) * shownSize + 1;
+  const to = Math.min(shownPage * shownSize, total);
+  const lastPage = Math.max(1, Math.ceil(total / shownSize));
 
-  const q = search.trim().toLowerCase();
-  const rows = all.filter((row) => {
-      if (q && !row.full_name.toLowerCase().includes(q) && !(row.nip ?? "").toLowerCase().includes(q)) return false;
-      const active = row.placements.filter((p) => placementStatus(p, today) !== "berakhir");
-      if (store === UNPLACED) return active.length === 0;
-      if (store !== ALL) return active.some((p) => p.branch_id === store);
-      return true;
-  });
+  const changeFilters = (patch: Partial<PlacementFilterValues>) => {
+    setFilters((prev) => ({ ...prev, ...patch }));
+    setPage(1);
+  };
+  const changeStatus = (next: PlacementStatusFilter) => {
+    setStatus(next);
+    setPage(1);
+  };
 
-  const toggle = (id: string) =>
+  const remember = (row: PlacementSearchRow) => {
+    const main = mainPlacement(row, today);
+    if (main) branchOf.current.set(row.employee_id, main.branch_id);
+  };
+  const toggle = (row: PlacementSearchRow) => {
+    remember(row);
     setSelected((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      if (next.has(row.employee_id)) next.delete(row.employee_id);
+      else next.add(row.employee_id);
       return next;
     });
-  const allVisibleSelected = rows.length > 0 && rows.every((r) => selected.has(r.employee_id));
+  };
+  const togglePage = () => {
+    const all = rows.every((r) => selected.has(r.employee_id));
+    rows.forEach(remember);
+    setSelected((prev) => {
+      const next = new Set(prev);
+      for (const r of rows) {
+        if (all) next.delete(r.employee_id);
+        else next.add(r.employee_id);
+      }
+      return next;
+    });
+  };
+
+  async function selectAllFiltered() {
+    setSelectingAll(true);
+    try {
+      const res = await fetchPlacementIds(baseFilter);
+      setSelected(new Set(res.ids));
+      if (res.truncated) toast.info(`Hanya ${res.ids.length} karyawan pertama yang dipilih`);
+    } catch (error) {
+      toast.error(error instanceof Error && error.message ? error.message : "Gagal memilih semua hasil filter");
+    } finally {
+      setSelectingAll(false);
+    }
+  }
+
+  function openSchedules() {
+    const ids = [...selected];
+    const tally = new Map<string, number>();
+    for (const id of ids) {
+      const branch = branchOf.current.get(id);
+      if (branch) tally.set(branch, (tally.get(branch) ?? 0) + 1);
+    }
+    let branch = filters.branchId;
+    let best = 0;
+    for (const [id, n] of tally) {
+      if (n > best) [branch, best] = [id, n];
+    }
+    if (ids.length > SCHEDULE_LINK_LIMIT) {
+      toast.info(`Jadwal Kerja dibuka untuk ${SCHEDULE_LINK_LIMIT} karyawan pertama yang dipilih`);
+    }
+    const params = [branch ? `branch_id=${encodeURIComponent(branch)}` : "", `employees=${ids.slice(0, SCHEDULE_LINK_LIMIT).join(",")}`];
+    router.push(`/dashboard/hris/schedules?${params.filter(Boolean).join("&")}`);
+  }
 
   return (
     <div className="space-y-5">
       <PageHeader
         kicker="HRIS · Master Data"
         title="Penempatan Karyawan"
-        description="Toko tempat setiap karyawan bekerja. Dipakai untuk pilihan toko saat clock-in dan pembagian biaya gaji per toko."
+        description="Toko tempat setiap karyawan bekerja. Dipakai untuk pilihan toko saat clock-in, jadwal kerja, dan pembagian biaya gaji per toko."
         actions={
           canManage ? (
-            <div className="flex flex-wrap gap-2">
-              <Button variant="outline" onClick={() => setLocationOpen(true)}>
-                <MapPin className="mr-1.5 h-4 w-4" /> Lokasi Toko
-                {missingCoords > 0 ? ` (${missingCoords} belum diisi)` : ""}
-              </Button>
-              {selected.size > 0 && (
-                <Button onClick={() => setBulkOpen(true)}>
-                  <Store className="mr-1.5 h-4 w-4" /> Tempatkan {selected.size} karyawan…
-                </Button>
-              )}
-            </div>
+            <Button variant="outline" onClick={() => setLocationOpen(true)}>
+              <MapPin className="mr-1.5 h-4 w-4" /> Lokasi Toko
+              {missingCoords > 0 ? ` (${missingCoords} belum diisi)` : ""}
+            </Button>
           ) : null
         }
       />
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {(branches.data ?? []).map((b) => (
-          <StatCard
-            key={b.id}
-            label={b.name}
-            value={stats.perStore.get(b.id) ?? 0}
-            unit="karyawan"
-            icon={<Building2 className="h-4 w-4" />}
-          />
-        ))}
-        <StatCard label="Multi-toko" value={stats.multi} unit="karyawan" tone="info" icon={<Users className="h-4 w-4" />} />
-        <StatCard
-          label="Tanpa penempatan"
-          value={stats.unplaced}
-          unit="karyawan"
-          tone={stats.unplaced > 0 ? "warning" : "success"}
-          hint={stats.unplaced > 0 ? "Biaya gajinya masuk “Tanpa toko”" : undefined}
-        />
-      </div>
-
       <Card>
-        <CardContent className="flex flex-wrap items-end gap-3 pt-6">
-          <div className="w-full sm:w-56">
-            <label className="mb-1 block text-xs font-medium text-gray-600">Toko</label>
-            <Select value={store} onValueChange={setStore}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={ALL}>Semua toko</SelectItem>
-                {(branches.data ?? []).map((b) => (
-                  <SelectItem key={b.id} value={b.id}>
-                    {b.name}
-                  </SelectItem>
-                ))}
-                <SelectItem value={UNPLACED}>Tanpa penempatan</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="w-full sm:w-72">
-            <label className="mb-1 block text-xs font-medium text-gray-600">Cari karyawan</label>
-            <div className="relative">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-400" />
-              <Input
-                className="pl-8"
-                placeholder="Nama atau NIP"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-            </div>
-          </div>
-          <label className="flex items-center gap-2 pb-2 text-sm text-gray-600">
-            <input type="checkbox" checked={includeEnded} onChange={(e) => setIncludeEnded(e.target.checked)} />
-            Tampilkan penempatan yang sudah berakhir
-          </label>
+        <CardContent className="space-y-4 pt-6">
+          <PlacementStatusChips status={status} counts={data?.counts} onChange={changeStatus} />
+          <PlacementFilters values={filters} onChange={changeFilters} />
         </CardContent>
       </Card>
 
       <Card>
         <CardContent className="p-0">
-          {overview.isLoading ? (
+          {result.isLoading ? (
             <div className="flex justify-center py-12">
-              <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+              <Loader2 className="h-6 w-6 animate-spin text-gray-400" aria-label="Memuat" />
             </div>
-          ) : overview.isError ? (
+          ) : result.isError ? (
             <div className="py-12 text-center text-sm text-red-500">Gagal memuat penempatan karyawan</div>
           ) : rows.length === 0 ? (
             <div className="py-12 text-center text-sm text-gray-400">Tidak ada karyawan untuk filter ini.</div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-gray-100 bg-gray-50 text-left text-xs text-gray-500">
-                    {canManage && (
-                      <th className="w-10 p-3">
-                        <input
-                          type="checkbox"
-                          aria-label="Pilih semua"
-                          checked={allVisibleSelected}
-                          onChange={() =>
-                            setSelected((prev) => {
-                              const next = new Set(prev);
-                              for (const r of rows) {
-                                if (allVisibleSelected) next.delete(r.employee_id);
-                                else next.add(r.employee_id);
-                              }
-                              return next;
-                            })
-                          }
-                        />
-                      </th>
-                    )}
-                    <th className="p-3">Karyawan</th>
-                    <th className="p-3">Departemen / Jabatan</th>
-                    <th className="p-3">Toko</th>
-                    <th className="p-3 text-right">Aksi</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((row) => (
-                    <tr key={row.employee_id} className="border-b border-gray-50 align-top last:border-0">
-                      {canManage && (
-                        <td className="p-3">
-                          <input
-                            type="checkbox"
-                            aria-label={`Pilih ${row.full_name}`}
-                            checked={selected.has(row.employee_id)}
-                            onChange={() => toggle(row.employee_id)}
-                          />
-                        </td>
-                      )}
-                      <td className="p-3">
-                        <Link
-                          href={`/dashboard/employees/${row.employee_id}?tab=placements`}
-                          className="font-medium text-gray-900 hover:underline"
-                        >
-                          {row.full_name}
-                        </Link>
-                        <p className="text-xs text-gray-400">{row.nip ?? "—"}</p>
-                      </td>
-                      <td className="p-3 text-gray-600">
-                        <p>{row.department_name ?? "—"}</p>
-                        <p className="text-xs text-gray-400">{row.position_title ?? ""}</p>
-                      </td>
-                      <td className="p-3">
-                        <PlacementBadges placements={includeEnded ? row.placements : running(row)} />
-                      </td>
-                      <td className="p-3 text-right">
-                        <Button size="sm" variant="outline" onClick={() => setManaging(row)}>
-                          {canManage ? "Kelola" : "Lihat"}
-                        </Button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <PlacementsTable
+              rows={rows}
+              today={today}
+              canManage={canManage}
+              selected={selected}
+              onToggle={toggle}
+              onTogglePage={togglePage}
+              onManage={setManaging}
+            />
+          )}
+          {total > 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-gray-100 px-4 py-3 text-sm text-gray-600">
+              <span>
+                {from}–{to} dari {total}
+              </span>
+              <div className="flex items-center gap-3">
+                <label className="flex items-center gap-2">
+                  <span className="text-xs text-gray-500">Baris per halaman</span>
+                  <select
+                    aria-label="Baris per halaman"
+                    className="h-8 rounded-md border border-gray-200 bg-white px-2 text-sm"
+                    value={pageSize}
+                    onChange={(e) => {
+                      setPageSize(Number(e.target.value) as PageSize);
+                      setPage(1);
+                    }}
+                  >
+                    {PAGE_SIZES.map((n) => (
+                      <option key={n} value={n}>
+                        {n}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <span className="text-xs text-gray-500">
+                  Halaman {shownPage} dari {lastPage}
+                </span>
+                <Button
+                  size="icon-sm"
+                  variant="outline"
+                  aria-label="Halaman sebelumnya"
+                  disabled={page <= 1}
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                >
+                  <ChevronLeft />
+                </Button>
+                <Button
+                  size="icon-sm"
+                  variant="outline"
+                  aria-label="Halaman berikutnya"
+                  disabled={page >= lastPage}
+                  onClick={() => setPage((p) => p + 1)}
+                >
+                  <ChevronRight />
+                </Button>
+              </div>
             </div>
           )}
         </CardContent>
       </Card>
-      {!overview.isLoading && rows.length > 0 && (
-        <p className="text-xs text-gray-500">
-          {rows.length} karyawan ditampilkan{selected.size > 0 ? ` · ${selected.size} dipilih` : ""}
-        </p>
+
+      {canManage && selected.size > 0 && (
+        <BulkActionBar
+          count={selected.size}
+          total={total}
+          selectingAll={selectingAll}
+          onSelectAll={selectAllFiltered}
+          onClear={() => setSelected(new Set())}
+          onAction={setAction}
+          onSchedule={openSchedules}
+        />
       )}
 
       <BulkPlacementDialog
-        open={bulkOpen}
+        open={action !== null}
+        mode={action ?? "move"}
         employeeIds={[...selected]}
-        onOpenChange={setBulkOpen}
+        onOpenChange={(open) => !open && setAction(null)}
         onDone={() => {
-          setBulkOpen(false);
+          setAction(null);
           setSelected(new Set());
         }}
       />

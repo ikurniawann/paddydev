@@ -3,12 +3,17 @@ import { withReasonQuery } from "@/lib/hris/delete-reason";
 import type { BranchLocationPayload } from "@/lib/hris/geofence";
 import type { PlaceResult } from "@/lib/maps/coords";
 import type {
+  BulkEndPlacementPayload,
   BulkPlacementPayload,
+  BulkPlacementResponse,
   ClockPlacements,
   Placement,
   PlacementOverviewFilter,
   PlacementOverviewRow,
+  PlacementIdsResult,
   PlacementPayload,
+  PlacementSearchFilter,
+  PlacementSearchResult,
   SavedBranchLocation,
   SavedBranchMinWorkHours,
   StoreBranch,
@@ -51,11 +56,39 @@ export const updatePlacement = (id: string, payload: PlacementPayload) =>
 export const deletePlacement = (id: string, reason: string) =>
   apiDelete(withReasonQuery(`/api/hris/employee-placements/${id}`, reason));
 
-export const bulkPlacement = (payload: BulkPlacementPayload) =>
-  apiPost<{ data: { created: number; skipped: number }; message?: string }>(
-    "/api/hris/employee-placements/bulk",
-    payload
+/** Parameter filter bersama search & ids (kosong dibuang buildListUrl). */
+const searchParams = (f: PlacementSearchFilter) => ({
+  q: f.q?.trim(),
+  branch_id: f.branch_id,
+  department_id: f.department_id,
+  position_id: f.position_id,
+  status: f.status,
+  include_ended: f.include_ended ? "true" : undefined,
+});
+
+/** Halaman Penempatan Karyawan: hasil berhalaman + jumlah per chip (EPIC-070). */
+export const searchPlacements = (filter: PlacementSearchFilter) =>
+  apiGet<{ data: PlacementSearchResult }>(
+    buildListUrl("/api/hris/employee-placements/search", {
+      ...searchParams(filter),
+      page: filter.page,
+      page_size: filter.page_size,
+    })
+  ).then((res) => res.data);
+
+/** "Pilih semua hasil filter": semua id karyawan yang cocok (maks 2000). */
+export const fetchPlacementIds = (filter: PlacementSearchFilter) =>
+  apiGet<{ data: PlacementIdsResult }>(buildListUrl("/api/hris/employee-placements/ids", searchParams(filter))).then(
+    (res) => res.data
   );
+
+/** Tambah/pindah massal; kirim step "commit" untuk menyimpan (tanpa itu hanya pratinjau). */
+export const bulkPlacement = (payload: BulkPlacementPayload) =>
+  apiPost<BulkPlacementResponse>("/api/hris/employee-placements/bulk", payload);
+
+/** Akhiri penempatan berjalan secara massal (pratinjau/simpan). */
+export const bulkEndPlacement = (payload: BulkEndPlacementPayload) =>
+  apiPost<BulkPlacementResponse>("/api/hris/employee-placements/bulk-end", payload);
 
 /** Toko yang bisa dipilih saat clock-in; employeeId kosong = karyawan yang login. */
 export const fetchClockPlacements = (employeeId?: string) =>
