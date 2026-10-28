@@ -424,9 +424,11 @@ func (s *store) ListShifts(ctx context.Context) ([]*Row, error) {
 	return queryRows(ctx, s.db, `SELECT `+shiftColumns+` FROM hris.shifts ORDER BY sort_order ASC, name ASC`)
 }
 
-// ListShiftsWithUsage is ListShifts plus employees_using: the distinct active
+// ListShiftsWithUsage is ListShifts plus employees_using: the distinct
 // employees holding the shift on a per-date row from today on, or in a weekly
-// pattern still running (or starting later). One aggregate query, no N+1.
+// pattern still running (or starting later). It mirrors guardShiftDeactivate
+// (inactive employees included), so employees_using > 0 exactly when the
+// server refuses to deactivate or delete the shift. One aggregate query, no N+1.
 func (s *store) ListShiftsWithUsage(ctx context.Context, today string) ([]*Row, error) {
 	return queryRows(ctx, s.db, `SELECT `+shiftColumns+`, COALESCE(u.n, 0)::int AS employees_using
 		FROM hris.shifts
@@ -436,7 +438,6 @@ func (s *store) ListShiftsWithUsage(ctx context.Context, today string) ([]*Row, 
 		    UNION ALL
 		    SELECT w.shift_id, w.employee_id FROM hris.employee_shifts w WHERE w.effective_to IS NULL OR w.effective_to >= $1::date
 		  ) src
-		  JOIN hris.employees e ON e.id = src.employee_id AND e.is_active
 		  WHERE shift_id IS NOT NULL
 		  GROUP BY shift_id
 		) u ON u.shift_id = shifts.id

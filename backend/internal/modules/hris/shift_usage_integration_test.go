@@ -21,6 +21,7 @@ func TestShiftListEmployeesUsing(t *testing.T) {
 	hr, _ := h.staff("hrd", scheduleTestMenus, false)
 	used := h.scalar(`INSERT INTO hris.shifts (name, start_time, end_time) VALUES ('Pakai Uji', '08:00', '17:00') RETURNING id::text`)
 	idle := h.scalar(`INSERT INTO hris.shifts (name, start_time, end_time) VALUES ('Nganggur Uji', '09:00', '18:00') RETURNING id::text`)
+	inactiveOnly := h.scalar(`INSERT INTO hris.shifts (name, start_time, end_time) VALUES ('Pakai Nonaktif Uji', '10:00', '19:00') RETURNING id::text`)
 
 	byDay := h.employee(emp{name: "Pakai Per Tanggal"})
 	byPattern := h.employee(emp{name: "Pakai Pola"})
@@ -39,6 +40,7 @@ func TestShiftListEmployeesUsing(t *testing.T) {
 		($3, 3, $5, '2026-01-01', NULL),
 		($4, 1, $5, '2026-01-01', '2026-10-04')`, byPattern, both, inactive, pastOnly, used)
 	h.exec(`INSERT INTO hris.employee_shift_days (employee_id, work_date, shift_id, batch_id) VALUES ($1, '2026-10-07', $2, gen_random_uuid())`, inactive, used)
+	h.exec(`INSERT INTO hris.employee_shift_days (employee_id, work_date, shift_id, batch_id) VALUES ($1, '2026-10-08', $2, gen_random_uuid())`, inactive, inactiveOnly)
 
 	// Without the param the old shape is kept.
 	plain := h.do(&hr, http.MethodGet, "/api/hris/shifts", nil)
@@ -52,10 +54,19 @@ func TestShiftListEmployeesUsing(t *testing.T) {
 	c := h.do(&hr, http.MethodGet, "/api/hris/shifts?with_usage=true", nil)
 	expect(t, c, http.StatusOK, "")
 	got := shiftUsage(t, c)
-	// byDay + byPattern + both (counted once across both sources); not inactive, not pastOnly.
-	if got[used] != float64(3) {
-		t.Fatalf("used shift employees_using = %v, want 3 (%s)", got[used], c.raw)
+	// Same predicate as guardShiftDeactivate: byDay + byPattern + both
+	// (counted once across both sources) + inactive (a future row still
+	// blocks deactivation); not pastOnly.
+	if got[used] != float64(4) {
+		t.Fatalf("used shift employees_using = %v, want 4 (%s)", got[used], c.raw)
 	}
+	// A shift held only by an inactive employee's future row is "in use":
+	// the list says so and the server refuses to turn it off.
+	if got[inactiveOnly] != float64(1) {
+		t.Fatalf("inactive-only shift employees_using = %v, want 1 (%s)", got[inactiveOnly], c.raw)
+	}
+	off := h.do(&hr, http.MethodPatch, "/api/hris/shifts/"+inactiveOnly, map[string]any{"is_active": false})
+	expect(t, off, http.StatusBadRequest, "Shift masih dipakai 1 jadwal mulai hari ini — ganti dulu jadwalnya")
 	if got[idle] != float64(0) {
 		t.Fatalf("idle shift employees_using = %v, want 0", got[idle])
 	}
