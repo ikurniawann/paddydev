@@ -89,12 +89,12 @@ export function ScheduleDelegatesPage({ canManage }: { canManage: boolean }) {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full min-w-[880px] text-sm">
                 <thead>
                   <tr className="border-b border-gray-100 bg-gray-50 text-left text-xs text-gray-500">
-                    <th className="p-3">Karyawan</th>
-                    <th className="p-3">Jabatan</th>
-                    <th className="p-3">Toko</th>
+                    <th className="min-w-[10rem] p-3">Karyawan</th>
+                    <th className="min-w-[9rem] p-3">Jabatan</th>
+                    <th className="min-w-[15rem] p-3">Toko</th>
                     <th className="p-3">Penempatan</th>
                     <th className="p-3">Bawahan</th>
                     <th className="p-3">Diubah</th>
@@ -163,7 +163,7 @@ function DelegateRow({
             <span
               key={b.id}
               title={b.name}
-              className="rounded-full border border-gray-200 bg-gray-50 px-2 py-0.5 text-xs text-gray-700"
+              className="whitespace-nowrap rounded-full border border-gray-200 bg-gray-50 px-2 py-0.5 text-xs text-gray-700"
             >
               {b.code}
             </span>
@@ -171,7 +171,7 @@ function DelegateRow({
           {more > 0 && (
             <span
               title={row.branches.slice(MAX_CHIPS).map((b) => b.code).join(", ")}
-              className="rounded-full border border-gray-200 bg-white px-2 py-0.5 text-xs text-gray-500"
+              className="whitespace-nowrap rounded-full border border-gray-200 bg-white px-2 py-0.5 text-xs text-gray-500"
             >
               +{more}
             </span>
