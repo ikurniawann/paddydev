@@ -1,7 +1,7 @@
 # EPIC-070: Penempatan & Jadwal Shift — Massal, Manual, Lebih Jelas (`MODULE-HRIS`)
 
-status: review
-environment: dev
+status: ready-for-qa
+environment: production
 retries: 0
 
 ## Goal
@@ -101,3 +101,25 @@ Lihat rencana `docs/superpowers/plans/2026-10-29-penempatan-jadwal-massal.md`.
   - sel grid belum di-memo;
   - teks "error" lama di dialog unggah;
   - hapus shift tanpa penjaga klik ganda.
+- 2026-10-29: **PR #45 merged** (`940be473`) setelah CI 4/4 hijau (Audit, Backend Go, Lint, Unit test).
+- 2026-10-29: **Deploy staging** (paddydev.reddie.id) 03:07 WIB, image `local-20261029-030739` = main `940be473`.
+  - Backup: `~/Desktop/paddydev-backups/staging-db-before-epic070-20261029-030726.dump`. Rollback image: `local-20261027-210041`.
+  - Tanpa migrasi baru; verify 10705 objek, 0 beda.
+  - Route baru tanpa login: 401 (bukan 404).
+- 2026-10-29: **QA staging di browser** (Playwright, akun dan karyawan uji `qa070-*` di toko PD-PVJ/PD-KOPO tanpa karyawan nyata): **8/8 skenario, 31/31 cek lulus**, 0 panic/5xx.
+  - Penempatan: chip, filter, halaman, kolom Jadwal; pindah massal dengan pratinjau dan audit; akhiri massal; pilih semua hasil filter → Atur jadwal.
+  - Jadwal: satu kotak, rentang, kosongkan dengan alasan, pola 2 minggu, salin minggu lalu, tanggal lampau terkunci, template mulai hari ini.
+  - Shift: kelompok, cari, angka Dipakai, tidak ada hapus untuk shift dipakai, perubahan jam langsung terlihat.
+  - Penolakan API: tanggal lampau, Non-Shift, kode tak dikenal.
+  - Bersih-bersih: semua data qa070 = 0, kecuali 12 baris `audit.audit_log` (tabel append-only). Laporan + screenshot: `.share/qa070/`.
+  - **Temuan di luar EPIC-070 (backlog):**
+    - header aplikasi menampilkan tanggal UTC sebelum 07.00 WIB;
+    - template Excel mengisi kotak kosong dengan DEF, sehingga unggah tanpa diubah menulis DEF (perilaku EPIC-056);
+    - pesan kode tak dikenal di simpan per kotak masih menyebut "sheet Kode Shift" (hanya lewat API langsung).
+- 2026-10-29: **Production belum di-deploy.** Pukul 03.23 WIB (0 absen 30 menit terakhir) langkah backup + kirim source ke VPS ditolak oleh pengaman izin otomatis Claude Code (kategori Production Deploy). Menunggu user menjalankan atau mengizinkan langkah production.
+- 2026-10-29: **Deploy production** (paddyadorable.biz.id) 23:29–23:37 WIB, atas izin eksplisit user ("Ya, 21 orang", jendela 23.30). Dibawa bersama EPIC-071.
+  - Image `local-20261029-233049` = main `f270c919`. Satu migrasi (milik EPIC-071); verify 10723 objek, 0 hilang/beda.
+  - Absensi 30 menit sebelum deploy: 0. Container sehat tanpa restart, 0 error/panic di log API, `/login` 200, route baru tanpa login 401.
+  - Backup VPS: `~/backups/prod-db-before-epic070-071-20261029-232927.dump`. Log: `~/backups/deploy-prod-epic070-071-20261029-232927.log`.
+  - Rollback: deploy ulang dari `~/paddydev-src.before-epic070-071-20261029-232927` (= `c4c75a27`, image lama `local-20261027-211744`).
+  - Status `ready-for-qa`: QA HR di production. Tidak boleh ada sesi uji sementara di production.
