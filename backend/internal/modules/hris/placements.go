@@ -80,10 +80,13 @@ func (s *store) PlacementsOf(ctx context.Context, employeeID string) ([]*Row, er
 // placementFilter narrows the overview: Branch keeps employees placed at
 // the store, Department/Position match the employee record, Search matches
 // name/NIP, Status keeps one chip (placementStatuses), All includes ended
-// placements in the placements column. Scope (EPIC-071 R3, a store
-// delegate; nil for HR) keeps the employees with a placement running today
-// (started and not ended, as delegateOutside) at one of Scope.BranchIDs or in ScopeSubtree, the delegate's reporting subtree
-// (delegateSubtreeIDs) that must be filled with it.
+// placements in the placements column.
+//
+// Scope is the store delegate (EPIC-071 R3; nil for HR). It keeps the
+// employees in their area: a placement running today (started, not ended,
+// as in delegateOutside) at one of Scope.BranchIDs, or a place in
+// ScopeSubtree. ScopeSubtree is the delegate's reporting subtree
+// (delegateSubtreeIDs) and must be set together with Scope.
 type placementFilter struct {
 	Branch, Department, Position, Search, Status string
 	All                                          bool
@@ -269,7 +272,7 @@ func (s *store) PlacementEmployees(ctx context.Context, ids []string) ([]*Row, e
 
 func (s *store) PlacementSpans(ctx context.Context, employeeIDs []string) ([]*Row, error) {
 	return queryRows(ctx, s.db, `SELECT ep.id::text AS id, ep.employee_id::text AS employee_id, ep.branch_id::text AS branch_id,
-		b.name AS branch_name, ep.start_date::text AS start_date, ep.end_date::text AS end_date`+placementFrom+`
+		b.name AS branch_name, ep.start_date::text AS start_date, ep.end_date::text AS end_date, ep.is_primary`+placementFrom+`
 		WHERE ep.employee_id = ANY($1::text[]::uuid[])
 		ORDER BY ep.start_date, b.name`, employeeIDs)
 }
@@ -534,15 +537,24 @@ func (s *Service) checkDelegateEmployees(ctx context.Context, q database.Querier
 	return nil
 }
 
-// foreignPlacement reports whether a move would end a placement of the
-// employee at a store outside the delegate's area (R6): one running on start
-// at a store not in scope, unless the employee is in the delegate's subtree.
-func foreignPlacement(sc storeScope, subtree map[string]bool, id string, spans []domain.PlacementSpan, start string) bool {
+// foreignPlacement reports whether a delegate's bulk action would write to
+// a placement of the employee at a store outside their area (R6), unless
+// the employee is in the delegate's subtree. A move ends every placement
+// running on start; a primary add clears the primary flag of the primary
+// placements overlapping [start, end] (ClearOtherPrimary). A non-primary
+// add writes nothing but the new placement.
+func foreignPlacement(sc storeScope, subtree map[string]bool, in bulkPlacementRequest, id string, spans []domain.PlacementSpan, start string) bool {
 	if sc.Delegate == nil || subtree[id] {
 		return false
 	}
 	return slices.ContainsFunc(spans, func(p domain.PlacementSpan) bool {
-		return p.RunningOn(start) && !sc.AllowsBranch(p.BranchID)
+		if sc.AllowsBranch(p.BranchID) || !p.RunningOn(start) {
+			return false
+		}
+		if in.Mode == bulkMove {
+			return true
+		}
+		return in.Primary && p.Primary && (in.End == nil || p.Start <= *in.End)
 	})
 }
 
@@ -586,7 +598,7 @@ func loadBulkPlacements(ctx context.Context, r Repository, ids []string) ([]stri
 	for _, p := range spans {
 		if t := out[p.Str("employee_id")]; t != nil {
 			t.spans = append(t.spans, domain.PlacementSpan{ID: p.Str("id"), BranchID: p.Str("branch_id"),
-				BranchName: p.Str("branch_name"), Start: p.Str("start_date"), End: p.StrPtr("end_date")})
+				BranchName: p.Str("branch_name"), Start: p.Str("start_date"), End: p.StrPtr("end_date"), Primary: p.Bool("is_primary")})
 		}
 	}
 	return uniq, out, nil
@@ -678,7 +690,7 @@ func (s *Service) BulkPlacementPlan(ctx context.Context, actor *auth.User, in bu
 				return err
 			}
 		}
-		if in.Scope != nil && in.Mode == bulkMove {
+		if in.Scope != nil && primary { // a move is always primary
 			ids, err := delegateSubtreeIDs(ctx, r.querier(), in.Scope)
 			if err != nil {
 				return err
@@ -708,7 +720,7 @@ func (s *Service) BulkPlacementPlan(ctx context.Context, actor *auth.User, in bu
 				continue
 			}
 			var plan domain.MoveDecision
-			if in.Mode == bulkMove && foreignPlacement(sc, subtree, id, t.spans, start) {
+			if foreignPlacement(sc, subtree, in, id, t.spans, start) {
 				plan = domain.MoveDecision{Outcome: domain.PlacementSkipped, Reason: reasonForeignPlacement}
 			} else if in.Mode == bulkMove {
 				plan = domain.PlanPlacementMove(t.spans, in.BranchID, start)
@@ -766,8 +778,9 @@ func (s *Service) BulkPlacementPlan(ctx context.Context, actor *auth.User, in bu
 // a store of their area and only ends placements at their stores; an
 // employee with none to end there is skipped.
 func (s *Service) BulkEndPlacement(ctx context.Context, actor *auth.User, step string, employeeIDs []string, end, branchID string, scope *delegateAccess) (*Row, error) {
+	branchID = strings.ToLower(branchID) // as the stored ids compare
 	sc := storeScope{Delegate: scope}
-	if branchID != "" && !sc.AllowsBranch(strings.ToLower(branchID)) {
+	if branchID != "" && !sc.AllowsBranch(branchID) {
 		return nil, httpx.Forbidden(errOutsideScope)
 	}
 	var out *Row

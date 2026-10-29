@@ -3,6 +3,7 @@ package hris
 import (
 	"net/http"
 	"slices"
+	"strings"
 	"testing"
 
 	"nuhabit/backend/internal/platform/testutil"
@@ -98,6 +99,13 @@ func TestDelegatePlacementSearch(t *testing.T) {
 	slices.Sort(got)
 	if want := sortedIDs(f.pID, f.x, f.y, f.z, f.u); !slices.Equal(got, want) || ids.data()["total"] != 5.0 || ids.data()["truncated"] != false {
 		t.Fatalf("ids = %s, want %v", ids.raw, want)
+	}
+
+	// Ended placements in the column do not widen the area: W stays out.
+	c = h.do(&f.p, http.MethodGet, searchPath(placementSearchURL, "include_ended", "true", "page_size", "100"), nil)
+	if got, want := scopeRowIDs(t, c), sortedIDs(f.pID, f.x, f.y, f.z, f.u); !slices.Equal(got, want) ||
+		c.data()["counts"].(map[string]any)["all"] != 5.0 || c.data()["total"] != 5.0 {
+		t.Fatalf("include_ended = %v, want %v\n%s", got, want, c.raw)
 	}
 
 	// A placement at A that only starts tomorrow is not running (R3): V, not
@@ -200,6 +208,55 @@ func TestDelegatePlacementMoveForeignPlacement(t *testing.T) {
 	expectBulk(t, add, f.x, "created", nil)
 }
 
+// Adding a primary store clears the employee's other overlapping primary
+// flags; a delegate must not do that to a store outside the area of someone
+// not below them (R6), so such an employee is skipped like on a move.
+func TestDelegatePlacementAddPrimaryForeign(t *testing.T) {
+	h := newHarness(t)
+	f := newPlacementScopeFixture(h, true)
+	// X2: secondary at A (in the area), primary at C (outside), not below P.
+	x2 := h.employee(emp{name: "Pst71 X2 Utama Luar"})
+	h.place(x2, f.tokoC)
+	h.placeExtra(x2, f.tokoA)
+	// Z2: below P, primary at C only.
+	z2 := h.employee(emp{name: "Pst71 Z2 Bawahan Luar", boss: &f.pID})
+	h.place(z2, f.tokoC)
+	primaryAt := func(id, branch string) string {
+		return h.scalar(`SELECT string_agg(is_primary::text, ',') FROM hris.employee_placements
+			WHERE employee_id = $1 AND branch_id = $2`, id, branch)
+	}
+
+	done := h.do(&f.p, http.MethodPost, placementBulkURL, map[string]any{
+		"branch_id": f.tokoD, "employee_ids": []string{x2, z2, f.x}, "mode": "add", "is_primary": true, "step": "commit"})
+	expect(t, done, http.StatusOK, "")
+	expectBulk(t, done, x2, "skipped", errForeignStore)
+	expectBulk(t, done, z2, "created", nil)
+	expectBulk(t, done, f.x, "created", nil)
+	if got := primaryAt(x2, f.tokoC); got != "true" {
+		t.Fatalf("X2's primary at C = %q, want true (untouched)", got)
+	}
+	if got := primaryAt(x2, f.tokoD); got != "" {
+		t.Fatalf("X2 at D = %q, want none", got)
+	}
+	if got := h.auditCount("placement.bulk_add", x2); got != "0" {
+		t.Fatalf("X2 audit = %s", got)
+	}
+	// A subordinate and an in-area-only employee behave as for HR: the new
+	// primary at D takes the flag from the overlapping one.
+	if primaryAt(z2, f.tokoC) != "false" || primaryAt(z2, f.tokoD) != "true" {
+		t.Fatalf("Z2 C/D primary = %s/%s", primaryAt(z2, f.tokoC), primaryAt(z2, f.tokoD))
+	}
+	if primaryAt(f.x, f.tokoA) != "false" || primaryAt(f.x, f.tokoD) != "true" {
+		t.Fatalf("X A/D primary = %s/%s", primaryAt(f.x, f.tokoA), primaryAt(f.x, f.tokoD))
+	}
+
+	// Without is_primary nothing foreign is written, so X2 may get D.
+	add := h.do(&f.p, http.MethodPost, placementBulkURL, map[string]any{
+		"branch_id": f.tokoD, "employee_ids": []string{x2}, "mode": "add", "step": "preview"})
+	expect(t, add, http.StatusOK, "")
+	expectBulk(t, add, x2, "created", nil)
+}
+
 func TestDelegatePlacementEnd(t *testing.T) {
 	h := newHarness(t)
 	f := newPlacementScopeFixture(h, true)
@@ -227,8 +284,8 @@ func TestDelegatePlacementEnd(t *testing.T) {
 	}
 	expect(t, end(map[string]any{"employee_ids": []string{f.w}}), http.StatusForbidden, "1 karyawan di luar wilayah Anda")
 	expect(t, end(map[string]any{"employee_ids": []string{f.y}, "branch_id": f.tokoC}), http.StatusForbidden, errOutsideScope)
-	// An own store as branch_id is fine.
-	ok := end(map[string]any{"employee_ids": []string{f.pID}, "branch_id": f.tokoA})
+	// An own store as branch_id is fine, in any letter case.
+	ok := end(map[string]any{"employee_ids": []string{f.pID}, "branch_id": strings.ToUpper(f.tokoA)})
 	expect(t, ok, http.StatusOK, "")
 	expectBulk(t, ok, f.pID, "ended", nil, "Pst71 Toko A@2026-10-06")
 }

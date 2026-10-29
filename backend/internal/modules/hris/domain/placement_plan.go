@@ -6,11 +6,12 @@ import "fmt"
 // one employee's placements, decided without the database so the R4 rules
 // are tested on their own.
 
-// PlacementSpan is one placement of the employee: store and date range
-// (End nil = open-ended).
+// PlacementSpan is one placement of the employee: store, date range
+// (End nil = open-ended) and the primary flag.
 type PlacementSpan struct {
 	ID, BranchID, BranchName, Start string
 	End                             *string
+	Primary                         bool
 }
 
 // RunningOn: the placement has not ended before date.
