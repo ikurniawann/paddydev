@@ -333,3 +333,49 @@ func TestDelegatePlacementStale(t *testing.T) {
 		t.Fatalf("X at D = %s, want 0", got)
 	}
 }
+
+// A delegate cannot backdate a placement change (it would rewrite past
+// history and the per-store payroll split): start no earlier than today,
+// an end no earlier than yesterday. HR keeps backdating.
+func TestDelegatePlacementNoBackdate(t *testing.T) {
+	h := newHarness(t)
+	f := newPlacementScopeFixture(h, true)
+	move := func(u *testutil.Staff, extra map[string]any) call {
+		body := map[string]any{"branch_id": f.tokoD, "employee_ids": []string{f.x}, "mode": "move", "step": "preview"}
+		for k, v := range extra {
+			body[k] = v
+		}
+		return h.do(u, http.MethodPost, placementBulkURL, body)
+	}
+	expect(t, move(&f.p, map[string]any{"start_date": "2026-10-04"}), http.StatusBadRequest, errStartBeforeToday)
+	expect(t, move(&f.p, map[string]any{"mode": "add", "start_date": "2026-10-01", "end_date": "2026-10-02"}),
+		http.StatusBadRequest, errStartBeforeToday)
+	expect(t, move(&f.p, map[string]any{"start_date": "2026-10-05"}), http.StatusOK, "")
+
+	end := func(date string) call {
+		return h.do(&f.p, http.MethodPost, placementEndURL, map[string]any{
+			"employee_ids": []string{f.x}, "end_date": date, "step": "preview"})
+	}
+	expect(t, end("2026-10-03"), http.StatusBadRequest, errEndBeforeYesterday)
+	ok := end("2026-10-04")
+	expect(t, ok, http.StatusOK, "")
+	expectBulk(t, ok, f.x, "ended", nil, "Pst71 Toko A@2026-10-04")
+
+	// HR is unchanged.
+	hr, _ := h.staff("hrd", []string{"hris.master.placements"}, false)
+	expect(t, move(&hr, map[string]any{"start_date": "2026-10-01"}), http.StatusOK, "")
+	expect(t, h.do(&hr, http.MethodPost, placementEndURL, map[string]any{
+		"employee_ids": []string{f.x}, "end_date": "2026-09-01", "step": "preview"}), http.StatusOK, "")
+}
+
+// A move naming an employee outside the area is refused as a whole too.
+func TestDelegatePlacementMoveOutsideEmployee(t *testing.T) {
+	h := newHarness(t)
+	f := newPlacementScopeFixture(h, true)
+	out := h.do(&f.p, http.MethodPost, placementBulkURL, map[string]any{
+		"branch_id": f.tokoD, "employee_ids": []string{f.x, f.w}, "mode": "move", "step": "commit"})
+	expect(t, out, http.StatusForbidden, "1 karyawan di luar wilayah Anda")
+	if got := h.scalar(`SELECT count(*)::text FROM hris.employee_placements WHERE branch_id = $1`, f.tokoD); got != "0" {
+		t.Fatalf("placements at D = %s, want 0", got)
+	}
+}

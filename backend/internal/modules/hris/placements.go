@@ -666,11 +666,20 @@ func (s *Service) runBulkPlacement(ctx context.Context, step string, fn func(Rep
 // BulkPlacementPlan moves (R4) or adds the employees to a store; see the
 // domain planners for the skip rules. Each processed employee is audited.
 func (s *Service) BulkPlacementPlan(ctx context.Context, actor *auth.User, in bulkPlacementRequest) (*Row, error) {
+	today := domain.TodayWIB(s.now())
 	start := in.Start
 	if start == "" {
-		start = domain.TodayWIB(s.now())
+		start = today
 	}
 	primary := in.Primary || in.Mode == bulkMove
+	if in.Scope != nil {
+		if start < today {
+			return nil, httpx.BadRequest(errStartBeforeToday)
+		}
+		if in.End != nil && *in.End < domain.AddDaysISO(today, -1) {
+			return nil, httpx.BadRequest(errEndBeforeYesterday)
+		}
+	}
 	if in.End != nil && *in.End < start {
 		return nil, httpx.BadRequest("Tanggal selesai tidak boleh sebelum tanggal mulai")
 	}
@@ -775,10 +784,13 @@ func (s *Service) BulkPlacementPlan(ctx context.Context, actor *auth.User, in bu
 // BulkEndPlacement ends the running placements (all, or only at branchID)
 // of the employees on end; see domain.PlanPlacementEnd for the skips. A
 // store delegate (scope, nil for HR; EPIC-071 R6) only names employees and
-// a store of their area and only ends placements at their stores; an
-// employee with none to end there is skipped.
+// a store of their area, only ends placements at their stores (an employee
+// with none to end there is skipped) and cannot end before yesterday.
 func (s *Service) BulkEndPlacement(ctx context.Context, actor *auth.User, step string, employeeIDs []string, end, branchID string, scope *delegateAccess) (*Row, error) {
 	branchID = strings.ToLower(branchID) // as the stored ids compare
+	if scope != nil && end < domain.AddDaysISO(domain.TodayWIB(s.now()), -1) {
+		return nil, httpx.BadRequest(errEndBeforeYesterday)
+	}
 	sc := storeScope{Delegate: scope}
 	if branchID != "" && !sc.AllowsBranch(branchID) {
 		return nil, httpx.Forbidden(errOutsideScope)

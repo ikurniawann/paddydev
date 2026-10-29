@@ -53,6 +53,13 @@ const errOutsideScope = "Toko di luar wilayah Anda"
 // errNoPlaceRight is the 403 for a delegate without the placement right.
 const errNoPlaceRight = "Anda tidak punya hak mengatur penempatan"
 
+// A delegate cannot backdate a placement change: it would rewrite past
+// placement history and the per-store payroll split. HR still may.
+const (
+	errStartBeforeToday   = "Tanggal mulai tidak boleh sebelum hari ini"
+	errEndBeforeYesterday = "Tanggal akhir paling awal kemarin"
+)
+
 // withScheduleScope guards a store-schedule route for HR and for appointed
 // delegates (EPIC-071). HR is decided exactly as the route did before:
 // HasMenuPrefix when action is "", HasMenuAction(action) otherwise. Anyone

@@ -23,7 +23,7 @@ INSERT INTO iam.menus (code, menu_name, route_path, icon, menu_type, order_numbe
   ('ess.attendance', 'Absensi', '/dashboard/me/absensi', 'calendar', 'sidebar', 10, '{"actions":["read"]}'::jsonb),
   ('ess.leave', 'Izin & Cuti', '/dashboard/me/cuti', 'paper-airplane', 'sidebar', 20, '{"actions":["read"]}'::jsonb),
   ('ess.team-shifts', 'Shift Tim', '/dashboard/me/shift-tim', 'calendar', 'sidebar', 45, '{"actions":["read","update"]}'::jsonb),
-  ('ess.store-schedule', 'Jadwal Toko', '/dashboard/me/jadwal-toko', 'calendar-days', 'sidebar', 46, '{"actions":["read","update"]}'::jsonb),
+  ('ess.store-schedule', 'Jadwal Toko', '/dashboard/me/jadwal-toko', 'calendar', 'sidebar', 46, '{"actions":["read","update"]}'::jsonb),
   ('hris', 'HRIS', '/dashboard/hris', 'users', 'group', 10, '{"actions":["read"]}'::jsonb),
   ('items', 'Items', '/dashboard/items', 'cube', 'group', 35, '{"actions":["read"]}'::jsonb),
   ('pos', 'Point of Sales', '/dashboard/pos', 'shopping', 'group', 70, '{"actions":["read"]}'::jsonb),

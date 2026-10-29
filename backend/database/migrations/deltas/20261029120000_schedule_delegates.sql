@@ -25,7 +25,7 @@ CREATE INDEX IF NOT EXISTS idx_schedule_delegate_branches_branch
 -- (pola ess_shift_tim_menu): API-nya memeriksa penunjukan, karyawan yang bukan
 -- pengatur hanya melihat penjelasan, bukan data orang lain.
 INSERT INTO iam.menus (code, menu_name, route_path, icon, menu_type, order_number, permission_context)
-VALUES ('ess.store-schedule', 'Jadwal Toko', '/dashboard/me/jadwal-toko', 'calendar-days', 'sidebar', 46,
+VALUES ('ess.store-schedule', 'Jadwal Toko', '/dashboard/me/jadwal-toko', 'calendar', 'sidebar', 46,
         '{"actions":["read","update"]}'::jsonb)
 ON CONFLICT (code) DO UPDATE SET
   menu_name = EXCLUDED.menu_name, route_path = EXCLUDED.route_path,
