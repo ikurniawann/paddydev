@@ -6,6 +6,7 @@ import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
 import { useStoreBranches } from "@/features/hris/placements/queries";
+import { useScheduleAccess } from "@/features/hris/schedule-access/queries";
 import { todayWib } from "@/lib/dates";
 import { scheduleTemplateUrl } from "../api";
 import { useInvalidateScheduleDependents } from "../mutations";
@@ -26,29 +27,44 @@ interface Props {
   /** Dari tautan Atur jadwal di Penempatan: `?branch_id=…&employees=a,b`. */
   initialBranchId?: string;
   initialEmployeeIds?: string[];
+  /**
+   * "store" = pengatur jadwal toko di Area Karyawan (EPIC-071): hanya toko
+   * wilayahnya (satu toko langsung terpilih), tampilan awal 1 minggu, tanpa
+   * jadwal tetap Non-Shift dan tautan ke halaman HR.
+   */
+  mode?: "hr" | "store";
 }
 
 /** Jadwal Kerja per cabang (EPIC-056, EPIC-070): grid bisa diedit, pola, salin, unggah. */
-export function SchedulesPage({ initialBranchId = "", initialEmployeeIds = [] }: Props) {
+export function SchedulesPage({ initialBranchId = "", initialEmployeeIds = [], mode = "hr" }: Props) {
+  const store = mode === "store";
   const today = todayWib();
-  const [branchId, setBranchId] = useState(initialBranchId);
+  const [pickedBranchId, setBranchId] = useState(initialBranchId);
   /** Cabang yang menerima centang awal; "" = cabang pertama yang dipilih, null = sudah dipakai. */
   const [prefillBranch, setPrefillBranch] = useState<string | null>(initialBranchId);
   const [start, setStart] = useState(() => mondayOf(today));
-  const [days, setDays] = useState<number>(14);
+  const [days, setDays] = useState<number>(store ? 7 : 14);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [fixedOpen, setFixedOpen] = useState(false);
-  const branches = useStoreBranches();
+  const storeBranches = useStoreBranches(!store);
+  const access = useScheduleAccess(store);
+  const branchList = store ? access.data?.branches : storeBranches.data;
+  // Pengatur dengan satu toko langsung melihat toko itu.
+  const branchId = pickedBranchId || (store && branchList?.length === 1 ? branchList[0].id : "");
+  const place = store ? "toko" : "cabang";
   const params = { branch_id: branchId, from: start, to: addDays(start, days - 1) };
   // Template & unggah tidak boleh memuat tanggal lewat (server menolak).
   const fileRange = { branch_id: branchId, ...uploadRange(params.from, params.to, today) };
   const grid = useScheduleGrid(params);
   // Unggah/jadwal tetap mengubah lebih dari grid ini: Penempatan, profil, Shift Tim ESS.
   const invalidateSchedules = useInvalidateScheduleDependents();
-  const branchName = branches.data?.find((b) => b.id === branchId)?.name ?? "";
+  const branchName = branchList?.find((b) => b.id === branchId)?.name ?? "";
   const ready = !!branchId;
   // Centang awal dipakai sekali: untuk cabang dari tautan (atau cabang pertama yang dipilih).
-  const prefill = prefillBranch !== null && branchId === prefillBranch ? initialEmployeeIds : undefined;
+  const prefill =
+    prefillBranch !== null && (branchId === prefillBranch || (prefillBranch === "" && branchId !== ""))
+      ? initialEmployeeIds
+      : undefined;
 
   function changeBranch(next: string) {
     if (prefillBranch === "") setPrefillBranch(next);
@@ -58,21 +74,23 @@ export function SchedulesPage({ initialBranchId = "", initialEmployeeIds = [] }:
 
   return (
     <div className="space-y-5">
-      <div className="border-b border-gray-200/70 pb-4">
-        <h1 className="text-2xl font-bold text-gray-900">Jadwal Kerja</h1>
-        <p className="text-sm text-gray-500">Atur jadwal shift per cabang: ubah per kotak, terapkan pola, atau unggah Excel</p>
-      </div>
+      {store ? null : (
+        <div className="border-b border-gray-200/70 pb-4">
+          <h1 className="text-2xl font-bold text-gray-900">Jadwal Kerja</h1>
+          <p className="text-sm text-gray-500">Atur jadwal shift per cabang: ubah per kotak, terapkan pola, atau unggah Excel</p>
+        </div>
+      )}
 
       <div className="flex flex-wrap items-end gap-3">
-        <div className="w-64">
-          <p className="mb-1 text-xs font-medium text-gray-600">Cabang</p>
+        <div className="w-full sm:w-64">
+          <p className="mb-1 text-xs font-medium text-gray-600">{store ? "Toko" : "Cabang"}</p>
           <Combobox
-            options={(branches.data ?? []).map((b) => ({ value: b.id, label: b.name, description: b.code }))}
+            options={(branchList ?? []).map((b) => ({ value: b.id, label: b.name, description: b.code }))}
             value={branchId}
             onChange={changeBranch}
-            placeholder="Pilih cabang"
-            searchPlaceholder="Cari cabang..."
-            emptyMessage="Cabang tidak ditemukan"
+            placeholder={`Pilih ${place}`}
+            searchPlaceholder={`Cari ${place}...`}
+            emptyMessage={store ? "Toko tidak ditemukan" : "Cabang tidak ditemukan"}
           />
         </div>
         <div>
@@ -120,7 +138,7 @@ export function SchedulesPage({ initialBranchId = "", initialEmployeeIds = [] }:
           <Button variant="outline" disabled={!ready} onClick={() => setUploadOpen(true)}>
             Unggah jadwal
           </Button>
-          {grid.data && grid.data.non_shift_count > 0 ? (
+          {!store && grid.data && grid.data.non_shift_count > 0 ? (
             <Button variant="outline" onClick={() => setFixedOpen(true)}>
               Terapkan jadwal tetap (Non-Shift)
             </Button>
@@ -129,7 +147,7 @@ export function SchedulesPage({ initialBranchId = "", initialEmployeeIds = [] }:
       </div>
 
       {!branchId ? (
-        <p className="py-10 text-center text-sm text-gray-400">Pilih cabang untuk melihat jadwal.</p>
+        <p className="py-10 text-center text-sm text-gray-400">Pilih {place} untuk melihat jadwal.</p>
       ) : grid.isLoading ? (
         <div className="flex justify-center py-14">
           <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
@@ -140,7 +158,12 @@ export function SchedulesPage({ initialBranchId = "", initialEmployeeIds = [] }:
         </p>
       ) : grid.data ? (
         <div className="space-y-3">
-          {grid.data.non_shift_count > 0 ? (
+          {store && grid.data.non_shift_count > 0 ? (
+            <p className="rounded-lg bg-info-soft px-3 py-2 text-sm text-info">
+              {grid.data.non_shift_count} karyawan Non-Shift di toko ini memakai jadwal tetap dan tidak tampil di sini. Jadwal
+              tetapnya diatur HR.
+            </p>
+          ) : grid.data.non_shift_count > 0 ? (
             <p className="rounded-lg bg-info-soft px-3 py-2 text-sm text-info">
               {grid.data.non_shift_count} karyawan Non-Shift di cabang ini memakai jadwal tetap dan tidak tampil di sini. Lihat daftarnya di{" "}
               <Link href="/dashboard/employees" className="underline">
@@ -149,7 +172,9 @@ export function SchedulesPage({ initialBranchId = "", initialEmployeeIds = [] }:
               (filter Tipe Jadwal: Non-Shift).
             </p>
           ) : null}
-          {grid.data.employees.length === 0 ? (
+          {grid.data.employees.length === 0 && store ? (
+            <p className="py-10 text-center text-sm text-gray-400">Belum ada karyawan Shift yang ditempatkan di toko ini.</p>
+          ) : grid.data.employees.length === 0 ? (
             <p className="py-10 text-center text-sm text-gray-400">
               Belum ada karyawan Shift yang ditempatkan di cabang ini.{" "}
               <Link href="/dashboard/hris/placements" className="underline">
@@ -178,7 +203,7 @@ export function SchedulesPage({ initialBranchId = "", initialEmployeeIds = [] }:
           onSaved={() => void invalidateSchedules()}
         />
       ) : null}
-      {fixedOpen ? (
+      {fixedOpen && !store ? (
         <FixedScheduleDialog
           open
           onOpenChange={setFixedOpen}

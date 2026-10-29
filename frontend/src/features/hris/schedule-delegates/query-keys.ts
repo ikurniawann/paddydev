@@ -6,4 +6,4 @@ export const scheduleDelegateKeys = {
 };
 
 /** Akses Jadwal Toko di Area Karyawan ikut berubah saat pengatur disimpan/dicabut. */
-export const SCHEDULE_ACCESS_KEY = ["hris", "schedule-access"] as const;
+export { SCHEDULE_ACCESS_KEY } from "@/features/hris/schedule-access/query-keys";

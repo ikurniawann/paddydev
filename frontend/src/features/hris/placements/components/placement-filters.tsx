@@ -75,35 +75,42 @@ export interface PlacementFilterValues {
   includeEnded: boolean;
 }
 
-/** Filter 4 kolom: cari, toko, departemen, jabatan. */
+/**
+ * Filter 4 kolom: cari, toko, departemen, jabatan. Dengan `storeBranches`
+ * (pengatur jadwal toko, EPIC-071) hanya cari + toko wilayah: master
+ * departemen/jabatan khusus HR, jadi tidak diminta sama sekali.
+ */
 export function PlacementFilters({
   values,
   onChange,
-}: {
-  values: PlacementFilterValues;
-  onChange: (patch: Partial<PlacementFilterValues>) => void;
-}) {
+  storeBranches,
+}: FieldProps & { storeBranches?: { id: string; name: string }[] }) {
+  if (storeBranches) {
+    return (
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <SearchField values={values} onChange={onChange} />
+        <FilterCombo
+          label="Toko"
+          placeholder="Semua toko"
+          value={values.branchId}
+          onChange={(branchId) => onChange({ branchId })}
+          options={storeBranches.map((b) => ({ value: b.id, label: b.name }))}
+        />
+        <IncludeEnded values={values} onChange={onChange} className="sm:col-span-2" />
+      </div>
+    );
+  }
+  return <HrPlacementFilters values={values} onChange={onChange} />;
+}
+
+function HrPlacementFilters({ values, onChange }: FieldProps) {
   const branches = useStoreBranches();
   const departments = useDepartmentList();
   const positions = usePositionList();
 
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-      <div>
-        <label htmlFor="placement-search" className="mb-1 block text-xs font-medium text-gray-600">
-          Cari karyawan
-        </label>
-        <div className="relative">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-400" />
-          <Input
-            id="placement-search"
-            className="pl-8"
-            placeholder="Nama atau NIP"
-            value={values.search}
-            onChange={(e) => onChange({ search: e.target.value })}
-          />
-        </div>
-      </div>
+      <SearchField values={values} onChange={onChange} />
       <FilterCombo
         label="Toko"
         placeholder="Semua toko"
@@ -125,15 +132,46 @@ export function PlacementFilters({
         onChange={(positionId) => onChange({ positionId })}
         options={(positions.data ?? []).map((p) => ({ value: p.id, label: p.title, description: p.department || undefined }))}
       />
-      <label className="flex items-center gap-2 text-sm text-gray-600 sm:col-span-2 lg:col-span-4">
-        <input
-          type="checkbox"
-          checked={values.includeEnded}
-          onChange={(e) => onChange({ includeEnded: e.target.checked })}
-        />
-        Tampilkan penempatan yang sudah berakhir
-      </label>
+      <IncludeEnded values={values} onChange={onChange} className="sm:col-span-2 lg:col-span-4" />
     </div>
+  );
+}
+
+interface FieldProps {
+  values: PlacementFilterValues;
+  onChange: (patch: Partial<PlacementFilterValues>) => void;
+}
+
+function SearchField({ values, onChange }: FieldProps) {
+  return (
+    <div>
+      <label htmlFor="placement-search" className="mb-1 block text-xs font-medium text-gray-600">
+        Cari karyawan
+      </label>
+      <div className="relative">
+        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-400" />
+        <Input
+          id="placement-search"
+          className="pl-8"
+          placeholder="Nama atau NIP"
+          value={values.search}
+          onChange={(e) => onChange({ search: e.target.value })}
+        />
+      </div>
+    </div>
+  );
+}
+
+function IncludeEnded({ values, onChange, className }: FieldProps & { className: string }) {
+  return (
+    <label className={cn("flex items-center gap-2 text-sm text-gray-600", className)}>
+      <input
+        type="checkbox"
+        checked={values.includeEnded}
+        onChange={(e) => onChange({ includeEnded: e.target.checked })}
+      />
+      Tampilkan penempatan yang sudah berakhir
+    </label>
   );
 }
 

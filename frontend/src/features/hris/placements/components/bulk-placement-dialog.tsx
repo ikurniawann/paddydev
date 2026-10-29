@@ -34,6 +34,8 @@ interface BulkPlacementDialogProps {
   onOpenChange: (open: boolean) => void;
   /** Dipanggil setelah tersimpan: tutup dialog dan kosongkan pilihan. */
   onDone: () => void;
+  /** Pengatur jadwal toko (EPIC-071): pilihan toko hanya wilayahnya (server menolak toko lain). */
+  branches?: { id: string; name: string }[];
 }
 
 const COPY: Record<BulkPlacementAction, { title: (n: number) => string; description: string }> = {
@@ -66,7 +68,7 @@ const OUTCOME: Record<BulkOutcome, { label: string; summary: string; className: 
  * Aksi massal halaman Penempatan Karyawan: Pindahkan ke toko, Tambah toko,
  * atau Akhiri penempatan. Selalu lewat pratinjau dulu, lalu Simpan.
  */
-export function BulkPlacementDialog({ open, mode, employeeIds, onOpenChange, onDone }: BulkPlacementDialogProps) {
+export function BulkPlacementDialog({ open, mode, employeeIds, onOpenChange, onDone, branches }: BulkPlacementDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl">
@@ -75,6 +77,7 @@ export function BulkPlacementDialog({ open, mode, employeeIds, onOpenChange, onD
             key={mode}
             mode={mode}
             employeeIds={employeeIds}
+            areaBranches={branches}
             onCancel={() => onOpenChange(false)}
             onDone={onDone}
           />
@@ -87,15 +90,17 @@ export function BulkPlacementDialog({ open, mode, employeeIds, onOpenChange, onD
 function BulkPlacementForm({
   mode,
   employeeIds,
+  areaBranches,
   onCancel,
   onDone,
 }: {
   mode: BulkPlacementAction;
   employeeIds: string[];
+  areaBranches?: { id: string; name: string }[];
   onCancel: () => void;
   onDone: () => void;
 }) {
-  const branches = useStoreBranches();
+  const branches = useStoreBranches(!areaBranches);
   const bulk = useBulkPlacement();
   const bulkEnd = useBulkEndPlacement();
   const [branchId, setBranchId] = useState("");
@@ -107,7 +112,7 @@ function BulkPlacementForm({
   const pending = bulk.isPending || bulkEnd.isPending;
   const tooMany = employeeIds.length > BULK_LIMIT;
   const copy = COPY[mode];
-  const storeOptions = (branches.data ?? []).map((b) => ({ value: b.id, label: b.name }));
+  const storeOptions = (areaBranches ?? branches.data ?? []).map((b) => ({ value: b.id, label: b.name }));
 
   // Isian berubah → pratinjau lama tidak berlaku lagi.
   const edit =
@@ -229,7 +234,11 @@ function BulkPlacementForm({
                 searchPlaceholder="Cari kode atau nama toko"
                 allowClear
               />
-              <p className="mt-1 text-xs text-gray-400">Biarkan “Semua toko” untuk mengakhiri semua penempatan yang berjalan.</p>
+              <p className="mt-1 text-xs text-gray-400">
+                {areaBranches
+                  ? "Biarkan “Semua toko” untuk mengakhiri penempatan yang berjalan di toko Anda."
+                  : "Biarkan “Semua toko” untuk mengakhiri semua penempatan yang berjalan."}
+              </p>
             </div>
           )}
           <div>

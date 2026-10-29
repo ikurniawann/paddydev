@@ -40,6 +40,9 @@ vi.mock("@/components/ui/combobox", () => ({
   ),
 }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() } }));
+// Mode toko (EPIC-071): daftar toko dari akses pengatur, bukan seluruh cabang.
+const accessApi = vi.hoisted(() => ({ fetchScheduleAccess: vi.fn() }));
+vi.mock("@/features/hris/schedule-access/api", () => accessApi);
 afterEach(cleanup);
 beforeEach(() => {
   api.fetchScheduleGrid.mockReset();
@@ -147,4 +150,39 @@ it("jadwal tetap diterapkan memuat ulang grid, Penempatan, profil, dan Shift Tim
   fireEvent.click(await screen.findByRole("button", { name: "Terapkan" }));
   await waitFor(() => expect(usersApi.applyFixedSchedule).toHaveBeenCalled());
   await waitFor(() => expect(invalidatedKeys(invalidate)).toEqual(expect.arrayContaining(SCHEDULE_DEPENDENTS)));
+});
+
+it("mode toko: hanya toko dari akses, tanpa jadwal tetap Non-Shift dan tautan halaman HR", async () => {
+  accessApi.fetchScheduleAccess.mockResolvedValue({
+    is_delegate: true,
+    can_place: false,
+    branches: [
+      { id: "s1", code: "KPO", name: "KPO - Paddy Kopo" },
+      { id: "s2", code: "BTR", name: "BTR - Paddy Batununggal" },
+    ],
+  });
+  api.fetchScheduleGrid.mockImplementation(async (p: { from: string; to: string }) => ({
+    data: { ...grid(p.from, p.to), non_shift_count: 2 },
+  }));
+  renderPage({ mode: "store" });
+  const select = (await screen.findByLabelText("Pilih toko")) as HTMLSelectElement;
+  await waitFor(() => expect(select.options).toHaveLength(3));
+  expect([...select.options].map((o) => o.value)).toEqual(["", "s1", "s2"]);
+  fireEvent.change(select, { target: { value: "s2" } });
+  await screen.findByLabelText("Pilih Ana");
+  expect(api.fetchScheduleGrid).toHaveBeenLastCalledWith({ branch_id: "s2", from: "2026-11-02", to: "2026-11-08" });
+  expect(screen.getByText(/2 karyawan Non-Shift/)).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "Terapkan jadwal tetap (Non-Shift)" })).toBeNull();
+  expect(screen.queryByRole("link", { name: "Karyawan" })).toBeNull();
+});
+
+it("mode toko: satu toko langsung terpilih", async () => {
+  accessApi.fetchScheduleAccess.mockResolvedValue({
+    is_delegate: true,
+    can_place: false,
+    branches: [{ id: "s1", code: "KPO", name: "KPO - Paddy Kopo" }],
+  });
+  renderPage({ mode: "store" });
+  await screen.findByLabelText("Pilih Ana");
+  expect(api.fetchScheduleGrid).toHaveBeenCalledWith({ branch_id: "s1", from: "2026-11-02", to: "2026-11-08" });
 });

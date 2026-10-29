@@ -10,8 +10,9 @@ import {
 import { placementQueryKeys } from "./query-keys";
 import type { PlacementSearchFilter } from "./types";
 
-export const useStoreBranches = () =>
-  useQuery({ queryKey: placementQueryKeys.branches(), queryFn: fetchStoreBranches, staleTime: 5 * 60_000 });
+/** `enabled` false = tidak diminta (mode toko memakai toko dari akses pengatur). */
+export const useStoreBranches = (enabled = true) =>
+  useQuery({ queryKey: placementQueryKeys.branches(), queryFn: fetchStoreBranches, staleTime: 5 * 60_000, enabled });
 
 export const useEmployeePlacements = (employeeId: string) =>
   useQuery({

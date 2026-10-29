@@ -23,6 +23,9 @@ vi.mock("@/features/master-data/departments/queries", () => ({
 vi.mock("@/features/master-data/positions/queries", () => ({
   usePositionList: () => ({ data: [{ id: "p1", title: "Kasir", is_active: true }] }),
 }));
+// Mode toko (EPIC-071): toko & hak penempatan dari akses pengatur.
+const accessApi = vi.hoisted(() => ({ fetchScheduleAccess: vi.fn() }));
+vi.mock("@/features/hris/schedule-access/api", () => accessApi);
 vi.mock("./branch-location-dialog", () => ({ BranchLocationDialog: () => null }));
 vi.mock("./employee-placements-tab", () => ({ PLACEMENT_MANAGERS: [], EmployeePlacementsTab: () => null }));
 // Combobox asli (popover + cmdk) diganti <select> supaya filter bisa dipilih di jsdom.
@@ -299,5 +302,64 @@ describe("PlacementsPage", () => {
     renderPage();
     await screen.findByText("Ani");
     expect(screen.queryByRole("link", { name: /Pengatur jadwal toko/ })).toBeNull();
+  });
+
+  describe("mode toko (pengatur jadwal, EPIC-071)", () => {
+    const onOpenSchedule = vi.fn();
+    function renderStore(canPlace = true) {
+      access.canManage = false; // pengatur tidak punya menu HR
+      accessApi.fetchScheduleAccess.mockResolvedValue({
+        is_delegate: true,
+        can_place: canPlace,
+        branches: [{ id: "b2", code: "KPO", name: "KPO - Paddy Kopo" }],
+      });
+      const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      render(
+        <QueryClientProvider client={client}>
+          <PlacementsPage mode="store" onOpenSchedule={onOpenSchedule} />
+        </QueryClientProvider>
+      );
+    }
+
+    it("Atur jadwal memanggil onOpenSchedule, bukan router.push", async () => {
+      renderStore();
+      await screen.findByText("Ani");
+      fireEvent.click(await screen.findByLabelText("Pilih Ani"));
+      fireEvent.click(screen.getByLabelText("Pilih Citra"));
+      fireEvent.click(screen.getByLabelText("Pilih Dodi"));
+      fireEvent.click(screen.getByRole("button", { name: "Atur jadwal" }));
+      expect(onOpenSchedule).toHaveBeenCalledWith("b2", ["e1", "e3", "e4"]);
+      expect(push).not.toHaveBeenCalled();
+    });
+
+    it("filter toko hanya toko wilayah, tanpa filter departemen/jabatan dan kontrol khusus HR", async () => {
+      renderStore();
+      await screen.findByText("Ani");
+      const store = screen.getByLabelText("Semua toko") as HTMLSelectElement;
+      await waitFor(() => expect([...store.options].map((o) => o.value)).toEqual(["", "b2"]));
+      expect(screen.queryByLabelText("Semua departemen")).toBeNull();
+      expect(screen.queryByLabelText("Semua jabatan")).toBeNull();
+      expect(screen.queryByRole("link", { name: /Pengatur jadwal toko/ })).toBeNull();
+      expect(screen.queryByRole("button", { name: /Lokasi Toko/ })).toBeNull();
+      expect(screen.queryByRole("link", { name: "Ani" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Kelola" })).toBeNull();
+      expect(api.fetchStoreBranches).not.toHaveBeenCalled();
+    });
+
+    it("tanpa boleh atur penempatan tidak ada centang dan aksi massal", async () => {
+      renderStore(false);
+      await screen.findByText("Ani");
+      await waitFor(() => expect(accessApi.fetchScheduleAccess).toHaveBeenCalled());
+      expect(screen.queryByLabelText("Pilih Ani")).toBeNull();
+    });
+
+    it("dialog pindah hanya menawarkan toko wilayah", async () => {
+      renderStore();
+      await screen.findByText("Ani");
+      fireEvent.click(await screen.findByLabelText("Pilih Ani"));
+      fireEvent.click(screen.getByRole("button", { name: "Pindahkan ke toko" }));
+      const picker = (await screen.findByLabelText("Pilih toko")) as HTMLSelectElement;
+      expect([...picker.options].map((o) => o.value)).toEqual(["", "b2"]);
+    });
   });
 });
