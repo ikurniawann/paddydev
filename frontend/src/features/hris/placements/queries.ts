@@ -7,6 +7,7 @@ import {
   fetchStoreBranches,
   searchPlacements,
 } from "./api";
+import { retryUnlessForbidden } from "@/features/hris/schedule-access/access-guard";
 import { placementQueryKeys } from "./query-keys";
 import type { PlacementSearchFilter } from "./types";
 
@@ -21,9 +22,13 @@ export const useEmployeePlacements = (employeeId: string) =>
     enabled: !!employeeId,
   });
 
-/** Hasil tetap tampil saat berpindah halaman/filter sampai data baru datang. */
-export const usePlacementSearch = (filter: PlacementSearchFilter) =>
+/**
+ * Hasil tetap tampil saat berpindah halaman/filter sampai data baru datang.
+ * `store` = mode pengatur jadwal toko: 403 (akses dicabut) tidak dicoba ulang.
+ */
+export const usePlacementSearch = (filter: PlacementSearchFilter, store = false) =>
   useQuery({
+    ...(store ? { retry: retryUnlessForbidden } : {}),
     queryKey: placementQueryKeys.search(filter),
     queryFn: () => searchPlacements(filter),
     placeholderData: keepPreviousData,

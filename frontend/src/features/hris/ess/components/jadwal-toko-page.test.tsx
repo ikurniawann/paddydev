@@ -4,6 +4,8 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { addDays } from "@/features/hris/schedules/schedule-range";
 import type { ScheduleGrid } from "@/features/hris/schedules/types";
 import type { ScheduleAccess } from "@/features/hris/schedule-access/types";
+import { ApiError } from "@/lib/api-client";
+import { toast } from "sonner";
 import { EssJadwalTokoPage } from "./jadwal-toko-page";
 
 const accessApi = vi.hoisted(() => ({ fetchScheduleAccess: vi.fn() }));
@@ -98,9 +100,10 @@ const placementRow = (id: string, name: string) => ({
   ],
 });
 
-function renderPage(access: ScheduleAccess) {
+/** `fresh` = staleTime seperti aplikasi (2 menit): akses tidak dimuat ulang hanya karena tab dipasang. */
+function renderPage(access: ScheduleAccess, fresh = false) {
   accessApi.fetchScheduleAccess.mockResolvedValue(access);
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, ...(fresh ? { staleTime: 120_000 } : {}) } } });
   render(
     <QueryClientProvider client={client}>
       <EssJadwalTokoPage />
@@ -176,4 +179,82 @@ it("gagal memuat akses tanpa data → kartu galat", async () => {
     </QueryClientProvider>
   );
   expect(await screen.findByText("Jaringan terputus")).toBeTruthy();
+});
+
+const NOT_DELEGATE = "Anda bukan pengatur jadwal toko. Hubungi HR bila seharusnya punya akses.";
+const DELEGATE: ScheduleAccess = { is_delegate: true, can_place: true, branches: [STORE] };
+const revoked = () => new ApiError("Insufficient permissions", 403, { error: "Insufficient permissions" });
+
+it("penunjukan dicabut saat halaman terbuka: grid 403 → kartu bukan pengatur, tanpa teks server", async () => {
+  scheduleApi.fetchScheduleGrid.mockRejectedValue(revoked());
+  renderPage(DELEGATE, true);
+  accessApi.fetchScheduleAccess.mockResolvedValue({ is_delegate: false, can_place: false, branches: [] });
+  expect(await screen.findByText(NOT_DELEGATE)).toBeTruthy();
+  expect(screen.queryByRole("tab", { name: "Jadwal" })).toBeNull();
+  expect(screen.queryByText("Insufficient permissions")).toBeNull();
+  expect(accessApi.fetchScheduleAccess).toHaveBeenCalledTimes(2);
+  expect(scheduleApi.fetchScheduleGrid).toHaveBeenCalledTimes(1);
+});
+
+it("akses gagal dimuat ulang sesudah 403 (mis. karyawan dinonaktifkan) → tetap kartu", async () => {
+  scheduleApi.fetchScheduleGrid.mockRejectedValue(revoked());
+  renderPage(DELEGATE, true);
+  accessApi.fetchScheduleAccess.mockRejectedValue(new Error("Jaringan terputus"));
+  expect(await screen.findByText(NOT_DELEGATE)).toBeTruthy();
+  expect(screen.queryByText("Insufficient permissions")).toBeNull();
+});
+
+it("403 wilayah tetap memakai pesan server, bukan kartu", async () => {
+  scheduleApi.fetchScheduleGrid.mockRejectedValue(new ApiError("Toko di luar wilayah Anda", 403, null));
+  renderPage(DELEGATE, true);
+  expect(await screen.findByText("Toko di luar wilayah Anda")).toBeTruthy();
+  expect(screen.getByRole("tab", { name: "Jadwal" })).toBeTruthy();
+  expect(screen.queryByText(NOT_DELEGATE)).toBeNull();
+});
+
+it("tab Penempatan: pencarian 403 → kartu bukan pengatur", async () => {
+  renderPage(DELEGATE, true);
+  await screen.findByLabelText("Pilih Ana");
+  placementApi.searchPlacements.mockRejectedValue(revoked());
+  accessApi.fetchScheduleAccess.mockResolvedValue({ is_delegate: false, can_place: false, branches: [] });
+  fireEvent.click(screen.getByRole("tab", { name: "Penempatan" }));
+  expect(await screen.findByText(NOT_DELEGATE)).toBeTruthy();
+  expect(screen.queryByText("Gagal memuat penempatan karyawan")).toBeNull();
+});
+
+it("aksi yang ditolak 403 → kartu bukan pengatur, toast tanpa teks server", async () => {
+  placementApi.searchPlacements.mockImplementation(async () => ({
+    rows: [placementRow("e1", "Ana"), placementRow("e2", "Budi")],
+    total: 3,
+    page: 1,
+    page_size: 25,
+    counts: { all: 3, unplaced: 0, no_schedule: 3, multi: 0 },
+  }));
+  placementApi.fetchPlacementIds.mockRejectedValue(revoked());
+  renderPage(DELEGATE, true);
+  fireEvent.click(await screen.findByRole("tab", { name: "Penempatan" }));
+  fireEvent.click(await screen.findByLabelText("Pilih Ana"));
+  accessApi.fetchScheduleAccess.mockResolvedValue({ is_delegate: false, can_place: false, branches: [] });
+  fireEvent.click(screen.getByRole("button", { name: /Pilih semua hasil filter/ }));
+  expect(await screen.findByText(NOT_DELEGATE)).toBeTruthy();
+  expect(toast.error).not.toHaveBeenCalledWith("Insufficient permissions");
+});
+
+it("mode toko punya Shift kosong + hak penempatan: arahkan ke tab Penempatan", async () => {
+  scheduleApi.fetchScheduleGrid.mockImplementation(async (p: { from: string; to: string }) => ({
+    data: { ...grid(p.from, p.to), employees: [] },
+  }));
+  renderPage(DELEGATE, true);
+  expect(await screen.findByText(/Belum ada karyawan Shift yang ditempatkan di toko ini\./)).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Tempatkan karyawan di tab Penempatan" }));
+  expect(screen.getByRole("tab", { name: "Penempatan" }).getAttribute("aria-selected")).toBe("true");
+});
+
+it("mode toko tanpa hak penempatan: Shift kosong tanpa arahan ke Penempatan", async () => {
+  scheduleApi.fetchScheduleGrid.mockImplementation(async (p: { from: string; to: string }) => ({
+    data: { ...grid(p.from, p.to), employees: [] },
+  }));
+  renderPage({ ...DELEGATE, can_place: false });
+  expect(await screen.findByText(/Belum ada karyawan Shift yang ditempatkan di toko ini\./)).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "Tempatkan karyawan di tab Penempatan" })).toBeNull();
 });

@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { useIamAccess } from "@/components/iam/iam-access-provider";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { todayWib } from "@/lib/dates";
+import { NOT_DELEGATE_MESSAGE, useStoreErrorText } from "@/features/hris/schedule-access/access-guard";
 import { useScheduleAccess } from "@/features/hris/schedule-access/queries";
 import { fetchPlacementIds } from "../api";
 import { usePlacementSearch, useStoreBranches } from "../queries";
@@ -83,7 +84,12 @@ export function PlacementsPage({
     status: status || undefined,
     include_ended: filters.includeEnded || undefined,
   };
-  const result = usePlacementSearch({ ...baseFilter, page, page_size: pageSize });
+  const result = usePlacementSearch({ ...baseFilter, page, page_size: pageSize }, store);
+  const errorText = useStoreErrorText();
+  const { report } = errorText;
+  useEffect(() => {
+    if (result.error) report(result.error);
+  }, [result.error, report]);
   const data = result.data;
   const rows = data?.rows ?? [];
   const total = data?.total ?? 0;
@@ -140,7 +146,7 @@ export function PlacementsPage({
       setSelected(new Set(res.ids));
       if (res.truncated) toast.info(`Hanya ${res.ids.length} karyawan pertama yang dipilih`);
     } catch (error) {
-      toast.error(error instanceof Error && error.message ? error.message : "Gagal memilih semua hasil filter");
+      toast.error(errorText.fail(error, "Gagal memilih semua hasil filter"));
     } finally {
       setSelectingAll(false);
     }
@@ -214,7 +220,9 @@ export function PlacementsPage({
               <Loader2 className="h-6 w-6 animate-spin text-gray-400" aria-label="Memuat" />
             </div>
           ) : result.isError ? (
-            <div className="py-12 text-center text-sm text-red-500">Gagal memuat penempatan karyawan</div>
+            <div className="py-12 text-center text-sm text-red-500">
+              {errorText.lost(result.error) ? NOT_DELEGATE_MESSAGE : "Gagal memuat penempatan karyawan"}
+            </div>
           ) : rows.length === 0 ? (
             <div className="py-12 text-center text-sm text-gray-400">Tidak ada karyawan untuk filter ini.</div>
           ) : (

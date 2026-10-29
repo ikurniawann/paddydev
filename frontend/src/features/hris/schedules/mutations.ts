@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { essQueryKeys } from "@/features/hris/ess/query-keys";
+import { useStoreErrorText } from "@/features/hris/schedule-access/access-guard";
 import { ApiError } from "@/lib/api-client";
 import { DeleteCancelledError, isValidDeleteReason, retryWithReason } from "@/lib/hris/delete-reason";
 import { saveScheduleCells } from "./api";
@@ -38,8 +39,6 @@ export function canCommit(preview: CellsPreview, ack: boolean, reason: string): 
   );
 }
 
-const message = (err: unknown, fallback: string) => (err instanceof Error && err.message ? err.message : fallback);
-
 /**
  * Simpan kotak jadwal: pratinjau dulu. Tanpa perubahan (baru/ubah/kosongkan = 0)
  * tidak disimpan. Tanpa error/peringatan/timpaan langsung disimpan (kecuali
@@ -47,6 +46,7 @@ const message = (err: unknown, fallback: string) => (err instanceof Error && err
  * peringatan, alasan bila ada jadwal yang tertimpa).
  */
 export function useScheduleCellsSave(branchId: string, onSaved?: () => void) {
+  const errorText = useStoreErrorText();
   const qc = useQueryClient();
   const invalidateDependents = useInvalidateScheduleDependents();
   const [review, setReview] = useState<CellsReview | null>(null);
@@ -80,7 +80,7 @@ export function useScheduleCellsSave(branchId: string, onSaved?: () => void) {
       return true;
     } catch (err) {
       if (err instanceof DeleteCancelledError) return false;
-      toast.error(message(err, "Gagal menyimpan jadwal"));
+      toast.error(errorText.fail(err, "Gagal menyimpan jadwal"));
       if (err instanceof ApiError && err.status === 409) {
         openReview(null);
         void qc.invalidateQueries({ queryKey: ["hris", "schedules"] });
@@ -112,7 +112,7 @@ export function useScheduleCellsSave(branchId: string, onSaved?: () => void) {
       const res = await saveScheduleCells({ branch_id: branchId, step: "preview", cells });
       preview = { ...res.data, errors: res.data.errors ?? [], warnings: res.data.warnings ?? [], changes: res.data.changes ?? [] };
     } catch (err) {
-      toast.error(message(err, "Jadwal tidak bisa diperiksa"));
+      toast.error(errorText.fail(err, "Jadwal tidak bisa diperiksa"));
       return;
     } finally {
       setBusy(false);

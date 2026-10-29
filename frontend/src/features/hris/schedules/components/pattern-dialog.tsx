@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { useStoreErrorText } from "@/features/hris/schedule-access/access-guard";
 import { fetchScheduleGrid } from "../api";
 import { CELLS_EMPLOYEE_LIMIT, CELLS_EMPLOYEE_LIMIT_MESSAGE, CELLS_LIMIT, useScheduleCellsSave } from "../mutations";
 import { coverChunks, expandPattern, mergeGrids } from "../schedule-cells";
@@ -46,6 +47,7 @@ function rangeProblem(from: string, to: string, today: string): string | null {
  * dipratinjau dulu sebelum disimpan.
  */
 export function PatternDialog({ open, onOpenChange, branchId, employees, shifts, defaultFrom, today, onSaved }: Props) {
+  const errorText = useStoreErrorText();
   const [pattern, setPattern] = useState<string[]>(() => DAYS.map(() => ""));
   const [from, setFrom] = useState(defaultFrom);
   const [to, setTo] = useState(() => addDays(defaultFrom, 27));
@@ -81,7 +83,7 @@ export function PatternDialog({ open, onOpenChange, branchId, employees, shifts,
       );
       await saver.save(cells, { confirm: true });
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Gagal memuat jadwal");
+      toast.error(errorText.fail(err, "Gagal memuat jadwal"));
     } finally {
       setLoading(false);
     }

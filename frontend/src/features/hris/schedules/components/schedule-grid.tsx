@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { CalendarRange, Copy, Eraser, Loader2, PaintBucket, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { useStoreErrorText } from "@/features/hris/schedule-access/access-guard";
 import { fetchScheduleGrid } from "../api";
 import { CELLS_EMPLOYEE_LIMIT, CELLS_EMPLOYEE_LIMIT_MESSAGE, useScheduleCellsSave } from "../mutations";
 import { cellKey, copyWeek, fillCells, parseCellKey, rowRange, shiftTone } from "../schedule-cells";
@@ -37,6 +38,7 @@ interface Picker {
  * karyawan untuk Terapkan pola. Tanggal lewat dan kotak "-" tidak bisa diubah.
  */
 export function ScheduleGrid({ grid, branchId, today, initialChecked, loading = false }: Props) {
+  const errorText = useStoreErrorText();
   const [checked, setChecked] = useState(() => new Set(initialChecked ?? []));
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [anchorKey, setAnchorKey] = useState<string | null>(null);
@@ -127,7 +129,7 @@ export function ScheduleGrid({ grid, branchId, today, initialChecked, loading = 
       setReviewTitle(`Salin jadwal ${dm(addDays(from, -7))}–${dm(addDays(from, -1))}`);
       await saver.save(cells, { confirm: true });
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Gagal memuat jadwal minggu lalu");
+      toast.error(errorText.fail(err, "Gagal memuat jadwal minggu lalu"));
     } finally {
       setCopying(false);
     }

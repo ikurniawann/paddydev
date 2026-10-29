@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
 import { useStoreBranches } from "@/features/hris/placements/queries";
+import { useStoreErrorText } from "@/features/hris/schedule-access/access-guard";
 import { useScheduleAccess } from "@/features/hris/schedule-access/queries";
 import { todayWib } from "@/lib/dates";
 import { scheduleTemplateUrl } from "../api";
@@ -33,10 +34,12 @@ interface Props {
    * jadwal tetap Non-Shift dan tautan ke halaman HR.
    */
   mode?: "hr" | "store";
+  /** Mode toko dengan hak penempatan: langkah berikut saat toko belum punya karyawan Shift. */
+  onOpenPlacements?: () => void;
 }
 
 /** Jadwal Kerja per cabang (EPIC-056, EPIC-070): grid bisa diedit, pola, salin, unggah. */
-export function SchedulesPage({ initialBranchId = "", initialEmployeeIds = [], mode = "hr" }: Props) {
+export function SchedulesPage({ initialBranchId = "", initialEmployeeIds = [], mode = "hr", onOpenPlacements }: Props) {
   const store = mode === "store";
   const today = todayWib();
   const [pickedBranchId, setBranchId] = useState(initialBranchId);
@@ -55,7 +58,12 @@ export function SchedulesPage({ initialBranchId = "", initialEmployeeIds = [], m
   const params = { branch_id: branchId, from: start, to: addDays(start, days - 1) };
   // Template & unggah tidak boleh memuat tanggal lewat (server menolak).
   const fileRange = { branch_id: branchId, ...uploadRange(params.from, params.to, today) };
-  const grid = useScheduleGrid(params);
+  const grid = useScheduleGrid(params, store);
+  const errorText = useStoreErrorText();
+  const { report } = errorText;
+  useEffect(() => {
+    if (grid.error) report(grid.error);
+  }, [grid.error, report]);
   // Unggah/jadwal tetap mengubah lebih dari grid ini: Penempatan, profil, Shift Tim ESS.
   const invalidateSchedules = useInvalidateScheduleDependents();
   const branchName = branchList?.find((b) => b.id === branchId)?.name ?? "";
@@ -154,7 +162,7 @@ export function SchedulesPage({ initialBranchId = "", initialEmployeeIds = [], m
         </div>
       ) : grid.isError ? (
         <p className="py-10 text-center text-sm text-danger">
-          {grid.error instanceof Error ? grid.error.message : "Gagal memuat jadwal"}
+          {errorText.text(grid.error, "Gagal memuat jadwal")}
         </p>
       ) : grid.data ? (
         <div className="space-y-3">
@@ -173,7 +181,14 @@ export function SchedulesPage({ initialBranchId = "", initialEmployeeIds = [], m
             </p>
           ) : null}
           {grid.data.employees.length === 0 && store ? (
-            <p className="py-10 text-center text-sm text-gray-400">Belum ada karyawan Shift yang ditempatkan di toko ini.</p>
+            <div className="flex flex-col items-center gap-3 py-10 text-center">
+              <p className="text-sm text-gray-400">Belum ada karyawan Shift yang ditempatkan di toko ini.</p>
+              {onOpenPlacements ? (
+                <Button variant="outline" onClick={onOpenPlacements}>
+                  Tempatkan karyawan di tab Penempatan
+                </Button>
+              ) : null}
+            </div>
           ) : grid.data.employees.length === 0 ? (
             <p className="py-10 text-center text-sm text-gray-400">
               Belum ada karyawan Shift yang ditempatkan di cabang ini.{" "}

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { useStoreErrorText } from "@/features/hris/schedule-access/access-guard";
 import { downloadScheduleErrors, importScheduleFile } from "../api";
 import { dayLabel, dm } from "../schedule-range";
 import type { ScheduleIssue, SchedulePreview } from "../types";
@@ -45,6 +46,7 @@ function IssueList({ issues, tone }: { issues: ScheduleIssue[]; tone: "danger" |
  * ada dikonfirmasi.
  */
 export function ScheduleUploadDialog({ open, onOpenChange, range, branchName, onSaved }: Props) {
+  const errorText = useStoreErrorText();
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<SchedulePreview | null>(null);
   const [ack, setAck] = useState(false);
@@ -65,7 +67,7 @@ export function ScheduleUploadDialog({ open, onOpenChange, range, branchName, on
       setAck(false);
     } catch (err) {
       setPreview(null);
-      toast.error(err instanceof Error ? err.message : "File tidak bisa diperiksa");
+      toast.error(errorText.fail(err, "File tidak bisa diperiksa"));
     } finally {
       setBusy(false);
     }
@@ -85,7 +87,7 @@ export function ScheduleUploadDialog({ open, onOpenChange, range, branchName, on
     } catch (err) {
       setConfirmOpen(false);
       setPreview(null);
-      toast.error(err instanceof Error ? err.message : "Gagal menyimpan jadwal");
+      toast.error(errorText.fail(err, "Gagal menyimpan jadwal"));
     } finally {
       setBusy(false);
     }
@@ -105,7 +107,7 @@ export function ScheduleUploadDialog({ open, onOpenChange, range, branchName, on
     try {
       await downloadScheduleErrors({ ...range, file });
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Gagal membuat file error");
+      toast.error(errorText.fail(err, "Gagal membuat file error"));
     }
   }
 
