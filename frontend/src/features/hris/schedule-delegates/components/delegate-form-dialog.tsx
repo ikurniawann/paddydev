@@ -13,7 +13,7 @@ import type { PlacementSearchRow } from "@/features/hris/placements/types";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { todayWib } from "@/lib/dates";
 import { useSaveDelegate } from "../mutations";
-import { useDelegateEmployeeSearch, useDelegateSuggest } from "../queries";
+import { useDelegateEmployeeSearch, useDelegateSuggest, useScheduleDelegates } from "../queries";
 import type { ScheduleDelegate } from "../types";
 
 interface DelegateFormDialogProps {
@@ -57,18 +57,23 @@ function DelegateFormBody({ delegate, onOpenChange }: DelegateFormDialogProps) {
   const [picked, setPicked] = useState<ComboboxOption | null>(null);
   const [searchText, setSearchText] = useState("");
   const q = useDebouncedValue(searchText.trim(), 300);
-  // null = belum diubah HR: toko mengikuti saran server (mode tambah) atau baris (mode ubah).
-  const [chosen, setChosen] = useState<string[] | null>(delegate ? delegate.branches.map((b) => b.id) : null);
-  const [canPlace, setCanPlace] = useState(delegate?.can_place ?? false);
+  // null = belum diubah HR: toko mengikuti baris pengatur yang ada, lalu saran server (karyawan baru).
+  const [chosen, setChosen] = useState<string[] | null>(null);
+  const [canPlaceChoice, setCanPlaceChoice] = useState<boolean | null>(null);
   const [storeFilter, setStoreFilter] = useState("");
   const [error, setError] = useState("");
 
   const branches = useStoreBranches();
   const employees = useDelegateEmployeeSearch(q, !editing);
-  const suggest = useDelegateSuggest(editing ? undefined : employeeId || undefined);
+  const delegates = useScheduleDelegates();
+  // Karyawan yang sudah menjadi pengatur: nilai barisnya dipakai, bukan saran (simpan akan menggantikannya).
+  const existing = editing ? undefined : (delegates.data ?? []).find((d) => d.employee_id === employeeId);
+  const base = delegate ?? existing;
+  const suggest = useDelegateSuggest(editing || existing || delegates.isLoading ? undefined : employeeId || undefined);
   const save = useSaveDelegate();
 
-  const selectedIds = chosen ?? suggest.data?.branch_ids ?? [];
+  const selectedIds = chosen ?? base?.branches.map((b) => b.id) ?? suggest.data?.branch_ids ?? [];
+  const canPlace = canPlaceChoice ?? base?.can_place ?? false;
   const selected = new Set(selectedIds);
 
   const options = useMemo(() => {
@@ -94,6 +99,7 @@ function DelegateFormBody({ delegate, onOpenChange }: DelegateFormDialogProps) {
     setEmployeeId(id);
     setPicked(options.find((o) => o.value === id) ?? null);
     setChosen(null);
+    setCanPlaceChoice(null);
     setError("");
   }
 
@@ -124,8 +130,9 @@ function DelegateFormBody({ delegate, onOpenChange }: DelegateFormDialogProps) {
     );
   }
 
-  const suggesting = !editing && !!employeeId && chosen === null && suggest.isLoading;
-  const noSuggestion = !editing && !!employeeId && chosen === null && suggest.isSuccess && selectedIds.length === 0;
+  const suggesting = !editing && !!employeeId && chosen === null && !base && suggest.isLoading;
+  const suggestFailed = !editing && !!employeeId && !base && suggest.isError;
+  const noSuggestion = !editing && !!employeeId && chosen === null && !base && suggest.isSuccess && selectedIds.length === 0;
 
   return (
     <>
@@ -202,6 +209,14 @@ function DelegateFormBody({ delegate, onOpenChange }: DelegateFormDialogProps) {
               ))
             )}
           </div>
+          {existing && (
+            <p className="mt-1 text-xs text-amber-700">
+              Karyawan ini sudah menjadi pengatur — perubahan akan menggantikan toko sebelumnya.
+            </p>
+          )}
+          {suggestFailed && (
+            <p className="mt-1 text-xs text-amber-700">Saran toko gagal dimuat — pilih toko secara manual.</p>
+          )}
           {noSuggestion && (
             <p className="mt-1 text-xs text-gray-500">
               Karyawan ini belum punya penempatan atau bawahan di toko mana pun. Pilih tokonya sendiri.
@@ -215,7 +230,7 @@ function DelegateFormBody({ delegate, onOpenChange }: DelegateFormDialogProps) {
             className="mt-0.5"
             aria-label="Boleh atur penempatan karyawan"
             checked={canPlace}
-            onChange={(e) => setCanPlace(e.target.checked)}
+            onChange={(e) => setCanPlaceChoice(e.target.checked)}
           />
           <span>Boleh atur penempatan karyawan</span>
         </label>

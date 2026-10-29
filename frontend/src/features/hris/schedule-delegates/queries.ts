@@ -16,6 +16,9 @@ export const useDelegateSuggest = (employeeId: string | undefined) =>
     enabled: !!employeeId,
     // Penempatan bisa berubah di antara dua pemilihan; selalu ambil saran terbaru.
     staleTime: 0,
+    // Toko yang sudah dicentang HR tidak boleh berubah sendiri; gagal ditampilkan sebagai petunjuk.
+    refetchOnWindowFocus: false,
+    retry: false,
   });
 
 /** Pencarian karyawan untuk pemilih (nama/NIP), 25 hasil teratas. */

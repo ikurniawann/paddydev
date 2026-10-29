@@ -106,6 +106,7 @@ beforeEach(() => {
     counts: { all: 1, unplaced: 0, no_schedule: 0, multi: 0 },
   });
   api.fetchDelegateSuggest.mockResolvedValue({ branch_ids: ["b1", "b2"] });
+  api.fetchScheduleDelegates.mockResolvedValue([]);
 });
 afterEach(cleanup);
 
@@ -177,5 +178,46 @@ describe("DelegateFormDialog (EPIC-071)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Simpan" }));
     await waitFor(() => expect(api.saveScheduleDelegate).toHaveBeenCalled());
     expect(api.saveScheduleDelegate).toHaveBeenCalledWith("e9", { branch_ids: ["b3"], can_place: true });
+  });
+
+  it("memilih karyawan yang sudah jadi pengatur memakai toko dan hak lamanya, dengan catatan", async () => {
+    api.fetchScheduleDelegates.mockResolvedValue([{ ...delegate, employee_id: "e1", can_place: true }]);
+    api.saveScheduleDelegate.mockResolvedValue(delegate);
+    renderDialog();
+    await waitFor(() => expect(screen.getByRole("option", { name: /Ani Wijaya/ })).toBeTruthy());
+    fireEvent.change(screen.getByLabelText("Pilih karyawan"), { target: { value: "e1" } });
+
+    expect(
+      await screen.findByText("Karyawan ini sudah menjadi pengatur — perubahan akan menggantikan toko sebelumnya.")
+    ).toBeTruthy();
+    expect((screen.getByLabelText("PIK - Paddy PIK") as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByLabelText("PVJ - Paddy PVJ") as HTMLInputElement).checked).toBe(false);
+    expect((screen.getByLabelText("Boleh atur penempatan karyawan") as HTMLInputElement).checked).toBe(true);
+    expect(api.fetchDelegateSuggest).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Simpan" }));
+    await waitFor(() => expect(api.saveScheduleDelegate).toHaveBeenCalled());
+    expect(api.saveScheduleDelegate).toHaveBeenCalledWith("e1", { branch_ids: ["b3"], can_place: true });
+  });
+
+  it("karyawan baru tidak menampilkan catatan pengatur yang sudah ada", async () => {
+    renderDialog();
+    await waitFor(() => expect(screen.getByRole("option", { name: /Ani Wijaya/ })).toBeTruthy());
+    fireEvent.change(screen.getByLabelText("Pilih karyawan"), { target: { value: "e1" } });
+    await waitFor(() => expect((screen.getByLabelText("PVJ - Paddy PVJ") as HTMLInputElement).checked).toBe(true));
+    expect(screen.queryByText(/sudah menjadi pengatur/)).toBeNull();
+  });
+
+  it("saran toko gagal dimuat menampilkan petunjuk dan toko bisa dipilih manual", async () => {
+    api.fetchDelegateSuggest.mockRejectedValue(new Error("boom"));
+    api.saveScheduleDelegate.mockResolvedValue(delegate);
+    renderDialog();
+    await waitFor(() => expect(screen.getByRole("option", { name: /Ani Wijaya/ })).toBeTruthy());
+    fireEvent.change(screen.getByLabelText("Pilih karyawan"), { target: { value: "e1" } });
+    expect(await screen.findByText("Saran toko gagal dimuat — pilih toko secara manual.")).toBeTruthy();
+    fireEvent.click(screen.getByLabelText("KPO - Paddy Kopo"));
+    fireEvent.click(screen.getByRole("button", { name: "Simpan" }));
+    await waitFor(() => expect(api.saveScheduleDelegate).toHaveBeenCalled());
+    expect(api.saveScheduleDelegate).toHaveBeenCalledWith("e1", { branch_ids: ["b2"], can_place: false });
+    expect(api.fetchDelegateSuggest).toHaveBeenCalledTimes(1);
   });
 });
