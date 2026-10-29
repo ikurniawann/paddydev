@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
 import { Input } from "@/components/ui/input";
+import { useStoreErrorText } from "@/features/hris/schedule-access/access-guard";
 import {
   Dialog,
   DialogContent,
@@ -15,6 +16,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { todayWib } from "@/lib/dates";
+import { addDays } from "@/features/hris/schedules/schedule-range";
 import { shortDateId } from "@/lib/hris/placements";
 import { cn } from "@/lib/utils";
 import { useBulkEndPlacement, useBulkPlacement } from "../mutations";
@@ -34,6 +36,8 @@ interface BulkPlacementDialogProps {
   onOpenChange: (open: boolean) => void;
   /** Dipanggil setelah tersimpan: tutup dialog dan kosongkan pilihan. */
   onDone: () => void;
+  /** Pengatur jadwal toko (EPIC-071): pilihan toko hanya wilayahnya (server menolak toko lain). */
+  branches?: { id: string; name: string }[];
 }
 
 const COPY: Record<BulkPlacementAction, { title: (n: number) => string; description: string }> = {
@@ -55,6 +59,12 @@ const COPY: Record<BulkPlacementAction, { title: (n: number) => string; descript
 
 const PAST_DATE_WARNING = "Tanggal sebelum hari ini — riwayat penempatan dan pembagian biaya gaji ikut berubah.";
 
+/** Pengatur tidak boleh memundurkan penempatan (server menolak dengan pesan yang sama). */
+const STORE_MIN_MESSAGE = {
+  start: "Tanggal mulai tidak boleh sebelum hari ini",
+  end: "Tanggal akhir paling awal kemarin",
+} as const;
+
 const OUTCOME: Record<BulkOutcome, { label: string; summary: string; className: string }> = {
   moved: { label: "Dipindah", summary: "dipindah", className: "bg-blue-50 text-blue-700" },
   created: { label: "Ditambah", summary: "ditambah", className: "bg-green-50 text-green-700" },
@@ -66,7 +76,7 @@ const OUTCOME: Record<BulkOutcome, { label: string; summary: string; className: 
  * Aksi massal halaman Penempatan Karyawan: Pindahkan ke toko, Tambah toko,
  * atau Akhiri penempatan. Selalu lewat pratinjau dulu, lalu Simpan.
  */
-export function BulkPlacementDialog({ open, mode, employeeIds, onOpenChange, onDone }: BulkPlacementDialogProps) {
+export function BulkPlacementDialog({ open, mode, employeeIds, onOpenChange, onDone, branches }: BulkPlacementDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl">
@@ -75,6 +85,7 @@ export function BulkPlacementDialog({ open, mode, employeeIds, onOpenChange, onD
             key={mode}
             mode={mode}
             employeeIds={employeeIds}
+            areaBranches={branches}
             onCancel={() => onOpenChange(false)}
             onDone={onDone}
           />
@@ -87,15 +98,18 @@ export function BulkPlacementDialog({ open, mode, employeeIds, onOpenChange, onD
 function BulkPlacementForm({
   mode,
   employeeIds,
+  areaBranches,
   onCancel,
   onDone,
 }: {
   mode: BulkPlacementAction;
   employeeIds: string[];
+  areaBranches?: { id: string; name: string }[];
   onCancel: () => void;
   onDone: () => void;
 }) {
-  const branches = useStoreBranches();
+  const errorText = useStoreErrorText();
+  const branches = useStoreBranches(!areaBranches);
   const bulk = useBulkPlacement();
   const bulkEnd = useBulkEndPlacement();
   const [branchId, setBranchId] = useState("");
@@ -107,7 +121,9 @@ function BulkPlacementForm({
   const pending = bulk.isPending || bulkEnd.isPending;
   const tooMany = employeeIds.length > BULK_LIMIT;
   const copy = COPY[mode];
-  const storeOptions = (branches.data ?? []).map((b) => ({ value: b.id, label: b.name }));
+  const storeOptions = (areaBranches ?? branches.data ?? []).map((b) => ({ value: b.id, label: b.name }));
+  // Mode toko: mulai paling awal hari ini, akhir paling awal kemarin; HR boleh tanggal lampau (koreksi).
+  const minDate = areaBranches ? (mode === "end" ? addDays(today, -1) : today) : undefined;
 
   // Isian berubah → pratinjau lama tidak berlaku lagi.
   const edit =
@@ -126,6 +142,10 @@ function BulkPlacementForm({
       toast.error("Isi tanggal dulu");
       return;
     }
+    if (minDate && date < minDate) {
+      toast.error(mode === "end" ? STORE_MIN_MESSAGE.end : STORE_MIN_MESSAGE.start);
+      return;
+    }
     const handlers = {
       onSuccess: (res: BulkPlacementResponse) => {
         if (step === "preview") {
@@ -136,7 +156,7 @@ function BulkPlacementForm({
         onDone();
       },
       onError: (error: Error) =>
-        toast.error(error.message || (step === "preview" ? "Gagal memuat pratinjau" : "Gagal menyimpan penempatan")),
+        toast.error(errorText.fail(error, step === "preview" ? "Gagal memuat pratinjau" : "Gagal menyimpan penempatan")),
     };
     if (mode === "end") {
       bulkEnd.mutate({ employee_ids: employeeIds, end_date: date, branch_id: branchId || null, step }, handlers);
@@ -158,8 +178,8 @@ function BulkPlacementForm({
 
   const results = preview?.results ?? [];
   const willChange = results.some((r) => r.outcome !== "skipped");
-  // Tanggal lampau tetap boleh (koreksi), tapi mengubah riwayat dan biaya gaji per toko.
-  const pastDateNote = date && date < today ? <p className="text-xs text-amber-700">{PAST_DATE_WARNING}</p> : null;
+  // Tanggal lampau tetap boleh untuk HR (koreksi), tapi mengubah riwayat dan biaya gaji per toko.
+  const pastDateNote = !minDate && date && date < today ? <p className="text-xs text-amber-700">{PAST_DATE_WARNING}</p> : null;
 
   return (
     <>
@@ -229,7 +249,11 @@ function BulkPlacementForm({
                 searchPlaceholder="Cari kode atau nama toko"
                 allowClear
               />
-              <p className="mt-1 text-xs text-gray-400">Biarkan “Semua toko” untuk mengakhiri semua penempatan yang berjalan.</p>
+              <p className="mt-1 text-xs text-gray-400">
+                {areaBranches
+                  ? "Biarkan “Semua toko” untuk mengakhiri penempatan yang berjalan di toko Anda."
+                  : "Biarkan “Semua toko” untuk mengakhiri semua penempatan yang berjalan."}
+              </p>
             </div>
           )}
           <div>
@@ -239,6 +263,7 @@ function BulkPlacementForm({
             <Input
               id="bulk-placement-date"
               type="date"
+              min={minDate}
               value={date}
               onChange={(e) => edit(setDate)(e.target.value)}
             />

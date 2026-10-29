@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, ChevronRight, Loader2, MapPin } from "lucide-react";
+import { ChevronLeft, ChevronRight, Loader2, MapPin, UserCog } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -11,6 +12,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { useIamAccess } from "@/components/iam/iam-access-provider";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { todayWib } from "@/lib/dates";
+import { NOT_DELEGATE_MESSAGE, useStoreErrorText } from "@/features/hris/schedule-access/access-guard";
+import { useScheduleAccess } from "@/features/hris/schedule-access/queries";
 import { fetchPlacementIds } from "../api";
 import { usePlacementSearch, useStoreBranches } from "../queries";
 import type { PlacementSearchFilter, PlacementSearchRow, PlacementStatusFilter } from "../types";
@@ -32,9 +35,25 @@ const SCHEDULE_LINK_LIMIT = 50;
  * (pindah/tambah/akhiri dengan pratinjau, atur jadwal). Pilihan bertahan
  * lintas halaman dan filter sampai dihapus.
  */
-export function PlacementsPage() {
+export function PlacementsPage({
+  mode = "hr",
+  onOpenSchedule,
+}: {
+  /**
+   * "store" = pengatur jadwal toko di Area Karyawan (EPIC-071): hak kelola dari
+   * `can_place`, toko hanya wilayahnya, tanpa kontrol yang memakai API khusus HR
+   * (master departemen/jabatan, lokasi toko, ubah satu penempatan, profil karyawan).
+   */
+  mode?: "hr" | "store";
+  /** Mode toko: "Atur jadwal" membuka tab Jadwal, bukan halaman HR. */
+  onOpenSchedule?: (branchId: string, employeeIds: string[]) => void;
+} = {}) {
+  const store = mode === "store";
   const router = useRouter();
-  const canManage = useIamAccess().hasPrefix(PLACEMENT_MANAGERS);
+  const hrManage = useIamAccess().hasPrefix(PLACEMENT_MANAGERS);
+  const access = useScheduleAccess(store);
+  const areaBranches = access.data?.branches;
+  const canManage = store ? access.data?.can_place === true : hrManage;
   const [status, setStatus] = useState<PlacementStatusFilter>("");
   const [filters, setFilters] = useState<PlacementFilterValues>({
     search: "",
@@ -54,7 +73,7 @@ export function PlacementsPage() {
   const branchOf = useRef(new Map<string, string>());
   const search = useDebouncedValue(filters.search.trim(), 300);
   const today = todayWib();
-  const branches = useStoreBranches();
+  const branches = useStoreBranches(!store);
   const missingCoords = (branches.data ?? []).filter((b) => b.lat === null || b.lng === null).length;
 
   const baseFilter: PlacementSearchFilter = {
@@ -65,7 +84,12 @@ export function PlacementsPage() {
     status: status || undefined,
     include_ended: filters.includeEnded || undefined,
   };
-  const result = usePlacementSearch({ ...baseFilter, page, page_size: pageSize });
+  const result = usePlacementSearch({ ...baseFilter, page, page_size: pageSize }, store);
+  const errorText = useStoreErrorText();
+  const { report } = errorText;
+  useEffect(() => {
+    if (result.error) report(result.error);
+  }, [result.error, report]);
   const data = result.data;
   const rows = data?.rows ?? [];
   const total = data?.total ?? 0;
@@ -122,7 +146,7 @@ export function PlacementsPage() {
       setSelected(new Set(res.ids));
       if (res.truncated) toast.info(`Hanya ${res.ids.length} karyawan pertama yang dipilih`);
     } catch (error) {
-      toast.error(error instanceof Error && error.message ? error.message : "Gagal memilih semua hasil filter");
+      toast.error(errorText.fail(error, "Gagal memilih semua hasil filter"));
     } finally {
       setSelectingAll(false);
     }
@@ -131,9 +155,11 @@ export function PlacementsPage() {
   function openSchedules() {
     const ids = [...selected];
     const tally = new Map<string, number>();
+    // Pengatur hanya bisa membuka toko wilayahnya (bawahan bisa bertoko utama di luar wilayah).
+    const inArea = (id: string) => !store || (areaBranches ?? []).some((b) => b.id === id);
     for (const id of ids) {
       const branch = branchOf.current.get(id);
-      if (branch) tally.set(branch, (tally.get(branch) ?? 0) + 1);
+      if (branch && inArea(branch)) tally.set(branch, (tally.get(branch) ?? 0) + 1);
     }
     let branch = filters.branchId;
     let best = 0;
@@ -141,7 +167,15 @@ export function PlacementsPage() {
       if (n > best) [branch, best] = [id, n];
     }
     if (ids.length > SCHEDULE_LINK_LIMIT) {
-      toast.info(`Jadwal Kerja dibuka untuk ${SCHEDULE_LINK_LIMIT} karyawan pertama yang dipilih`);
+      toast.info(
+        store
+          ? `Tab Jadwal dibuka untuk ${SCHEDULE_LINK_LIMIT} karyawan pertama yang dipilih`
+          : `Jadwal Kerja dibuka untuk ${SCHEDULE_LINK_LIMIT} karyawan pertama yang dipilih`
+      );
+    }
+    if (store) {
+      onOpenSchedule?.(branch, ids.slice(0, SCHEDULE_LINK_LIMIT));
+      return;
     }
     const params = [branch ? `branch_id=${encodeURIComponent(branch)}` : "", `employees=${ids.slice(0, SCHEDULE_LINK_LIMIT).join(",")}`];
     router.push(`/dashboard/hris/schedules?${params.filter(Boolean).join("&")}`);
@@ -149,24 +183,33 @@ export function PlacementsPage() {
 
   return (
     <div className="space-y-5">
-      <PageHeader
-        kicker="HRIS · Master Data"
-        title="Penempatan Karyawan"
-        description="Toko tempat setiap karyawan bekerja. Dipakai untuk pilihan toko saat clock-in, jadwal kerja, dan pembagian biaya gaji per toko."
-        actions={
-          canManage ? (
-            <Button variant="outline" onClick={() => setLocationOpen(true)}>
-              <MapPin className="mr-1.5 h-4 w-4" /> Lokasi Toko
-              {missingCoords > 0 ? ` (${missingCoords} belum diisi)` : ""}
-            </Button>
-          ) : null
-        }
-      />
+      {store ? null : (
+        <PageHeader
+          kicker="HRIS · Master Data"
+          title="Penempatan Karyawan"
+          description="Toko tempat setiap karyawan bekerja. Dipakai untuk pilihan toko saat clock-in, jadwal kerja, dan pembagian biaya gaji per toko."
+          actions={
+            canManage ? (
+              <>
+                <Button variant="outline" asChild>
+                  <Link href="/dashboard/hris/placements/pengatur">
+                    <UserCog className="mr-1.5 h-4 w-4" /> Pengatur jadwal toko
+                  </Link>
+                </Button>
+                <Button variant="outline" onClick={() => setLocationOpen(true)}>
+                  <MapPin className="mr-1.5 h-4 w-4" /> Lokasi Toko
+                  {missingCoords > 0 ? ` (${missingCoords} belum diisi)` : ""}
+                </Button>
+              </>
+            ) : null
+          }
+        />
+      )}
 
       <Card>
         <CardContent className="space-y-4 pt-6">
           <PlacementStatusChips status={status} counts={data?.counts} onChange={changeStatus} />
-          <PlacementFilters values={filters} onChange={changeFilters} />
+          <PlacementFilters values={filters} onChange={changeFilters} storeBranches={store ? areaBranches ?? [] : undefined} />
         </CardContent>
       </Card>
 
@@ -177,7 +220,9 @@ export function PlacementsPage() {
               <Loader2 className="h-6 w-6 animate-spin text-gray-400" aria-label="Memuat" />
             </div>
           ) : result.isError ? (
-            <div className="py-12 text-center text-sm text-red-500">Gagal memuat penempatan karyawan</div>
+            <div className="py-12 text-center text-sm text-red-500">
+              {errorText.lost(result.error) ? NOT_DELEGATE_MESSAGE : "Gagal memuat penempatan karyawan"}
+            </div>
           ) : rows.length === 0 ? (
             <div className="py-12 text-center text-sm text-gray-400">Tidak ada karyawan untuk filter ini.</div>
           ) : (
@@ -185,6 +230,7 @@ export function PlacementsPage() {
               rows={rows}
               today={today}
               canManage={canManage}
+              mode={mode}
               selected={selected}
               onToggle={toggle}
               onTogglePage={togglePage}
@@ -258,13 +304,14 @@ export function PlacementsPage() {
         open={action !== null}
         mode={action ?? "move"}
         employeeIds={[...selected]}
+        branches={store ? areaBranches ?? [] : undefined}
         onOpenChange={(open) => !open && setAction(null)}
         onDone={() => {
           setAction(null);
           setSelected(new Set());
         }}
       />
-      {canManage && (
+      {canManage && !store && (
         <BranchLocationDialog open={locationOpen} onOpenChange={setLocationOpen} branches={branches.data ?? []} />
       )}
       <Dialog open={managing !== null} onOpenChange={(open) => !open && setManaging(null)}>

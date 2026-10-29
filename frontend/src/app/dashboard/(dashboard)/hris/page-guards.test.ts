@@ -1,5 +1,6 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { IAM } from "@/lib/iam/prefixes";
 
 // EPIC-057: halaman detail Rekrutmen/Live Monitoring, dashboard rekrutmen dan
 // konfigurasi KPI dijaga menu yang sama dengan API-nya (bukan hanya sesi).
@@ -10,6 +11,9 @@ vi.mock("@/features/hris/candidates", () => ({ CandidateDetailPage: () => null }
 vi.mock("@/features/hris/live-monitoring", () => ({ LiveMonitorDetailPage: () => null }));
 vi.mock("@/features/hris/dashboard", () => ({ RecruitmentDashboardPage: () => null }));
 vi.mock("@/features/hris/kpi", () => ({ KpiConfigPage: () => null, KpiScorecardPage: () => null }));
+vi.mock("@/features/hris/schedule-delegates", () => ({ ScheduleDelegatesPage: () => null }));
+const userHasIamAction = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/iam/has-menu", () => ({ userHasIamAction }));
 
 beforeEach(() => requireIamPage.mockReset());
 
@@ -48,5 +52,17 @@ describe("page guards", () => {
       ["hris.performance.kpi-scorecard", "hris.performance.kpi-config"],
       "/dashboard/me"
     );
+  });
+
+  it("Pengatur jadwal toko (EPIC-071) memakai penjaga yang sama dengan halaman Penempatan", async () => {
+    requireIamPage.mockResolvedValue({ id: "u1", role: "hrd" });
+    userHasIamAction.mockResolvedValue(false);
+    const { default: Page } = await import("./placements/pengatur/page");
+    const page = await Page();
+    const managers = [...IAM.hrisPlacements, ...IAM.hrisKepegawaian, ...IAM.settingsUsers];
+    expect(requireIamPage).toHaveBeenCalledWith(managers);
+    // Tambah/Ubah/Cabut hanya untuk aksi update (sama dengan PUT/DELETE Go).
+    expect(userHasIamAction).toHaveBeenCalledWith("u1", "hrd", managers, "update");
+    expect(page.props).toEqual({ canManage: false });
   });
 });

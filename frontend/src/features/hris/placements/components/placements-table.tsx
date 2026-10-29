@@ -40,13 +40,25 @@ interface PlacementsTableProps {
   rows: PlacementSearchRow[];
   today: string;
   canManage: boolean;
+  /** "store" (pengatur jadwal toko): nama tanpa tautan profil, tanpa Kelola/Lihat (API khusus HR). */
+  mode?: "hr" | "store";
   selected: Set<string>;
   onToggle: (row: PlacementSearchRow) => void;
   onTogglePage: () => void;
   onManage: (row: PlacementSearchRow) => void;
 }
 
-export function PlacementsTable({ rows, today, canManage, selected, onToggle, onTogglePage, onManage }: PlacementsTableProps) {
+export function PlacementsTable({
+  rows,
+  today,
+  canManage,
+  mode = "hr",
+  selected,
+  onToggle,
+  onTogglePage,
+  onManage,
+}: PlacementsTableProps) {
+  const hr = mode === "hr";
   const pageSelected = rows.length > 0 && rows.every((r) => selected.has(r.employee_id));
   return (
     <div className="overflow-x-auto">
@@ -67,7 +79,7 @@ export function PlacementsTable({ rows, today, canManage, selected, onToggle, on
             <th className="p-3">Toko utama</th>
             <th className="p-3">Sejak</th>
             <th className="p-3">Jadwal</th>
-            <th className="p-3 text-right">Aksi</th>
+            {hr && <th className="p-3 text-right">Aksi</th>}
           </tr>
         </thead>
         <tbody>
@@ -95,12 +107,16 @@ export function PlacementsTable({ rows, today, canManage, selected, onToggle, on
                   </td>
                 )}
                 <td className="p-3">
-                  <Link
-                    href={`/dashboard/employees/${row.employee_id}?tab=placements`}
-                    className="font-medium text-gray-900 hover:underline"
-                  >
-                    {row.full_name}
-                  </Link>
+                  {hr ? (
+                    <Link
+                      href={`/dashboard/employees/${row.employee_id}?tab=placements`}
+                      className="font-medium text-gray-900 hover:underline"
+                    >
+                      {row.full_name}
+                    </Link>
+                  ) : (
+                    <p className="font-medium text-gray-900">{row.full_name}</p>
+                  )}
                   <p className="text-xs text-gray-400" title={row.department_name ?? undefined}>
                     {subtitle || "—"}
                   </p>
@@ -126,11 +142,13 @@ export function PlacementsTable({ rows, today, canManage, selected, onToggle, on
                     {schedule.label}
                   </span>
                 </td>
-                <td className="p-3 text-right">
-                  <Button size="sm" variant="outline" onClick={() => onManage(row)}>
-                    {canManage ? "Kelola" : "Lihat"}
-                  </Button>
-                </td>
+                {hr && (
+                  <td className="p-3 text-right">
+                    <Button size="sm" variant="outline" onClick={() => onManage(row)}>
+                      {canManage ? "Kelola" : "Lihat"}
+                    </Button>
+                  </td>
+                )}
               </tr>
             );
           })}

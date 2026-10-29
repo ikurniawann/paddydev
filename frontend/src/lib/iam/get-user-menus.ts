@@ -345,6 +345,26 @@ export function filterNavByPrefixes(
   return items.map(keep).filter((i): i is NavItem => i !== null);
 }
 
+/**
+ * Pohon nav baru tanpa item ber-`href` ini (rekursif), mis. menu Jadwal Toko
+ * untuk akun yang bukan pengatur (EPIC-071). Group yang jadi kosong karena
+ * pembuangan ikut dibuang; pohon asal tidak diubah.
+ */
+export function dropNavHref(items: NavItem[], href: string): NavItem[] {
+  const result: NavItem[] = [];
+  for (const item of items) {
+    if (item.href === href) continue;
+    if (!item.children?.length) {
+      result.push(item);
+      continue;
+    }
+    const children = dropNavHref(item.children, href);
+    if (children.length > 0) result.push({ ...item, children });
+    else if (isNavigableHref(item.href)) result.push({ href: item.href, label: item.label, icon: item.icon });
+  }
+  return result;
+}
+
 /** Cari NavItem berdasarkan href (rekursif). */
 export function findNavItem(items: NavItem[], href: string): NavItem | undefined {
   for (const item of items) {

@@ -10,11 +10,13 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"nuhabit/backend/internal/modules/hris/domain"
 	"nuhabit/backend/internal/platform/audit"
 	"nuhabit/backend/internal/platform/auth"
+	"nuhabit/backend/internal/platform/database"
 	"nuhabit/backend/internal/platform/httpx"
 	"nuhabit/backend/internal/platform/iam"
 	"nuhabit/backend/internal/platform/validate"
@@ -79,10 +81,18 @@ func (s *store) PlacementsOf(ctx context.Context, employeeID string) ([]*Row, er
 // the store, Department/Position match the employee record, Search matches
 // name/NIP, Status keeps one chip (placementStatuses), All includes ended
 // placements in the placements column.
+//
+// Scope is the store delegate (EPIC-071 R3; nil for HR). It keeps the
+// employees in their area: a placement running today (started, not ended,
+// as in delegateOutside) at one of Scope.BranchIDs, or a place in
+// ScopeSubtree. ScopeSubtree is the delegate's reporting subtree
+// (delegateSubtreeIDs) and must be set together with Scope.
 type placementFilter struct {
 	Branch, Department, Position, Search, Status string
 	All                                          bool
 	Today                                        string
+	Scope                                        *delegateAccess
+	ScopeSubtree                                 []string
 }
 
 // The overview conditions; $1 is always Today. A placement is running when
@@ -132,6 +142,18 @@ func placementWhere(f placementFilter) (string, []any) {
 	}
 	if f.Status != "" {
 		where = append(where, placementStatuses[f.Status])
+	}
+	if f.Scope != nil {
+		subtree := f.ScopeSubtree
+		if subtree == nil {
+			subtree = []string{} // an empty array, not NULL
+		}
+		args = append(args, f.Scope.BranchIDs, subtree)
+		// Running as in delegateOutside (R3): started by today, not ended.
+		where = append(where, fmt.Sprintf(`(EXISTS (SELECT 1 FROM hris.employee_placements ep
+			WHERE ep.employee_id = e.id AND ep.branch_id = ANY($%d::uuid[])
+			  AND ep.start_date <= $1::date AND %s) OR e.id = ANY($%d::uuid[]))`,
+			len(args)-1, placementRunning, len(args)))
 	}
 	return strings.Join(where, " AND "), args
 }
@@ -250,7 +272,7 @@ func (s *store) PlacementEmployees(ctx context.Context, ids []string) ([]*Row, e
 
 func (s *store) PlacementSpans(ctx context.Context, employeeIDs []string) ([]*Row, error) {
 	return queryRows(ctx, s.db, `SELECT ep.id::text AS id, ep.employee_id::text AS employee_id, ep.branch_id::text AS branch_id,
-		b.name AS branch_name, ep.start_date::text AS start_date, ep.end_date::text AS end_date`+placementFrom+`
+		b.name AS branch_name, ep.start_date::text AS start_date, ep.end_date::text AS end_date, ep.is_primary`+placementFrom+`
 		WHERE ep.employee_id = ANY($1::text[]::uuid[])
 		ORDER BY ep.start_date, b.name`, employeeIDs)
 }
@@ -470,13 +492,70 @@ const (
 // errBulkPreview rolls the preview transaction back.
 var errBulkPreview = errors.New("bulk placement preview")
 
-// bulkPlacementRequest is a bulk move/add (mode set).
+// bulkPlacementRequest is a bulk move/add (mode set). Scope is the store
+// delegate acting (EPIC-071 R6), nil for HR.
 type bulkPlacementRequest struct {
 	Mode, Step, BranchID string
 	EmployeeIDs          []string
 	Primary              bool
 	Start                string
 	End, Notes           *string
+	Scope                *delegateAccess
+}
+
+// The per-employee skip reasons of a store delegate's bulk actions (R6).
+const (
+	reasonForeignPlacement = "Punya penempatan di toko lain di luar wilayah Anda — hubungi HR"
+	reasonNoStorePlacement = "Tidak ada penempatan di toko Anda"
+)
+
+// delegateSubtreeIDs lists the delegate's reporting subtree (delegateSubtree:
+// active employees, at most 10 levels, the delegate excluded); never nil.
+func delegateSubtreeIDs(ctx context.Context, q database.Querier, d *delegateAccess) ([]string, error) {
+	rows, err := q.Query(ctx, delegateSubtree+` SELECT id::text FROM sub`, d.EmployeeID)
+	if err != nil {
+		return nil, err
+	}
+	ids, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	if ids == nil {
+		ids = []string{}
+	}
+	return ids, err
+}
+
+// checkDelegateEmployees refuses (403) a delegate's bulk request when any of
+// the employees is outside their area (R3), before anything about the
+// employees is read, so nothing of an outside employee is answered.
+func (s *Service) checkDelegateEmployees(ctx context.Context, q database.Querier, d *delegateAccess, ids []string) error {
+	out, err := delegateOutside(ctx, q, d, domain.TodayWIB(s.now()), uniqueIDs(ids))
+	if err != nil {
+		return err
+	}
+	if len(out) > 0 {
+		return httpx.Forbidden(fmt.Sprintf("%d karyawan di luar wilayah Anda", len(out)))
+	}
+	return nil
+}
+
+// foreignPlacement reports whether a delegate's bulk action would write to
+// a placement of the employee at a store outside their area (R6), unless
+// the employee is in the delegate's subtree. A move ends every placement
+// running on start; a primary add clears the primary flag of the primary
+// placements overlapping [start, end] (ClearOtherPrimary). A non-primary
+// add writes nothing but the new placement.
+func foreignPlacement(sc storeScope, subtree map[string]bool, in bulkPlacementRequest, id string, spans []domain.PlacementSpan, start string) bool {
+	if sc.Delegate == nil || subtree[id] {
+		return false
+	}
+	return slices.ContainsFunc(spans, func(p domain.PlacementSpan) bool {
+		if sc.AllowsBranch(p.BranchID) || !p.RunningOn(start) {
+			return false
+		}
+		if in.Mode == bulkMove {
+			return true
+		}
+		return in.Primary && p.Primary && (in.End == nil || p.Start <= *in.End)
+	})
 }
 
 // bulkPlacementTarget is an employee of a bulk action with their placements.
@@ -485,18 +564,25 @@ type bulkPlacementTarget struct {
 	spans []domain.PlacementSpan
 }
 
-// loadBulkPlacements reads the employees (nil when not found) and their
-// placements; ids are deduplicated, keeping the order.
-func loadBulkPlacements(ctx context.Context, r Repository, ids []string) ([]string, map[string]*bulkPlacementTarget, error) {
+// uniqueIDs lowercases (as PostgreSQL reads the ids back) and deduplicates
+// ids, keeping the order.
+func uniqueIDs(ids []string) []string {
 	uniq := make([]string, 0, len(ids))
 	seen := map[string]bool{}
 	for _, id := range ids {
-		id = strings.ToLower(id) // as PostgreSQL reads the ids back
+		id = strings.ToLower(id)
 		if !seen[id] {
 			seen[id] = true
 			uniq = append(uniq, id)
 		}
 	}
+	return uniq
+}
+
+// loadBulkPlacements reads the employees (nil when not found) and their
+// placements; ids are deduplicated, keeping the order.
+func loadBulkPlacements(ctx context.Context, r Repository, ids []string) ([]string, map[string]*bulkPlacementTarget, error) {
+	uniq := uniqueIDs(ids)
 	emps, err := r.PlacementEmployees(ctx, uniq)
 	if err != nil {
 		return nil, nil, err
@@ -512,7 +598,7 @@ func loadBulkPlacements(ctx context.Context, r Repository, ids []string) ([]stri
 	for _, p := range spans {
 		if t := out[p.Str("employee_id")]; t != nil {
 			t.spans = append(t.spans, domain.PlacementSpan{ID: p.Str("id"), BranchID: p.Str("branch_id"),
-				BranchName: p.Str("branch_name"), Start: p.Str("start_date"), End: p.StrPtr("end_date")})
+				BranchName: p.Str("branch_name"), Start: p.Str("start_date"), End: p.StrPtr("end_date"), Primary: p.Bool("is_primary")})
 		}
 	}
 	return uniq, out, nil
@@ -580,11 +666,20 @@ func (s *Service) runBulkPlacement(ctx context.Context, step string, fn func(Rep
 // BulkPlacementPlan moves (R4) or adds the employees to a store; see the
 // domain planners for the skip rules. Each processed employee is audited.
 func (s *Service) BulkPlacementPlan(ctx context.Context, actor *auth.User, in bulkPlacementRequest) (*Row, error) {
+	today := domain.TodayWIB(s.now())
 	start := in.Start
 	if start == "" {
-		start = domain.TodayWIB(s.now())
+		start = today
 	}
 	primary := in.Primary || in.Mode == bulkMove
+	if in.Scope != nil {
+		if start < today {
+			return nil, httpx.BadRequest(errStartBeforeToday)
+		}
+		if in.End != nil && *in.End < domain.AddDaysISO(today, -1) {
+			return nil, httpx.BadRequest(errEndBeforeYesterday)
+		}
+	}
 	if in.End != nil && *in.End < start {
 		return nil, httpx.BadRequest("Tanggal selesai tidak boleh sebelum tanggal mulai")
 	}
@@ -592,8 +687,27 @@ func (s *Service) BulkPlacementPlan(ctx context.Context, actor *auth.User, in bu
 	if in.Mode == bulkMove {
 		action = "placement.bulk_move"
 	}
+	sc := storeScope{Delegate: in.Scope}
+	if !sc.AllowsBranch(strings.ToLower(in.BranchID)) {
+		return nil, httpx.Forbidden(errOutsideScope)
+	}
 	var out *Row
 	err := s.runBulkPlacement(ctx, in.Step, func(r Repository) error {
+		subtree := map[string]bool{}
+		if in.Scope != nil {
+			if err := s.checkDelegateEmployees(ctx, r.querier(), in.Scope, in.EmployeeIDs); err != nil {
+				return err
+			}
+		}
+		if in.Scope != nil && primary { // a move is always primary
+			ids, err := delegateSubtreeIDs(ctx, r.querier(), in.Scope)
+			if err != nil {
+				return err
+			}
+			for _, id := range ids {
+				subtree[id] = true
+			}
+		}
 		branch, err := r.BranchGeofence(ctx, in.BranchID)
 		if err != nil {
 			return err
@@ -615,7 +729,9 @@ func (s *Service) BulkPlacementPlan(ctx context.Context, actor *auth.User, in bu
 				continue
 			}
 			var plan domain.MoveDecision
-			if in.Mode == bulkMove {
+			if foreignPlacement(sc, subtree, in, id, t.spans, start) {
+				plan = domain.MoveDecision{Outcome: domain.PlacementSkipped, Reason: reasonForeignPlacement}
+			} else if in.Mode == bulkMove {
 				plan = domain.PlanPlacementMove(t.spans, in.BranchID, start)
 			} else if reason := domain.PlanPlacementAdd(t.spans, in.BranchID, start, in.End); reason != "" {
 				plan = domain.MoveDecision{Outcome: domain.PlacementSkipped, Reason: reason}
@@ -666,10 +782,26 @@ func (s *Service) BulkPlacementPlan(ctx context.Context, actor *auth.User, in bu
 }
 
 // BulkEndPlacement ends the running placements (all, or only at branchID)
-// of the employees on end; see domain.PlanPlacementEnd for the skips.
-func (s *Service) BulkEndPlacement(ctx context.Context, actor *auth.User, step string, employeeIDs []string, end, branchID string) (*Row, error) {
+// of the employees on end; see domain.PlanPlacementEnd for the skips. A
+// store delegate (scope, nil for HR; EPIC-071 R6) only names employees and
+// a store of their area, only ends placements at their stores (an employee
+// with none to end there is skipped) and cannot end before yesterday.
+func (s *Service) BulkEndPlacement(ctx context.Context, actor *auth.User, step string, employeeIDs []string, end, branchID string, scope *delegateAccess) (*Row, error) {
+	branchID = strings.ToLower(branchID) // as the stored ids compare
+	if scope != nil && end < domain.AddDaysISO(domain.TodayWIB(s.now()), -1) {
+		return nil, httpx.BadRequest(errEndBeforeYesterday)
+	}
+	sc := storeScope{Delegate: scope}
+	if branchID != "" && !sc.AllowsBranch(branchID) {
+		return nil, httpx.Forbidden(errOutsideScope)
+	}
 	var out *Row
 	err := s.runBulkPlacement(ctx, step, func(r Repository) error {
+		if scope != nil {
+			if err := s.checkDelegateEmployees(ctx, r.querier(), scope, employeeIDs); err != nil {
+				return err
+			}
+		}
 		if branchID != "" {
 			branch, err := r.BranchGeofence(ctx, branchID)
 			if err != nil {
@@ -692,7 +824,16 @@ func (s *Service) BulkEndPlacement(ctx context.Context, actor *auth.User, step s
 				results = append(results, bulkPlacementResult(id, nil, domain.PlacementSkipped, "Karyawan tidak ditemukan", nil, ""))
 				continue
 			}
-			plan := domain.PlanPlacementEnd(t.spans, branchID, end)
+			spans := t.spans
+			if scope != nil {
+				spans = slices.DeleteFunc(slices.Clone(spans), func(p domain.PlacementSpan) bool { return !sc.AllowsBranch(p.BranchID) })
+			}
+			plan := domain.PlanPlacementEnd(spans, branchID, end)
+			if scope != nil && plan.Outcome == domain.PlacementSkipped && !slices.ContainsFunc(spans, func(p domain.PlacementSpan) bool {
+				return p.End == nil || *p.End > end
+			}) {
+				plan.Reason = reasonNoStorePlacement
+			}
 			counts[plan.Outcome]++
 			results = append(results, bulkPlacementResult(id, t, plan.Outcome, plan.Reason, plan.End, end))
 			if plan.Outcome == domain.PlacementSkipped {
@@ -779,8 +920,10 @@ func (h handlers) listPlacementOverview(w http.ResponseWriter, r *http.Request, 
 }
 
 // placementSearchFilter reads the search/ids filter:
-// q&branch_id&department_id&position_id&status&include_ended.
-func (h handlers) placementSearchFilter(q url.Values) (placementFilter, error) {
+// q&branch_id&department_id&position_id&status&include_ended. For a store
+// delegate (EPIC-071 R3) it is limited to their area, and a branch_id
+// outside it is refused before anything is read.
+func (h handlers) placementSearchFilter(ctx context.Context, q url.Values, sc storeScope) (placementFilter, error) {
 	f := placementFilter{Branch: q.Get("branch_id"), Department: q.Get("department_id"), Position: q.Get("position_id"),
 		Search: q.Get("q"), Status: q.Get("status"), All: q.Get("include_ended") == "true", Today: domain.TodayWIB(h.svc.now())}
 	for _, id := range []struct{ val, msg string }{
@@ -792,6 +935,16 @@ func (h handlers) placementSearchFilter(q url.Values) (placementFilter, error) {
 	}
 	if _, known := placementStatuses[f.Status]; !known {
 		return f, httpx.BadRequest("Status tidak valid")
+	}
+	if sc.Delegate != nil {
+		if f.Branch != "" && !sc.AllowsBranch(strings.ToLower(f.Branch)) {
+			return f, httpx.Forbidden(errOutsideScope)
+		}
+		subtree, err := delegateSubtreeIDs(ctx, h.svc.repo.querier(), sc.Delegate)
+		if err != nil {
+			return f, err
+		}
+		f.Scope, f.ScopeSubtree = sc.Delegate, subtree
 	}
 	return f, nil
 }
@@ -810,9 +963,9 @@ func placementTotal(counts *Row, status string) int {
 
 // GET /api/hris/employee-placements/search?q&branch_id&department_id&position_id&status&page&page_size&include_ended
 // → { rows, total, page, page_size, counts: { all, unplaced, no_schedule, multi } }
-func (h handlers) searchPlacements(w http.ResponseWriter, r *http.Request, _ *auth.User) error {
+func (h handlers) searchPlacements(w http.ResponseWriter, r *http.Request, _ *auth.User, sc storeScope) error {
 	q := r.URL.Query()
-	f, err := h.placementSearchFilter(q)
+	f, err := h.placementSearchFilter(r.Context(), q, sc)
 	if err != nil {
 		return err
 	}
@@ -843,8 +996,8 @@ func (h handlers) searchPlacements(w http.ResponseWriter, r *http.Request, _ *au
 const placementIDLimit = 2000
 
 // GET /api/hris/employee-placements/ids?<search filter> → { ids, total, truncated }
-func (h handlers) placementIDs(w http.ResponseWriter, r *http.Request, _ *auth.User) error {
-	f, err := h.placementSearchFilter(r.URL.Query())
+func (h handlers) placementIDs(w http.ResponseWriter, r *http.Request, _ *auth.User, sc storeScope) error {
+	f, err := h.placementSearchFilter(r.Context(), r.URL.Query(), sc)
 	if err != nil {
 		return err
 	}
@@ -937,8 +1090,8 @@ var bulkSteps = []string{bulkPreview, bulkCommit}
 // With mode ("add"|"move", EPIC-070) it also takes step ("preview", the
 // default, | "commit") and notes, and answers
 // { step, created, moved, skipped, results[] }; without it the legacy
-// { created, skipped } (R6).
-func (h handlers) bulkPlacement(w http.ResponseWriter, r *http.Request, u *auth.User) error {
+// { created, skipped } (R6). A store delegate (EPIC-071 R6) must send mode.
+func (h handlers) bulkPlacement(w http.ResponseWriter, r *http.Request, u *auth.User, sc storeScope) error {
 	f, err := readForm(r, "")
 	if err != nil {
 		return err
@@ -961,9 +1114,12 @@ func (h handlers) bulkPlacement(w http.ResponseWriter, r *http.Request, u *auth.
 	if len(ids) == 0 {
 		return httpx.BadRequest("Pilih minimal satu karyawan")
 	}
+	if sc.Delegate != nil && !withMode {
+		return httpx.BadRequest("Pilih mode pindah atau tambah")
+	}
 	if withMode {
 		in := bulkPlacementRequest{Mode: *mode, Step: bulkPreview, BranchID: *branch, EmployeeIDs: ids,
-			Primary: primary != nil && *primary, Start: strOr(start), End: nilIfEmpty(end), Notes: nilIfEmpty(notes)}
+			Primary: primary != nil && *primary, Start: strOr(start), End: nilIfEmpty(end), Notes: nilIfEmpty(notes), Scope: sc.Delegate}
 		if step != nil {
 			in.Step = *step
 		}
@@ -986,7 +1142,7 @@ func (h handlers) bulkPlacement(w http.ResponseWriter, r *http.Request, u *auth.
 
 // POST /api/hris/employee-placements/bulk-end { employee_ids[], end_date, branch_id?, step }
 // → { step, ended, skipped, results[] }
-func (h handlers) bulkEndPlacement(w http.ResponseWriter, r *http.Request, u *auth.User) error {
+func (h handlers) bulkEndPlacement(w http.ResponseWriter, r *http.Request, u *auth.User, sc storeScope) error {
 	f, err := readForm(r, "")
 	if err != nil {
 		return err
@@ -1001,7 +1157,7 @@ func (h handlers) bulkEndPlacement(w http.ResponseWriter, r *http.Request, u *au
 	if len(ids) == 0 {
 		return httpx.BadRequest("Pilih minimal satu karyawan")
 	}
-	out, err := h.svc.BulkEndPlacement(r.Context(), u, *step, ids, *end, strOr(branch))
+	out, err := h.svc.BulkEndPlacement(r.Context(), u, *step, ids, *end, strOr(branch), sc.Delegate)
 	if err != nil {
 		return err
 	}

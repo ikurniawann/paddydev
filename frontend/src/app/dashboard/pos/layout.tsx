@@ -1,7 +1,8 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { requireUser, type AuthUser } from "@/lib/auth/require-user";
-import { getUserMenus, isEssOnlyUser } from "@/lib/iam/get-user-menus";
+import { dropNavHref, getUserMenus, isEssOnlyUser } from "@/lib/iam/get-user-menus";
+import { isScheduleDelegate, JADWAL_TOKO_PATH } from "@/lib/iam/schedule-delegate";
 import { loadGrantedMenuCodesForUser } from "@/lib/iam/has-menu";
 import { hasAnyIamMenuPrefix } from "@/lib/iam/match";
 import { IAM } from "@/lib/iam/prefixes";
@@ -25,11 +26,15 @@ export default async function PosDashboardLayout({
   let grantedCodes: string[];
   try {
     user = await requireUser();
-    [navItems, essOnly, grantedCodes] = await Promise.all([
+    let scheduleDelegate: boolean;
+    [navItems, essOnly, grantedCodes, scheduleDelegate] = await Promise.all([
       getUserMenus(user.id, user.role),
       isEssOnlyUser(user.id, user.role),
       loadGrantedMenuCodesForUser(user.id, user.role),
+      isScheduleDelegate(user.id),
     ]);
+    // Menu Jadwal Toko hanya untuk pengatur aktif (EPIC-071 R8), sama dengan layout dashboard.
+    if (!scheduleDelegate) navItems = dropNavHref(navItems, JADWAL_TOKO_PATH);
   } catch (error) {
     if (isNextControlFlowError(error)) throw error;
     console.error("[pos-layout]", error);

@@ -3,10 +3,12 @@ import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth/require-user";
 import {
   collectNavHrefs,
+  dropNavHref,
   getUserMenus,
   filterNavByPrefixes,
   isEssOnlyUser,
 } from "@/lib/iam/get-user-menus";
+import { isScheduleDelegate, JADWAL_TOKO_PATH } from "@/lib/iam/schedule-delegate";
 import {
   allowedModulePaths,
   canAccessPath,
@@ -43,9 +45,10 @@ export default async function DashboardGroupLayout({
   }
   // Kebijakan ESS-only ditentukan IAM (permission menu non-ESS), bukan daftar role di kode.
   const essOnly = await isEssOnlyUser(user.id, user.role);
-  const [allNavItems, grantedCodes] = await Promise.all([
+  const [allNavItems, grantedCodes, scheduleDelegate] = await Promise.all([
     getUserMenus(user.id, user.role),
     loadGrantedMenuCodesForUser(user.id, user.role),
+    isScheduleDelegate(user.id),
   ]);
 
   const pathname = (await headers()).get("x-pathname") ?? "";
@@ -68,12 +71,15 @@ export default async function DashboardGroupLayout({
   }
   // ESS-only: menu Area Karyawan + modul tambahan role. Full-access: buang
   // "Beranda" ESS (/dashboard/me) agar tak ganda dengan Beranda utama.
-  const navItems = essOnly
+  const essNav = essOnly
     ? filterNavByPrefixes(allNavItems, [
         ESS_HOME_PATH,
         ...allowedModulePaths(user.role),
       ])
     : allNavItems.filter((item) => item.href !== "/dashboard/me");
+  // Menu Jadwal Toko di-grant ke semua role; hanya pengatur aktif yang melihatnya
+  // (EPIC-071 R8). Buka lewat URL tetap aman: halamannya menjelaskan "bukan pengatur".
+  const navItems = scheduleDelegate ? essNav : dropNavHref(essNav, JADWAL_TOKO_PATH);
 
   return (
     <IamAccessProvider grantedCodes={grantedCodes}>

@@ -6,3 +6,4 @@ export { EssPinjamanPage } from "./components/pinjaman-page";
 export { EssPengumumanPage } from "./components/pengumuman-page";
 export { EssBerandaPage } from "./components/beranda-page";
 export { EssShiftTimPage } from "./components/shift-tim-page";
+export { EssJadwalTokoPage } from "./components/jadwal-toko-page";

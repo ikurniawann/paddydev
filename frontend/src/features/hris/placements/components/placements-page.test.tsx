@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PlacementSearchRow, StoreBranch } from "../types";
+import { toast } from "sonner";
 import { PlacementsPage } from "./placements-page";
 
 const api = vi.hoisted(() => ({
@@ -15,13 +16,17 @@ const push = vi.fn();
 vi.mock("../api", () => api);
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
 vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn(), info: vi.fn() } }));
-vi.mock("@/components/iam/iam-access-provider", () => ({ useIamAccess: () => ({ hasPrefix: () => true }) }));
+const access = vi.hoisted(() => ({ canManage: true }));
+vi.mock("@/components/iam/iam-access-provider", () => ({ useIamAccess: () => ({ hasPrefix: () => access.canManage }) }));
 vi.mock("@/features/master-data/departments/queries", () => ({
   useDepartmentList: () => ({ data: [{ id: "d1", name: "Operations", is_active: true }] }),
 }));
 vi.mock("@/features/master-data/positions/queries", () => ({
   usePositionList: () => ({ data: [{ id: "p1", title: "Kasir", is_active: true }] }),
 }));
+// Mode toko (EPIC-071): toko & hak penempatan dari akses pengatur.
+const accessApi = vi.hoisted(() => ({ fetchScheduleAccess: vi.fn() }));
+vi.mock("@/features/hris/schedule-access/api", () => accessApi);
 vi.mock("./branch-location-dialog", () => ({ BranchLocationDialog: () => null }));
 vi.mock("./employee-placements-tab", () => ({ PLACEMENT_MANAGERS: [], EmployeePlacementsTab: () => null }));
 // Combobox asli (popover + cmdk) diganti <select> supaya filter bisa dipilih di jsdom.
@@ -122,6 +127,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  access.canManage = true;
   cleanup();
   vi.clearAllMocks();
 });
@@ -283,5 +289,90 @@ describe("PlacementsPage", () => {
     fireEvent.click(screen.getByLabelText("Pilih Budi"));
     fireEvent.click(screen.getByRole("button", { name: "Pindahkan ke toko" }));
     expect(await screen.findByText("Pindahkan 2 karyawan ke toko")).toBeTruthy();
+  });
+
+  it("tombol Pengatur jadwal toko di header membuka halaman pengatur (EPIC-071)", async () => {
+    renderPage();
+    await screen.findByText("Ani");
+    const link = screen.getByRole("link", { name: /Pengatur jadwal toko/ });
+    expect(link.getAttribute("href")).toBe("/dashboard/hris/placements/pengatur");
+  });
+
+  it("tombol Pengatur jadwal toko tersembunyi tanpa hak kelola", async () => {
+    access.canManage = false;
+    renderPage();
+    await screen.findByText("Ani");
+    expect(screen.queryByRole("link", { name: /Pengatur jadwal toko/ })).toBeNull();
+  });
+
+  describe("mode toko (pengatur jadwal, EPIC-071)", () => {
+    const onOpenSchedule = vi.fn();
+    function renderStore(canPlace = true) {
+      access.canManage = false; // pengatur tidak punya menu HR
+      accessApi.fetchScheduleAccess.mockResolvedValue({
+        is_delegate: true,
+        can_place: canPlace,
+        branches: [{ id: "b2", code: "KPO", name: "KPO - Paddy Kopo" }],
+      });
+      const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      render(
+        <QueryClientProvider client={client}>
+          <PlacementsPage mode="store" onOpenSchedule={onOpenSchedule} />
+        </QueryClientProvider>
+      );
+    }
+
+    it("Atur jadwal memanggil onOpenSchedule, bukan router.push", async () => {
+      renderStore();
+      await screen.findByText("Ani");
+      fireEvent.click(await screen.findByLabelText("Pilih Ani"));
+      fireEvent.click(screen.getByLabelText("Pilih Citra"));
+      fireEvent.click(screen.getByLabelText("Pilih Dodi"));
+      fireEvent.click(screen.getByRole("button", { name: "Atur jadwal" }));
+      expect(onOpenSchedule).toHaveBeenCalledWith("b2", ["e1", "e3", "e4"]);
+      expect(push).not.toHaveBeenCalled();
+    });
+
+    it("filter toko hanya toko wilayah, tanpa filter departemen/jabatan dan kontrol khusus HR", async () => {
+      renderStore();
+      await screen.findByText("Ani");
+      const store = screen.getByLabelText("Semua toko") as HTMLSelectElement;
+      await waitFor(() => expect([...store.options].map((o) => o.value)).toEqual(["", "b2"]));
+      expect(screen.queryByLabelText("Semua departemen")).toBeNull();
+      expect(screen.queryByLabelText("Semua jabatan")).toBeNull();
+      expect(screen.queryByRole("link", { name: /Pengatur jadwal toko/ })).toBeNull();
+      expect(screen.queryByRole("button", { name: /Lokasi Toko/ })).toBeNull();
+      expect(screen.queryByRole("link", { name: "Ani" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Kelola" })).toBeNull();
+      expect(api.fetchStoreBranches).not.toHaveBeenCalled();
+    });
+
+    it("tanpa boleh atur penempatan tidak ada centang dan aksi massal", async () => {
+      renderStore(false);
+      await screen.findByText("Ani");
+      await waitFor(() => expect(accessApi.fetchScheduleAccess).toHaveBeenCalled());
+      expect(screen.queryByLabelText("Pilih Ani")).toBeNull();
+    });
+
+    it("lebih dari 50 karyawan: pesan menyebut tab Jadwal, bukan halaman Jadwal Kerja", async () => {
+      api.fetchPlacementIds.mockResolvedValue({ ids: Array.from({ length: 60 }, (_, i) => `id${i}`), total: 60, truncated: false });
+      renderStore();
+      await screen.findByText("Ani");
+      fireEvent.click(await screen.findByLabelText("Pilih Ani"));
+      fireEvent.click(screen.getByRole("button", { name: "Pilih semua hasil filter (60)" }));
+      await screen.findByText("60 karyawan dipilih");
+      fireEvent.click(screen.getByRole("button", { name: "Atur jadwal" }));
+      expect(toast.info).toHaveBeenCalledWith("Tab Jadwal dibuka untuk 50 karyawan pertama yang dipilih");
+      expect(onOpenSchedule.mock.calls.at(-1)?.[1]).toHaveLength(50);
+    });
+
+    it("dialog pindah hanya menawarkan toko wilayah", async () => {
+      renderStore();
+      await screen.findByText("Ani");
+      fireEvent.click(await screen.findByLabelText("Pilih Ani"));
+      fireEvent.click(screen.getByRole("button", { name: "Pindahkan ke toko" }));
+      const picker = (await screen.findByLabelText("Pilih toko")) as HTMLSelectElement;
+      expect([...picker.options].map((o) => o.value)).toEqual(["", "b2"]);
+    });
   });
 });

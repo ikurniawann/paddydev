@@ -19,9 +19,11 @@ vi.mock("@/lib/dates", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/dates")>()),
   todayWib: () => "2026-11-04",
 }));
-vi.mock("@/features/hris/placements/queries", () => ({
-  useStoreBranches: () => ({ data: [{ id: "b1", name: "PVJ - Paddy PVJ", code: "PVJ" }] }),
+// vi.fn agar mode toko bisa memastikan daftar cabang HR tidak pernah diminta (enabled=false).
+const placementQueries = vi.hoisted(() => ({
+  useStoreBranches: vi.fn((enabled = true) => ({ data: enabled ? [{ id: "b1", name: "PVJ - Paddy PVJ", code: "PVJ" }] : undefined })),
 }));
+vi.mock("@/features/hris/placements/queries", () => placementQueries);
 vi.mock("@/components/ui/combobox", () => ({
   Combobox: ({ options, value, onChange, placeholder }: {
     options: { value: string; label: string }[];
@@ -40,6 +42,9 @@ vi.mock("@/components/ui/combobox", () => ({
   ),
 }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() } }));
+// Mode toko (EPIC-071): daftar toko dari akses pengatur, bukan seluruh cabang.
+const accessApi = vi.hoisted(() => ({ fetchScheduleAccess: vi.fn() }));
+vi.mock("@/features/hris/schedule-access/api", () => accessApi);
 afterEach(cleanup);
 beforeEach(() => {
   api.fetchScheduleGrid.mockReset();
@@ -147,4 +152,66 @@ it("jadwal tetap diterapkan memuat ulang grid, Penempatan, profil, dan Shift Tim
   fireEvent.click(await screen.findByRole("button", { name: "Terapkan" }));
   await waitFor(() => expect(usersApi.applyFixedSchedule).toHaveBeenCalled());
   await waitFor(() => expect(invalidatedKeys(invalidate)).toEqual(expect.arrayContaining(SCHEDULE_DEPENDENTS)));
+});
+
+it("mode toko: hanya toko dari akses, tanpa jadwal tetap Non-Shift dan tautan halaman HR", async () => {
+  accessApi.fetchScheduleAccess.mockResolvedValue({
+    is_delegate: true,
+    can_place: false,
+    branches: [
+      { id: "s1", code: "KPO", name: "KPO - Paddy Kopo" },
+      { id: "s2", code: "BTR", name: "BTR - Paddy Batununggal" },
+    ],
+  });
+  api.fetchScheduleGrid.mockImplementation(async (p: { from: string; to: string }) => ({
+    data: { ...grid(p.from, p.to), non_shift_count: 2 },
+  }));
+  renderPage({ mode: "store" });
+  const select = (await screen.findByLabelText("Pilih toko")) as HTMLSelectElement;
+  await waitFor(() => expect(select.options).toHaveLength(3));
+  expect([...select.options].map((o) => o.value)).toEqual(["", "s1", "s2"]);
+  fireEvent.change(select, { target: { value: "s2" } });
+  await screen.findByLabelText("Pilih Ana");
+  expect(api.fetchScheduleGrid).toHaveBeenLastCalledWith({ branch_id: "s2", from: "2026-11-02", to: "2026-11-08" });
+  expect(screen.getByText(/2 karyawan Non-Shift/)).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "Terapkan jadwal tetap (Non-Shift)" })).toBeNull();
+  expect(screen.queryByRole("link", { name: "Karyawan" })).toBeNull();
+});
+
+it("mode toko: satu toko langsung terpilih", async () => {
+  accessApi.fetchScheduleAccess.mockResolvedValue({
+    is_delegate: true,
+    can_place: false,
+    branches: [{ id: "s1", code: "KPO", name: "KPO - Paddy Kopo" }],
+  });
+  renderPage({ mode: "store" });
+  await screen.findByLabelText("Pilih Ana");
+  expect(api.fetchScheduleGrid).toHaveBeenCalledWith({ branch_id: "s1", from: "2026-11-02", to: "2026-11-08" });
+});
+
+/** Mode toko tidak boleh meminta daftar cabang HR (/api/hris/branches). */
+function expectNoHrBranchRequest(fetchSpy: { mock: { calls: Parameters<typeof fetch>[] } }) {
+  expect(placementQueries.useStoreBranches).toHaveBeenCalled();
+  expect(placementQueries.useStoreBranches.mock.calls.every(([enabled]) => enabled === false)).toBe(true);
+  const urls = fetchSpy.mock.calls.map(([input]) => (input instanceof Request ? input.url : String(input)));
+  expect(urls.some((u) => u.includes("/api/hris/branches"))).toBe(false);
+}
+
+it("mode toko: tidak meminta cabang HR, keadaan grid kosong tanpa tautan halaman HR", async () => {
+  placementQueries.useStoreBranches.mockClear();
+  const fetchSpy = vi.spyOn(globalThis, "fetch");
+  accessApi.fetchScheduleAccess.mockResolvedValue({
+    is_delegate: true,
+    can_place: false,
+    branches: [{ id: "s1", code: "KPO", name: "KPO - Paddy Kopo" }],
+  });
+  api.fetchScheduleGrid.mockImplementation(async (p: { from: string; to: string }) => ({
+    data: { ...grid(p.from, p.to), employees: [], non_shift_count: 1 },
+  }));
+  renderPage({ mode: "store" });
+  expect(await screen.findByText("Belum ada karyawan Shift yang ditempatkan di toko ini.")).toBeTruthy();
+  const hrefs = screen.queryAllByRole("link").map((a) => a.getAttribute("href") ?? "");
+  expect(hrefs.some((h) => h.startsWith("/dashboard/hris/placements") || h.startsWith("/dashboard/employees"))).toBe(false);
+  expectNoHrBranchRequest(fetchSpy);
+  fetchSpy.mockRestore();
 });

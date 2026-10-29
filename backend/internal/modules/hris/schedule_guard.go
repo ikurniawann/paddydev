@@ -59,6 +59,16 @@ func (h handlers) clearGuardFor(r *http.Request, u *auth.User, reason string) (c
 	return clearGuard{Allowed: allowed, Reason: reason, Meta: auditMeta(r)}, nil
 }
 
+// clearGuardScoped is the guard for a scoped caller. A delegate may replace
+// and clear per-date rows in their stores without "delete" (R5); the reason
+// stays mandatory and is enforced by check. HR keeps the "delete" rule.
+func (h handlers) clearGuardScoped(r *http.Request, u *auth.User, reason string, sc storeScope) (clearGuard, error) {
+	if sc.Delegate != nil {
+		return clearGuard{Allowed: true, Reason: reason, Meta: auditMeta(r)}, nil
+	}
+	return h.clearGuardFor(r, u, reason)
+}
+
 // replacedScheduleDays counts the per-date rows an upload would overwrite
 // with a different shift (a libur cell has no shift id).
 func replacedScheduleDays(ctx context.Context, q database.Querier, as []domain.ScheduleAssignment) (int, error) {

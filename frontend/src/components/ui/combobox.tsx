@@ -35,6 +35,11 @@ export interface ComboboxProps {
   /** Extra classes for the dropdown panel (e.g. min-w for long labels). */
   contentClassName?: string;
   allowClear?: boolean;
+  /**
+   * Pencarian dilakukan pemanggil (mis. ke server): teks yang diketik dilaporkan
+   * di sini dan `options` dipakai apa adanya tanpa disaring lagi di sini.
+   */
+  onSearchChange?: (search: string) => void;
 }
 
 export function Combobox({
@@ -48,6 +53,7 @@ export function Combobox({
   className,
   contentClassName,
   allowClear = false,
+  onSearchChange,
 }: ComboboxProps) {
   const [open, setOpen] = React.useState(false);
   const [searchValue, setSearchValue] = React.useState("");
@@ -58,7 +64,7 @@ export function Combobox({
   );
 
   const filteredOptions = React.useMemo(() => {
-    if (!searchValue) return options;
+    if (!searchValue || onSearchChange) return options;
     const search = searchValue.toLowerCase();
     return options.filter(
       (opt) =>
@@ -66,14 +72,17 @@ export function Combobox({
         opt.value.toLowerCase().includes(search) ||
         opt.description?.toLowerCase().includes(search)
     );
-  }, [options, searchValue]);
+  }, [options, searchValue, onSearchChange]);
 
   return (
     <Popover
       open={open}
       onOpenChange={(next) => {
         setOpen(next);
-        if (!next) setSearchValue("");
+        if (!next) {
+          setSearchValue("");
+          onSearchChange?.("");
+        }
       }}
     >
       <PopoverTrigger
@@ -131,7 +140,10 @@ export function Combobox({
             <input
               data-combobox-search="true"
               value={searchValue}
-              onChange={(e) => setSearchValue(e.target.value)}
+              onChange={(e) => {
+                setSearchValue(e.target.value);
+                onSearchChange?.(e.target.value);
+              }}
               placeholder={searchPlaceholder}
               className="w-full border-0! bg-transparent text-sm text-gray-900 shadow-none! outline-none! ring-0! placeholder:text-gray-400 focus:border-0! focus:shadow-none! focus:outline-none! focus:ring-0!"
               style={{ border: 0, boxShadow: "none", outline: "none" }}
@@ -148,6 +160,7 @@ export function Combobox({
                     onChange(allowClear && option.value === value ? "" : option.value);
                     setOpen(false);
                     setSearchValue("");
+                    onSearchChange?.("");
                   }}
                   className="hover:bg-gray-100 data-[selected=true]:bg-gray-200 cursor-pointer py-2 px-3 bg-white rounded-sm items-start"
                 >

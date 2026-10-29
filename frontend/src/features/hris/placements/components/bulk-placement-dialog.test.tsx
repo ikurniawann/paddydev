@@ -211,6 +211,31 @@ describe("BulkPlacementDialog", () => {
     expect(screen.queryByText(/Tanggal sebelum hari ini/)).toBeNull();
   });
 
+  it.each([
+    ["move", "Tanggal pindah", "2026-11-04"],
+    ["add", "Tanggal mulai", "2026-11-04"],
+    ["end", "Tanggal terakhir bekerja", "2026-11-03"],
+  ] as const)("mode toko %s: tanggal paling awal %s, tanpa peringatan tanggal lampau", (mode, label, min) => {
+    renderDialog({ mode, branches: [{ id: "b1", name: "PVJ - Paddy PVJ" }] });
+    const input = screen.getByLabelText(label) as HTMLInputElement;
+    expect(input.min).toBe(min);
+    fireEvent.change(input, { target: { value: "2026-11-03" } });
+    expect(screen.queryByText(/Tanggal sebelum hari ini/)).toBeNull();
+  });
+
+  it("mode toko: tanggal sebelum batas ditolak sebelum dikirim", async () => {
+    renderDialog({ mode: "end", branches: [{ id: "b1", name: "PVJ - Paddy PVJ" }] });
+    fireEvent.change(screen.getByLabelText("Tanggal terakhir bekerja"), { target: { value: "2026-11-02" } });
+    fireEvent.click(screen.getByRole("button", { name: "Lihat pratinjau" }));
+    expect(toast.error).toHaveBeenCalledWith("Tanggal akhir paling awal kemarin");
+    expect(api.bulkEndPlacement).not.toHaveBeenCalled();
+  });
+
+  it("mode HR: tanpa batas tanggal", () => {
+    renderDialog({ mode: "move" });
+    expect((screen.getByLabelText("Tanggal pindah") as HTMLInputElement).min).toBe("");
+  });
+
   it("lebih dari 500 karyawan tidak bisa diproses", async () => {
     renderDialog({ employeeIds: Array.from({ length: 501 }, (_, i) => `e${i}`) });
     expect(screen.getByText("Maksimal 500 karyawan per aksi")).toBeTruthy();

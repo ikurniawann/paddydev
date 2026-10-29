@@ -46,6 +46,11 @@ type ScheduleUploadContext struct {
 	// code, "L", "-" or "").
 	EmployeesByID map[string]UploadEmployee
 	Current       map[string]map[string]string
+	// RosterOnly (EPIC-071 store delegates): Employees holds only the people
+	// placed at the branch in the window. Anyone else, and any inactive
+	// employee, is reported as not found at the branch, revealing nothing
+	// about them (no name, schedule type or active state).
+	RosterOnly bool
 }
 
 type ScheduleFile struct {
@@ -235,7 +240,11 @@ func ValidateScheduleUpload(c ScheduleUploadContext, f ScheduleFile) ScheduleUpl
 		seen[nip] = r.Line
 		e, ok := c.Employees[nip]
 		if !ok || !e.Active {
-			fail(r.Line, "NIP", "", "NIP "+nip+" tidak dikenal atau sudah nonaktif")
+			if c.RosterOnly {
+				fail(r.Line, "NIP", "", "NIP "+nip+" tidak ditemukan di "+c.BranchName)
+			} else {
+				fail(r.Line, "NIP", "", "NIP "+nip+" tidak dikenal atau sudah nonaktif")
+			}
 			continue
 		}
 		if msg := nonShiftIssue(e); msg != "" {
@@ -469,6 +478,8 @@ func ValidateScheduleCells(c ScheduleUploadContext, cells []ScheduleCellInput) S
 		e, ok := c.EmployeesByID[in.EmployeeID]
 		msg, name := "", e.Name
 		switch {
+		case c.RosterOnly && (!ok || !e.Active):
+			msg, name = "Karyawan tidak ditemukan di "+c.BranchName, ""
 		case !ok:
 			msg = "Karyawan tidak dikenal atau sudah nonaktif"
 		case !e.Active:

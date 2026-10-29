@@ -449,12 +449,15 @@ func colName(i int) (string, error) {
 
 // uploadContext loads what the upload and per-cell rules read for the
 // branch and dates: the employees placed there plus those named by NIP
-// (upload) or ID (cells) who are not, keyed both ways.
-func uploadContext(ctx context.Context, q database.Querier, rng *scheduleRange, today string, nips, ids []string) (domain.ScheduleUploadContext, map[string]string, error) {
+// (upload) or ID (cells) who are not, keyed both ways. rosterOnly (a store
+// delegate) skips that second lookup: only the branch roster is known, so
+// nothing is learned about people outside it.
+func uploadContext(ctx context.Context, q database.Querier, rng *scheduleRange, today string, nips, ids []string, rosterOnly bool) (domain.ScheduleUploadContext, map[string]string, error) {
 	c := domain.ScheduleUploadContext{
 		BranchID: rng.Branch.ID, BranchName: rng.Branch.Name, Dates: rng.Dates, Today: today,
 		Employees: map[string]domain.UploadEmployee{}, EmployeesByID: map[string]domain.UploadEmployee{}, Shifts: map[string]domain.UploadShift{},
 		ClosedDates: map[string]bool{}, OnLeave: map[string]map[string]bool{}, ClockedIn: map[string]map[string]bool{},
+		RosterOnly: rosterOnly,
 	}
 	names := map[string]string{} // employee id → name
 	emps, err := branchEmployees(ctx, q, rng.Branch.ID, rng.Dates)
@@ -467,7 +470,7 @@ func uploadContext(ctx context.Context, q database.Querier, rng *scheduleRange, 
 		c.Employees[e.NIP], c.EmployeesByID[e.ID] = u, u
 		names[e.ID] = e.Name
 	}
-	if len(nips) > 0 || len(ids) > 0 {
+	if !rosterOnly && (len(nips) > 0 || len(ids) > 0) {
 		rows, err := q.Query(ctx, `SELECT id::text, nip, full_name, schedule_type, is_active FROM hris.employees
 			WHERE nip = ANY($1) OR id = ANY($2::uuid[])`, nips, ids)
 		if err != nil {
@@ -586,6 +589,7 @@ type scheduleImportInput struct {
 	Fingerprint        string
 	AckWarnings        bool
 	Guard              clearGuard
+	RosterOnly         bool // store delegate: see uploadContext
 }
 
 const maxScheduleChanges = 500
@@ -621,7 +625,7 @@ func (s *Service) ImportSchedule(ctx context.Context, actor *auth.User, in sched
 				nips = append(nips, nip)
 			}
 		}
-		uctx, names, err := uploadContext(ctx, q, rng, today, nips, nil)
+		uctx, names, err := uploadContext(ctx, q, rng, today, nips, nil, in.RosterOnly)
 		if err != nil {
 			return err
 		}
@@ -753,8 +757,11 @@ func scheduleDiff(ctx context.Context, q database.Querier, c domain.ScheduleUplo
 
 /* ── HTTP ────────────────────────────────────────────────────────────── */
 
-func (h handlers) getSchedules(w http.ResponseWriter, r *http.Request, _ *auth.User) error {
+func (h handlers) getSchedules(w http.ResponseWriter, r *http.Request, _ *auth.User, sc storeScope) error {
 	q := r.URL.Query()
+	if !sc.AllowsBranch(q.Get("branch_id")) {
+		return httpx.Forbidden(errOutsideScope)
+	}
 	data, err := h.svc.ScheduleGrid(r.Context(), q.Get("branch_id"), q.Get("from"), q.Get("to"))
 	if err != nil {
 		return err
@@ -772,8 +779,11 @@ func writeFile(w http.ResponseWriter, f *exportFile) error {
 	return err
 }
 
-func (h handlers) getScheduleTemplate(w http.ResponseWriter, r *http.Request, _ *auth.User) error {
+func (h handlers) getScheduleTemplate(w http.ResponseWriter, r *http.Request, _ *auth.User, sc storeScope) error {
 	q := r.URL.Query()
+	if !sc.AllowsBranch(q.Get("branch_id")) {
+		return httpx.Forbidden(errOutsideScope)
+	}
 	f, err := h.svc.ScheduleTemplate(r.Context(), q.Get("branch_id"), q.Get("from"), q.Get("to"))
 	if err != nil {
 		return err
@@ -781,9 +791,12 @@ func (h handlers) getScheduleTemplate(w http.ResponseWriter, r *http.Request, _ 
 	return writeFile(w, f)
 }
 
-func (h handlers) importSchedules(w http.ResponseWriter, r *http.Request, u *auth.User) error {
+func (h handlers) importSchedules(w http.ResponseWriter, r *http.Request, u *auth.User, sc storeScope) error {
 	if err := r.ParseMultipartForm(16 << 20); err != nil {
 		return httpx.BadRequest("Unggah file .xlsx dari template Jadwal Kerja")
+	}
+	if !sc.AllowsBranch(r.FormValue("branch_id")) {
+		return httpx.Forbidden(errOutsideScope)
 	}
 	file, header, err := r.FormFile("file")
 	if err != nil {
@@ -794,7 +807,7 @@ func (h handlers) importSchedules(w http.ResponseWriter, r *http.Request, u *aut
 	if err != nil {
 		return err
 	}
-	g, err := h.clearGuardFor(r, u, strings.TrimSpace(r.FormValue("reason")))
+	g, err := h.clearGuardScoped(r, u, strings.TrimSpace(r.FormValue("reason")), sc)
 	if err != nil {
 		return err
 	}
@@ -802,6 +815,7 @@ func (h handlers) importSchedules(w http.ResponseWriter, r *http.Request, u *aut
 		BranchID: r.FormValue("branch_id"), From: r.FormValue("from"), To: r.FormValue("to"),
 		Data: data, FileName: header.Filename, Step: r.FormValue("step"),
 		Fingerprint: r.FormValue("fingerprint"), AckWarnings: r.FormValue("ack_warnings") == "true", Guard: g,
+		RosterOnly: sc.Delegate != nil,
 	}
 	out, errFile, err := h.svc.ImportSchedule(r.Context(), u, in)
 	if err != nil {
@@ -829,6 +843,7 @@ type scheduleCellsInput struct {
 	AckWarnings                 bool
 	Cells                       []domain.ScheduleCellInput
 	Guard                       clearGuard
+	RosterOnly                  bool // store delegate: see uploadContext
 }
 
 type cellsSummary struct {
@@ -916,7 +931,7 @@ func (s *Service) SaveScheduleCells(ctx context.Context, actor *auth.User, in sc
 		if err != nil {
 			return err
 		}
-		uctx, names, err := uploadContext(ctx, q, rng, today, nil, idList)
+		uctx, names, err := uploadContext(ctx, q, rng, today, nil, idList, in.RosterOnly)
 		if err != nil {
 			return err
 		}
@@ -1059,7 +1074,7 @@ func cellsDiff(c domain.ScheduleUploadContext, names map[string]string, res doma
 	return sum, changes
 }
 
-func (h handlers) saveScheduleCells(w http.ResponseWriter, r *http.Request, u *auth.User) error {
+func (h handlers) saveScheduleCells(w http.ResponseWriter, r *http.Request, u *auth.User, sc storeScope) error {
 	f, err := readForm(r, "")
 	if err != nil {
 		return err
@@ -1083,12 +1098,15 @@ func (h handlers) saveScheduleCells(w http.ResponseWriter, r *http.Request, u *a
 	if err := formErr(f, ""); err != nil {
 		return err
 	}
-	g, err := h.clearGuardFor(r, u, strings.TrimSpace(strOr(reason)))
+	if !sc.AllowsBranch(*branch) {
+		return httpx.Forbidden(errOutsideScope)
+	}
+	g, err := h.clearGuardScoped(r, u, strings.TrimSpace(strOr(reason)), sc)
 	if err != nil {
 		return err
 	}
 	in := scheduleCellsInput{BranchID: *branch, Step: *step, Fingerprint: strOr(fp),
-		AckWarnings: ack != nil && *ack, Cells: cells, Guard: g}
+		AckWarnings: ack != nil && *ack, Cells: cells, Guard: g, RosterOnly: sc.Delegate != nil}
 	out, err := h.svc.SaveScheduleCells(r.Context(), u, in)
 	if err != nil {
 		return err
