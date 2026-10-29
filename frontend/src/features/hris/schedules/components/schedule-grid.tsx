@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { CalendarRange, Copy, Eraser, Loader2, PaintBucket, X } from "lucide-react";
+import { useMemo, useState, useSyncExternalStore } from "react";
+import { CalendarRange, ChevronDown, Copy, Eraser, Loader2, MousePointerClick, PaintBucket, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { useStoreErrorText } from "@/features/hris/schedule-access/access-guard";
@@ -26,6 +26,22 @@ interface Props {
   loading?: boolean;
 }
 
+const WIDE_QUERY = "(min-width: 640px)";
+
+/** Server render, hidrasi, dan peramban tanpa matchMedia dianggap layar lebar (legenda terbuka). */
+function useWideScreen(): boolean {
+  return useSyncExternalStore(
+    (onChange) => {
+      if (typeof window.matchMedia !== "function") return () => {};
+      const list = window.matchMedia(WIDE_QUERY);
+      list.addEventListener("change", onChange);
+      return () => list.removeEventListener("change", onChange);
+    },
+    () => (typeof window.matchMedia === "function" ? window.matchMedia(WIDE_QUERY).matches : true),
+    () => true
+  );
+}
+
 interface Picker {
   anchor: Element;
   title: string;
@@ -34,8 +50,9 @@ interface Picker {
 
 /**
  * Grid Jadwal Kerja yang bisa diedit (EPIC-070): klik kotak untuk ubah satu
- * hari; Ctrl/Cmd-klik dan Shift-klik untuk memilih banyak kotak; centang
- * karyawan untuk Terapkan pola. Tanggal lewat dan kotak "-" tidak bisa diubah.
+ * hari; Ctrl/Cmd-klik dan Shift-klik, atau tombol "Pilih beberapa kotak"
+ * (untuk layar sentuh), untuk memilih banyak kotak; centang karyawan untuk
+ * Terapkan pola. Tanggal lewat dan kotak "-" tidak bisa diubah.
  */
 export function ScheduleGrid({ grid, branchId, today, initialChecked, loading = false }: Props) {
   const errorText = useStoreErrorText();
@@ -45,6 +62,12 @@ export function ScheduleGrid({ grid, branchId, today, initialChecked, loading = 
   const [picker, setPicker] = useState<Picker | null>(null);
   const [patternOpen, setPatternOpen] = useState(false);
   const [copying, setCopying] = useState(false);
+  /** Mode sentuh: ketuk kotak = pilih/batal pilih (setara Ctrl-klik). */
+  const [multiSelect, setMultiSelect] = useState(false);
+  /** Legenda kode shift: bawaan ikut ukuran layar (terbuka di ≥640px, tertutup di HP); ketukan pengguna menimpanya. */
+  const wide = useWideScreen();
+  const [legendChoice, setLegendChoice] = useState<boolean | null>(null);
+  const legendOpen = legendChoice ?? wide;
   const [reviewTitle, setReviewTitle] = useState("Periksa perubahan jadwal");
   const saver = useScheduleCellsSave(branchId, () => setSelected(new Set()));
 
@@ -82,6 +105,14 @@ export function ScheduleGrid({ grid, branchId, today, initialChecked, loading = 
     setAnchorKey(null);
   }
 
+  function toggleMultiSelect() {
+    if (multiSelect) {
+      setSelected(new Set());
+      setAnchorKey(null);
+    }
+    setMultiSelect(!multiSelect);
+  }
+
   function save(cells: Parameters<typeof saver.save>[0], title: string, confirm = false) {
     setReviewTitle(title);
     void saver.save(cells, { confirm });
@@ -89,7 +120,7 @@ export function ScheduleGrid({ grid, branchId, today, initialChecked, loading = 
 
   function onCell(e: React.MouseEvent<HTMLButtonElement>, employee: Grid["employees"][number], date: string) {
     const key = cellKey(employee.id, date);
-    const additive = e.ctrlKey || e.metaKey;
+    const additive = e.ctrlKey || e.metaKey || multiSelect;
     if (e.shiftKey && anchorKey && parseCellKey(anchorKey).employee_id === employee.id) {
       const range = rowRange(employee.id, dates, parseCellKey(anchorKey).date, date).filter((k) => editable.has(k));
       setSelected((prev) => new Set([...(additive ? prev : []), ...range]));
@@ -142,36 +173,56 @@ export function ScheduleGrid({ grid, branchId, today, initialChecked, loading = 
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <ul className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-gray-600">
-          {grid.shifts.map((s) => (
-            <li key={s.code} className="flex items-center gap-1.5">
-              <span className={`rounded px-1.5 py-0.5 font-mono font-semibold ${shiftTone(s.code)}`}>{s.code}</span>
-              {s.name} {hhmm(s.start_time)}–{hhmm(s.end_time)}
-            </li>
-          ))}
-          <li className="flex items-center gap-1.5">
-            <span className={`rounded px-1.5 py-0.5 font-mono font-semibold ${shiftTone("L")}`}>L</span>Libur
-          </li>
-          <li className="flex items-center gap-1.5">
-            <span className={`rounded px-1.5 py-0.5 ${shiftTone("")}`}>Belum ada</span>belum dijadwalkan
-          </li>
-          <li className="flex items-center gap-1.5">
-            <span className="inline-block h-4 w-6 rounded border border-gray-200" style={HATCH} />
-            tidak ditempatkan di cabang ini
-          </li>
-          <li className="flex items-center gap-1.5">
-            <span className="underline decoration-dotted">P</span>dari pola mingguan
-          </li>
-        </ul>
-        <Button variant="outline" size="sm" onClick={() => void copyLastWeek()} disabled={busy}>
-          {copying ? <Loader2 className="animate-spin" /> : <Copy />} Salin minggu lalu
-        </Button>
+        <div className="min-w-0 flex-1 space-y-2">
+          <button
+            type="button"
+            aria-expanded={legendOpen}
+            aria-controls="schedule-legend"
+            onClick={() => setLegendChoice(!legendOpen)}
+            className="flex items-center gap-1 text-xs font-medium text-gray-700 hover:text-gray-900"
+          >
+            <ChevronDown className={`h-3.5 w-3.5 transition-transform ${legendOpen ? "" : "-rotate-90"}`} aria-hidden />
+            Kode shift ({grid.shifts.length})
+          </button>
+          {legendOpen ? (
+            <ul id="schedule-legend" className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-gray-600">
+              {grid.shifts.map((s) => (
+                <li key={s.code} className="flex items-center gap-1.5">
+                  <span className={`rounded px-1.5 py-0.5 font-mono font-semibold ${shiftTone(s.code)}`}>{s.code}</span>
+                  {s.name} {hhmm(s.start_time)}–{hhmm(s.end_time)}
+                </li>
+              ))}
+              <li className="flex items-center gap-1.5">
+                <span className={`rounded px-1.5 py-0.5 font-mono font-semibold ${shiftTone("L")}`}>L</span>Libur
+              </li>
+              <li className="flex items-center gap-1.5">
+                <span className={`rounded px-1.5 py-0.5 ${shiftTone("")}`}>Belum ada</span>belum dijadwalkan
+              </li>
+              <li className="flex items-center gap-1.5">
+                <span className="inline-block h-4 w-6 rounded border border-gray-200" style={HATCH} />
+                tidak ditempatkan di cabang ini
+              </li>
+              <li className="flex items-center gap-1.5">
+                <span className="underline decoration-dotted">P</span>dari pola mingguan
+              </li>
+            </ul>
+          ) : null}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button variant={multiSelect ? "default" : "outline"} size="sm" aria-pressed={multiSelect} onClick={toggleMultiSelect}>
+            <MousePointerClick /> Pilih beberapa kotak
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => void copyLastWeek()} disabled={busy}>
+            {copying ? <Loader2 className="animate-spin" /> : <Copy />} Salin minggu lalu
+          </Button>
+        </div>
       </div>
 
       <p className="flex items-center gap-1.5 text-xs text-gray-500">
         {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-label="Memuat jadwal" /> : null}
         Klik kotak untuk mengubah satu hari. Tahan Ctrl (Mac: Cmd) untuk memilih beberapa kotak, atau Shift untuk memilih rentang dalam satu baris.
       </p>
+      <p className="text-xs text-gray-500 sm:hidden">Ketuk Pilih beberapa kotak untuk mengisi banyak hari sekaligus.</p>
       {missing.length > 0 ? (
         <p className="rounded-lg bg-warning-soft px-3 py-2 text-sm text-warning">
           {missing.length} karyawan yang dipilih dari Penempatan tidak tampil karena tidak ditempatkan di cabang ini pada tanggal ini.
@@ -182,7 +233,7 @@ export function ScheduleGrid({ grid, branchId, today, initialChecked, loading = 
         <table className="w-full border-separate border-spacing-0 text-xs">
           <thead>
             <tr className="bg-gray-50 text-gray-500">
-              <th className="sticky left-0 z-10 min-w-56 border-b border-gray-200 bg-gray-50 px-3 py-2 text-left">
+              <th className="sticky left-0 z-10 min-w-32 border-b border-gray-200 bg-gray-50 sm:min-w-56 px-3 py-2 text-left">
                 <label className="flex items-center gap-2 font-medium">
                   <input type="checkbox" aria-label="Pilih semua karyawan" checked={allChecked} onChange={toggleAll} />
                   Karyawan
@@ -204,12 +255,14 @@ export function ScheduleGrid({ grid, branchId, today, initialChecked, loading = 
           <tbody>
             {grid.employees.map((e) => (
               <tr key={e.id}>
-                <td className="sticky left-0 z-10 border-b border-gray-100 bg-white px-3 py-1.5">
-                  <label className="flex items-center gap-2">
+                <td className="sticky left-0 z-10 min-w-32 border-b border-gray-100 bg-white px-3 py-1.5 sm:min-w-56">
+                  <label className="flex max-w-32 items-center gap-2 sm:max-w-none">
                     <input type="checkbox" aria-label={`Pilih ${e.name}`} checked={checked.has(e.id)} onChange={() => toggleRow(e.id)} />
-                    <span>
-                      <span className="block font-medium text-gray-800">{e.name}</span>
-                      <span className="block text-[11px] text-gray-400">
+                    <span className="min-w-0">
+                      <span className="block truncate font-medium text-gray-800" title={e.name}>
+                        {e.name}
+                      </span>
+                      <span className="block truncate text-[11px] text-gray-400">
                         {e.nip}
                         {e.position ? ` · ${e.position}` : ""}
                       </span>

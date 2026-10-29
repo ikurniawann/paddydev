@@ -243,4 +243,89 @@ describe("ScheduleGrid", () => {
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByRole("button", { name: "Simpan jadwal" })).toBeTruthy();
   });
+  describe("sentuhan (HP)", () => {
+    const original = window.matchMedia;
+    afterEach(() => {
+      window.matchMedia = original;
+    });
+    const stubMedia = (matches: boolean) => {
+      window.matchMedia = ((query: string) => ({
+        matches,
+        media: query,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      })) as unknown as typeof window.matchMedia;
+    };
+
+    it("Pilih beberapa kotak: ketuk dua kotak memilihnya tanpa membuka pemilih; matikan → pilihan hilang", () => {
+      renderGrid();
+      const toggle = screen.getByRole("button", { name: "Pilih beberapa kotak" });
+      expect(toggle.getAttribute("aria-pressed")).toBe("false");
+      fireEvent.click(toggle);
+      expect(toggle.getAttribute("aria-pressed")).toBe("true");
+
+      fireEvent.click(screen.getByRole("button", { name: "Ana 03/11" }));
+      fireEvent.click(screen.getByRole("button", { name: "Ana 04/11" }));
+      expect(screen.getByText("2 kotak dipilih")).toBeTruthy();
+      expect(screen.queryByRole("button", { name: /^S · Siang/ })).toBeNull();
+
+      // Ketuk lagi pada kotak terpilih membatalkannya.
+      fireEvent.click(screen.getByRole("button", { name: "Ana 04/11" }));
+      expect(screen.getByText("1 kotak dipilih")).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: "Ana 04/11" }));
+      expect(screen.getByText("2 kotak dipilih")).toBeTruthy();
+
+      fireEvent.click(toggle);
+      expect(toggle.getAttribute("aria-pressed")).toBe("false");
+      expect(screen.queryByText("2 kotak dipilih")).toBeNull();
+      expect(screen.getByRole("button", { name: "Ana 03/11" }).getAttribute("aria-pressed")).toBe("false");
+    });
+
+    it("mode pilih banyak: Isi kotak terpilih mengirim kedua sel", async () => {
+      api.saveScheduleCells.mockResolvedValue(preview());
+      renderGrid();
+      fireEvent.click(screen.getByRole("button", { name: "Pilih beberapa kotak" }));
+      fireEvent.click(screen.getByRole("button", { name: "Ana 03/11" }));
+      fireEvent.click(screen.getByRole("button", { name: "Budi 03/11" }));
+      fireEvent.click(screen.getByRole("button", { name: "Isi kotak terpilih" }));
+      fireEvent.click(await screen.findByRole("button", { name: /^S · Siang/ }));
+      await waitFor(() => expect(previewCall()).toBeTruthy());
+      expect(previewCall().cells).toEqual([
+        { employee_id: "e1", date: "2026-11-03", code: "S" },
+        { employee_id: "e2", date: "2026-11-03", code: "S" },
+      ]);
+    });
+
+    it("layar sempit: legenda tertutup sampai tombol Kode shift (N) diketuk", async () => {
+      stubMedia(false);
+      renderGrid();
+      const toggle = await screen.findByRole("button", { name: /^Kode shift \(2\)/ });
+      await waitFor(() => expect(toggle.getAttribute("aria-expanded")).toBe("false"));
+      expect(screen.queryByText(/Pagi 08:00–16:00/)).toBeNull();
+      fireEvent.click(toggle);
+      expect(toggle.getAttribute("aria-expanded")).toBe("true");
+      expect(screen.getByText(/Pagi 08:00–16:00/)).toBeTruthy();
+      fireEvent.click(toggle);
+      expect(screen.queryByText(/Pagi 08:00–16:00/)).toBeNull();
+    });
+
+    it("layar lebar: legenda terbuka", async () => {
+      stubMedia(true);
+      renderGrid();
+      const toggle = screen.getByRole("button", { name: /^Kode shift \(2\)/ });
+      await waitFor(() => expect(toggle.getAttribute("aria-expanded")).toBe("true"));
+      expect(screen.getByText(/Pagi 08:00–16:00/)).toBeTruthy();
+    });
+
+    it("kolom nama: min-w-32 di HP, sm:min-w-56 di layar lebar; nama lengkap di title", () => {
+      renderGrid();
+      const th = screen.getByText("Karyawan").closest("th")!;
+      expect(th.className).toContain("min-w-32");
+      expect(th.className).toContain("sm:min-w-56");
+      const td = screen.getByText("Ana", { selector: "span.font-medium" }).closest("td")!;
+      expect(td.className).toContain("min-w-32");
+      expect(td.className).toContain("sm:min-w-56");
+      expect(screen.getByText("Ana", { selector: "span.font-medium" }).getAttribute("title")).toBe("Ana");
+    });
+  });
 });
