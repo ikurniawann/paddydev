@@ -2,6 +2,7 @@ package hris
 
 import (
 	"bytes"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -42,6 +43,22 @@ func newScopeFixture(h *harness) scopeFixture {
 	f.defShift = h.scalar(`SELECT id::text FROM hris.shifts WHERE code = 'DEF'`)
 	f.nsShift = h.scalar(`SELECT id::text FROM hris.shifts WHERE code = 'NS'`)
 	return f
+}
+
+// multipartRequest is the import request for fields and file.
+func multipartRequest(t *testing.T, fields map[string]string, file []byte) *http.Request {
+	t.Helper()
+	var body bytes.Buffer
+	w := multipart.NewWriter(&body)
+	for k, v := range fields {
+		_ = w.WriteField(k, v)
+	}
+	fw, _ := w.CreateFormFile("file", "jadwal.xlsx")
+	_, _ = fw.Write(file)
+	_ = w.Close()
+	r := httptest.NewRequest(http.MethodPost, "/api/hris/schedules/import", &body)
+	r.Header.Set("Content-Type", w.FormDataContentType())
+	return r
 }
 
 func gridURL(branch string) string {
@@ -147,4 +164,96 @@ func TestScheduleScopeHRAlsoDelegate(t *testing.T) {
 	h.delegate(hrID, false, f.tokoA)
 	expect(t, h.do(&hr, http.MethodGet, gridURL(f.tokoA), nil), http.StatusOK, "")
 	expect(t, h.do(&hr, http.MethodGet, gridURL(f.tokoB), nil), http.StatusOK, "")
+}
+
+// A delegate learns nothing about people outside the store roster (review
+// fix 1): the message is generic and carries no name.
+func TestDelegateScheduleNoLeakOutsideRoster(t *testing.T) {
+	h := newHarness(t)
+	f := newScopeFixture(h)
+	const secret = "Yani Rahasia Toko B"
+	y := h.employee(emp{name: secret})
+	h.place(y, f.tokoB)
+	h.exec(`UPDATE hris.employees SET schedule_type = 'non_shift' WHERE id = $1`, y)
+	nipY := h.scalar(`SELECT nip FROM hris.employees WHERE id = $1`, y)
+	noRows := func() {
+		t.Helper()
+		if got := h.scalar(`SELECT count(*)::text FROM hris.employee_shift_days WHERE employee_id = $1`, y); got != "0" {
+			t.Fatalf("shift day rows for Y = %s, want 0", got)
+		}
+	}
+
+	// Import.
+	file := anaWeek(f.tokoA, nipY, []string{"DEF", "DEF", "DEF", "DEF", "DEF", "L", "L"})
+	fields := map[string]string{"branch_id": f.tokoA, "from": "2026-10-05", "to": "2026-10-11", "step": "preview"}
+	pre := upload(t, h, &f.p, fields, file)
+	expect(t, pre, http.StatusOK, "")
+	if bytes.Contains([]byte(pre.raw), []byte(secret)) || bytes.Contains([]byte(pre.raw), []byte("Non-Shift")) {
+		t.Fatalf("import preview leaks Y: %s", pre.raw)
+	}
+	want := "NIP " + nipY + " tidak ditemukan di Scope Toko A"
+	if !bytes.Contains([]byte(pre.raw), []byte(want)) {
+		t.Fatalf("import preview lacks %q: %s", want, pre.raw)
+	}
+	fields["step"] = "error_file"
+	r := testutil.AsStaff(multipartRequest(t, fields, file), f.p)
+	rec := httptest.NewRecorder()
+	h.exec("SAVEPOINT harness_request")
+	h.mux.ServeHTTP(rec, r)
+	h.exec("RELEASE SAVEPOINT harness_request")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("error file = %d %s", rec.Code, rec.Body.String())
+	}
+	ef, err := excelize.OpenReader(bytes.NewReader(rec.Body.Bytes()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, sheet := range ef.GetSheetList() {
+		rows, _ := ef.GetRows(sheet)
+		for _, row := range rows {
+			for _, v := range row {
+				if v == secret {
+					t.Fatalf("error file leaks Y in sheet %s", sheet)
+				}
+			}
+		}
+	}
+	fields["step"], fields["fingerprint"], fields["ack_warnings"] = "commit", pre.data()["fingerprint"].(string), "true"
+	if c := upload(t, h, &f.p, fields, file); c.status == http.StatusOK {
+		t.Fatalf("commit with errors = %d", c.status)
+	}
+	noRows()
+
+	// Cells.
+	body := cellsBody(f.tokoA, "preview", anaCell(y, "2026-10-06", "DEF"))
+	c := h.do(&f.p, http.MethodPost, cellsPath, body)
+	expect(t, c, http.StatusOK, "")
+	if bytes.Contains([]byte(c.raw), []byte(secret)) || bytes.Contains([]byte(c.raw), []byte("Non-Shift")) {
+		t.Fatalf("cells preview leaks Y: %s", c.raw)
+	}
+	if !bytes.Contains([]byte(c.raw), []byte("Karyawan tidak ditemukan di Scope Toko A")) {
+		t.Fatalf("cells preview lacks generic message: %s", c.raw)
+	}
+	body["step"], body["fingerprint"], body["ack_warnings"] = "commit", c.data()["fingerprint"], true
+	if c := h.do(&f.p, http.MethodPost, cellsPath, body); c.status == http.StatusOK {
+		t.Fatalf("cells commit with errors = %d", c.status)
+	}
+	noRows()
+
+	// HR keeps the detailed messages.
+	hr, _ := h.staff("hrd", scheduleTestMenus, false)
+	hc := h.do(&hr, http.MethodPost, cellsPath, cellsBody(f.tokoA, "preview", anaCell(y, "2026-10-06", "DEF")))
+	expect(t, hc, http.StatusOK, "")
+	if !bytes.Contains([]byte(hc.raw), []byte(secret)) {
+		t.Fatalf("HR message changed: %s", hc.raw)
+	}
+}
+
+// A delegate whose only store is inactive is no delegate any more: the
+// wrapper answers 403, not an empty grid.
+func TestDelegateScheduleInactiveStore(t *testing.T) {
+	h := newHarness(t)
+	f := newScopeFixture(h)
+	h.exec(`UPDATE configuration.branches SET is_active = false WHERE id = $1`, f.tokoA)
+	expect(t, h.do(&f.p, http.MethodGet, gridURL(f.tokoA), nil), http.StatusForbidden, errNoPerm)
 }
