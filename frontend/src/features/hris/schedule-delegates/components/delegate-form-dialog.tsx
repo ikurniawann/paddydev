@@ -5,7 +5,14 @@ import { Loader2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogFooter,
+  DialogPanel,
+  DialogPanelBody,
+  DialogPanelHeader,
+  DialogPanelTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { useStoreBranches } from "@/features/hris/placements/queries";
 import { mainPlacement } from "@/features/hris/placements/components/placements-table";
@@ -27,12 +34,12 @@ export function DelegateFormDialog(props: DelegateFormDialogProps) {
   const { open, delegate, onOpenChange } = props;
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>{delegate ? "Ubah pengatur jadwal toko" : "Tambah pengatur jadwal toko"}</DialogTitle>
-        </DialogHeader>
+      <DialogPanel size="sm">
+        <DialogPanelHeader>
+          <DialogPanelTitle>{delegate ? "Ubah pengatur jadwal toko" : "Tambah pengatur jadwal toko"}</DialogPanelTitle>
+        </DialogPanelHeader>
         {open && <DelegateFormBody key={delegate?.employee_id ?? "new"} {...props} />}
-      </DialogContent>
+      </DialogPanel>
     </Dialog>
   );
 }
@@ -138,13 +145,13 @@ function DelegateFormBody({ delegate, onOpenChange }: DelegateFormDialogProps) {
 
   return (
     <>
-      <div className="space-y-4">
+      <DialogPanelBody className="min-w-0 space-y-4">
         <div>
           <label className="mb-1 block text-xs font-medium text-gray-600">Karyawan</label>
           {editing ? (
-            <div className="rounded-lg border border-gray-200/80 bg-gray-50 px-3 py-2 text-sm">
-              <p className="font-medium text-gray-900">{delegate.full_name}</p>
-              <p className="text-xs text-gray-500">
+            <div className="min-w-0 rounded-lg border border-gray-200/80 bg-gray-50 px-3 py-2 text-sm">
+              <p className="break-words font-medium text-gray-900">{delegate.full_name}</p>
+              <p className="break-words text-xs text-gray-500">
                 {[delegate.nip, delegate.position_title].filter(Boolean).join(" · ") || "—"}
               </p>
             </div>
@@ -199,14 +206,15 @@ function DelegateFormBody({ delegate, onOpenChange }: DelegateFormDialogProps) {
               <p className="p-3 text-sm text-gray-400">Toko tidak ditemukan.</p>
             ) : (
               stores.map((b) => (
-                <label key={b.id} className="flex cursor-pointer items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50">
+                <label key={b.id} className="flex cursor-pointer items-start gap-2 px-3 py-2 text-sm hover:bg-gray-50">
                   <input
                     type="checkbox"
+                    className="mt-0.5 shrink-0"
                     aria-label={storeText(b)}
                     checked={selected.has(b.id)}
                     onChange={() => toggleStore(b.id)}
                   />
-                  <span className="truncate text-gray-900">{storeText(b)}</span>
+                  <span className="min-w-0 break-words text-gray-900">{storeText(b)}</span>
                 </label>
               ))
             )}
@@ -229,7 +237,7 @@ function DelegateFormBody({ delegate, onOpenChange }: DelegateFormDialogProps) {
         <label className="flex items-start gap-2 text-sm text-gray-700">
           <input
             type="checkbox"
-            className="mt-0.5"
+            className="mt-0.5 shrink-0"
             aria-label="Boleh atur penempatan karyawan"
             checked={canPlace}
             onChange={(e) => setCanPlaceChoice(e.target.checked)}
@@ -246,7 +254,7 @@ function DelegateFormBody({ delegate, onOpenChange }: DelegateFormDialogProps) {
             {error}
           </p>
         )}
-      </div>
+      </DialogPanelBody>
       <DialogFooter>
         <Button variant="outline" onClick={() => onOpenChange(false)} disabled={save.isPending}>
           Batal
