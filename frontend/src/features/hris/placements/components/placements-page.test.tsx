@@ -15,7 +15,8 @@ const push = vi.fn();
 vi.mock("../api", () => api);
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
 vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn(), info: vi.fn() } }));
-vi.mock("@/components/iam/iam-access-provider", () => ({ useIamAccess: () => ({ hasPrefix: () => true }) }));
+const access = vi.hoisted(() => ({ canManage: true }));
+vi.mock("@/components/iam/iam-access-provider", () => ({ useIamAccess: () => ({ hasPrefix: () => access.canManage }) }));
 vi.mock("@/features/master-data/departments/queries", () => ({
   useDepartmentList: () => ({ data: [{ id: "d1", name: "Operations", is_active: true }] }),
 }));
@@ -122,6 +123,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  access.canManage = true;
   cleanup();
   vi.clearAllMocks();
 });
@@ -283,5 +285,19 @@ describe("PlacementsPage", () => {
     fireEvent.click(screen.getByLabelText("Pilih Budi"));
     fireEvent.click(screen.getByRole("button", { name: "Pindahkan ke toko" }));
     expect(await screen.findByText("Pindahkan 2 karyawan ke toko")).toBeTruthy();
+  });
+
+  it("tombol Pengatur jadwal toko di header membuka halaman pengatur (EPIC-071)", async () => {
+    renderPage();
+    await screen.findByText("Ani");
+    const link = screen.getByRole("link", { name: /Pengatur jadwal toko/ });
+    expect(link.getAttribute("href")).toBe("/dashboard/hris/placements/pengatur");
+  });
+
+  it("tombol Pengatur jadwal toko tersembunyi tanpa hak kelola", async () => {
+    access.canManage = false;
+    renderPage();
+    await screen.findByText("Ani");
+    expect(screen.queryByRole("link", { name: /Pengatur jadwal toko/ })).toBeNull();
   });
 });

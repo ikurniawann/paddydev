@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, ChevronRight, Loader2, MapPin } from "lucide-react";
+import { ChevronLeft, ChevronRight, Loader2, MapPin, UserCog } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -155,10 +156,17 @@ export function PlacementsPage() {
         description="Toko tempat setiap karyawan bekerja. Dipakai untuk pilihan toko saat clock-in, jadwal kerja, dan pembagian biaya gaji per toko."
         actions={
           canManage ? (
-            <Button variant="outline" onClick={() => setLocationOpen(true)}>
-              <MapPin className="mr-1.5 h-4 w-4" /> Lokasi Toko
-              {missingCoords > 0 ? ` (${missingCoords} belum diisi)` : ""}
-            </Button>
+            <>
+              <Button variant="outline" asChild>
+                <Link href="/dashboard/hris/placements/pengatur">
+                  <UserCog className="mr-1.5 h-4 w-4" /> Pengatur jadwal toko
+                </Link>
+              </Button>
+              <Button variant="outline" onClick={() => setLocationOpen(true)}>
+                <MapPin className="mr-1.5 h-4 w-4" /> Lokasi Toko
+                {missingCoords > 0 ? ` (${missingCoords} belum diisi)` : ""}
+              </Button>
+            </>
           ) : null
         }
       />

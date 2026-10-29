@@ -1,5 +1,6 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { IAM } from "@/lib/iam/prefixes";
 
 // EPIC-057: halaman detail Rekrutmen/Live Monitoring, dashboard rekrutmen dan
 // konfigurasi KPI dijaga menu yang sama dengan API-nya (bukan hanya sesi).
@@ -10,6 +11,7 @@ vi.mock("@/features/hris/candidates", () => ({ CandidateDetailPage: () => null }
 vi.mock("@/features/hris/live-monitoring", () => ({ LiveMonitorDetailPage: () => null }));
 vi.mock("@/features/hris/dashboard", () => ({ RecruitmentDashboardPage: () => null }));
 vi.mock("@/features/hris/kpi", () => ({ KpiConfigPage: () => null, KpiScorecardPage: () => null }));
+vi.mock("@/features/hris/schedule-delegates", () => ({ ScheduleDelegatesPage: () => null }));
 
 beforeEach(() => requireIamPage.mockReset());
 
@@ -48,5 +50,15 @@ describe("page guards", () => {
       ["hris.performance.kpi-scorecard", "hris.performance.kpi-config"],
       "/dashboard/me"
     );
+  });
+
+  it("Pengatur jadwal toko (EPIC-071) memakai penjaga yang sama dengan halaman Penempatan", async () => {
+    const { default: Page } = await import("./placements/pengatur/page");
+    await Page();
+    expect(requireIamPage).toHaveBeenCalledWith([
+      ...IAM.hrisPlacements,
+      ...IAM.hrisKepegawaian,
+      ...IAM.settingsUsers,
+    ]);
   });
 });
