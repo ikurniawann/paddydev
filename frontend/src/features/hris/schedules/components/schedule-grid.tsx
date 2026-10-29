@@ -184,7 +184,7 @@ export function ScheduleGrid({ grid, branchId, today, initialChecked, loading = 
             aria-expanded={legendOpen}
             aria-controls="schedule-legend"
             onClick={() => setLegendChoice(!legendOpen)}
-            className="flex items-center gap-1 text-xs font-medium text-gray-700 hover:text-gray-900"
+            className="flex shrink-0 items-center gap-1 whitespace-nowrap text-xs font-medium text-gray-700 hover:text-gray-900"
           >
             <ChevronDown className={`h-3.5 w-3.5 transition-transform ${legendOpen ? "" : "-rotate-90"}`} aria-hidden />
             Kode shift ({grid.shifts.length})
