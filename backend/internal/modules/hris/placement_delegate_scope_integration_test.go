@@ -100,10 +100,29 @@ func TestDelegatePlacementSearch(t *testing.T) {
 		t.Fatalf("ids = %s, want %v", ids.raw, want)
 	}
 
+	// A placement at A that only starts tomorrow is not running (R3): V, not
+	// below P, stays out of search, counts and ids.
+	v := h.employee(emp{name: "Pst71 V Besok"})
+	h.exec(`INSERT INTO hris.employee_placements (employee_id, branch_id, is_primary, start_date)
+		VALUES ($1, $2, true, '2026-10-06')`, v, f.tokoA)
+	c = h.do(&f.p, http.MethodGet, searchPath(placementSearchURL, "page_size", "100"), nil)
+	if got, want := scopeRowIDs(t, c), sortedIDs(f.pID, f.x, f.y, f.z, f.u); !slices.Equal(got, want) || c.data()["counts"].(map[string]any)["all"] != 5.0 {
+		t.Fatalf("search with V = %v, want %v\n%s", got, want, c.raw)
+	}
+	c = h.do(&f.p, http.MethodGet, searchPath(placementSearchURL, "branch_id", f.tokoA), nil)
+	if got, want := scopeRowIDs(t, c), sortedIDs(f.pID, f.x); !slices.Equal(got, want) {
+		t.Fatalf("store A with V = %v, want %v", got, want)
+	}
+	ids = h.do(&f.p, http.MethodGet, placementIDsURL, nil)
+	expect(t, ids, http.StatusOK, "")
+	if ids.data()["total"] != 5.0 || slices.Contains(ids.data()["ids"].([]any), any(v)) {
+		t.Fatalf("ids with V = %s", ids.raw)
+	}
+
 	// HR still sees everyone, W included.
 	hr, _ := h.staff("hrd", []string{"hris.master.placements"}, false)
 	c = h.do(&hr, http.MethodGet, searchPath(placementSearchURL, "q", "Pst71", "page_size", "100"), nil)
-	if got, want := scopeRowIDs(t, c), sortedIDs(f.pID, f.x, f.y, f.z, f.w, f.u); !slices.Equal(got, want) {
+	if got, want := scopeRowIDs(t, c), sortedIDs(f.pID, f.x, f.y, f.z, f.w, f.u, v); !slices.Equal(got, want) {
 		t.Fatalf("HR search = %v, want %v", got, want)
 	}
 }

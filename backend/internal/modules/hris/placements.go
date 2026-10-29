@@ -81,8 +81,8 @@ func (s *store) PlacementsOf(ctx context.Context, employeeID string) ([]*Row, er
 // the store, Department/Position match the employee record, Search matches
 // name/NIP, Status keeps one chip (placementStatuses), All includes ended
 // placements in the placements column. Scope (EPIC-071 R3, a store
-// delegate; nil for HR) keeps the employees with a running placement at one
-// of Scope.BranchIDs or in ScopeSubtree, the delegate's reporting subtree
+// delegate; nil for HR) keeps the employees with a placement running today
+// (started and not ended, as delegateOutside) at one of Scope.BranchIDs or in ScopeSubtree, the delegate's reporting subtree
 // (delegateSubtreeIDs) that must be filled with it.
 type placementFilter struct {
 	Branch, Department, Position, Search, Status string
@@ -146,8 +146,10 @@ func placementWhere(f placementFilter) (string, []any) {
 			subtree = []string{} // an empty array, not NULL
 		}
 		args = append(args, f.Scope.BranchIDs, subtree)
+		// Running as in delegateOutside (R3): started by today, not ended.
 		where = append(where, fmt.Sprintf(`(EXISTS (SELECT 1 FROM hris.employee_placements ep
-			WHERE ep.employee_id = e.id AND ep.branch_id = ANY($%d::uuid[]) AND %s) OR e.id = ANY($%d::uuid[]))`,
+			WHERE ep.employee_id = e.id AND ep.branch_id = ANY($%d::uuid[])
+			  AND ep.start_date <= $1::date AND %s) OR e.id = ANY($%d::uuid[]))`,
 			len(args)-1, placementRunning, len(args)))
 	}
 	return strings.Join(where, " AND "), args
