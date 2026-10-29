@@ -1,6 +1,6 @@
 # EPIC-071: Pengatur Jadwal Toko — Jabatan Tertentu Mengatur Jadwal & Penempatan (`MODULE-HRIS`)
 
-status: backlog
+status: review
 environment: dev
 retries: 0
 
@@ -63,6 +63,19 @@ Yang sudah ada sebelumnya: ESS **Shift Tim** (`/dashboard/me/shift-tim`). Atasan
 - **R11 — Karyawan nonaktif:** pengatur yang dinonaktifkan otomatis kehilangan akses, karena dicek `is_active` setiap permintaan. Barisnya tetap tersimpan. Bila diaktifkan kembali, aksesnya kembali.
 - **R12 — Deploy:** EPIC-070 dan EPIC-071 di-deploy ke production bersama, setelah EPIC-071 lulus QA staging dan user memberi izin deploy production.
 
+### Ruling saat implementasi (R13+)
+- **R13 — "Penempatan berjalan"** (R3) = `start_date <= hari ini` dan belum berakhir. Pencarian, daftar id, hitungan chip, dan pemeriksaan "di luar wilayah" memakai definisi yang sama.
+- **R14 — Tambah toko sebagai toko utama** oleh pengatur: karyawan yang **bukan** bawahannya dan punya penempatan utama yang tumpang tindih di toko **di luar** wilayah dilewati, dengan alasan yang sama seperti Pindah ("Punya penempatan di toko lain di luar wilayah Anda — hubungi HR"). Tanpa centang toko utama, tidak ada yang dilewati.
+- **R15 — Akhiri massal** menerima `branch_id` huruf besar/kecil (dinormalkan ke huruf kecil). Berlaku juga untuk HR.
+- **R16 — Baris penempatan di toko luar wilayah** milik karyawan dalam wilayah tetap terlihat oleh pengatur (supaya ia tahu orang itu juga bekerja di toko lain), tetapi tidak bisa diubahnya.
+- **R17 — Menu Jadwal Toko** juga disembunyikan dari sidebar layout POS untuk akun yang bukan pengatur aktif.
+- **R18 — Unggah & simpan kotak oleh pengatur** hanya memvalidasi karyawan roster toko itu. Karyawan lain mendapat pesan umum "… tidak ditemukan di <toko>", tanpa membocorkan data di luar wilayah.
+- **R19 — Pengatur tidak bisa memundurkan penempatan:** tanggal mulai (pindah/tambah) paling awal hari ini → 400 "Tanggal mulai tidak boleh sebelum hari ini"; tanggal akhir (akhiri massal, dan akhir opsional tambah/pindah) paling awal kemarin → 400 "Tanggal akhir paling awal kemarin". Dialog mode toko memasang batas `min` yang sama dan tidak menampilkan peringatan tanggal lampau. HR tetap boleh tanggal lampau (koreksi).
+- **R20 — Karyawan multi-toko:** pengatur boleh menimpa jadwal per tanggal karyawan yang juga bekerja di toko lain, pada hari karyawan itu ditempatkan di toko si pengatur (konsekuensi R4; teraudit dengan alasan).
+- **R21 — Akses dicabut saat halaman terbuka:** 403 umum dari API mode toko (penunjukan dicabut atau karyawan dinonaktifkan) memuat ulang akses dan halaman Jadwal Toko menampilkan kartu "Anda bukan pengatur jadwal toko. Hubungi HR bila seharusnya punya akses." Teks server berbahasa Inggris tidak pernah tampil. Grid dan pencarian mode toko tidak mencoba ulang 403. 403 wilayah ("… di luar wilayah Anda") dan hak penempatan tetap menampilkan pesannya.
+- **R22 — Halaman HR Pengatur Jadwal Toko** bisa dibaca dengan prefix menu penempatan; Tambah/Ubah/Cabut hanya tampil dengan aksi `update` (sama dengan guard PUT/DELETE).
+- **Catatan tes:** `TestGapDigestRun` kadang gagal saat seluruh paket berjalan (DB uji dipakai bersama), lulus bila dijalankan sendiri.
+
 ## Tasks
 Lihat rencana `docs/superpowers/plans/2026-10-29-pengatur-jadwal-toko.md`.
 
@@ -84,3 +97,18 @@ Lihat rencana `docs/superpowers/plans/2026-10-29-pengatur-jadwal-toko.md`.
     - ESS Shift Tim = atasan langsung, pola mingguan per orang.
   - Data production dibaca read-only (tabel di Goal).
   - Rencana ditulis, status `backlog` menunggu review user.
+- 2026-10-29: **Implementasi** (subagent per task + review per task), branch `feat/epic071-jadwal-per-jabatan`:
+  - **T1** `b3b07484`: migrasi `hris.schedule_delegates` + `schedule_delegate_branches`, menu ESS `ess.store-schedule` (semua role), seeder, `GET /api/hris/me/schedule-access`, akses inti (`withScheduleScope`: HR atau pengatur).
+  - **T2** `ec5f5358`: API HR kelola pengatur `schedule-delegates` (list/suggest/PUT/DELETE, audit `schedule_delegate.set|revoke`).
+  - **T3** `2b63d40c..b7b65a30`: jadwal mode pengatur (grid, kotak, unggah, template) dibatasi toko wilayah; R13, R18, R20.
+  - **T4** `e053540c..f27e9ce9`: penempatan mode pengatur (cari/ids/bulk/bulk-end) dengan R6; R14, R15, R16.
+  - **T5** `76369281..444fafbe`: halaman HR Pengatur Jadwal Toko (daftar, dialog tambah/ubah dengan saran toko, cabut).
+  - **T6** `58d0aaea..75c7ea70`: halaman ESS Jadwal Toko (tab Jadwal/Penempatan, mode toko), menu hanya untuk pengatur aktif; R17.
+- 2026-10-29: **Review akhir seluruh branch:** With fixes. Diperbaiki dalam satu gelombang:
+  - `2dafcb66` Go: pengatur tidak bisa memundurkan tanggal penempatan (R19); ikon menu Jadwal Toko `calendar` (ikon `calendar-days` tidak dikenal sidebar).
+  - `4fd01103` halaman HR pengatur: aksi hanya untuk hak `update` (R22); Simpan nonaktif bila daftar pengatur gagal dimuat.
+  - `570eab5a` Jadwal Toko: akses dicabut → kartu (R21); batas tanggal dialog mode toko (R19); grid kosong mengarahkan ke tab Penempatan bila boleh.
+- 2026-10-29: **Gerbang lokal** (sesudah fix wave):
+  - `go vet ./internal/modules/hris/...` bersih; `go test ./internal/modules/hris/... -count=1` hijau;
+  - `make -C backend generate` tanpa diff;
+  - frontend `tsc` + `lint` bersih, `pnpm test` 861 file / 6256 tes lulus (sebelum fix wave: 860 file / 6235 tes).
