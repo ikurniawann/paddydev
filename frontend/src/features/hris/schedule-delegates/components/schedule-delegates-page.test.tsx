@@ -48,11 +48,11 @@ const rows: ScheduleDelegate[] = [
   },
 ];
 
-function renderPage() {
+function renderPage(canManage = true) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={client}>
-      <ScheduleDelegatesPage />
+      <ScheduleDelegatesPage canManage={canManage} />
     </QueryClientProvider>
   );
   return client;
@@ -80,6 +80,15 @@ describe("ScheduleDelegatesPage (EPIC-071)", () => {
     const budi = screen.getByText("Budi Santoso").closest("tr")!;
     expect(within(budi).getByText("Tidak")).toBeTruthy();
     expect(within(budi).getByText("Nonaktif")).toBeTruthy();
+  });
+
+  it("tanpa hak ubah (hanya baca): Tambah, Ubah, dan Cabut tidak tampil", async () => {
+    renderPage(false);
+    await screen.findByText("Ani Wijaya");
+    expect(screen.queryByRole("button", { name: /Tambah pengatur/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Ubah" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Cabut" })).toBeNull();
+    expect(screen.queryByText("Aksi")).toBeNull();
   });
 
   it("daftar kosong menampilkan petunjuk", async () => {

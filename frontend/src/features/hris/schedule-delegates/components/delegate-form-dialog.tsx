@@ -132,6 +132,8 @@ function DelegateFormBody({ delegate, onOpenChange }: DelegateFormDialogProps) {
 
   const suggesting = !editing && !!employeeId && chosen === null && !base && suggest.isLoading;
   const suggestFailed = !editing && !!employeeId && !base && suggest.isError;
+  // Tanpa daftar pengatur, karyawan yang sudah jadi pengatur tidak dikenali: simpan bisa menimpa wilayahnya diam-diam.
+  const listFailed = !editing && delegates.isError;
   const noSuggestion = !editing && !!employeeId && chosen === null && !base && suggest.isSuccess && selectedIds.length === 0;
 
   return (
@@ -236,6 +238,9 @@ function DelegateFormBody({ delegate, onOpenChange }: DelegateFormDialogProps) {
         </label>
         <p className="text-xs text-gray-500">Pengatur hanya bisa mengubah jadwal dan penempatan di toko yang dipilih</p>
 
+        {listFailed && (
+          <p className="text-sm text-red-600">Daftar pengatur gagal dimuat. Tutup lalu buka lagi dialog ini.</p>
+        )}
         {error && (
           <p role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
             {error}
@@ -246,7 +251,7 @@ function DelegateFormBody({ delegate, onOpenChange }: DelegateFormDialogProps) {
         <Button variant="outline" onClick={() => onOpenChange(false)} disabled={save.isPending}>
           Batal
         </Button>
-        <Button onClick={handleSave} disabled={save.isPending}>
+        <Button onClick={handleSave} disabled={save.isPending || listFailed}>
           {save.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Simpan"}
         </Button>
       </DialogFooter>

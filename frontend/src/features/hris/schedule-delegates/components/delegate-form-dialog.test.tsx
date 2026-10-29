@@ -220,4 +220,11 @@ describe("DelegateFormDialog (EPIC-071)", () => {
     expect(api.saveScheduleDelegate).toHaveBeenCalledWith("e1", { branch_ids: ["b2"], can_place: false });
     expect(api.fetchDelegateSuggest).toHaveBeenCalledTimes(1);
   });
+
+  it("daftar pengatur gagal dimuat: Simpan nonaktif saat menambah (pengatur lama tidak bisa dikenali)", async () => {
+    api.fetchScheduleDelegates.mockRejectedValue(new Error("boom"));
+    renderDialog();
+    expect(await screen.findByText("Daftar pengatur gagal dimuat. Tutup lalu buka lagi dialog ini.")).toBeTruthy();
+    expect((screen.getByRole("button", { name: "Simpan" }) as HTMLButtonElement).disabled).toBe(true);
+  });
 });

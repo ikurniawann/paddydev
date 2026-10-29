@@ -22,8 +22,10 @@ const MAX_CHIPS = 3;
  * HRIS → Penempatan Karyawan → Pengatur jadwal toko (EPIC-071): HR menunjuk
  * karyawan yang boleh mengatur jadwal (dan, bila dicentang, penempatan) di
  * toko-toko tertentu, mengubah wilayahnya, atau mencabut aksesnya.
+ * `canManage` = aksi update di menu penempatan/kepegawaian (sama dengan guard
+ * PUT/DELETE Go); tanpa itu halaman hanya bisa dibaca.
  */
-export function ScheduleDelegatesPage() {
+export function ScheduleDelegatesPage({ canManage }: { canManage: boolean }) {
   const list = useScheduleDelegates();
   const revoke = useRevokeDelegate();
   const [editing, setEditing] = useState<ScheduleDelegate | null>(null);
@@ -64,9 +66,11 @@ export function ScheduleDelegatesPage() {
                 <ChevronLeft className="mr-1 h-4 w-4" /> Penempatan Karyawan
               </Link>
             </Button>
-            <Button onClick={() => openForm(null)}>
-              <Plus className="mr-1.5 h-4 w-4" /> Tambah pengatur
-            </Button>
+            {canManage ? (
+              <Button onClick={() => openForm(null)}>
+                <Plus className="mr-1.5 h-4 w-4" /> Tambah pengatur
+              </Button>
+            ) : null}
           </>
         }
       />
@@ -94,12 +98,17 @@ export function ScheduleDelegatesPage() {
                     <th className="p-3">Penempatan</th>
                     <th className="p-3">Bawahan</th>
                     <th className="p-3">Diubah</th>
-                    <th className="p-3 text-right">Aksi</th>
+                    {canManage ? <th className="p-3 text-right">Aksi</th> : null}
                   </tr>
                 </thead>
                 <tbody>
                   {rows.map((row) => (
-                    <DelegateRow key={row.employee_id} row={row} onEdit={openForm} onRevoke={setRevoking} />
+                    <DelegateRow
+                      key={row.employee_id}
+                      row={row}
+                      onEdit={canManage ? openForm : undefined}
+                      onRevoke={canManage ? setRevoking : undefined}
+                    />
                   ))}
                 </tbody>
               </table>
@@ -108,7 +117,7 @@ export function ScheduleDelegatesPage() {
         </CardContent>
       </Card>
 
-      <DelegateFormDialog open={formOpen} delegate={editing} onOpenChange={setFormOpen} />
+      {canManage ? <DelegateFormDialog open={formOpen} delegate={editing} onOpenChange={setFormOpen} /> : null}
       <ConfirmDialog
         open={revoking !== null}
         onOpenChange={(open) => !open && setRevoking(null)}
@@ -132,8 +141,9 @@ function DelegateRow({
   onRevoke,
 }: {
   row: ScheduleDelegate;
-  onEdit: (row: ScheduleDelegate) => void;
-  onRevoke: (row: ScheduleDelegate) => void;
+  /** Tanpa keduanya (hanya baca) kolom Aksi tidak ditampilkan. */
+  onEdit?: (row: ScheduleDelegate) => void;
+  onRevoke?: (row: ScheduleDelegate) => void;
 }) {
   const shown = row.branches.slice(0, MAX_CHIPS);
   const more = row.branches.length - shown.length;
@@ -175,16 +185,18 @@ function DelegateRow({
         {row.updated_at ? <p className="whitespace-nowrap">{formatDateTime(row.updated_at)}</p> : null}
         {row.updated_by_name ? <p className="text-gray-400">{row.updated_by_name}</p> : null}
       </td>
-      <td className="p-3">
-        <div className="flex justify-end gap-2">
-          <Button size="sm" variant="outline" onClick={() => onEdit(row)}>
-            Ubah
-          </Button>
-          <Button size="sm" variant="outline" onClick={() => onRevoke(row)}>
-            Cabut
-          </Button>
-        </div>
-      </td>
+      {onEdit && onRevoke ? (
+        <td className="p-3">
+          <div className="flex justify-end gap-2">
+            <Button size="sm" variant="outline" onClick={() => onEdit(row)}>
+              Ubah
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => onRevoke(row)}>
+              Cabut
+            </Button>
+          </div>
+        </td>
+      ) : null}
     </tr>
   );
 }

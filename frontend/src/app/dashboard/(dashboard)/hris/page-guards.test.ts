@@ -12,6 +12,8 @@ vi.mock("@/features/hris/live-monitoring", () => ({ LiveMonitorDetailPage: () =>
 vi.mock("@/features/hris/dashboard", () => ({ RecruitmentDashboardPage: () => null }));
 vi.mock("@/features/hris/kpi", () => ({ KpiConfigPage: () => null, KpiScorecardPage: () => null }));
 vi.mock("@/features/hris/schedule-delegates", () => ({ ScheduleDelegatesPage: () => null }));
+const userHasIamAction = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/iam/has-menu", () => ({ userHasIamAction }));
 
 beforeEach(() => requireIamPage.mockReset());
 
@@ -53,12 +55,14 @@ describe("page guards", () => {
   });
 
   it("Pengatur jadwal toko (EPIC-071) memakai penjaga yang sama dengan halaman Penempatan", async () => {
+    requireIamPage.mockResolvedValue({ id: "u1", role: "hrd" });
+    userHasIamAction.mockResolvedValue(false);
     const { default: Page } = await import("./placements/pengatur/page");
-    await Page();
-    expect(requireIamPage).toHaveBeenCalledWith([
-      ...IAM.hrisPlacements,
-      ...IAM.hrisKepegawaian,
-      ...IAM.settingsUsers,
-    ]);
+    const page = await Page();
+    const managers = [...IAM.hrisPlacements, ...IAM.hrisKepegawaian, ...IAM.settingsUsers];
+    expect(requireIamPage).toHaveBeenCalledWith(managers);
+    // Tambah/Ubah/Cabut hanya untuk aksi update (sama dengan PUT/DELETE Go).
+    expect(userHasIamAction).toHaveBeenCalledWith("u1", "hrd", managers, "update");
+    expect(page.props).toEqual({ canManage: false });
   });
 });
