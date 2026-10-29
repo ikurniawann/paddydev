@@ -1,7 +1,7 @@
 # EPIC-071: Pengatur Jadwal Toko — Jabatan Tertentu Mengatur Jadwal & Penempatan (`MODULE-HRIS`)
 
-status: review
-environment: dev
+status: ready-for-qa
+environment: production
 retries: 0
 
 ## Goal
@@ -112,3 +112,20 @@ Lihat rencana `docs/superpowers/plans/2026-10-29-pengatur-jadwal-toko.md`.
   - `go vet ./internal/modules/hris/...` bersih; `go test ./internal/modules/hris/... -count=1` hijau;
   - `make -C backend generate` tanpa diff;
   - frontend `tsc` + `lint` bersih, `pnpm test` 861 file / 6256 tes lulus (sebelum fix wave: 860 file / 6235 tes).
+- 2026-10-29: **PR #46 merged** (`fb055275`), CI 4/4 hijau. Deploy staging 09:06 WIB (backup `~/Desktop/paddydev-backups/staging-db-before-epic071-20261029-090625.dump`).
+- 2026-10-29: **QA staging** 7/7 skenario lulus. Dua perbaikan dari cek di HP:
+  - PR #47 (`7e3af267`): pilih banyak kotak lewat sentuhan, legenda kode shift bisa dilipat.
+  - PR #48 (`f270c919`): tombol "Kode shift" tidak terlipat di HP.
+  - Staging akhir `local-20261029-100312` = main `f270c919`. Laporan + screenshot: `.share/qa071/`.
+- 2026-10-29 12:38: **Uji coba di staging**: 10 pengatur ditunjuk (actor audit 'Sistem (uji staging EPIC-071)'). Toko disalin dari saran production, minus ODOO-TWLK yang tidak ada di staging. Backup: `staging-db-before-epic071-delegates-20261029-123822.dump`.
+- 2026-10-29: **Video tutorial koordinator** (laptop 1080p + HP 780×1688, ±2,5 menit, teks di layar) di `.share/video071/`. Direkam di staging dengan data contoh; data contoh sudah dihapus, tersisa 34 baris audit (append-only).
+- 2026-10-29: **Deploy production** 23:29–23:37 WIB bersama EPIC-070, atas izin eksplisit user.
+  - Image `local-20261029-233049` = main `f270c919`. Migrasi `20261029120000_schedule_delegates.sql` diterapkan; verify 0 beda; 2 tabel + menu `ess.store-schedule` ada.
+  - Backup, log, dan rollback: lihat Automation Log EPIC-070 (stamp `20261029-232927`).
+- 2026-10-29 23:37: **Penunjukan 21 pengatur di production** dari Excel HR "Data Pemberian Akses untuk Input Jadwal Kerja Shift (2)". Baris PPVJ kedua ternyata Puspa lagi (duplikat), jadi tidak ada orang kedua.
+  - Semua `can_place = true`; 55 tautan toko; 21 baris audit `schedule_delegate.set` (actor 'Ops (Claude Code atas persetujuan user)').
+  - Toko = saran sistem (penempatan berjalan orang itu + bawahannya) yang dibaca read-only malam itu. Uji kering (ROLLBACK) dulu, baru COMMIT.
+  - Farhan: TWLK masuk, PPLN tidak (penempatan PPLN kini di bawah Asriani).
+  - **Catatan untuk HR:** Dhimas (ODOO-WAREHOUSE-PADDY) dan Siti Asyah (MIZU-BANDUNG) tidak punya bawahan. Wilayah mereka = seluruh karyawan di toko itu (R3: toko ATAU bawahan). HR dapat mempersempit atau mencabut di Penempatan → Pengatur jadwal toko.
+  - Rollback penunjukan saja: cabut di aplikasi, atau `DELETE FROM hris.schedule_delegates` (toko ikut terhapus lewat cascade).
+  - Status `ready-for-qa`: koordinator/HR mencoba menu Jadwal Toko di production.

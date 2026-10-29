@@ -1,7 +1,7 @@
 # EPIC-070: Penempatan & Jadwal Shift — Massal, Manual, Lebih Jelas (`MODULE-HRIS`)
 
-status: deploying-dev
-environment: dev
+status: ready-for-qa
+environment: production
 retries: 0
 
 ## Goal
@@ -117,3 +117,9 @@ Lihat rencana `docs/superpowers/plans/2026-10-29-penempatan-jadwal-massal.md`.
     - template Excel mengisi kotak kosong dengan DEF, sehingga unggah tanpa diubah menulis DEF (perilaku EPIC-056);
     - pesan kode tak dikenal di simpan per kotak masih menyebut "sheet Kode Shift" (hanya lewat API langsung).
 - 2026-10-29: **Production belum di-deploy.** Pukul 03.23 WIB (0 absen 30 menit terakhir) langkah backup + kirim source ke VPS ditolak oleh pengaman izin otomatis Claude Code (kategori Production Deploy). Menunggu user menjalankan atau mengizinkan langkah production.
+- 2026-10-29: **Deploy production** (paddyadorable.biz.id) 23:29–23:37 WIB, atas izin eksplisit user ("Ya, 21 orang", jendela 23.30). Dibawa bersama EPIC-071.
+  - Image `local-20261029-233049` = main `f270c919`. Satu migrasi (milik EPIC-071); verify 10723 objek, 0 hilang/beda.
+  - Absensi 30 menit sebelum deploy: 0. Container sehat tanpa restart, 0 error/panic di log API, `/login` 200, route baru tanpa login 401.
+  - Backup VPS: `~/backups/prod-db-before-epic070-071-20261029-232927.dump`. Log: `~/backups/deploy-prod-epic070-071-20261029-232927.log`.
+  - Rollback: deploy ulang dari `~/paddydev-src.before-epic070-071-20261029-232927` (= `c4c75a27`, image lama `local-20261027-211744`).
+  - Status `ready-for-qa`: QA HR di production. Tidak boleh ada sesi uji sementara di production.
