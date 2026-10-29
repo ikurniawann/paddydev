@@ -258,3 +258,14 @@ it("mode toko tanpa hak penempatan: Shift kosong tanpa arahan ke Penempatan", as
   expect(await screen.findByText(/Belum ada karyawan Shift yang ditempatkan di toko ini\./)).toBeTruthy();
   expect(screen.queryByRole("button", { name: "Tempatkan karyawan di tab Penempatan" })).toBeNull();
 });
+
+it("hak penempatan dicabut saat tab Penempatan terbuka → kembali ke tab Jadwal", async () => {
+  const client = renderPage(DELEGATE, true);
+  fireEvent.click(await screen.findByRole("tab", { name: "Penempatan" }));
+  expect(await screen.findByText("Ana")).toBeTruthy();
+  accessApi.fetchScheduleAccess.mockResolvedValue({ ...DELEGATE, can_place: false });
+  await act(() => client.invalidateQueries({ queryKey: ["hris", "schedule-access"] }));
+  await waitFor(() => expect(screen.queryByRole("tab", { name: "Penempatan" })).toBeNull());
+  expect(screen.getByRole("tab", { name: "Jadwal" }).getAttribute("aria-selected")).toBe("true");
+  expect(await screen.findByLabelText("Pilih Ana")).toBeTruthy();
+});

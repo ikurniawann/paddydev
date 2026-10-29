@@ -52,6 +52,8 @@ export function EssJadwalTokoPage() {
   const data = access.data;
   // Kartu bukan pengatur sampai akses yang dimuat sesudah penolakan berkata lain (gagal muat = tetap kartu).
   const lost = lostAt !== null && access.dataUpdatedAt <= lostAt;
+  // Hak penempatan dicabut saat tab Penempatan terbuka: kembali ke tab Jadwal.
+  const shownTab: Tab = data?.can_place ? tab : "jadwal";
   return (
     <div className="space-y-5">
       <div>
@@ -86,7 +88,7 @@ export function EssJadwalTokoPage() {
         </Card>
       ) : (
         <StoreForbiddenProvider value={onForbidden}>
-          <Tabs value={tab} onValueChange={(value) => setTab(value as Tab)}>
+          <Tabs value={shownTab} onValueChange={(value) => setTab(value as Tab)}>
             <TabsList>
               <TabsTrigger value="jadwal">Jadwal</TabsTrigger>
               {data.can_place ? <TabsTrigger value="penempatan">Penempatan</TabsTrigger> : null}
