@@ -149,6 +149,7 @@ func (h handlers) routes() []module.Route {
 		// Keputusan HR yang boleh diambil akun (EPIC-067 R14).
 		r("GET /api/hris/me/approve-access", h.withActor(h.myApproveAccess)),
 		r("GET /api/hris/me/leave-balance-access", h.withActor(h.myLeaveBalanceAccess)),
+		r("GET /api/hris/me/schedule-access", h.withActor(h.myScheduleAccess)),
 
 		// announcements (cover upload and files: fileRoutes)
 		r("GET /api/hris/announcements", h.withMenu(kepegawaian, h.listAnnouncements)),

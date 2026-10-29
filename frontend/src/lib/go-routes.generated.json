@@ -2472,6 +2472,11 @@
   {
     "module": "hris",
     "method": "GET",
+    "path": "/api/hris/me/schedule-access"
+  },
+  {
+    "module": "hris",
+    "method": "GET",
     "path": "/api/hris/me/team"
   },
   {
