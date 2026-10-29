@@ -317,6 +317,15 @@ describe("ScheduleGrid", () => {
       expect(screen.getByText(/Pagi 08:00–16:00/)).toBeTruthy();
     });
 
+    it("petunjuk: teks Ctrl/Shift hanya di layar lebar, petunjuk ketuk hanya di HP", () => {
+      renderGrid();
+      const desktop = screen.getByText(/Tahan Ctrl \(Mac: Cmd\)/);
+      expect(desktop.className).toContain("hidden");
+      expect(desktop.className).toContain("sm:inline");
+      const touch = screen.getByText("Ketuk Pilih beberapa kotak untuk mengisi banyak hari sekaligus.");
+      expect(touch.className).toContain("sm:hidden");
+    });
+
     it("kolom nama: min-w-32 di HP, sm:min-w-56 di layar lebar; nama lengkap di title", () => {
       renderGrid();
       const th = screen.getByText("Karyawan").closest("th")!;

@@ -220,7 +220,9 @@ export function ScheduleGrid({ grid, branchId, today, initialChecked, loading = 
 
       <p className="flex items-center gap-1.5 text-xs text-gray-500">
         {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-label="Memuat jadwal" /> : null}
-        Klik kotak untuk mengubah satu hari. Tahan Ctrl (Mac: Cmd) untuk memilih beberapa kotak, atau Shift untuk memilih rentang dalam satu baris.
+        <span className="hidden sm:inline">
+          Klik kotak untuk mengubah satu hari. Tahan Ctrl (Mac: Cmd) untuk memilih beberapa kotak, atau Shift untuk memilih rentang dalam satu baris.
+        </span>
       </p>
       <p className="text-xs text-gray-500 sm:hidden">Ketuk Pilih beberapa kotak untuk mengisi banyak hari sekaligus.</p>
       {missing.length > 0 ? (
