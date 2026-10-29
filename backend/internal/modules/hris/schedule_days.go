@@ -753,8 +753,11 @@ func scheduleDiff(ctx context.Context, q database.Querier, c domain.ScheduleUplo
 
 /* ── HTTP ────────────────────────────────────────────────────────────── */
 
-func (h handlers) getSchedules(w http.ResponseWriter, r *http.Request, _ *auth.User) error {
+func (h handlers) getSchedules(w http.ResponseWriter, r *http.Request, _ *auth.User, sc storeScope) error {
 	q := r.URL.Query()
+	if !sc.AllowsBranch(q.Get("branch_id")) {
+		return httpx.Forbidden(errOutsideScope)
+	}
 	data, err := h.svc.ScheduleGrid(r.Context(), q.Get("branch_id"), q.Get("from"), q.Get("to"))
 	if err != nil {
 		return err
@@ -772,8 +775,11 @@ func writeFile(w http.ResponseWriter, f *exportFile) error {
 	return err
 }
 
-func (h handlers) getScheduleTemplate(w http.ResponseWriter, r *http.Request, _ *auth.User) error {
+func (h handlers) getScheduleTemplate(w http.ResponseWriter, r *http.Request, _ *auth.User, sc storeScope) error {
 	q := r.URL.Query()
+	if !sc.AllowsBranch(q.Get("branch_id")) {
+		return httpx.Forbidden(errOutsideScope)
+	}
 	f, err := h.svc.ScheduleTemplate(r.Context(), q.Get("branch_id"), q.Get("from"), q.Get("to"))
 	if err != nil {
 		return err
@@ -781,7 +787,7 @@ func (h handlers) getScheduleTemplate(w http.ResponseWriter, r *http.Request, _ 
 	return writeFile(w, f)
 }
 
-func (h handlers) importSchedules(w http.ResponseWriter, r *http.Request, u *auth.User) error {
+func (h handlers) importSchedules(w http.ResponseWriter, r *http.Request, u *auth.User, sc storeScope) error {
 	if err := r.ParseMultipartForm(16 << 20); err != nil {
 		return httpx.BadRequest("Unggah file .xlsx dari template Jadwal Kerja")
 	}
@@ -794,7 +800,10 @@ func (h handlers) importSchedules(w http.ResponseWriter, r *http.Request, u *aut
 	if err != nil {
 		return err
 	}
-	g, err := h.clearGuardFor(r, u, strings.TrimSpace(r.FormValue("reason")))
+	if !sc.AllowsBranch(r.FormValue("branch_id")) {
+		return httpx.Forbidden(errOutsideScope)
+	}
+	g, err := h.clearGuardScoped(r, u, strings.TrimSpace(r.FormValue("reason")), sc)
 	if err != nil {
 		return err
 	}
@@ -1059,7 +1068,7 @@ func cellsDiff(c domain.ScheduleUploadContext, names map[string]string, res doma
 	return sum, changes
 }
 
-func (h handlers) saveScheduleCells(w http.ResponseWriter, r *http.Request, u *auth.User) error {
+func (h handlers) saveScheduleCells(w http.ResponseWriter, r *http.Request, u *auth.User, sc storeScope) error {
 	f, err := readForm(r, "")
 	if err != nil {
 		return err
@@ -1083,7 +1092,10 @@ func (h handlers) saveScheduleCells(w http.ResponseWriter, r *http.Request, u *a
 	if err := formErr(f, ""); err != nil {
 		return err
 	}
-	g, err := h.clearGuardFor(r, u, strings.TrimSpace(strOr(reason)))
+	if !sc.AllowsBranch(*branch) {
+		return httpx.Forbidden(errOutsideScope)
+	}
+	g, err := h.clearGuardScoped(r, u, strings.TrimSpace(strOr(reason)), sc)
 	if err != nil {
 		return err
 	}

@@ -47,6 +47,50 @@ func (s storeScope) AllowsBranch(id string) bool {
 	return id != "" && slices.Contains(s.Delegate.BranchIDs, id)
 }
 
+// errOutsideScope is the 403 for a store outside the delegate's area (R4).
+const errOutsideScope = "Toko di luar wilayah Anda"
+
+// errNoPlaceRight is the 403 for a delegate without the placement right.
+const errNoPlaceRight = "Anda tidak punya hak mengatur penempatan"
+
+// withScheduleScope guards a store-schedule route for HR and for appointed
+// delegates (EPIC-071). HR is decided exactly as the route did before:
+// HasMenuPrefix when action is "", HasMenuAction(action) otherwise. Anyone
+// else must be an active delegate (loadDelegateAccess), else 403 with the
+// usual "Insufficient permissions"; needPlace additionally requires
+// can_place. fn receives the scope and must check sc.AllowsBranch itself.
+func (h handlers) withScheduleScope(action string, prefixes []string, needPlace bool, fn func(w http.ResponseWriter, r *http.Request, u *auth.User, sc storeScope) error) http.Handler {
+	return handle(func(w http.ResponseWriter, r *http.Request) error {
+		u, err := h.auth.RequireUser(r)
+		if err != nil {
+			return err
+		}
+		var isHR bool
+		if action == "" {
+			isHR, err = h.auth.HasMenuPrefix(r.Context(), u, prefixes...)
+		} else {
+			isHR, err = h.auth.HasMenuAction(r.Context(), u, action, prefixes...)
+		}
+		if err != nil {
+			return err
+		}
+		if isHR {
+			return fn(w, r, u, storeScope{})
+		}
+		d, err := loadDelegateAccess(r.Context(), h.svc.repo.querier(), u.ID)
+		if err != nil {
+			return err
+		}
+		if d == nil {
+			return httpx.Forbidden("Insufficient permissions")
+		}
+		if needPlace && !d.CanPlace {
+			return httpx.Forbidden(errNoPlaceRight)
+		}
+		return fn(w, r, u, storeScope{Delegate: d})
+	})
+}
+
 // loadDelegateAccess returns the schedule-delegate access of the account
 // userID, or nil when it is not an active delegate: no appointment, the
 // employee is inactive, or none of the appointed stores is active. When the
