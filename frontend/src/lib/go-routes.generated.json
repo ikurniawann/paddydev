@@ -2707,6 +2707,26 @@
   {
     "module": "hris",
     "method": "GET",
+    "path": "/api/hris/schedule-delegates"
+  },
+  {
+    "module": "hris",
+    "method": "GET",
+    "path": "/api/hris/schedule-delegates/suggest"
+  },
+  {
+    "module": "hris",
+    "method": "DELETE",
+    "path": "/api/hris/schedule-delegates/{employee_id}"
+  },
+  {
+    "module": "hris",
+    "method": "PUT",
+    "path": "/api/hris/schedule-delegates/{employee_id}"
+  },
+  {
+    "module": "hris",
+    "method": "GET",
     "path": "/api/hris/schedules"
   },
   {

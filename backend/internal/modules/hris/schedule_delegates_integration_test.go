@@ -220,3 +220,48 @@ func TestDelegateSubtreeCycle(t *testing.T) {
 		t.Fatalf("outside = %v, want none", out)
 	}
 }
+
+// A reporting_to chain gives every employee one boss, so a cycle that does
+// not pass through the delegate can never be reached from them: walking down
+// from P only visits people whose boss chain ends at P. The cycle tests above
+// (P's own boss is below P) are therefore the only reachable shape; this one
+// checks the depth cap on a chain that is deeper than 10 levels, which is
+// what keeps a long or looping hierarchy bounded.
+func TestDelegateSubtreeDepthCap(t *testing.T) {
+	h := newHarness(t)
+	_, p := h.staff("pos", nil, true, emp{name: "Del Dalam P"})
+	h.delegate(p, true, h.branch("Del Dalam A"))
+	chain := make([]string, 12)
+	boss := p
+	for i := range chain {
+		chain[i] = h.employee(emp{name: "Del Dalam " + string(rune('A'+i)), boss: &boss})
+		boss = chain[i]
+	}
+	access := &delegateAccess{EmployeeID: p}
+	out, err := delegateOutside(context.Background(), h.tx, access, "2026-10-05", chain)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := chain[10:]; !slices.Equal(out, want) {
+		t.Fatalf("outside = %v, want levels 11-12 %v", out, want)
+	}
+}
+
+func TestLoadDelegateAccessSeveralEmployeesOneUser(t *testing.T) {
+	h := newHarness(t)
+	s, first := h.staff("pos", nil, true, emp{name: "Del Ganda 1"})
+	second := h.employee(emp{name: "Del Ganda 2", user: &s.UserID})
+	br := h.branch("Del Ganda Toko")
+	h.delegate(first, true, br)
+	h.delegate(second, false, br)
+	want := first
+	if second < first {
+		want = second
+	}
+	for i := 0; i < 3; i++ {
+		got, err := loadDelegateAccess(context.Background(), h.tx, s.UserID)
+		if err != nil || got == nil || got.EmployeeID != want {
+			t.Fatalf("got %+v, %v; want employee %s", got, err, want)
+		}
+	}
+}

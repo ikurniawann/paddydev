@@ -133,7 +133,13 @@ describe("goBackendTarget", () => {
     );
   });
 
-  it.each([["GET", "/api/hris/me/schedule-access"]])(
+  it.each([
+    ["GET", "/api/hris/me/schedule-access"],
+    ["GET", "/api/hris/schedule-delegates"],
+    ["GET", "/api/hris/schedule-delegates/suggest"],
+    ["PUT", "/api/hris/schedule-delegates/00000000-0000-4000-8000-000000000001"],
+    ["DELETE", "/api/hris/schedule-delegates/00000000-0000-4000-8000-000000000001"],
+  ])(
     "forwards the EPIC-071 endpoint %s %s to Go",
     (method, pathname) => {
       expect(goBackendTarget(pathname, method, { env })).toBe(
@@ -236,7 +242,7 @@ describe("Go route manifest", () => {
       // Alokasi saldo cuti (EPIC-068): daftar (tanpa route Next), template/impor Excel, pengaturan sisa bawaan, hak aksi: hanya di Go.
       "/api/hris/leave-balances", "/api/hris/leave-settings", "/api/hris/me/leave-balance-access",
       // Pengatur jadwal toko (EPIC-071): hanya di Go, tanpa fallback Next.
-      "/api/hris/me/schedule-access"];
+      "/api/hris/me/schedule-access", "/api/hris/schedule-delegates"];
     const goNative = (p: string) =>
       goNativePrefixes.some((n) => p === n || p.startsWith(`${n}/`));
     const missing = switched

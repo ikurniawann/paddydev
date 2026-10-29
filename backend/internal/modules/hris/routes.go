@@ -150,6 +150,11 @@ func (h handlers) routes() []module.Route {
 		r("GET /api/hris/me/approve-access", h.withActor(h.myApproveAccess)),
 		r("GET /api/hris/me/leave-balance-access", h.withActor(h.myLeaveBalanceAccess)),
 		r("GET /api/hris/me/schedule-access", h.withActor(h.myScheduleAccess)),
+		// HR appoints store schedule delegates (EPIC-071 R9).
+		r("GET /api/hris/schedule-delegates", h.withMenu(placementManagers, h.listScheduleDelegates)),
+		r("GET /api/hris/schedule-delegates/suggest", h.withMenu(placementManagers, h.suggestDelegateBranches)),
+		r("PUT /api/hris/schedule-delegates/{employee_id}", h.withAction("update", placementManagers, h.setScheduleDelegate)),
+		r("DELETE /api/hris/schedule-delegates/{employee_id}", h.withAction("update", placementManagers, h.revokeScheduleDelegate)),
 
 		// announcements (cover upload and files: fileRoutes)
 		r("GET /api/hris/announcements", h.withMenu(kepegawaian, h.listAnnouncements)),
