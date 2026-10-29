@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PlacementSearchRow, StoreBranch } from "../types";
+import { toast } from "sonner";
 import { PlacementsPage } from "./placements-page";
 
 const api = vi.hoisted(() => ({
@@ -351,6 +352,18 @@ describe("PlacementsPage", () => {
       await screen.findByText("Ani");
       await waitFor(() => expect(accessApi.fetchScheduleAccess).toHaveBeenCalled());
       expect(screen.queryByLabelText("Pilih Ani")).toBeNull();
+    });
+
+    it("lebih dari 50 karyawan: pesan menyebut tab Jadwal, bukan halaman Jadwal Kerja", async () => {
+      api.fetchPlacementIds.mockResolvedValue({ ids: Array.from({ length: 60 }, (_, i) => `id${i}`), total: 60, truncated: false });
+      renderStore();
+      await screen.findByText("Ani");
+      fireEvent.click(await screen.findByLabelText("Pilih Ani"));
+      fireEvent.click(screen.getByRole("button", { name: "Pilih semua hasil filter (60)" }));
+      await screen.findByText("60 karyawan dipilih");
+      fireEvent.click(screen.getByRole("button", { name: "Atur jadwal" }));
+      expect(toast.info).toHaveBeenCalledWith("Tab Jadwal dibuka untuk 50 karyawan pertama yang dipilih");
+      expect(onOpenSchedule.mock.calls.at(-1)?.[1]).toHaveLength(50);
     });
 
     it("dialog pindah hanya menawarkan toko wilayah", async () => {

@@ -161,7 +161,11 @@ export function PlacementsPage({
       if (n > best) [branch, best] = [id, n];
     }
     if (ids.length > SCHEDULE_LINK_LIMIT) {
-      toast.info(`Jadwal Kerja dibuka untuk ${SCHEDULE_LINK_LIMIT} karyawan pertama yang dipilih`);
+      toast.info(
+        store
+          ? `Tab Jadwal dibuka untuk ${SCHEDULE_LINK_LIMIT} karyawan pertama yang dipilih`
+          : `Jadwal Kerja dibuka untuk ${SCHEDULE_LINK_LIMIT} karyawan pertama yang dipilih`
+      );
     }
     if (store) {
       onOpenSchedule?.(branch, ids.slice(0, SCHEDULE_LINK_LIMIT));

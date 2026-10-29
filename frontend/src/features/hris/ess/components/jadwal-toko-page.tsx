@@ -47,7 +47,8 @@ export function EssJadwalTokoPage() {
         </p>
       </div>
 
-      {access.isError ? (
+      {/* Gagal muat ulang di latar tidak boleh mengganti halaman yang sedang dipakai (suntingan grid hilang). */}
+      {!data && access.isError ? (
         <Card>
           <CardContent className="p-6 text-sm text-red-600">
             {access.error instanceof Error && access.error.message ? access.error.message : "Gagal memuat akses Jadwal Toko"}

@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { addDays } from "@/features/hris/schedules/schedule-range";
 import type { ScheduleGrid } from "@/features/hris/schedules/types";
@@ -106,6 +106,7 @@ function renderPage(access: ScheduleAccess) {
       <EssJadwalTokoPage />
     </QueryClientProvider>
   );
+  return client;
 }
 
 beforeEach(() => {
@@ -152,4 +153,27 @@ it("boleh atur penempatan: tab Penempatan tanpa filter departemen, Atur jadwal k
   await waitFor(() => expect((screen.getByLabelText("Pilih Budi") as HTMLInputElement).checked).toBe(true));
   expect((screen.getByLabelText("Pilih Ana") as HTMLInputElement).checked).toBe(false);
   expect(screen.getByRole("tab", { name: "Jadwal" }).getAttribute("aria-selected")).toBe("true");
+});
+
+it("muat ulang akses yang gagal di latar tidak mengganti halaman yang sedang dipakai", async () => {
+  const client = renderPage({ is_delegate: true, can_place: true, branches: [STORE] });
+  await screen.findByLabelText("Pilih Ana");
+  accessApi.fetchScheduleAccess.mockRejectedValue(new Error("Jaringan terputus"));
+  await act(() => client.refetchQueries({ queryKey: ["hris", "schedule-access"] }));
+  await waitFor(() => expect(client.getQueryState(["hris", "schedule-access"])?.status).toBe("error"));
+  expect(screen.getByRole("tab", { name: "Jadwal" })).toBeTruthy();
+  expect(screen.getByRole("tab", { name: "Penempatan" })).toBeTruthy();
+  expect(screen.getByLabelText("Pilih Ana")).toBeTruthy();
+  expect(screen.queryByText("Jaringan terputus")).toBeNull();
+});
+
+it("gagal memuat akses tanpa data → kartu galat", async () => {
+  accessApi.fetchScheduleAccess.mockRejectedValue(new Error("Jaringan terputus"));
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(
+    <QueryClientProvider client={client}>
+      <EssJadwalTokoPage />
+    </QueryClientProvider>
+  );
+  expect(await screen.findByText("Jaringan terputus")).toBeTruthy();
 });

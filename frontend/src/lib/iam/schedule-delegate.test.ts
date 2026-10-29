@@ -57,6 +57,9 @@ describe("isScheduleDelegate", () => {
     expect(sql).toContain("e.is_active");
     expect(sql).toContain("e.user_id = $1");
     expect(sql).toContain("b.is_active");
+    // Sama dengan Go loadDelegateAccess: satu karyawan (id terkecil), toko aktif dicek untuk dia saja.
+    expect(sql).toMatch(/ORDER BY e\.id\s+LIMIT 1/);
+    expect(sql.indexOf("LIMIT 1")).toBeLessThan(sql.indexOf("hris.schedule_delegate_branches"));
   });
 
   it("false bila tidak ada baris", async () => {

@@ -19,9 +19,11 @@ vi.mock("@/lib/dates", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/dates")>()),
   todayWib: () => "2026-11-04",
 }));
-vi.mock("@/features/hris/placements/queries", () => ({
-  useStoreBranches: () => ({ data: [{ id: "b1", name: "PVJ - Paddy PVJ", code: "PVJ" }] }),
+// vi.fn agar mode toko bisa memastikan daftar cabang HR tidak pernah diminta (enabled=false).
+const placementQueries = vi.hoisted(() => ({
+  useStoreBranches: vi.fn((enabled = true) => ({ data: enabled ? [{ id: "b1", name: "PVJ - Paddy PVJ", code: "PVJ" }] : undefined })),
 }));
+vi.mock("@/features/hris/placements/queries", () => placementQueries);
 vi.mock("@/components/ui/combobox", () => ({
   Combobox: ({ options, value, onChange, placeholder }: {
     options: { value: string; label: string }[];
@@ -185,4 +187,31 @@ it("mode toko: satu toko langsung terpilih", async () => {
   renderPage({ mode: "store" });
   await screen.findByLabelText("Pilih Ana");
   expect(api.fetchScheduleGrid).toHaveBeenCalledWith({ branch_id: "s1", from: "2026-11-02", to: "2026-11-08" });
+});
+
+/** Mode toko tidak boleh meminta daftar cabang HR (/api/hris/branches). */
+function expectNoHrBranchRequest(fetchSpy: { mock: { calls: Parameters<typeof fetch>[] } }) {
+  expect(placementQueries.useStoreBranches).toHaveBeenCalled();
+  expect(placementQueries.useStoreBranches.mock.calls.every(([enabled]) => enabled === false)).toBe(true);
+  const urls = fetchSpy.mock.calls.map(([input]) => (input instanceof Request ? input.url : String(input)));
+  expect(urls.some((u) => u.includes("/api/hris/branches"))).toBe(false);
+}
+
+it("mode toko: tidak meminta cabang HR, keadaan grid kosong tanpa tautan halaman HR", async () => {
+  placementQueries.useStoreBranches.mockClear();
+  const fetchSpy = vi.spyOn(globalThis, "fetch");
+  accessApi.fetchScheduleAccess.mockResolvedValue({
+    is_delegate: true,
+    can_place: false,
+    branches: [{ id: "s1", code: "KPO", name: "KPO - Paddy Kopo" }],
+  });
+  api.fetchScheduleGrid.mockImplementation(async (p: { from: string; to: string }) => ({
+    data: { ...grid(p.from, p.to), employees: [], non_shift_count: 1 },
+  }));
+  renderPage({ mode: "store" });
+  expect(await screen.findByText("Belum ada karyawan Shift yang ditempatkan di toko ini.")).toBeTruthy();
+  const hrefs = screen.queryAllByRole("link").map((a) => a.getAttribute("href") ?? "");
+  expect(hrefs.some((h) => h.startsWith("/dashboard/hris/placements") || h.startsWith("/dashboard/employees"))).toBe(false);
+  expectNoHrBranchRequest(fetchSpy);
+  fetchSpy.mockRestore();
 });
