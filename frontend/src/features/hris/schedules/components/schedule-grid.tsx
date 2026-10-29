@@ -34,6 +34,11 @@ function useWideScreen(): boolean {
     (onChange) => {
       if (typeof window.matchMedia !== "function") return () => {};
       const list = window.matchMedia(WIDE_QUERY);
+      // Safari <= 13 hanya punya addListener/removeListener; addEventListener di sana melempar error.
+      if (typeof list.addEventListener !== "function") {
+        list.addListener(onChange);
+        return () => list.removeListener(onChange);
+      }
       list.addEventListener("change", onChange);
       return () => list.removeEventListener("change", onChange);
     },
