@@ -1,7 +1,7 @@
 # EPIC-072: Detail Pengajuan untuk Penyetuju — Alasan & Dokumentasi Terlihat Sebelum Memutus (`MODULE-HRIS`)
 
 status: ready-for-qa
-environment: dev
+environment: production
 retries: 0
 
 ## Goal
@@ -59,4 +59,8 @@ Rencana: `docs/superpowers/plans/2026-10-30-detail-pengajuan-penyetuju.md`.
 - 2026-10-30: **Gerbang lokal:** `go vet` bersih; `go test -p 1` payroll/hris/desktop ok; frontend `tsc` 0, `lint` 0, `pnpm test` 865 file / 6286 tes lulus.
 - 2026-10-30 13:10: **Deploy staging** branch `783bd26b` (PR #52), image `local-20261030-131040`, tanpa migrasi (verify 0 beda). Backup `~/Desktop/paddydev-backups/staging-db-before-epic072-20261030-131033.dump`.
 - 2026-10-30: **QA staging** dengan data demo (akun `qa072-hr` peran hrd + `hris_manager`, karyawan fiktif "QA072 Atasan" dan "QA072 Pemohon…", 1 cuti sakit berlampiran, 1 lembur berdokumentasi PDF + gambar). Probe Playwright laptop 1280 + HP 390: ESS Persetujuan Tim (Detail cuti, Detail lembur gambar + PDF), HR Cuti, HR Lembur, 10/10 lulus. 0 elemen keluar dari dialog, alasan utuh tampil, lampiran 200 dan termuat, `employee_id=me` tidak memuat pengajuan orang lain, 0 error konsol, 0 respons API ≥ 400, log API 0 error. Data demo, sesi, dan file lampiran dihapus (0 tersisa). Keputusan (Setujui/Tolak) tidak diuji di staging agar tidak mengirim WhatsApp ke nomor fiktif; logika keputusan tidak berubah dan tercakup tes unit.
+- 2026-10-30: **PR #52 merged** (`28721f40`), CI 4/4 hijau.
+- 2026-10-30 13:26 WIB: **Deploy production** atas izin eksplisit user ("Merge + deploy prod"). Image `local-20261030-132645` = main `28721f40`, tanpa migrasi (565, verify 0 beda), container healthy, log API 0 error, absensi tetap masuk setelah deploy, bundle memuat dialog Detail dan `employee_id=me`.
+  - Backup `~/backups/prod-db-before-epic072-20261030-132458.dump`; source lama `~/paddydev-src.before-epic072-20261030-132458` (= `405eddc6`). Rollback: kembalikan folder source itu lalu jalankan `tools/deploy-paddydev.sh`.
+  - Status tetap `ready-for-qa`: HR/atasan mencoba tombol Detail di production (tanpa sesi uji di production).
 
