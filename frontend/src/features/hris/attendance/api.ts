@@ -46,6 +46,12 @@ export const fetchDailyRoster = (date?: string) =>
     buildListUrl("/api/hris/attendance/daily-roster", { date })
   ).then((res) => res.data);
 
+/** Roster harian tim atasan (EPIC-074): bentuk sama dengan roster HR, tanpa foto. */
+export const fetchTeamAttendance = (date?: string) =>
+  apiGet<{ data: DailyRosterData }>(
+    buildListUrl("/api/hris/me/team-attendance", { date })
+  ).then((res) => res.data);
+
 /** date kosong = kemarin (WIB), diputuskan server. */
 export const fetchAttendanceGapSummary = (date?: string) =>
   apiGet<{ data: AttendanceGapSummary }>(

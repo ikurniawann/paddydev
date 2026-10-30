@@ -15,7 +15,7 @@ import {
 import { CalendarOff, Clock, RefreshCw, Users } from "lucide-react";
 import { todayWib } from "@/lib/dates";
 import { shiftClock } from "@/lib/hris/attendance-calendar";
-import { useDailyRoster } from "../queries";
+import { useDailyRoster, useTeamAttendance } from "../queries";
 import type { RosterStatus } from "../types";
 import { RosterRow, STATUS_META } from "./roster-row";
 
@@ -25,9 +25,15 @@ import { RosterRow, STATUS_META } from "./roster-row";
  * jam mulai + toleransi tanpa clock-in ditonjolkan (is_overdue).
  */
 
-export function AttendanceMonitoringTab() {
+export function AttendanceMonitoringTab({ scope = "hr" }: {
+  /** "team" = Absensi Tim atasan di Area Karyawan (EPIC-074): tim sendiri, tanpa foto. */
+  scope?: "hr" | "team";
+} = {}) {
+  const team = scope === "team";
   const [date, setDate] = useState(() => todayWib());
-  const rosterQuery = useDailyRoster(date);
+  const hrQuery = useDailyRoster(date, !team);
+  const teamQuery = useTeamAttendance(date, team);
+  const rosterQuery = team ? teamQuery : hrQuery;
   const data = rosterQuery.data ?? null;
   const loading = rosterQuery.isLoading || rosterQuery.isFetching;
   const error = rosterQuery.error ? rosterQuery.error.message || "Gagal memuat roster" : null;
@@ -187,6 +193,13 @@ export function AttendanceMonitoringTab() {
       ) : error ? (
         <Card>
           <CardContent className="py-12 text-center text-red-500 text-sm">{error}</CardContent>
+        </Card>
+      ) : team && data && data.employees.length === 0 ? (
+        <Card>
+          <CardContent className="py-12 text-center text-gray-400">
+            <Users className="w-8 h-8 mx-auto mb-2 text-gray-300" />
+            Belum ada anggota tim.
+          </CardContent>
         </Card>
       ) : groups.length === 0 ? (
         <Card>

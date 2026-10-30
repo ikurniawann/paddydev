@@ -62,6 +62,9 @@ export interface RosterEmployee {
   is_overdue: boolean;
   attendance: RosterAttendance | null;
   leave: { id: string; leave_type: string | null } | null;
+  /** Absensi Tim (EPIC-074): atasan langsung anggota & apakah melapor langsung ke penonton. */
+  reporting_to_name?: string;
+  direct?: boolean;
 }
 
 export interface DailyRosterData {
