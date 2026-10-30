@@ -1,4 +1,5 @@
 import { apiGet, apiPost, buildListUrl } from "@/lib/api-client";
+import { privateFileHref } from "@/lib/hris/attachments";
 import type {
   AttendanceGaps,
   AttendanceRequest,
@@ -33,4 +34,4 @@ export const cancelAttendanceRequest = (id: string) =>
   apiPost<{ data: AttendanceRequest; message?: string }>(`${BASE}/${id}/cancel`, {});
 
 /** URL foto bukti (dibaca pemohon dan HR); path dari server. */
-export const attendanceRequestAttachmentUrl = (path: string) => `${BASE}/attachment/${path}`;
+export const attendanceRequestAttachmentUrl = (path: string) => privateFileHref(`${BASE}/attachment`, path);
