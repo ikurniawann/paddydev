@@ -3,6 +3,8 @@ package hris
 import (
 	"os"
 	"testing"
+
+	"nuhabit/backend/internal/platform/testutil"
 )
 
 const teamAttendanceURL = "/api/hris/me/team-attendance"
@@ -82,16 +84,68 @@ func TestTeamAttendanceCycleAndSelf(t *testing.T) {
 	}
 }
 
-// An account without an employee gets an empty team; a bad date is 400.
+// Accounts with no team (unlinked, or linked without subordinates) get an
+// empty envelope, never the whole company (review #1: an empty id list must
+// not turn into "every employee"); a bad date is 400.
 func TestTeamAttendanceUnlinked(t *testing.T) {
 	h := newHarness(t)
+	outsider := h.employee(emp{name: "Karyawan Lain"})
 	admin, _ := h.staff("pos", nil, false)
-	c := h.do(&admin, "GET", teamAttendanceURL, nil)
-	expect(t, c, 200, "")
-	if list, ok := c.data()["employees"].([]any); !ok || len(list) != 0 {
-		t.Fatalf("unlinked = %s", c.raw)
+	plain, _ := h.staff("pos", nil, true, emp{name: "Tanpa Bawahan"})
+	for _, who := range []*struct {
+		name string
+		s    *testutil.Staff
+	}{{"unlinked", &admin}, {"no reports", &plain}} {
+		c := h.do(who.s, "GET", teamAttendanceURL+"?date=2026-10-05", nil)
+		expect(t, c, 200, "")
+		d := c.data()
+		list, ok := d["employees"].([]any)
+		if !ok || len(list) != 0 {
+			t.Fatalf("%s: employees = %s", who.name, c.raw)
+		}
+		summary, _ := d["summary"].(map[string]any)
+		shifts, _ := d["shifts"].([]any)
+		if d["date"] != "2026-10-05" || summary == nil || summary["hadir"] != float64(0) || shifts == nil || len(shifts) != 0 {
+			t.Fatalf("%s: envelope = %s", who.name, c.raw)
+		}
 	}
+	_ = outsider
 	expect(t, h.do(&admin, "GET", teamAttendanceURL+"?date=salah", nil), 400, "Format tanggal tidak valid")
+}
+
+// Review #3: a manager whose employee record is inactive has no team, even
+// when opened by URL.
+func TestTeamAttendanceInactiveManager(t *testing.T) {
+	h := newHarness(t)
+	boss, bossID := h.staff("pos", nil, true, emp{name: "Atasan Nonaktif"})
+	h.employee(emp{name: "Bawahan Aktif", boss: &bossID})
+	h.exec(`UPDATE hris.employees SET is_active = false WHERE id = $1`, bossID)
+	c := h.do(&boss, "GET", teamAttendanceURL+"?date=2026-10-05", nil)
+	expect(t, c, 200, "")
+	if list, _ := c.data()["employees"].([]any); len(list) != 0 {
+		t.Fatalf("inactive manager team = %s", c.raw)
+	}
+}
+
+// Review #2: free-text attendance notes reach the manager only where the
+// UI shows them, a check-in outside the geofence.
+func TestTeamAttendanceNotes(t *testing.T) {
+	h := newHarness(t)
+	boss, bossID := h.staff("pos", nil, true, emp{name: "Atasan Catatan"})
+	inside := h.employee(emp{name: "Di Area", boss: &bossID})
+	outside := h.employee(emp{name: "Luar Area", boss: &bossID})
+	h.exec(`INSERT INTO hris.attendance (employee_id, date, clock_in, status, notes, clock_in_geofence)
+		VALUES ($1, '2026-10-05', '2026-10-05 08:00+07', 'present', 'catatan pribadi', 'valid'),
+		       ($2, '2026-10-05', '2026-10-05 08:00+07', 'present', 'di gudang belakang', 'invalid')`, inside, outside)
+	rows := teamRows(t, h.do(&boss, "GET", teamAttendanceURL+"?date=2026-10-05", nil))
+	in, _ := rows[inside]["attendance"].(map[string]any)
+	out, _ := rows[outside]["attendance"].(map[string]any)
+	if in == nil || in["notes"] != nil {
+		t.Errorf("inside notes = %v", in)
+	}
+	if out == nil || out["notes"] != "di gudang belakang" {
+		t.Errorf("outside notes = %v", out)
+	}
 }
 
 const teamAttendanceMenuMigration = "../../../database/migrations/deltas/20261030120000_ess_team_attendance_menu.sql"

@@ -20,11 +20,13 @@ type teamAttendee struct {
 
 // teamAttendees lists the manager's team (R1): every active employee below
 // them in the reporting_to chain to 10 levels (delegateSubtree), the
-// manager excluded; never nil.
+// manager excluded; never nil. An inactive manager has no team, even when
+// the page is opened by URL.
 func teamAttendees(ctx context.Context, q database.Querier, managerID string) ([]teamAttendee, error) {
 	rows, err := q.Query(ctx, delegateSubtree+` SELECT DISTINCT e.id::text, coalesce(m.full_name, ''), e.reporting_to = $1
 		FROM sub JOIN hris.employees e ON e.id = sub.id
-		LEFT JOIN hris.employees m ON m.id = e.reporting_to`, managerID)
+		LEFT JOIN hris.employees m ON m.id = e.reporting_to
+		WHERE EXISTS (SELECT 1 FROM hris.employees me WHERE me.id = $1 AND me.is_active)`, managerID)
 	if err != nil {
 		return nil, err
 	}
@@ -51,6 +53,12 @@ func (s *Service) TeamAttendance(ctx context.Context, managerID *string, date, t
 			return nil, err
 		}
 	}
+	if len(members) == 0 {
+		// Most accounts have no team: answer without the company-wide roster
+		// query (Beranda asks on every visit).
+		return emptyTeamRoster(date, today), nil
+	}
+	// Must stay non-nil: RosterRows reads nil as "every employee".
 	ids := make([]string, len(members))
 	byID := make(map[string]teamAttendee, len(members))
 	for i, m := range members {
@@ -69,9 +77,23 @@ func (s *Service) TeamAttendance(ctx context.Context, managerID *string, date, t
 		if att, ok := e.Get("attendance").(*Row); ok && att != nil {
 			att.Set("clock_in_photo_url", nil)
 			att.Set("clock_out_photo_url", nil)
+			// Free-text notes only where the page shows them: a check outside the area.
+			if att.Str("clock_in_geofence") != "invalid" && att.Str("clock_out_geofence") != "invalid" {
+				att.Set("notes", nil)
+			}
 		}
 	}
 	return out, nil
+}
+
+// emptyTeamRoster is the TeamAttendance envelope of an account without a team.
+func emptyTeamRoster(date, today string) *Row {
+	summary := newRow()
+	for _, k := range rosterOrder {
+		summary.Set(k, 0)
+	}
+	return obj("date", date, "day_of_week", domain.IsoDayOfWeek(date), "is_today", date == today, "summary", summary,
+		"shifts", []*Row{}, "holidays", []*Row{}, "employees", []*Row{})
 }
 
 // GET /api/hris/me/team-attendance?date=YYYY-MM-DD (default today WIB):
