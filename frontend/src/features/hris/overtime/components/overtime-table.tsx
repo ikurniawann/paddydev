@@ -29,9 +29,20 @@ interface OvertimeTableProps {
   /** Pemegang aksi `approve` daun Lembur (EPIC-067 R14): hanya mereka melihat Setujui/Tolak, Batalkan penugasan perusahaan, dan boleh mengganti jenis hari (server menetapkan day_type hanya untuk mereka, R11). */
   canDecide: boolean;
   onCorrect: (row: OvertimeRow) => void;
+  /** Karyawan akun ini: pengajuannya sendiri tidak diputus di sini (server juga menolak). */
+  myEmployeeId?: string | null;
 }
 
-export function OvertimeTable({ rows, loading, decidingId, onDecide, canCorrect, canDecide, onCorrect }: OvertimeTableProps) {
+export function OvertimeTable({
+  rows,
+  loading,
+  decidingId,
+  onDecide,
+  canCorrect,
+  canDecide,
+  onCorrect,
+  myEmployeeId,
+}: OvertimeTableProps) {
   return (
     <div className="overflow-x-auto rounded-xl border border-gray-200/70 bg-white shadow-sm">
       <table className="w-full text-sm">
@@ -70,6 +81,7 @@ export function OvertimeTable({ rows, loading, decidingId, onDecide, canCorrect,
                 canCorrect={canCorrect}
                 canDecide={canDecide}
                 onCorrect={onCorrect}
+                myEmployeeId={myEmployeeId}
               />
             ))
           )}
@@ -86,9 +98,10 @@ interface OvertimeTableRowProps {
   canCorrect: boolean;
   canDecide: boolean;
   onCorrect: (row: OvertimeRow) => void;
+  myEmployeeId?: string | null;
 }
 
-function OvertimeTableRow({ row, deciding, onDecide, canCorrect, canDecide, onCorrect }: OvertimeTableRowProps) {
+function OvertimeTableRow({ row, deciding, onDecide, canCorrect, canDecide, onCorrect, myEmployeeId }: OvertimeTableRowProps) {
   const badge = STATUS_BADGES[row.status] ?? STATUS_BADGES.pending;
   const pending = row.status === "pending";
   // Koreksi jam lembur karyawan yang punya atasan langsung (aktif) adalah hak atasan (EPIC-066);
@@ -100,7 +113,7 @@ function OvertimeTableRow({ row, deciding, onDecide, canCorrect, canDecide, onCo
     row.employee.reporting_to_active === true;
   const [dayType, setDayType] = useState<OvertimeDayType>(row.day_type ?? "regular");
   const [showDetail, setShowDetail] = useState(false);
-  const decidable = pending && row.source === "employee" && canDecide;
+  const decidable = pending && row.source === "employee" && canDecide && row.employee_id !== myEmployeeId;
   // Hanya kirim jenis bila pemegang approve mengubahnya di sini; jangan menimpa koreksi/nilai server.
   const approve = () => onDecide(row.id, "approve", dayType !== (row.day_type ?? "regular") ? dayType : undefined);
   return (
@@ -218,7 +231,8 @@ function OvertimeTableRow({ row, deciding, onDecide, canCorrect, canDecide, onCo
             fields={[
               { label: "Tanggal", value: formatDate(row.date, "—") },
               { label: "Jam", value: `${hhmm(row.start_time)}–${hhmm(row.end_time)} (${Number(row.hours)} jam)` },
-              { label: "Jenis hari", value: overtimeDayTypeLabel(row.day_type ?? "regular") },
+              // Jenis yang akan dikirim Setujui (pilihan di baris), bukan hanya nilai server.
+              { label: "Jenis hari", value: overtimeDayTypeLabel(decidable ? dayType : (row.day_type ?? "regular")) },
               ...(row.source === "employee" ? [{ label: "Istirahat", value: `${row.break_minutes ?? 0} menit` }] : []),
               { label: "Sumber", value: row.source === "company" ? "Penugasan perusahaan" : "Diajukan karyawan" },
               ...(row.created_at ? [{ label: "Diajukan", value: formatDateTime(row.created_at, "—") }] : []),

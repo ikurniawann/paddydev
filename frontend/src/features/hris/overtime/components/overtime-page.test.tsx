@@ -4,6 +4,7 @@ import { OvertimePage } from "./overtime-page";
 
 let access: { data?: { attendance: boolean; leaves: boolean; overtime: boolean } } = {};
 vi.mock("@/features/hris/approve-access", () => ({ useHrApproveAccess: () => access }));
+vi.mock("@/features/hris/ess/queries", () => ({ useEssMe: () => ({ data: { employee: { id: "hr-1" } } }) }));
 vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 vi.mock("../mutations", () => ({ useDecideOvertime: () => ({ mutate: vi.fn(), isPending: false }) }));
 vi.mock("../queries", () => ({

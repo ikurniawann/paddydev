@@ -13,12 +13,15 @@ vi.mock("@/components/hris/ApprovalButtons", () => ({
   ApprovalButtons: () => <button>tombol-keputusan</button>,
 }));
 vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
+let myEmployeeId = "hr-1";
+vi.mock("@/features/hris/ess/queries", () => ({ useEssMe: () => ({ data: { employee: { id: myEmployeeId } } }) }));
 vi.mock("../queries", () => ({
   useLeaveList: () => ({
     isLoading: false,
     data: [
       {
         id: "l1",
+        employee_id: "e1",
         status: "pending",
         leave_type: "annual",
         start_date: "2026-10-27",
@@ -36,6 +39,7 @@ vi.mock("../queries", () => ({
 afterEach(() => {
   cleanup();
   access = {};
+  myEmployeeId = "hr-1";
 });
 
 describe("LeavesPage: tombol keputusan mengikuti akses approve (EPIC-067 R14)", () => {
@@ -76,6 +80,17 @@ describe("LeavesPage: detail & lampiran (EPIC-072)", () => {
   it("tanpa akses approve: Detail tetap bisa dibuka, tanpa tombol keputusan", () => {
     grant(false);
     render(<LeavesPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Detail cuti Budi Santoso" }));
+    expect(within(screen.getByRole("dialog")).queryByText("tombol-keputusan")).toBeNull();
+  });
+});
+
+describe("LeavesPage: pengajuan sendiri (EPIC-072 Review Focus #4)", () => {
+  it("pemegang approve tidak melihat tombol keputusan pada cutinya sendiri, di kartu maupun Detail", () => {
+    grant(true);
+    myEmployeeId = "e1";
+    render(<LeavesPage />);
+    expect(screen.queryByText("tombol-keputusan")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Detail cuti Budi Santoso" }));
     expect(within(screen.getByRole("dialog")).queryByText("tombol-keputusan")).toBeNull();
   });

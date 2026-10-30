@@ -523,13 +523,3 @@ func jsTrim(s string) string {
 		return r >= 0x2000 && r <= 0x200A
 	})
 }
-
-// ShortReason is a request reason on one line, cut at max characters with
-// "…" (EPIC-072 R6: the Hari Ini panel shows why before "Buka").
-func ShortReason(reason string, max int) string {
-	r := []rune(strings.Join(strings.Fields(reason), " "))
-	if len(r) <= max {
-		return string(r)
-	}
-	return strings.TrimRight(string(r[:max]), " ") + "…"
-}

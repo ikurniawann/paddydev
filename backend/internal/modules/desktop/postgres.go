@@ -240,7 +240,7 @@ func (p *Postgres) InboxSection(ctx context.Context, key string) (*InboxSection,
 	switch key {
 	case "cuti":
 		sql = `SELECT l.id::text, COALESCE(l.leave_type::text, 'Cuti'), l.start_date::text, l.end_date::text,
-		            COALESCE(l.total_days::float8, 1), COALESCE(e.full_name, 'Karyawan'), COALESCE(l.reason, ''),
+		            COALESCE(l.total_days::float8, 1), COALESCE(e.full_name, 'Karyawan'),
 		            count(*) OVER ()::int AS total
 		       FROM hris.leaves l
 		       LEFT JOIN hris.employees e ON e.id = l.employee_id
@@ -271,16 +271,13 @@ func (p *Postgres) InboxSection(ctx context.Context, key string) (*InboxSection,
 		var it InboxItem
 		switch key {
 		case "cuti":
-			var leaveType, reason string
+			var leaveType string
 			var start, end *string
 			var days float64
-			if err := rows.Scan(&it.ID, &leaveType, &start, &end, &days, &it.Title, &reason, &sec.Total); err != nil {
+			if err := rows.Scan(&it.ID, &leaveType, &start, &end, &days, &it.Title, &sec.Total); err != nil {
 				return nil, err
 			}
 			it.Subtitle = domain.LeaveTypeLabel(leaveType) + " · " + domain.DescribeLeaveRange(deref(start), deref(end), days)
-			if short := domain.ShortReason(reason, 60); short != "" {
-				it.Subtitle += " · " + short
-			}
 			// EPIC-072 R6: decided on the HR Cuti page after reading the reason
 			// and attachment, not blind from the panel.
 			it.Href = "/dashboard/hris/leaves"

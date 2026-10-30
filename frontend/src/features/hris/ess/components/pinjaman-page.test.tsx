@@ -55,4 +55,10 @@ describe("EssPinjamanPage — kasbon tim (EPIC-072)", () => {
       expect.anything()
     );
   });
+
+  it("baris kasbon tim boleh turun baris di HP agar nama & keperluan tidak terjepit (review #8)", () => {
+    render(<EssPinjamanPage />);
+    const row = screen.getByRole("button", { name: "Detail kasbon Anggota K" }).closest("li");
+    expect(row?.className).toContain("flex-wrap");
+  });
 });

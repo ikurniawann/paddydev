@@ -109,6 +109,13 @@ func yearOf(date string) int {
 }
 
 func (s *Service) ListLeaves(ctx context.Context, a *Actor, f leaveFilter, page, limit int) (*Row, error) {
+	// employee_id=me: the account's own requests (ESS), whatever it may read.
+	if f.EmployeeID != nil && *f.EmployeeID == "me" {
+		if a.EmployeeID == nil {
+			return nil, httpx.Forbidden("Akun ini tidak terhubung ke data karyawan")
+		}
+		f.EmployeeID = a.EmployeeID
+	}
 	if !a.hrReads(iam.LeafCuti) {
 		if a.EmployeeID == nil {
 			return nil, httpx.Forbidden("Akun ini tidak terhubung ke data karyawan")

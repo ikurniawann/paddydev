@@ -126,3 +126,26 @@ describe("OvertimeTable — Detail (EPIC-072)", () => {
     expect(within(screen.getByRole("dialog")).queryByRole("button", { name: "Setujui" })).toBeNull();
   });
 });
+
+describe("OvertimeTable — pengajuan sendiri (EPIC-072 Review Focus #4)", () => {
+  it("myEmployeeId = pemilik: tanpa Setujui/Tolak di baris maupun Detail", () => {
+    render(
+      <OvertimeTable rows={[base]} loading={false} decidingId={null} onDecide={vi.fn()} canCorrect={false}
+        canDecide onCorrect={vi.fn()} myEmployeeId="e1" />
+    );
+    expect(screen.queryByRole("button", { name: "Setujui" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Detail lembur Crew Koreksi" }));
+    expect(within(screen.getByRole("dialog")).queryByRole("button", { name: "Setujui" })).toBeNull();
+  });
+
+  it("Detail menampilkan jenis hari yang dipilih di baris, sama dengan yang dikirim Setujui (review #4)", () => {
+    const onDecide = vi.fn();
+    render(table(base, onDecide));
+    fireEvent.change(screen.getByLabelText("Jenis hari"), { target: { value: "rest_day" } });
+    fireEvent.click(screen.getByRole("button", { name: "Detail lembur Crew Koreksi" }));
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText("Weekend / Libur")).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Setujui" }));
+    expect(onDecide).toHaveBeenCalledWith("o1", "approve", "rest_day");
+  });
+});

@@ -63,7 +63,7 @@ export async function submitClock(payload: EssClockPayload): Promise<EssClockRes
   }
 }
 
-export const fetchMyLeaves = () => softGet<EssLeaveRow[]>("/api/hris/leaves?limit=20", []);
+export const fetchMyLeaves = () => softGet<EssLeaveRow[]>("/api/hris/leaves?employee_id=me&limit=20", []);
 
 /** Upload lampiran (bila ada) lalu kirim pengajuan dengan path-nya. */
 export async function submitMyLeave(form: EssLeaveForm, attachmentDataUrl?: string) {
@@ -77,7 +77,7 @@ export async function submitMyLeave(form: EssLeaveForm, attachmentDataUrl?: stri
   return apiPost<{ data: unknown }>("/api/hris/leaves", { ...form, attachment_url: attachmentUrl });
 }
 
-export const fetchMyOvertime = () => softGet<EssOvertimeRow[]>("/api/hris/overtime", []);
+export const fetchMyOvertime = () => softGet<EssOvertimeRow[]>("/api/hris/overtime?employee_id=me", []);
 
 export const submitOvertime = (form: EssOvertimeForm) =>
   apiPost<{ data: unknown }>("/api/hris/overtime", { ...form, break_minutes: Number(form.break_minutes || 0) });

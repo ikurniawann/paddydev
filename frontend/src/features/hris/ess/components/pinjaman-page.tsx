@@ -195,7 +195,7 @@ export function EssPinjamanPage() {
           <h3 className="text-sm font-semibold text-gray-800">Persetujuan Kasbon Tim</h3>
           <ul className="mt-3 divide-y divide-gray-100">
             {teamLoans.map((loan) => (
-              <li key={loan.id} className="flex items-start justify-between gap-3 py-3">
+              <li key={loan.id} className="flex flex-wrap items-start justify-between gap-3 py-3">
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-gray-900">
                     {loan.employee?.full_name ?? "—"}

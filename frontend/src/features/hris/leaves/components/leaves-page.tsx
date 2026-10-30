@@ -9,6 +9,7 @@ import { AttachmentPreviewButtons } from "@/components/hris/attachment-preview";
 import { RequestDetailDialog } from "@/components/hris/request-detail-dialog";
 import { leaveAttachmentHref } from "@/lib/hris/attachments";
 import { useHrApproveAccess } from "@/features/hris/approve-access";
+import { useEssMe } from "@/features/hris/ess/queries";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -57,6 +58,9 @@ export function LeavesPage() {
   // selama memuat/error. Antrean atasan ada di ESS Persetujuan Tim, bukan di sini.
   const { data: access } = useHrApproveAccess();
   const canDecide = access?.leaves === true;
+  // Cuti milik sendiri tidak diputus di sini (server juga menolak, EPIC-072 Review Focus #4).
+  const myEmployeeId = useEssMe().data?.employee?.id;
+  const decidable = (leave: LeaveItem) => canDecide && leave.status === "pending" && leave.employee_id !== myEmployeeId;
   const leaves = useMemo(() => data ?? [], [data]);
   // Detail cuti (EPIC-072): alasan utuh + lampiran sebelum memutus.
   // Disimpan per id agar status/aksi mengikuti data terbaru setelah keputusan.
@@ -279,7 +283,7 @@ export function LeavesPage() {
                     <p className="text-xs text-gray-500">
                       Diajukan: {formatDate(leave.created_at)}
                     </p>
-                    {canDecide && <ApprovalButtons leaveId={leave.id} />}
+                    {decidable(leave) && <ApprovalButtons leaveId={leave.id} />}
                   </div>
                 )}
               </CardContent>
@@ -392,7 +396,7 @@ export function LeavesPage() {
             ) : undefined
           }
           actions={
-            canDecide && detail.status === "pending" ? <ApprovalButtons leaveId={detail.id} /> : undefined
+            decidable(detail) ? <ApprovalButtons leaveId={detail.id} /> : undefined
           }
         />
       )}

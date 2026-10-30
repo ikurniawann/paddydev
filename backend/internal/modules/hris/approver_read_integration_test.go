@@ -59,6 +59,15 @@ func TestApproverReadsRequestDetails(t *testing.T) {
 		}
 	}
 
+	// ESS lists its own requests with employee_id=me: an approver sees only
+	// their own rows there, not the HR-wide list (review finding #1).
+	if own := h.do(&approver, "GET", "/api/hris/leaves?employee_id=me&limit=100", nil); own.status != 200 || hasEmployeeRow(own.list(), crew) {
+		t.Errorf("approver ESS leave list = %d %s", own.status, own.raw)
+	}
+	if own := h.do(&approver, "GET", "/api/hris/overtime?employee_id=me", nil); own.status != 200 || hasEmployeeRow(own.list(), crew) {
+		t.Errorf("approver ESS overtime list = %d %s", own.status, own.raw)
+	}
+
 	if l := h.do(&plain, "GET", "/api/hris/leaves?limit=100", nil); hasEmployeeRow(l.list(), crew) {
 		t.Errorf("plain account sees the crew's leave")
 	}

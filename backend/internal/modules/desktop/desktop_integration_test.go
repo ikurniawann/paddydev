@@ -126,10 +126,11 @@ func TestDesktopInbox(t *testing.T) {
 	var days string
 	_ = deps.DB.QueryRow(ctx, `SELECT total_days::float8::text FROM hris.leaves WHERE id = $1`, leave).Scan(&days)
 	item := sections[0].(map[string]any)["items"].([]any)[0].(map[string]any)
-	// EPIC-072 R6: the reason shows (cut at 60 characters) and the panel no
-	// longer decides; "Buka" leads to the HR Cuti page with the detail.
+	// EPIC-072 R6: the panel no longer decides; "Buka" leads to the HR Cuti
+	// page with the detail. The reason (often medical) is not shown here:
+	// the inbox reaches every hris.* menu, wider than Cuti readers (R7).
 	if item["id"] != leave || item["title"] != "Inbox Test" ||
-		item["subtitle"] != "Cuti Tahunan · "+days+" hari · 18 Agu–20 Sep · Acara keluarga di luar kota, berangkat pagi dan kembali mala…" ||
+		item["subtitle"] != "Cuti Tahunan · "+days+" hari · 18 Agu–20 Sep" ||
 		item["href"] != "/dashboard/hris/leaves" || item["actionable"] != nil {
 		t.Fatalf("item %v", item)
 	}
