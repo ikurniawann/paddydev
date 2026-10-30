@@ -63,4 +63,7 @@ Rencana: `docs/superpowers/plans/2026-10-30-detail-pengajuan-penyetuju.md`.
 - 2026-10-30 13:26 WIB: **Deploy production** atas izin eksplisit user ("Merge + deploy prod"). Image `local-20261030-132645` = main `28721f40`, tanpa migrasi (565, verify 0 beda), container healthy, log API 0 error, absensi tetap masuk setelah deploy, bundle memuat dialog Detail dan `employee_id=me`.
   - Backup `~/backups/prod-db-before-epic072-20261030-132458.dump`; source lama `~/paddydev-src.before-epic072-20261030-132458` (= `405eddc6`). Rollback: kembalikan folder source itu lalu jalankan `tools/deploy-paddydev.sh`.
   - Status tetap `ready-for-qa`: HR/atasan mencoba tombol Detail di production (tanpa sesi uji di production).
-
+- 2026-10-30: **Catatan tertunda dikerjakan** (branch `fix/epic072-075-sisa`):
+  - `fff9b477`: rute cadangan Next `/api/desktop/inbox` sama dengan Go (cuti tanpa putus langsung, href `/dashboard/hris/leaves`); kode Setujui/Tolak panel Hari Ini yang sudah mati dihapus.
+  - `57e0d6a1`: tombol lampiran/dokumentasi di baris daftar punya nama aksesibel per karyawan ("Lampiran 1 cuti Budi").
+  - `79bcf5d9`: Detail Persetujuan Tim mengikuti antrean terbaru dan tertutup bila penyetuju lain sudah memutus.

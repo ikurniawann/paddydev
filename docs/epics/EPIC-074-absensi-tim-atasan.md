@@ -58,4 +58,7 @@ Rencana: `docs/superpowers/plans/2026-10-30-absensi-tim-atasan.md`.
   - Karyawan biasa: tanpa menu, tanpa kartu; halaman "Belum ada anggota tim."
   - Foto tidak ada di respons; 0 halaman meluber; 0 error konsol; 0 respons API ≥ 400.
   - Data demo dihapus (0 tersisa).
-
+- 2026-10-30: **PR #55 merged** (`36b374f5`) sesudah tes migrasi dibuat tahan terhadap CI paralel.
+- 2026-10-30: **Catatan tertunda:**
+  - `9c42fd14`: halaman Absensi Tim tanpa anggota tidak lagi menampilkan filter dan ringkasan bernilai nol.
+  - Urutan menu 44 yang sama dengan Persetujuan Tim **dibiarkan**: nomor urut kembar sudah lazim di menu ESS (20 dipakai tiga menu, 45 dua menu) dan diurutkan menurut nama secara konsisten. Mengubahnya butuh migrasi baru tanpa manfaat.
