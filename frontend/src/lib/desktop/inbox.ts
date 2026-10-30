@@ -1,7 +1,10 @@
+import { leaveTypeLabel } from "@/lib/hris/leave-types";
+
 /**
  * Kotak keputusan desktop — isi kartu "Perlu Keputusan", tapi berupa DAFTAR
- * yang bisa ditindaklanjuti, bukan sekadar angka. Cuti bisa disetujui
- * langsung dari widget; sisanya membuka halaman yang tepat sebagai jendela.
+ * yang bisa ditindaklanjuti, bukan sekadar angka. Setiap item membuka
+ * halaman yang tepat sebagai jendela; keputusan cuti diambil di halaman Cuti
+ * HR sesudah membaca alasan & lampiran (EPIC-072 R6).
  */
 
 export type InboxSectionKey = "cuti" | "po" | "stok";
@@ -10,10 +13,8 @@ export interface InboxItem {
   id: string;
   title: string;
   subtitle?: string | null;
-  /** Halaman yang dibuka bila keputusan butuh konteks penuh. */
+  /** Halaman yang dibuka untuk memutus dengan konteks penuh. */
   href: string;
-  /** true = ada tombol Setujui/Tolak langsung di widget. */
-  actionable?: boolean;
 }
 
 export interface InboxSection {
@@ -63,3 +64,22 @@ export function describeLeaveRange(start: string, end: string, days: number): st
   const range = start === end ? fmt(start) : `${fmt(start)}–${fmt(end)}`;
   return `${days} hari · ${range}`;
 }
+
+/**
+ * Item cuti panel Hari Ini (EPIC-072 R6, sama dengan Go desktop inbox): tanpa
+ * Setujui/Tolak langsung — keputusan diambil di halaman Cuti HR sesudah
+ * membaca alasan & lampiran; alasan tidak ditampilkan di panel.
+ */
+export function leaveInboxItem(row: Record<string, unknown>): InboxItem {
+  return {
+    id: String(row.id),
+    title: String(row.full_name ?? "Karyawan"),
+    subtitle: `${leaveTypeLabel(String(row.leave_type ?? "Cuti"))} · ${describeLeaveRange(
+      String(row.start_date).slice(0, 10),
+      String(row.end_date).slice(0, 10),
+      Number(row.total_days ?? 1)
+    )}`,
+    href: "/dashboard/hris/leaves",
+  };
+}
+

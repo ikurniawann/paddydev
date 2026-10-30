@@ -158,6 +158,19 @@ export function EssPersetujuanTimPage() {
   const loadFailed = queue.isError || tripsQuery.isError || loansQuery.isError;
   const loading = queue.isLoading || tripsQuery.isLoading || loansQuery.isLoading;
   const empty = leaves.length + overtime.length + trips.length + loans.length === 0;
+  // Detail mengikuti data antrean terbaru: bila penyetuju lain sudah memutus,
+  // pengajuannya hilang dari antrean dan dialog tertutup sendiri.
+  const shown: Detail | null = !detail
+    ? null
+    : detail.kind === "leave"
+      ? (() => {
+          const row = leaves.find((r) => r.id === detail.row.id);
+          return row ? { kind: "leave" as const, row } : null;
+        })()
+      : (() => {
+          const row = overtime.find((r) => r.id === detail.row.id);
+          return row ? { kind: "overtime" as const, row } : null;
+        })();
 
   return (
     <div className="space-y-6">
@@ -199,7 +212,12 @@ export function EssPersetujuanTimPage() {
                 </div>
                 <div className="flex shrink-0 flex-wrap items-center gap-3">
                   {row.attachment_url && (
-                    <AttachmentPreviewButtons paths={[row.attachment_url]} hrefFor={leaveAttachmentHref} label="Lampiran" />
+                    <AttachmentPreviewButtons
+                      paths={[row.attachment_url]}
+                      hrefFor={leaveAttachmentHref}
+                      label="Lampiran"
+                      context={`cuti ${row.employee.full_name}`}
+                    />
                   )}
                   {actions({ kind: "leave", row })}
                 </div>
@@ -267,48 +285,48 @@ export function EssPersetujuanTimPage() {
         />
       )}
 
-      {detail && (
+      {shown && (
         <RequestDetailDialog
           open
           onOpenChange={(o) => !o && setDetail(null)}
-          title={detail.kind === "leave" ? "Detail cuti" : "Detail lembur"}
-          employee={{ name: detail.row.employee.full_name, nip: detail.row.employee.nip }}
+          title={shown.kind === "leave" ? "Detail cuti" : "Detail lembur"}
+          employee={{ name: shown.row.employee.full_name, nip: shown.row.employee.nip }}
           fields={
-            detail.kind === "leave"
+            shown.kind === "leave"
               ? [
-                  { label: "Jenis", value: leaveTypeLabel(detail.row.leave_type) },
-                  { label: "Periode", value: leavePeriod(detail.row) },
-                  { label: "Jumlah", value: `${Number(detail.row.total_days)} hari` },
-                  { label: "Diajukan", value: formatDateTime(detail.row.created_at, "—") },
+                  { label: "Jenis", value: leaveTypeLabel(shown.row.leave_type) },
+                  { label: "Periode", value: leavePeriod(shown.row) },
+                  { label: "Jumlah", value: `${Number(shown.row.total_days)} hari` },
+                  { label: "Diajukan", value: formatDateTime(shown.row.created_at, "—") },
                 ]
               : [
-                  { label: "Tanggal", value: formatDate(detail.row.date, "—") },
-                  { label: "Jam", value: `${hhmm(detail.row.start_time)}–${hhmm(detail.row.end_time)}` },
-                  { label: "Jenis hari", value: overtimeDayTypeLabel(detail.row.day_type) },
-                  { label: "Istirahat", value: `${detail.row.break_minutes ?? 0} menit` },
+                  { label: "Tanggal", value: formatDate(shown.row.date, "—") },
+                  { label: "Jam", value: `${hhmm(shown.row.start_time)}–${hhmm(shown.row.end_time)}` },
+                  { label: "Jenis hari", value: overtimeDayTypeLabel(shown.row.day_type) },
+                  { label: "Istirahat", value: `${shown.row.break_minutes ?? 0} menit` },
                   {
                     label: "Jam dibayar",
-                    value: `${paidOvertimeHours(hhmm(detail.row.start_time), hhmm(detail.row.end_time), detail.row.break_minutes ?? 0).toLocaleString("id-ID")} jam`,
+                    value: `${paidOvertimeHours(hhmm(shown.row.start_time), hhmm(shown.row.end_time), shown.row.break_minutes ?? 0).toLocaleString("id-ID")} jam`,
                   },
-                  { label: "Diajukan", value: formatDateTime(detail.row.created_at, "—") },
+                  { label: "Diajukan", value: formatDateTime(shown.row.created_at, "—") },
                 ]
           }
-          reason={{ text: detail.row.reason }}
+          reason={{ text: shown.row.reason }}
           attachments={
-            detail.kind === "leave"
-              ? { paths: detail.row.attachment_url ? [detail.row.attachment_url] : [], hrefFor: leaveAttachmentHref, label: "Lampiran" }
-              : { paths: detail.row.attachments ?? [], hrefFor: overtimeAttachmentHref }
+            shown.kind === "leave"
+              ? { paths: shown.row.attachment_url ? [shown.row.attachment_url] : [], hrefFor: leaveAttachmentHref, label: "Lampiran" }
+              : { paths: shown.row.attachments ?? [], hrefFor: overtimeAttachmentHref }
           }
           actions={
             <>
-              <Button variant="outline" disabled={busyId === detail.row.id} onClick={() => {
-                const target = detail;
+              <Button variant="outline" disabled={busyId === shown.row.id} onClick={() => {
+                const target = shown;
                 setDetail(null);
                 askReject(target);
               }}>
                 Tolak
               </Button>
-              <Button disabled={busyId === detail.row.id} onClick={() => approveFromDetail(detail)}>
+              <Button disabled={busyId === shown.row.id} onClick={() => approveFromDetail(shown)}>
                 Setujui
               </Button>
             </>

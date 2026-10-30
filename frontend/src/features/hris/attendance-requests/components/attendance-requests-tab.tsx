@@ -99,6 +99,7 @@ export function AttendanceRequestsTab() {
                             paths={[r.attachment_path]}
                             hrefFor={attendanceRequestAttachmentUrl}
                             label="Foto bukti"
+                            context={r.employee?.full_name ?? undefined}
                             buttonClassName="text-xs text-blue-600 underline"
                           />
                         )}

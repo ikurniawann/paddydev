@@ -173,7 +173,7 @@ describe("EssPersetujuanTimPage", () => {
       overtime: [],
     };
     render(<EssPersetujuanTimPage />);
-    const buttons = screen.getAllByRole("button", { name: "Lampiran 1" });
+    const buttons = screen.getAllByRole("button", { name: "Lampiran 1 cuti Anggota A" });
     expect(buttons).toHaveLength(1);
     fireEvent.click(buttons[0]);
     expect(screen.getByAltText("Lampiran 1").getAttribute("src")).toBe(
@@ -216,4 +216,15 @@ describe("EssPersetujuanTimPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Setujui lembur Anggota B" }));
     expect(within(screen.getByRole("dialog")).getByText("Stock opname")).toBeTruthy();
   });
+
+  it("Detail tertutup bila pengajuan sudah diputus penyetuju lain (data antrean terbaru) (EPIC-072 sisa)", () => {
+    queue = { leaves: [leave], overtime: [] };
+    const { rerender } = render(<EssPersetujuanTimPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Detail cuti Anggota A" }));
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    queue = { leaves: [], overtime: [] };
+    rerender(<EssPersetujuanTimPage />);
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
 });
+

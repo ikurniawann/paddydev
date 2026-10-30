@@ -2,12 +2,12 @@
 
 import { X } from "lucide-react";
 import type { DesktopOverview } from "@/lib/desktop/overview";
-import { useDecideLeave, useDesktopInbox } from "../../hooks/use-desktop-inbox";
+import { useDesktopInbox } from "../../hooks/use-desktop-inbox";
 
 /**
- * Panel "Hari Ini" (⌘⇧J): ringkasan operasional + KOTAK KEPUTUSAN yang bisa
- * langsung ditindaklanjuti. Cuti disetujui di tempat; PO dan stok membuka
- * halaman yang tepat karena keputusannya butuh konteks penuh.
+ * Panel "Hari Ini" (⌘⇧J): ringkasan operasional + KOTAK KEPUTUSAN. Setiap
+ * item membuka halaman yang tepat karena keputusannya butuh konteks penuh
+ * (cuti: alasan & lampiran di halaman Cuti HR, EPIC-072 R6).
  */
 export function TodayPanel({
   overview,
@@ -19,9 +19,7 @@ export function TodayPanel({
   onOpenPath: (path: string, title: string) => void;
 }) {
   const inbox = useDesktopInbox();
-  const decide = useDecideLeave();
   const sections = inbox.data ?? [];
-  const busyId = decide.isPending ? decide.variables?.id : null;
 
   const pulsa = overview?.pulsaBisnis;
   const tim = overview?.timHariIni;
@@ -79,26 +77,6 @@ export function TodayPanel({
                   <div className="truncate text-sm font-semibold">{item.title}</div>
                   {item.subtitle && <div className="truncate text-[11px] text-white/45">{item.subtitle}</div>}
                   <div className="mt-2 flex gap-1.5">
-                    {item.actionable ? (
-                      <>
-                        <button
-                          type="button"
-                          disabled={busyId === item.id}
-                          onClick={() => decide.mutate({ id: item.id, action: "approve" })}
-                          className="rounded-lg bg-emerald-600 px-3 py-1.5 text-[11px] font-bold transition hover:bg-emerald-500 disabled:opacity-50"
-                        >
-                          {busyId === item.id ? "…" : "Setujui"}
-                        </button>
-                        <button
-                          type="button"
-                          disabled={busyId === item.id}
-                          onClick={() => decide.mutate({ id: item.id, action: "reject" })}
-                          className="rounded-lg bg-rose-700 px-3 py-1.5 text-[11px] font-bold transition hover:bg-rose-600 disabled:opacity-50"
-                        >
-                          Tolak
-                        </button>
-                      </>
-                    ) : null}
                     <button
                       type="button"
                       onClick={() => onOpenPath(item.href, section.label)}

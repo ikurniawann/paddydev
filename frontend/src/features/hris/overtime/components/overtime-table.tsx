@@ -143,7 +143,7 @@ function OvertimeTableRow({ row, deciding, onDecide, canCorrect, canDecide, onCo
         {row.source === "employee" && (
           <p className="text-xs text-gray-500">istirahat {row.break_minutes ?? 0} menit</p>
         )}
-        <OvertimeAttachmentButtons paths={row.attachments ?? []} className="mt-1" />
+        <OvertimeAttachmentButtons paths={row.attachments ?? []} className="mt-1" context={row.employee?.full_name ?? undefined} />
       </td>
       <td className="px-4 py-3">
         {row.source === "company" ? (

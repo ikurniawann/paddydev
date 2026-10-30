@@ -17,12 +17,15 @@ export function AttachmentPreviewButtons({
   paths,
   hrefFor,
   label: noun = "Dokumentasi",
+  context,
   className,
   buttonClassName = "text-xs font-medium text-pink-600 hover:underline",
 }: {
   paths: string[];
   hrefFor: (path: string) => string;
   label?: string;
+  /** Pembeda antarbaris untuk pembaca layar, mis. "cuti Budi" → "Lampiran 1 cuti Budi". */
+  context?: string;
   className?: string;
   buttonClassName?: string;
 }) {
@@ -35,7 +38,13 @@ export function AttachmentPreviewButtons({
     <>
       <span className={cn("flex flex-wrap gap-x-3 gap-y-1", className)}>
         {paths.map((path, i) => (
-          <button key={path} type="button" className={buttonClassName} onClick={() => setIndex(i)}>
+          <button
+            key={path}
+            type="button"
+            className={buttonClassName}
+            aria-label={context ? `${noun} ${i + 1} ${context}` : undefined}
+            onClick={() => setIndex(i)}
+          >
             {noun} {i + 1}
           </button>
         ))}

@@ -1,6 +1,6 @@
 # EPIC-073: Jadwal Toko — Tampil untuk HR & Pintasan di Beranda HP (`MODULE-HRIS`)
 
-status: review
+status: ready-for-qa
 environment: dev
 retries: 0
 
@@ -52,4 +52,4 @@ Keputusan user 30-10-2026: **"HR juga + pintasan HP"**.
   - Halaman: pengatur mode toko (PPVJ); HR "Mode HR" dengan tab Penempatan; karyawan biasa kartu "bukan pengatur".
   - Tidak ada halaman meluber, 0 error konsol, 0 respons API ≥ 400. Log API hanya mencatat 4 permintaan yang dibatalkan browser saat probe pindah halaman (`context canceled`), bukan galat aplikasi.
   - Data demo dihapus (0 tersisa; 10 pengatur staging utuh).
-
+- 2026-10-30: **PR #54 merged** (`a8169dc0`), CI 4/4 hijau. Staging sudah menjalankan isi yang sama (QA 12/12 di atas). Production belum (menunggu izin user). Status `ready-for-qa`.

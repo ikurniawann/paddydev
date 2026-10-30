@@ -59,4 +59,7 @@ Rencana: `docs/superpowers/plans/2026-10-30-export-absensi-salary-kontrak.md`.
   - Gaji kembar → pesan R8; versi pertama tetap aktif.
   - Salary: 135 baris urut A–Z, pencarian, unduh `struktur-gaji-paddy-2026-10-30.xlsx` (laptop dan HP); tidak meluber; 0 error konsol / API.
   - Data demo (akun, karyawan, kontrak, gaji) dihapus.
-
+- 2026-10-30: **PR #56 merged** (`ded5c888`), CI 4/4 hijau.
+- 2026-10-30: **Catatan tertunda:**
+  - `48409760`: tanggal efektif yang sama dengan versi gaji lama yang sudah **tidak aktif** kini mendapat pesan sendiri ("… sudah dipakai versi struktur gaji lama yang sudah tidak aktif. Pilih tanggal efektif lain."), bukan saran "Ubah lewat Edit".
+  - Nomor kontrak dipakai lagi bila draft bernomor tertinggi dihapus: **diterima**. Nomor tetap unik di antara kontrak yang ada (constraint UNIK), dan draft yang dihapus tidak punya dokumen resmi.

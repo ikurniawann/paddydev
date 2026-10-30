@@ -34,6 +34,8 @@ export function AttendanceMonitoringTab({ scope = "hr" }: {
   const hrQuery = useDailyRoster(date, !team);
   const teamQuery = useTeamAttendance(date, team);
   const rosterQuery = team ? teamQuery : hrQuery;
+  // Absensi Tim tanpa anggota: cukup penjelasan, tanpa filter & deretan angka nol.
+  const teamEmpty = team && rosterQuery.data?.employees.length === 0;
   const data = rosterQuery.data ?? null;
   const loading = rosterQuery.isLoading || rosterQuery.isFetching;
   const error = rosterQuery.error ? rosterQuery.error.message || "Gagal memuat roster" : null;
@@ -84,73 +86,75 @@ export function AttendanceMonitoringTab({ scope = "hr" }: {
   return (
     <div className="space-y-4">
       {/* Kontrol: tanggal + filter */}
-      <Card>
-        <CardContent className="pt-6">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            <div>
-              <label className="text-sm font-medium text-gray-700 mb-2 block">Tanggal</label>
-              <div className="flex gap-2">
-                <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => void rosterQuery.refetch()}
-                  title="Muat ulang"
+      {!teamEmpty && (
+        <Card>
+          <CardContent className="pt-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-2 block">Tanggal</label>
+                <div className="flex gap-2">
+                  <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => void rosterQuery.refetch()}
+                    title="Muat ulang"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+                  </Button>
+                </div>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-2 block">Shift</label>
+                <Select value={filterShift} onValueChange={setFilterShift}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Semua shift" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Semua Shift</SelectItem>
+                    {(data?.shifts ?? []).map((shift) => (
+                      <SelectItem key={shift.id} value={shift.id}>
+                        {shift.name}
+                      </SelectItem>
+                    ))}
+                    <SelectItem value="off">Tanpa Shift</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-2 block">Status</label>
+                <Select
+                  value={filterStatus}
+                  onValueChange={(value) => setFilterStatus(value as "all" | RosterStatus)}
                 >
-                  <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
-                </Button>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Semua status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Semua Status</SelectItem>
+                    {(Object.keys(STATUS_META) as RosterStatus[]).map((status) => (
+                      <SelectItem key={status} value={status}>
+                        {STATUS_META[status].label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-2 block">Cari</label>
+                <Input
+                  placeholder="Nama / NIP…"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
               </div>
             </div>
-            <div>
-              <label className="text-sm font-medium text-gray-700 mb-2 block">Shift</label>
-              <Select value={filterShift} onValueChange={setFilterShift}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Semua shift" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Semua Shift</SelectItem>
-                  {(data?.shifts ?? []).map((shift) => (
-                    <SelectItem key={shift.id} value={shift.id}>
-                      {shift.name}
-                    </SelectItem>
-                  ))}
-                  <SelectItem value="off">Tanpa Shift</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <label className="text-sm font-medium text-gray-700 mb-2 block">Status</label>
-              <Select
-                value={filterStatus}
-                onValueChange={(value) => setFilterStatus(value as "all" | RosterStatus)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Semua status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Semua Status</SelectItem>
-                  {(Object.keys(STATUS_META) as RosterStatus[]).map((status) => (
-                    <SelectItem key={status} value={status}>
-                      {STATUS_META[status].label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <label className="text-sm font-medium text-gray-700 mb-2 block">Cari</label>
-              <Input
-                placeholder="Nama / NIP…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Hari libur — jelaskan kenapa roster hari ini sepi (EPIC-036) */}
-      {data && data.holidays.length > 0 && (
+      {data && !teamEmpty && data.holidays.length > 0 && (
         <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
           <CalendarOff className="mt-0.5 h-4 w-4 shrink-0" />
           <p>
@@ -163,7 +167,7 @@ export function AttendanceMonitoringTab({ scope = "hr" }: {
       )}
 
       {/* Ringkasan */}
-      {data && (
+      {data && !teamEmpty && (
         <div className="flex flex-wrap items-center gap-2">
           <Badge className="bg-indigo-100 text-indigo-700">
             <Users className="w-3 h-3" /> Terjadwal {data.summary.scheduled}

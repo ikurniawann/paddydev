@@ -256,6 +256,7 @@ export function LeavesPage() {
                           paths={[leave.attachment_url]}
                           hrefFor={leaveAttachmentHref}
                           label="Lampiran"
+                          context={`cuti ${leave.employee?.full_name ?? ""}`.trim()}
                           className="mt-1"
                         />
                       </div>
