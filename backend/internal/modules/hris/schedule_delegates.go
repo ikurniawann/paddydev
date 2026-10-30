@@ -1,6 +1,8 @@
 package hris
 
 import (
+	"nuhabit/backend/internal/platform/iam"
+
 	"context"
 	"errors"
 	"net/http"
@@ -208,20 +210,14 @@ func delegateBranches(ctx context.Context, q database.Querier, ids []string) ([]
 // else gets is_delegate false (the ESS menu is granted to every role). hr and
 // hr_can_place (EPIC-073 R3) say the account opens Jadwal Toko in HR mode:
 // "update" on Jadwal Kerja (the schedule write routes' check) and the
-// placement routes' menu prefix.
+// placement routes' menu prefix, both read from the grants actorFor loaded.
 func (h handlers) myScheduleAccess(w http.ResponseWriter, r *http.Request, a *Actor) error {
-	u, err := h.auth.RequireUser(r)
-	if err != nil {
-		return err
+	codes := make([]string, 0, len(a.grants))
+	for code := range a.grants {
+		codes = append(codes, code)
 	}
-	hr, err := h.auth.HasMenuAction(r.Context(), u, "update", scheduleManagers...)
-	if err != nil {
-		return err
-	}
-	hrPlace, err := h.auth.HasMenuPrefix(r.Context(), u, placementManagers...)
-	if err != nil {
-		return err
-	}
+	hr := iam.HasGrantedAction(a.grants, scheduleManagers, "update")
+	hrPlace := iam.HasAnyMenuPrefix(codes, placementManagers)
 	q := h.svc.repo.querier()
 	d, err := loadDelegateAccess(r.Context(), q, a.UserID)
 	if err != nil {

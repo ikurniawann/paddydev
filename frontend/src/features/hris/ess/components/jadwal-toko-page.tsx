@@ -65,7 +65,9 @@ export function EssJadwalTokoPage() {
           Jadwal Toko
         </h1>
         <p className="mt-1 text-sm text-gray-500">
-          Atur jadwal kerja karyawan di toko Anda. Perubahan langsung berlaku ke absensi mereka.
+          {hrMode
+            ? "Atur jadwal kerja karyawan di semua toko. Perubahan langsung berlaku ke absensi mereka."
+            : "Atur jadwal kerja karyawan di toko Anda. Perubahan langsung berlaku ke absensi mereka."}
         </p>
       </div>
 
@@ -95,13 +97,15 @@ export function EssJadwalTokoPage() {
             <TabsContent value="jadwal" className="pt-2">
               <SchedulesPage
                 key={target.n}
+                embedded
                 initialBranchId={target.branchId}
                 initialEmployeeIds={target.employeeIds}
+                onOpenPlacements={data.hr_can_place ? () => setTab("penempatan") : undefined}
               />
             </TabsContent>
             {data.hr_can_place ? (
               <TabsContent value="penempatan" className="pt-2">
-                <PlacementsPage onOpenSchedule={openSchedule} />
+                <PlacementsPage embedded onOpenSchedule={openSchedule} />
               </TabsContent>
             ) : null}
           </Tabs>

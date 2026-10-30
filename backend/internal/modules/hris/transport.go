@@ -115,6 +115,7 @@ func (h handlers) actorFor(ctx context.Context, u *auth.User) (*Actor, error) {
 		codes = append(codes, code)
 	}
 	a.EmployeeRecords = iam.HasAnyMenuPrefix(codes, employeeRecordManagers)
+	a.grants = granted
 	return a, nil
 }
 

@@ -279,7 +279,9 @@ it("HR Jadwal Kerja (bukan pengatur): mode HR semua toko dengan tab Penempatan (
   expect(screen.getByRole("tab", { name: "Penempatan" })).toBeTruthy();
 });
 
-it("HR tanpa menu penempatan: hanya tab Jadwal (EPIC-073 R2)", async () => {
+// Defensif: di server `hr` (update Jadwal Kerja, di bawah hris.kepegawaian) selalu berarti
+// hr_can_place juga true; halaman tetap menghormati flag bila suatu saat berbeda.
+it("HR tanpa menu penempatan (defensif): hanya tab Jadwal (EPIC-073 R2)", async () => {
   placementApi.fetchStoreBranches.mockResolvedValue([STORE]);
   renderPage({ is_delegate: false, can_place: false, branches: [], hr: true, hr_can_place: false });
   expect(await screen.findByText(/Mode HR/)).toBeTruthy();
@@ -290,5 +292,29 @@ it("HR yang juga pengatur memakai mode HR (EPIC-073 R2)", async () => {
   placementApi.fetchStoreBranches.mockResolvedValue([STORE]);
   renderPage({ is_delegate: true, can_place: false, branches: [STORE], hr: true, hr_can_place: true });
   expect(await screen.findByText(/Mode HR/)).toBeTruthy();
+});
+
+it("mode HR tanpa judul HR ganda; subjudul menyebut semua toko (review EPIC-073)", async () => {
+  placementApi.fetchStoreBranches.mockResolvedValue([STORE]);
+  renderPage({ is_delegate: false, can_place: false, branches: [], hr: true, hr_can_place: true });
+  await screen.findByText(/Mode HR/);
+  expect(screen.queryByRole("heading", { name: "Jadwal Kerja" })).toBeNull();
+  expect(screen.getByText(/Atur jadwal kerja karyawan di semua toko/)).toBeTruthy();
+  fireEvent.click(screen.getByRole("tab", { name: "Penempatan" }));
+  await screen.findByText("Ana");
+  expect(screen.queryByRole("heading", { name: "Penempatan Karyawan" })).toBeNull();
+});
+
+it("mode HR: cabang tanpa karyawan Shift → tombol ke tab Penempatan, tidak keluar halaman (review EPIC-073)", async () => {
+  placementApi.fetchStoreBranches.mockResolvedValue([STORE]);
+  scheduleApi.fetchScheduleGrid.mockImplementation(async (p: { from: string; to: string }) => ({
+    data: { ...grid(p.from, p.to), employees: [] },
+  }));
+  renderPage({ is_delegate: false, can_place: false, branches: [], hr: true, hr_can_place: true });
+  await screen.findByText(/Mode HR/);
+  fireEvent.change(await screen.findByLabelText("Pilih cabang"), { target: { value: "s1" } });
+  fireEvent.click(await screen.findByRole("button", { name: "Atur penempatan karyawan" }));
+  expect(push).not.toHaveBeenCalled();
+  await waitFor(() => expect(screen.getByRole("tab", { name: "Penempatan" }).getAttribute("aria-selected")).toBe("true"));
 });
 

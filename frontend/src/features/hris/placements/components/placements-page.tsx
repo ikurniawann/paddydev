@@ -38,6 +38,7 @@ const SCHEDULE_LINK_LIMIT = 50;
 export function PlacementsPage({
   mode = "hr",
   onOpenSchedule,
+  embedded = false,
 }: {
   /**
    * "store" = pengatur jadwal toko di Area Karyawan (EPIC-071): hak kelola dari
@@ -45,8 +46,10 @@ export function PlacementsPage({
    * (master departemen/jabatan, lokasi toko, ubah satu penempatan, profil karyawan).
    */
   mode?: "hr" | "store";
-  /** Mode toko: "Atur jadwal" membuka tab Jadwal, bukan halaman HR. */
+  /** Di dalam Jadwal Toko (mode toko atau HR): "Atur jadwal" membuka tab Jadwal, bukan halaman HR. */
   onOpenSchedule?: (branchId: string, employeeIds: string[]) => void;
+  /** Di dalam halaman lain (Jadwal Toko mode HR, EPIC-073): tanpa judul halaman sendiri. */
+  embedded?: boolean;
 } = {}) {
   const store = mode === "store";
   const router = useRouter();
@@ -168,7 +171,7 @@ export function PlacementsPage({
     }
     if (ids.length > SCHEDULE_LINK_LIMIT) {
       toast.info(
-        store
+        onOpenSchedule
           ? `Tab Jadwal dibuka untuk ${SCHEDULE_LINK_LIMIT} karyawan pertama yang dipilih`
           : `Jadwal Kerja dibuka untuk ${SCHEDULE_LINK_LIMIT} karyawan pertama yang dipilih`
       );
@@ -184,7 +187,7 @@ export function PlacementsPage({
 
   return (
     <div className="space-y-5">
-      {store ? null : (
+      {store || embedded ? null : (
         <PageHeader
           kicker="HRIS · Master Data"
           title="Penempatan Karyawan"
