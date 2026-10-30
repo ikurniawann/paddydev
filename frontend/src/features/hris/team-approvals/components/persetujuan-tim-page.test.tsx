@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { TeamApprovals, TeamLeaveRequest, TeamOvertimeRequest } from "../types";
 import { EssPersetujuanTimPage } from "./persetujuan-tim-page";
@@ -164,7 +164,7 @@ describe("EssPersetujuanTimPage", () => {
     expect(screen.queryByText(LOAD_ERROR)).toBeNull();
   });
 
-  it("cuti dengan lampiran menampilkan tautan ke berkas privat; tanpa lampiran tidak", () => {
+  it("cuti dengan lampiran menampilkan pratinjau berkas privat; tanpa lampiran tidak (EPIC-072)", () => {
     queue = {
       leaves: [
         { ...leave, attachment_url: "leave-attachments/e1/surat dokter.png" },
@@ -173,11 +173,47 @@ describe("EssPersetujuanTimPage", () => {
       overtime: [],
     };
     render(<EssPersetujuanTimPage />);
-    const links = screen.getAllByRole("link", { name: /Lihat lampiran/ });
-    expect(links).toHaveLength(1);
-    expect(links[0].getAttribute("href")).toBe("/api/hris/leaves/attachment/leave-attachments/e1/surat%20dokter.png");
-    expect(links[0].getAttribute("target")).toBe("_blank");
-    expect(links[0].getAttribute("rel")).toContain("noopener");
-    expect(links[0].getAttribute("aria-label")).toBe("Lihat lampiran cuti Anggota A");
+    const buttons = screen.getAllByRole("button", { name: "Lampiran 1" });
+    expect(buttons).toHaveLength(1);
+    fireEvent.click(buttons[0]);
+    expect(screen.getByAltText("Lampiran 1").getAttribute("src")).toBe(
+      "/api/hris/leaves/attachment/leave-attachments/e1/surat%20dokter.png");
+  });
+
+  it("Detail cuti: alasan utuh + lampiran, lalu Setujui dari dialog (EPIC-072)", () => {
+    const reason = "Acara keluarga di luar kota.\nBerangkat pagi, kembali lusa malam.";
+    queue = { leaves: [{ ...leave, reason, attachment_url: "leave-attachments/e1/x.png" }], overtime: [] };
+    decide.mockImplementation((_v, opts) => opts.onSuccess());
+    render(<EssPersetujuanTimPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Detail cuti Anggota A" }));
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText((_, el) => el?.tagName === "P" && el.textContent === reason)).toBeTruthy();
+    expect(within(dialog).getByRole("button", { name: "Lampiran 1" })).toBeTruthy();
+    expect(within(dialog).getByText("2 hari")).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Setujui" }));
+    expect(decide).toHaveBeenCalledWith(
+      { kind: "leave", id: "l1", action: "approve", rejectionReason: undefined },
+      expect.anything()
+    );
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("Detail lembur: alasan + dokumentasi; Tolak membuka dialog alasan dengan ringkasan pengajuan (EPIC-072)", () => {
+    queue = { leaves: [], overtime: [overtime] };
+    render(<EssPersetujuanTimPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Detail lembur Anggota B" }));
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText("Stock opname")).toBeTruthy();
+    expect(within(dialog).getByRole("button", { name: "Dokumentasi 1" })).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Tolak" }));
+    expect(screen.getByLabelText("Alasan penolakan")).toBeTruthy();
+    expect(screen.getByText(/Alasan pengajuan: Stock opname/)).toBeTruthy();
+  });
+
+  it("Setujui lembur menampilkan alasan pengajuan di dialog koreksi (EPIC-072 R3)", () => {
+    queue = { leaves: [], overtime: [overtime] };
+    render(<EssPersetujuanTimPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Setujui lembur Anggota B" }));
+    expect(within(screen.getByRole("dialog")).getByText("Stock opname")).toBeTruthy();
   });
 });
