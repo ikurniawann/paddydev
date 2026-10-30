@@ -166,15 +166,21 @@ func (s *service) createSalary(ctx context.Context, employeeID, companyID string
 	}
 	// EPIC-075 R8: one version per employee, entity and effective date. Refuse
 	// before touching anything, with a message HR can act on.
-	var duplicate bool
-	if err := s.db.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM hris.employee_salary
-		WHERE employee_id = $1 AND company_id = $2::uuid AND effective_date = $3::text::date)`,
-		employeeID, entity.ID, effectiveDate).Scan(&duplicate); err != nil {
+	// The message differs for an inactive version: it is off the active-only
+	// list, so "Edit" would send HR nowhere.
+	var duplicate, activeDuplicate bool
+	if err := s.db.QueryRow(ctx, `SELECT count(*) > 0, coalesce(bool_or(is_active), false) FROM hris.employee_salary
+		WHERE employee_id = $1 AND company_id = $2::uuid AND effective_date = $3::text::date`,
+		employeeID, entity.ID, effectiveDate).Scan(&duplicate, &activeDuplicate); err != nil {
 		return nil, err
 	}
-	if duplicate {
+	if duplicate && activeDuplicate {
 		return nil, httpx.Conflict("Struktur gaji karyawan ini untuk entitas tersebut dengan tanggal efektif " +
 			dateOnly(effectiveDate) + " sudah ada. Ubah lewat Edit atau pilih tanggal efektif lain.")
+	}
+	if duplicate {
+		return nil, httpx.Conflict("Tanggal efektif " + dateOnly(effectiveDate) +
+			" sudah dipakai versi struktur gaji lama yang sudah tidak aktif. Pilih tanggal efektif lain.")
 	}
 	val := func(key string, def any) any {
 		if v, ok := in.get(key); ok && v != nil && v != "" && v != "0" {

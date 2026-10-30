@@ -434,3 +434,17 @@ func TestSalaryDuplicateEffectiveKeepsActive(t *testing.T) {
 		t.Fatalf("after new date: %d active, base %s", n, base)
 	}
 }
+
+// EPIC-075 sisa: a same-date version that is no longer active is not on the
+// active-only list, so the message must not send HR to "Edit".
+func TestSalaryDuplicateEffectiveInactive(t *testing.T) {
+	e := setup(t)
+	emp := e.employee("Gaji Lama", "", true)
+	post := func(date string, status int) map[string]any {
+		return e.call(&e.hr, "POST", "/api/hris/employee-salary",
+			map[string]any{"employee_id": emp, "base_salary": 3_000_000, "effective_date": date, "company_id": e.co}, status)
+	}
+	post("2026-01-01", 200)
+	post("2026-03-01", 200) // 2026-01-01 is now inactive
+	wantErr(t, post("2026-01-01", 409), "Tanggal efektif 2026-01-01 sudah dipakai versi struktur gaji lama yang sudah tidak aktif. Pilih tanggal efektif lain.")
+}
