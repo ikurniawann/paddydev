@@ -67,7 +67,7 @@ describe("LeavesPage: detail & lampiran (EPIC-072)", () => {
   it("kartu menampilkan lampiran dengan pratinjau; Detail memuat alasan utuh dan tombol keputusan", () => {
     grant(true);
     render(<LeavesPage />);
-    fireEvent.click(screen.getByRole("button", { name: "Lampiran 1" }));
+    fireEvent.click(screen.getByRole("button", { name: "Lampiran 1 cuti Budi Santoso" }));
     expect(screen.getByAltText("Lampiran 1").getAttribute("src")).toBe(
       "/api/hris/leaves/attachment/leave-attachments/e1/undangan.png");
     fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });

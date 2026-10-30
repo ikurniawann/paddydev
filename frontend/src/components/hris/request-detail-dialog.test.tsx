@@ -63,3 +63,12 @@ describe("AttachmentPreviewButtons", () => {
     expect(screen.getByTitle("Bukti 1").getAttribute("src")).toBe("/files/a/e1/x.pdf");
   });
 });
+
+describe("AttachmentPreviewButtons — nama aksesibel per baris (EPIC-072 sisa)", () => {
+  it("context membedakan tombol antarbaris; teks tampilan tetap singkat", () => {
+    render(<AttachmentPreviewButtons paths={["a/e1/x.png"]} hrefFor={(p) => `/f/${p}`} label="Lampiran" context="cuti Budi" />);
+    const btn = screen.getByRole("button", { name: "Lampiran 1 cuti Budi" });
+    expect(btn.textContent).toBe("Lampiran 1");
+  });
+});
+

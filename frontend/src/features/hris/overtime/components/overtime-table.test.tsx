@@ -59,7 +59,7 @@ describe("OvertimeTable — istirahat, dokumentasi, koreksi (EPIC-066)", () => {
     render(table({ ...base, break_minutes: 30, attachments: ["overtime-attachments/e1/1-aaaaaaaaaaaaaaaa.pdf"] }));
     expect(screen.getByText(/istirahat 30 menit/)).toBeTruthy();
     expect(screen.queryByRole("link", { name: "Dokumentasi 1" })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Dokumentasi 1" }));
+    fireEvent.click(screen.getByRole("button", { name: "Dokumentasi 1 Crew Koreksi" }));
     expect(screen.getByTitle("Dokumentasi 1").getAttribute("src")).toBe(
       "/api/hris/overtime/attachment/overtime-attachments/e1/1-aaaaaaaaaaaaaaaa.pdf");
   });

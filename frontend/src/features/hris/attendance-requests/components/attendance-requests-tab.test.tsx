@@ -44,7 +44,7 @@ describe("AttendanceRequestsTab", () => {
     expect(screen.getByText("Budi Santoso")).toBeTruthy();
     expect(screen.getByText("Koreksi absen")).toBeTruthy();
     expect(screen.getByText("Pulang 17:00")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Foto bukti 1" }));
+    fireEvent.click(screen.getByRole("button", { name: "Foto bukti 1 Budi Santoso" }));
     expect(screen.getByAltText("Foto bukti 1").getAttribute("src")).toBe(
       "/api/hris/attendance-requests/attachment/attendance-requests/e1/a.png"
     );

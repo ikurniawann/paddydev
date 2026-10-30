@@ -199,7 +199,12 @@ export function EssPersetujuanTimPage() {
                 </div>
                 <div className="flex shrink-0 flex-wrap items-center gap-3">
                   {row.attachment_url && (
-                    <AttachmentPreviewButtons paths={[row.attachment_url]} hrefFor={leaveAttachmentHref} label="Lampiran" />
+                    <AttachmentPreviewButtons
+                      paths={[row.attachment_url]}
+                      hrefFor={leaveAttachmentHref}
+                      label="Lampiran"
+                      context={`cuti ${row.employee.full_name}`}
+                    />
                   )}
                   {actions({ kind: "leave", row })}
                 </div>
