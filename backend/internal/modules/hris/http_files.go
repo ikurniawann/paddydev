@@ -146,12 +146,14 @@ func (h handlers) uploadLeaveAttachment(w http.ResponseWriter, r *http.Request, 
 // The employee's direct manager reads it too: Persetujuan Tim links the file
 // from the queue (EPIC-063). A reporting_to pointing at oneself grants nothing.
 func (h handlers) leaveAttachment(w http.ResponseWriter, r *http.Request, a *Actor) error {
-	return h.managerReadableFile(w, r, a, "/api/hris/leaves/attachment/", "leave-attachments")
+	return h.managerReadableFile(w, r, a, "/api/hris/leaves/attachment/", "leave-attachments", iam.LeafCuti)
 }
 
-// managerReadableFile is ownedFile that the owner's direct manager reads too.
-func (h handlers) managerReadableFile(w http.ResponseWriter, r *http.Request, a *Actor, prefix, folder string) error {
-	if !a.IsHR && a.EmployeeID != nil {
+// managerReadableFile serves a request's private file to the owner, their
+// direct manager, and HR or the holders of "approve" on leaf (EPIC-072 R7).
+func (h handlers) managerReadableFile(w http.ResponseWriter, r *http.Request, a *Actor, prefix, folder, leaf string) error {
+	staff := a.hrReads(leaf)
+	if !staff && a.EmployeeID != nil {
 		if segments := privateSegments(r, prefix, folder, 3); segments != nil && segments[1] != *a.EmployeeID {
 			reports, err := h.svc.repo.SubordinateIDs(r.Context(), *a.EmployeeID)
 			if err != nil {
@@ -162,7 +164,7 @@ func (h handlers) managerReadableFile(w http.ResponseWriter, r *http.Request, a 
 			}
 		}
 	}
-	return h.ownedFile(w, r, a, prefix, folder)
+	return h.ownedFileFor(w, r, a, staff, prefix, folder)
 }
 
 /* ── Overtime documentation (EPIC-066) ───────────────────────────────── */
@@ -203,9 +205,9 @@ func (h handlers) uploadOvertimeAttachment(w http.ResponseWriter, r *http.Reques
 }
 
 // GET /api/hris/overtime/attachment/overtime-attachments/<employeeId>/<file>:
-// the owner, their direct manager and HR.
+// the owner, their direct manager, and HR or "approve" on Lembur.
 func (h handlers) overtimeAttachment(w http.ResponseWriter, r *http.Request, a *Actor) error {
-	return h.managerReadableFile(w, r, a, "/api/hris/overtime/attachment/", overtimeAttachmentFolder)
+	return h.managerReadableFile(w, r, a, "/api/hris/overtime/attachment/", overtimeAttachmentFolder, iam.LeafLembur)
 }
 
 // ownedFile serves <folder>/<employeeId>/<file>…: HR reads all, others only

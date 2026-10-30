@@ -84,6 +84,10 @@ func TestKasbonTwoStepApproval(t *testing.T) {
 	if len(queue) != 1 || queue[0].(map[string]any)["id"] != id {
 		t.Fatalf("antrean manager = %v", queue)
 	}
+	// EPIC-072 R8: catatan ikut tampil di detail kasbon tim (kolom non-gaji).
+	if _, ok := queue[0].(map[string]any)["notes"]; !ok {
+		t.Fatalf("antrean manager tanpa notes: %v", queue[0])
+	}
 	// Manager menyetujui tahap 1.
 	step1 := e.call(&mgrStaff, "POST", "/api/hris/loans/"+id+"/approve", map[string]any{"approved": true}, 200)
 	if d := step1["data"].(map[string]any); d["status"] != "manager_approved" || d["manager_approved_by"] != mgr {
