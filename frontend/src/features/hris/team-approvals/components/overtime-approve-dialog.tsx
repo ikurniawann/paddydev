@@ -15,6 +15,8 @@ export interface OvertimeApproveRow {
   break_minutes: number;
   attachments: string[];
   employee_name: string;
+  /** Alasan pengajuan, dibaca sebelum menyetujui (EPIC-072 R3). */
+  reason?: string | null;
 }
 
 export type OvertimeApproveTimes = OvertimeTimes;
@@ -60,6 +62,10 @@ export function OvertimeApproveDialog({
           <DialogTitle>Setujui lembur {row.employee_name}</DialogTitle>
         </DialogHeader>
         <div className="space-y-3 text-sm">
+          <div>
+            <p className="text-xs font-medium text-gray-600">Alasan</p>
+            <p className="whitespace-pre-line break-words text-gray-900">{row.reason?.trim() || "—"}</p>
+          </div>
           <OvertimeAttachmentButtons paths={row.attachments} buttonClassName="text-sm text-blue-600 underline" />
           <div className="grid grid-cols-3 gap-2">
             <label className="text-xs font-medium text-gray-600">

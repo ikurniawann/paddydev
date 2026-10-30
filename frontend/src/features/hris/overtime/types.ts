@@ -23,6 +23,7 @@ export interface OvertimeRow {
   decided_by_name?: string | null;
   corrected_at?: string | null;
   corrected_by_name?: string | null;
+  created_at?: string;
   employee?: {
     id: string;
     full_name: string;

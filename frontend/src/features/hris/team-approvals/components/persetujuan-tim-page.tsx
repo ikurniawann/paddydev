@@ -4,19 +4,27 @@ import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
 import { BanknotesIcon, CalendarDaysIcon, ClockIcon } from "@heroicons/react/24/outline";
+import { AttachmentPreviewButtons } from "@/components/hris/attachment-preview";
+import { RequestDetailDialog } from "@/components/hris/request-detail-dialog";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { formatDate } from "@/lib/format";
+import { formatDate, formatDateTime } from "@/lib/format";
+import { leaveAttachmentHref } from "@/lib/hris/attachments";
 import { leaveTypeLabel } from "@/lib/hris/leave-types";
-import { overtimeDayTypeLabel, overtimeTimeChanges } from "@/lib/hris/overtime-rules";
+import {
+  overtimeAttachmentHref,
+  overtimeDayTypeLabel,
+  overtimeTimeChanges,
+  paidOvertimeHours,
+} from "@/lib/hris/overtime-rules";
 import { hhmm } from "@/lib/hris/shifts-view";
 import { TeamTripApprovals, useBusinessTrips } from "@/features/hris/business-trips";
 import { EssLoading, EssNotLinked } from "@/features/hris/ess/components/ess-states";
 import { useEssMe, useTeamLoanApprovals } from "@/features/hris/ess/queries";
 import { useDecideTeamRequest } from "../mutations";
 import { useTeamApprovals } from "../queries";
-import type { TeamDecision, TeamOvertimeRequest, TeamRequestKind } from "../types";
+import type { TeamDecision, TeamLeaveRequest, TeamOvertimeRequest, TeamRequestKind } from "../types";
 import { OvertimeApproveDialog, type OvertimeApproveTimes } from "./overtime-approve-dialog";
 
 const DONE: Record<TeamRequestKind, Record<TeamDecision, string>> = {
@@ -24,17 +32,31 @@ const DONE: Record<TeamRequestKind, Record<TeamDecision, string>> = {
   overtime: { approve: "Lembur disetujui", reject: "Lembur ditolak" },
 };
 
-/** Lampiran cuti disajikan privat di /api/hris/leaves/attachment/<path> (atasan langsung boleh membacanya). */
-function leaveAttachmentHref(path: string) {
-  return `/api/hris/leaves/attachment/${path.split("/").map(encodeURIComponent).join("/")}`;
-}
-
 const NOUN: Record<TeamRequestKind, string> = { leave: "cuti", overtime: "lembur" };
 
 interface Rejecting {
   kind: TeamRequestKind;
   id: string;
   name: string;
+  /** Ringkasan pengajuan + alasannya, tampil di dialog Tolak (EPIC-072 R3). */
+  summary: string;
+  reason: string | null;
+}
+
+type Detail = { kind: "leave"; row: TeamLeaveRequest } | { kind: "overtime"; row: TeamOvertimeRequest };
+
+const leavePeriod = (row: TeamLeaveRequest) =>
+  `${formatDate(row.start_date, "—")}${row.end_date !== row.start_date ? ` s.d. ${formatDate(row.end_date, "—")}` : ""}`;
+const overtimeClock = (row: TeamOvertimeRequest) =>
+  `${hhmm(row.start_time)}–${hhmm(row.end_time)} (${String(Number(row.hours)).replace(".", ",")} jam)`;
+
+function rejectingOf(detail: Detail): Rejecting {
+  const { row } = detail;
+  const summary =
+    detail.kind === "leave"
+      ? `${leaveTypeLabel(detail.row.leave_type)} · ${leavePeriod(detail.row)}`
+      : `Lembur ${formatDate(detail.row.date, "—")} · ${overtimeClock(detail.row)}`;
+  return { kind: detail.kind, id: row.id, name: row.employee.full_name, summary, reason: row.reason };
 }
 
 /**
@@ -56,6 +78,7 @@ export function EssPersetujuanTimPage() {
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState("");
   const [approving, setApproving] = useState<TeamOvertimeRequest | null>(null);
+  const [detail, setDetail] = useState<Detail | null>(null);
   const busyId = decide.isPending ? decide.variables?.id : null;
 
   function run(
@@ -74,10 +97,17 @@ export function EssPersetujuanTimPage() {
     );
   }
 
-  function askReject(kind: TeamRequestKind, id: string, name: string) {
+  function askReject(target: Detail) {
     setReason("");
-    setRejecting({ kind, id, name });
+    setRejecting(rejectingOf(target));
     setOpen(true);
+  }
+
+  // Setujui/Tolak dari dialog Detail memakai alur yang sama dengan tombol baris.
+  function approveFromDetail(target: Detail) {
+    setDetail(null);
+    if (target.kind === "overtime") setApproving(target.row);
+    else run("leave", target.row.id, "approve");
   }
 
   function confirmReject() {
@@ -98,15 +128,20 @@ export function EssPersetujuanTimPage() {
     run("overtime", row.id, "approve", undefined, overtimeTimeChanges(row, times));
   }
 
-  function actions(kind: TeamRequestKind, id: string, name: string, onApprove?: () => void) {
+  function actions(target: Detail, onApprove?: () => void) {
+    const { kind, row } = target;
+    const name = row.employee.full_name;
     return (
       <div className="flex shrink-0 gap-2">
-        <Button size="sm" aria-label={`Setujui ${NOUN[kind]} ${name}`} disabled={busyId === id}
-          onClick={onApprove ?? (() => run(kind, id, "approve"))}>
+        <Button size="sm" variant="ghost" aria-label={`Detail ${NOUN[kind]} ${name}`} onClick={() => setDetail(target)}>
+          Detail
+        </Button>
+        <Button size="sm" aria-label={`Setujui ${NOUN[kind]} ${name}`} disabled={busyId === row.id}
+          onClick={onApprove ?? (() => run(kind, row.id, "approve"))}>
           Setujui
         </Button>
-        <Button size="sm" variant="outline" aria-label={`Tolak ${NOUN[kind]} ${name}`} disabled={busyId === id}
-          onClick={() => askReject(kind, id, name)}>
+        <Button size="sm" variant="outline" aria-label={`Tolak ${NOUN[kind]} ${name}`} disabled={busyId === row.id}
+          onClick={() => askReject(target)}>
           Tolak
         </Button>
       </div>
@@ -157,25 +192,16 @@ export function EssPersetujuanTimPage() {
                   <p className="text-sm font-medium text-gray-900">
                     {row.employee.full_name} · {leaveTypeLabel(row.leave_type)}
                   </p>
-                  <p className="truncate text-xs text-gray-600">
-                    {formatDate(row.start_date, "—")}
-                    {row.end_date !== row.start_date ? ` s.d. ${formatDate(row.end_date, "—")}` : ""} (
-                    {Number(row.total_days)} hari) · {row.reason || "—"}
+                  <p className="text-xs text-gray-600">
+                    {leavePeriod(row)} ({Number(row.total_days)} hari)
                   </p>
+                  <p className="line-clamp-2 break-words text-xs text-gray-600">{row.reason || "—"}</p>
                 </div>
                 <div className="flex shrink-0 flex-wrap items-center gap-3">
                   {row.attachment_url && (
-                    <a
-                      href={leaveAttachmentHref(row.attachment_url)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      aria-label={`Lihat lampiran cuti ${row.employee.full_name}`}
-                      className="text-xs font-medium text-pink-600 hover:underline"
-                    >
-                      Lihat lampiran
-                    </a>
+                    <AttachmentPreviewButtons paths={[row.attachment_url]} hrefFor={leaveAttachmentHref} label="Lampiran" />
                   )}
-                  {actions("leave", row.id, row.employee.full_name)}
+                  {actions({ kind: "leave", row })}
                 </div>
               </li>
             ))}
@@ -195,13 +221,13 @@ export function EssPersetujuanTimPage() {
                   <p className="text-sm font-medium text-gray-900">
                     {row.employee.full_name} · {formatDate(row.date, "—")}
                   </p>
-                  <p className="truncate text-xs text-gray-600">
-                    {hhmm(row.start_time)}–{hhmm(row.end_time)} ({String(Number(row.hours)).replace(".", ",")} jam) ·{" "}
-                    {overtimeDayTypeLabel(row.day_type)} · istirahat {row.break_minutes ?? 0} menit ·{" "}
-                    {row.attachments?.length ?? 0} dokumentasi · {row.reason || "—"}
+                  <p className="text-xs text-gray-600">
+                    {overtimeClock(row)} · {overtimeDayTypeLabel(row.day_type)} · istirahat {row.break_minutes ?? 0} menit ·{" "}
+                    {row.attachments?.length ?? 0} dokumentasi
                   </p>
+                  <p className="line-clamp-2 break-words text-xs text-gray-600">{row.reason || "—"}</p>
                 </div>
-                {actions("overtime", row.id, row.employee.full_name, () => setApproving(row))}
+                {actions({ kind: "overtime", row }, () => setApproving(row))}
               </li>
             ))}
           </ul>
@@ -233,10 +259,60 @@ export function EssPersetujuanTimPage() {
             break_minutes: approving.break_minutes ?? 0,
             attachments: approving.attachments ?? [],
             employee_name: approving.employee.full_name,
+            reason: approving.reason,
           }}
           open
           onOpenChange={(o) => !o && setApproving(null)}
           onApprove={(times) => approveOvertime(approving, times)}
+        />
+      )}
+
+      {detail && (
+        <RequestDetailDialog
+          open
+          onOpenChange={(o) => !o && setDetail(null)}
+          title={detail.kind === "leave" ? "Detail cuti" : "Detail lembur"}
+          employee={{ name: detail.row.employee.full_name, nip: detail.row.employee.nip }}
+          fields={
+            detail.kind === "leave"
+              ? [
+                  { label: "Jenis", value: leaveTypeLabel(detail.row.leave_type) },
+                  { label: "Periode", value: leavePeriod(detail.row) },
+                  { label: "Jumlah", value: `${Number(detail.row.total_days)} hari` },
+                  { label: "Diajukan", value: formatDateTime(detail.row.created_at, "—") },
+                ]
+              : [
+                  { label: "Tanggal", value: formatDate(detail.row.date, "—") },
+                  { label: "Jam", value: `${hhmm(detail.row.start_time)}–${hhmm(detail.row.end_time)}` },
+                  { label: "Jenis hari", value: overtimeDayTypeLabel(detail.row.day_type) },
+                  { label: "Istirahat", value: `${detail.row.break_minutes ?? 0} menit` },
+                  {
+                    label: "Jam dibayar",
+                    value: `${paidOvertimeHours(hhmm(detail.row.start_time), hhmm(detail.row.end_time), detail.row.break_minutes ?? 0).toLocaleString("id-ID")} jam`,
+                  },
+                  { label: "Diajukan", value: formatDateTime(detail.row.created_at, "—") },
+                ]
+          }
+          reason={{ text: detail.row.reason }}
+          attachments={
+            detail.kind === "leave"
+              ? { paths: detail.row.attachment_url ? [detail.row.attachment_url] : [], hrefFor: leaveAttachmentHref, label: "Lampiran" }
+              : { paths: detail.row.attachments ?? [], hrefFor: overtimeAttachmentHref }
+          }
+          actions={
+            <>
+              <Button variant="outline" disabled={busyId === detail.row.id} onClick={() => {
+                const target = detail;
+                setDetail(null);
+                askReject(target);
+              }}>
+                Tolak
+              </Button>
+              <Button disabled={busyId === detail.row.id} onClick={() => approveFromDetail(detail)}>
+                Setujui
+              </Button>
+            </>
+          }
         />
       )}
 
@@ -248,6 +324,12 @@ export function EssPersetujuanTimPage() {
         cancelLabel="Kembali"
         onConfirm={confirmReject}
       >
+        {rejecting && (
+          <div className="mb-3 space-y-1 rounded-lg border border-gray-200/80 bg-gray-50 px-3 py-2 text-xs text-gray-700">
+            <p className="font-medium text-gray-900">{rejecting.summary}</p>
+            <p className="whitespace-pre-line break-words">Alasan pengajuan: {rejecting.reason?.trim() || "—"}</p>
+          </div>
+        )}
         <div className="space-y-1.5">
           <label htmlFor="team-rejection-reason" className="block text-xs font-medium text-gray-600">
             Alasan penolakan

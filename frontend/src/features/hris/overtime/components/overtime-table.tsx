@@ -1,8 +1,10 @@
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { formatDate } from "@/lib/format";
+import { RequestDetailDialog } from "@/components/hris/request-detail-dialog";
+import { formatDate, formatDateTime } from "@/lib/format";
 import {
   OVERTIME_DAY_TYPE_OPTIONS,
+  overtimeAttachmentHref,
   overtimeDayTypeLabel,
   type OvertimeDecisionAction,
 } from "@/lib/hris/overtime-rules";
@@ -27,9 +29,20 @@ interface OvertimeTableProps {
   /** Pemegang aksi `approve` daun Lembur (EPIC-067 R14): hanya mereka melihat Setujui/Tolak, Batalkan penugasan perusahaan, dan boleh mengganti jenis hari (server menetapkan day_type hanya untuk mereka, R11). */
   canDecide: boolean;
   onCorrect: (row: OvertimeRow) => void;
+  /** Karyawan akun ini: pengajuannya sendiri tidak diputus di sini (server juga menolak). */
+  myEmployeeId?: string | null;
 }
 
-export function OvertimeTable({ rows, loading, decidingId, onDecide, canCorrect, canDecide, onCorrect }: OvertimeTableProps) {
+export function OvertimeTable({
+  rows,
+  loading,
+  decidingId,
+  onDecide,
+  canCorrect,
+  canDecide,
+  onCorrect,
+  myEmployeeId,
+}: OvertimeTableProps) {
   return (
     <div className="overflow-x-auto rounded-xl border border-gray-200/70 bg-white shadow-sm">
       <table className="w-full text-sm">
@@ -68,6 +81,7 @@ export function OvertimeTable({ rows, loading, decidingId, onDecide, canCorrect,
                 canCorrect={canCorrect}
                 canDecide={canDecide}
                 onCorrect={onCorrect}
+                myEmployeeId={myEmployeeId}
               />
             ))
           )}
@@ -84,9 +98,10 @@ interface OvertimeTableRowProps {
   canCorrect: boolean;
   canDecide: boolean;
   onCorrect: (row: OvertimeRow) => void;
+  myEmployeeId?: string | null;
 }
 
-function OvertimeTableRow({ row, deciding, onDecide, canCorrect, canDecide, onCorrect }: OvertimeTableRowProps) {
+function OvertimeTableRow({ row, deciding, onDecide, canCorrect, canDecide, onCorrect, myEmployeeId }: OvertimeTableRowProps) {
   const badge = STATUS_BADGES[row.status] ?? STATUS_BADGES.pending;
   const pending = row.status === "pending";
   // Koreksi jam lembur karyawan yang punya atasan langsung (aktif) adalah hak atasan (EPIC-066);
@@ -97,6 +112,10 @@ function OvertimeTableRow({ row, deciding, onDecide, canCorrect, canDecide, onCo
     row.employee.reporting_to !== row.employee_id &&
     row.employee.reporting_to_active === true;
   const [dayType, setDayType] = useState<OvertimeDayType>(row.day_type ?? "regular");
+  const [showDetail, setShowDetail] = useState(false);
+  const decidable = pending && row.source === "employee" && canDecide && row.employee_id !== myEmployeeId;
+  // Hanya kirim jenis bila pemegang approve mengubahnya di sini; jangan menimpa koreksi/nilai server.
+  const approve = () => onDecide(row.id, "approve", dayType !== (row.day_type ?? "regular") ? dayType : undefined);
   return (
     <tr className="border-b last:border-0 hover:bg-gray-50/60">
       <td className="px-4 py-3 font-medium text-gray-900">{row.employee?.full_name ?? "—"}</td>
@@ -137,16 +156,27 @@ function OvertimeTableRow({ row, deciding, onDecide, canCorrect, canDecide, onCo
           </span>
         )}
       </td>
-      <td className="max-w-[220px] truncate px-4 py-3 text-gray-600" title={row.reason ?? ""}>
-        {row.reason || "—"}
-        {row.status === "rejected" && row.rejection_reason ? ` · Ditolak: ${row.rejection_reason}` : ""}
+      <td className="max-w-[220px] px-4 py-3 text-gray-600" title={row.reason ?? ""}>
+        <p className="line-clamp-2 break-words">
+          {row.reason || "—"}
+          {row.status === "rejected" && row.rejection_reason ? ` · Ditolak: ${row.rejection_reason}` : ""}
+        </p>
       </td>
       <td className="px-4 py-3">
         <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${badge.className}`}>{badge.label}</span>
         {row.decided_as === "hr" && <span className="ml-1 text-xs text-gray-500">oleh HR</span>}
       </td>
       <td className="px-4 py-3 text-right">
-        {pending && row.source === "employee" && canDecide && (
+        <Button
+          size="sm"
+          variant="ghost"
+          className="mb-1 text-xs"
+          aria-label={`Detail lembur ${row.employee?.full_name ?? ""}`}
+          onClick={() => setShowDetail(true)}
+        >
+          Detail
+        </Button>
+        {decidable && (
           <div className="flex justify-end gap-2">
             <select
               aria-label="Jenis hari"
@@ -161,10 +191,7 @@ function OvertimeTableRow({ row, deciding, onDecide, canCorrect, canDecide, onCo
                 </option>
               ))}
             </select>
-            <Button size="sm" disabled={deciding} onClick={() =>
-                // Hanya kirim jenis bila pemegang approve mengubahnya di sini; jangan menimpa koreksi/nilai server.
-                onDecide(row.id, "approve", dayType !== (row.day_type ?? "regular") ? dayType : undefined)
-              }>
+            <Button size="sm" disabled={deciding} onClick={approve}>
               Setujui
             </Button>
             <Button size="sm" variant="outline" disabled={deciding} onClick={() => onDecide(row.id, "reject")}>
@@ -193,6 +220,54 @@ function OvertimeTableRow({ row, deciding, onDecide, canCorrect, canDecide, onCo
           <Button size="sm" variant="ghost" className="ml-2 text-xs" onClick={() => onCorrect(row)}>
             Koreksi
           </Button>
+        )}
+        {showDetail && (
+          <RequestDetailDialog
+            open
+            onOpenChange={setShowDetail}
+            title="Detail lembur"
+            employee={{ name: row.employee?.full_name ?? "—", nip: row.employee?.nip }}
+            status={<span className={`rounded-full px-2 py-0.5 text-xs font-medium ${badge.className}`}>{badge.label}</span>}
+            fields={[
+              { label: "Tanggal", value: formatDate(row.date, "—") },
+              { label: "Jam", value: `${hhmm(row.start_time)}–${hhmm(row.end_time)} (${Number(row.hours)} jam)` },
+              // Jenis yang akan dikirim Setujui (pilihan di baris), bukan hanya nilai server.
+              { label: "Jenis hari", value: overtimeDayTypeLabel(decidable ? dayType : (row.day_type ?? "regular")) },
+              ...(row.source === "employee" ? [{ label: "Istirahat", value: `${row.break_minutes ?? 0} menit` }] : []),
+              { label: "Sumber", value: row.source === "company" ? "Penugasan perusahaan" : "Diajukan karyawan" },
+              ...(row.created_at ? [{ label: "Diajukan", value: formatDateTime(row.created_at, "—") }] : []),
+            ]}
+            reason={{ text: row.reason }}
+            attachments={{ paths: row.attachments ?? [], hrefFor: overtimeAttachmentHref }}
+            notes={
+              row.corrected_at || (row.status === "rejected" && row.rejection_reason) ? (
+                <div className="space-y-1 text-xs">
+                  {row.corrected_at && <p className="text-amber-700">Dikoreksi {row.corrected_by_name ?? "HR"}</p>}
+                  {row.status === "rejected" && row.rejection_reason && (
+                    <p className="whitespace-pre-line break-words text-red-600">Alasan penolakan: {row.rejection_reason}</p>
+                  )}
+                </div>
+              ) : undefined
+            }
+            actions={
+              decidable ? (
+                <>
+                  <Button variant="outline" disabled={deciding} onClick={() => {
+                    setShowDetail(false);
+                    onDecide(row.id, "reject");
+                  }}>
+                    Tolak
+                  </Button>
+                  <Button disabled={deciding} onClick={() => {
+                    setShowDetail(false);
+                    approve();
+                  }}>
+                    Setujui
+                  </Button>
+                </>
+              ) : undefined
+            }
+          />
         )}
       </td>
     </tr>

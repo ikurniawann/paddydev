@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ClockGeofenceError, submitClock } from "./api";
+import { ClockGeofenceError, fetchMyLeaves, fetchMyOvertime, submitClock } from "./api";
 import type { EssClockPayload } from "./types";
 
 const payload: EssClockPayload = { action: "clock-in", photo: "data:image/jpeg;base64,AAA" };
@@ -45,5 +45,18 @@ describe("submitClock", () => {
       data: { is_late: false },
     });
     expect(JSON.parse(fetchFn.mock.calls[0][1].body)).toEqual({ ...payload, notes: "Ambil stok" });
+  });
+});
+
+describe("riwayat milik sendiri (EPIC-072 review #1)", () => {
+  it("cuti dan lembur ESS meminta employee_id=me agar pemegang approve tidak melihat daftar HR", async () => {
+    const fn = mockFetch(200, { data: [] });
+    await fetchMyLeaves();
+    await fetchMyOvertime();
+    const urls = fn.mock.calls.map((c) => String(c[0]));
+    expect(urls[0]).toContain("/api/hris/leaves?");
+    expect(urls[0]).toContain("employee_id=me");
+    expect(urls[1]).toContain("/api/hris/overtime?");
+    expect(urls[1]).toContain("employee_id=me");
   });
 });

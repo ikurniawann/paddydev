@@ -104,7 +104,7 @@ func TestDesktopInbox(t *testing.T) {
 	t.Cleanup(func() { _, _ = deps.DB.Exec(ctx, `DELETE FROM hris.employees WHERE id = $1`, emp) })
 	// The oldest start date sorts first, so the fixture is always listed.
 	if err := deps.DB.QueryRow(ctx, `INSERT INTO hris.leaves (employee_id, leave_type, start_date, end_date, total_days, reason)
-		VALUES ($1, 'annual', '1999-08-18', '1999-09-20', 3.5, 'test') RETURNING id::text`, emp).Scan(&leave); err != nil {
+		VALUES ($1, 'annual', '1999-08-18', '1999-09-20', 3.5, 'Acara keluarga di luar kota, berangkat pagi dan kembali malam hari berikutnya') RETURNING id::text`, emp).Scan(&leave); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _, _ = deps.DB.Exec(ctx, `DELETE FROM hris.leaves WHERE id = $1`, leave) })
@@ -126,8 +126,12 @@ func TestDesktopInbox(t *testing.T) {
 	var days string
 	_ = deps.DB.QueryRow(ctx, `SELECT total_days::float8::text FROM hris.leaves WHERE id = $1`, leave).Scan(&days)
 	item := sections[0].(map[string]any)["items"].([]any)[0].(map[string]any)
-	if item["id"] != leave || item["title"] != "Inbox Test" || item["subtitle"] != "Cuti Tahunan · "+days+" hari · 18 Agu–20 Sep" ||
-		item["href"] != "/dashboard/hris/workforce/leaves" || item["actionable"] != true {
+	// EPIC-072 R6: the panel no longer decides; "Buka" leads to the HR Cuti
+	// page with the detail. The reason (often medical) is not shown here:
+	// the inbox reaches every hris.* menu, wider than Cuti readers (R7).
+	if item["id"] != leave || item["title"] != "Inbox Test" ||
+		item["subtitle"] != "Cuti Tahunan · "+days+" hari · 18 Agu–20 Sep" ||
+		item["href"] != "/dashboard/hris/leaves" || item["actionable"] != nil {
 		t.Fatalf("item %v", item)
 	}
 

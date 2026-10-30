@@ -53,7 +53,7 @@ var overtimeAttachmentRe = regexp.MustCompile(`^overtime-attachments/([0-9a-f-]{
 // overtimeQuery is overtimeListQuerySchema.
 type overtimeQuery struct{ Status, Month, Year, EmployeeID, Scope *string }
 
-// ListOvertime: HR all (or one employee), the employee their own, a direct
+// ListOvertime: HR or "approve" on Lembur all (or one employee), the employee their own, a direct
 // manager with scope=approvals their reports' own requests.
 func (s *Service) ListOvertime(ctx context.Context, a *Actor, q overtimeQuery) ([]*Row, error) {
 	var f overtimeFilter
@@ -70,7 +70,7 @@ func (s *Service) ListOvertime(ctx context.Context, a *Actor, q overtimeQuery) (
 			return []*Row{}, nil
 		}
 		f.EmployeeIDs, f.EmployeeSource = ids, true
-	case a.IsHR:
+	case a.hrReads(iam.LeafLembur):
 		target := q.EmployeeID
 		if target != nil && *target == "me" {
 			target = a.EmployeeID

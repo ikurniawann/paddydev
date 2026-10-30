@@ -278,7 +278,9 @@ func (p *Postgres) InboxSection(ctx context.Context, key string) (*InboxSection,
 				return nil, err
 			}
 			it.Subtitle = domain.LeaveTypeLabel(leaveType) + " · " + domain.DescribeLeaveRange(deref(start), deref(end), days)
-			it.Href, it.Actionable = "/dashboard/hris/workforce/leaves", true
+			// EPIC-072 R6: decided on the HR Cuti page after reading the reason
+			// and attachment, not blind from the panel.
+			it.Href = "/dashboard/hris/leaves"
 		case "po":
 			var supplier string
 			var total float64

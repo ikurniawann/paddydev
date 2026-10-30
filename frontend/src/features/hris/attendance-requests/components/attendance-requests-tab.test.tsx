@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AttendanceRequest } from "../types";
 import { AttendanceRequestsTab } from "./attendance-requests-tab";
@@ -44,9 +44,11 @@ describe("AttendanceRequestsTab", () => {
     expect(screen.getByText("Budi Santoso")).toBeTruthy();
     expect(screen.getByText("Koreksi absen")).toBeTruthy();
     expect(screen.getByText("Pulang 17:00")).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Lihat foto bukti" }).getAttribute("href")).toBe(
+    fireEvent.click(screen.getByRole("button", { name: "Foto bukti 1" }));
+    expect(screen.getByAltText("Foto bukti 1").getAttribute("src")).toBe(
       "/api/hris/attendance-requests/attachment/attendance-requests/e1/a.png"
     );
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
     fireEvent.click(screen.getByRole("button", { name: "Setujui" }));
     expect(decide).toHaveBeenCalledWith({ id: "r1", action: "approve", rejectionReason: undefined }, expect.anything());
   });
@@ -71,5 +73,19 @@ describe("AttendanceRequestsTab", () => {
     render(<AttendanceRequestsTab />);
     expect(screen.queryByRole("button", { name: "Setujui" })).toBeNull();
     expect(screen.getByText("oleh HR Pemutus")).toBeTruthy();
+  });
+});
+
+describe("AttendanceRequestsTab — Detail (EPIC-072)", () => {
+  it("Detail menampilkan jam diajukan vs tercatat, alasan, foto; Tolak dari dialog membuka alasan penolakan", () => {
+    rows.push(req({}));
+    render(<AttendanceRequestsTab />);
+    fireEvent.click(screen.getByRole("button", { name: "Detail pengajuan absensi Budi Santoso" }));
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText("Lupa absen pulang, HP mati")).toBeTruthy();
+    expect(within(dialog).getByText("Pulang 17:00")).toBeTruthy();
+    expect(within(dialog).getByRole("button", { name: "Foto bukti 1" })).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Tolak" }));
+    expect(screen.getByRole("button", { name: "Tolak pengajuan" })).toBeTruthy();
   });
 });

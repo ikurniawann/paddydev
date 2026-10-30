@@ -63,7 +63,7 @@ export async function submitClock(payload: EssClockPayload): Promise<EssClockRes
   }
 }
 
-export const fetchMyLeaves = () => softGet<EssLeaveRow[]>("/api/hris/leaves?limit=20", []);
+export const fetchMyLeaves = () => softGet<EssLeaveRow[]>("/api/hris/leaves?employee_id=me&limit=20", []);
 
 /** Upload lampiran (bila ada) lalu kirim pengajuan dengan path-nya. */
 export async function submitMyLeave(form: EssLeaveForm, attachmentDataUrl?: string) {
@@ -77,7 +77,7 @@ export async function submitMyLeave(form: EssLeaveForm, attachmentDataUrl?: stri
   return apiPost<{ data: unknown }>("/api/hris/leaves", { ...form, attachment_url: attachmentUrl });
 }
 
-export const fetchMyOvertime = () => softGet<EssOvertimeRow[]>("/api/hris/overtime", []);
+export const fetchMyOvertime = () => softGet<EssOvertimeRow[]>("/api/hris/overtime?employee_id=me", []);
 
 export const submitOvertime = (form: EssOvertimeForm) =>
   apiPost<{ data: unknown }>("/api/hris/overtime", { ...form, break_minutes: Number(form.break_minutes || 0) });
@@ -113,8 +113,11 @@ export const fetchMyLoans = () => softGet<EssLoanRow[]>("/api/hris/loans?employe
 export const fetchTeamLoanApprovals = () =>
   softGet<EssLoanRow[]>("/api/hris/loans?scope=approvals", []);
 
-export const decideTeamLoan = (id: string, approved: boolean) =>
-  apiPost<{ message?: string }>(`/api/hris/loans/${id}/approve`, { approved });
+export const decideTeamLoan = (id: string, approved: boolean, rejectionReason?: string) =>
+  apiPost<{ message?: string }>(`/api/hris/loans/${id}/approve`, {
+    approved,
+    ...(rejectionReason ? { rejection_reason: rejectionReason } : {}),
+  });
 
 export const submitLoan = (payload: EssLoanPayload) =>
   apiPost<{ data: unknown }>("/api/hris/loans", payload);

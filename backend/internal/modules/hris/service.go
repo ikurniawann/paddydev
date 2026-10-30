@@ -102,6 +102,13 @@ func (a *Actor) CanApprove(leaf string) bool {
 	return a != nil && slices.Contains(a.Approves, leaf)
 }
 
+// hrReads reports whether the account reads every employee's requests on
+// leaf: an HR app role, or "approve" on the leaf (EPIC-072 R7) so whoever
+// may decide sees the reason and attachments first.
+func (a *Actor) hrReads(leaf string) bool {
+	return a != nil && (a.IsHR || a.CanApprove(leaf))
+}
+
 // ActorRepo resolves the employee behind an account.
 type ActorRepo interface {
 	EmployeeIDByUser(ctx context.Context, userID string) (*string, error)

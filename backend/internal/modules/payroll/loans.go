@@ -70,7 +70,7 @@ func (s *service) listLoanApprovals(ctx context.Context, a *actor) ([]*obj, erro
 	if a.EmployeeID == nil {
 		return []*obj{}, nil
 	}
-	rows, err := queryObjs(ctx, s.db, `SELECT id, employee_id, loan_type, principal_amount, tenor_months, purpose,
+	rows, err := queryObjs(ctx, s.db, `SELECT id, employee_id, loan_type, principal_amount, tenor_months, purpose, notes,
 		status, created_at FROM hris.loans WHERE status = 'pending' AND manager_approver_id = $1 ORDER BY created_at`,
 		*a.EmployeeID)
 	if err != nil {

@@ -3,9 +3,13 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { formatDate } from "@/lib/format";
+import { formatDate, formatDateTime } from "@/lib/format";
 import { ApprovalButtons } from "@/components/hris/ApprovalButtons";
+import { AttachmentPreviewButtons } from "@/components/hris/attachment-preview";
+import { RequestDetailDialog } from "@/components/hris/request-detail-dialog";
+import { leaveAttachmentHref } from "@/lib/hris/attachments";
 import { useHrApproveAccess } from "@/features/hris/approve-access";
+import { useEssMe } from "@/features/hris/ess/queries";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -32,7 +36,7 @@ import { LEAVE_TYPES } from "@/lib/hris/leave-types";
 import { LEAVE_TYPE_LABELS, LEAVE_STATUS_LABELS, LEAVE_STATUS_COLORS } from "@/types/hris";
 import { useLeaveList } from "../queries";
 import { downloadLeavesCsv } from "../api";
-import type { LeaveListParams } from "../types";
+import type { LeaveItem, LeaveListParams } from "../types";
 
 export function LeavesPage() {
   const router = useRouter();
@@ -54,7 +58,15 @@ export function LeavesPage() {
   // selama memuat/error. Antrean atasan ada di ESS Persetujuan Tim, bukan di sini.
   const { data: access } = useHrApproveAccess();
   const canDecide = access?.leaves === true;
+  // Cuti milik sendiri tidak diputus di sini (server juga menolak, EPIC-072 Review Focus #4).
+  const myEmployeeId = useEssMe().data?.employee?.id;
+  const decidable = (leave: LeaveItem) => canDecide && leave.status === "pending" && leave.employee_id !== myEmployeeId;
   const leaves = useMemo(() => data ?? [], [data]);
+  // Detail cuti (EPIC-072): alasan utuh + lampiran sebelum memutus.
+  // Disimpan per id agar status/aksi mengikuti data terbaru setelah keputusan.
+  const [detailId, setDetailId] = useState<string | null>(null);
+  const detail: LeaveItem | undefined = leaves.find((l) => l.id === detailId);
+  const typeLabel = (type: string) => LEAVE_TYPE_LABELS[type as keyof typeof LEAVE_TYPE_LABELS] || type;
 
   const handleExport = async () => {
     try {
@@ -187,7 +199,17 @@ export function LeavesPage() {
                       </p>
                     </div>
                   </div>
-                  {getStatusBadge(leave.status)}
+                  <div className="flex shrink-0 items-center gap-2">
+                    {getStatusBadge(leave.status)}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      aria-label={`Detail cuti ${leave.employee?.full_name ?? ""}`}
+                      onClick={() => setDetailId(leave.id)}
+                    >
+                      Detail
+                    </Button>
+                  </div>
                 </div>
               </CardHeader>
               <CardContent>
@@ -224,8 +246,20 @@ export function LeavesPage() {
                   <div className="space-y-3">
                     <div>
                       <p className="text-sm font-medium text-gray-700">Alasan</p>
-                      <p className="text-sm text-gray-600 mt-1 line-clamp-2">{leave.reason}</p>
+                      <p className="text-sm text-gray-600 mt-1 line-clamp-2 break-words">{leave.reason}</p>
                     </div>
+
+                    {leave.attachment_url && (
+                      <div>
+                        <p className="text-sm font-medium text-gray-700">Lampiran</p>
+                        <AttachmentPreviewButtons
+                          paths={[leave.attachment_url]}
+                          hrefFor={leaveAttachmentHref}
+                          label="Lampiran"
+                          className="mt-1"
+                        />
+                      </div>
+                    )}
 
                     {leave.status === "approved" && leave.approver && (
                       <div className="flex items-center gap-2 text-sm text-green-600">
@@ -249,7 +283,7 @@ export function LeavesPage() {
                     <p className="text-xs text-gray-500">
                       Diajukan: {formatDate(leave.created_at)}
                     </p>
-                    {canDecide && <ApprovalButtons leaveId={leave.id} />}
+                    {decidable(leave) && <ApprovalButtons leaveId={leave.id} />}
                   </div>
                 )}
               </CardContent>
@@ -329,6 +363,43 @@ export function LeavesPage() {
           Export CSV
         </Button>
       </div>
+      {detail && (
+        <RequestDetailDialog
+          open
+          onOpenChange={(o) => !o && setDetailId(null)}
+          title="Detail cuti"
+          employee={{
+            name: detail.employee?.full_name ?? "—",
+            nip: detail.employee?.nip,
+            subtitle: detail.employee?.department?.name,
+          }}
+          status={getStatusBadge(detail.status)}
+          fields={[
+            { label: "Jenis", value: typeLabel(detail.leave_type) },
+            { label: "Periode", value: `${formatDate(detail.start_date)} – ${formatDate(detail.end_date)}` },
+            { label: "Durasi", value: `${detail.total_days} hari kerja` },
+            { label: "Diajukan", value: formatDateTime(detail.created_at, "—") },
+          ]}
+          reason={{ text: detail.reason }}
+          attachments={{
+            paths: detail.attachment_url ? [detail.attachment_url] : [],
+            hrefFor: leaveAttachmentHref,
+            label: "Lampiran",
+          }}
+          notes={
+            detail.status === "approved" && detail.approver ? (
+              <p className="text-xs text-green-700">Disetujui oleh {detail.approver.full_name}</p>
+            ) : detail.status === "rejected" && detail.rejection_reason ? (
+              <p className="whitespace-pre-line break-words text-xs text-red-600">
+                Alasan penolakan: {detail.rejection_reason}
+              </p>
+            ) : undefined
+          }
+          actions={
+            decidable(detail) ? <ApprovalButtons leaveId={detail.id} /> : undefined
+          }
+        />
+      )}
     </div>
   );
 }

@@ -109,7 +109,14 @@ func yearOf(date string) int {
 }
 
 func (s *Service) ListLeaves(ctx context.Context, a *Actor, f leaveFilter, page, limit int) (*Row, error) {
-	if !a.IsHR {
+	// employee_id=me: the account's own requests (ESS), whatever it may read.
+	if f.EmployeeID != nil && *f.EmployeeID == "me" {
+		if a.EmployeeID == nil {
+			return nil, httpx.Forbidden("Akun ini tidak terhubung ke data karyawan")
+		}
+		f.EmployeeID = a.EmployeeID
+	}
+	if !a.hrReads(iam.LeafCuti) {
 		if a.EmployeeID == nil {
 			return nil, httpx.Forbidden("Akun ini tidak terhubung ke data karyawan")
 		}
@@ -264,7 +271,7 @@ func (s *Service) notifyLeaveRequest(ctx context.Context, tx pgx.Tx, e outbox.Ev
 	})
 }
 
-// Leave is getLeave: HR, the owner, or the direct manager.
+// Leave is getLeave: HR (or "approve" on Cuti), the owner, or the direct manager.
 func (s *Service) Leave(ctx context.Context, a *Actor, id string) (*Row, error) {
 	row, err := s.repo.LeaveDetail(ctx, id)
 	if err != nil {
@@ -278,7 +285,7 @@ func (s *Service) Leave(ctx context.Context, a *Actor, id string) (*Row, error) 
 	if emp := row.Child("employee"); emp != nil && a.EmployeeID != nil {
 		manager = emp.Str("reporting_to") == *a.EmployeeID
 	}
-	if !a.IsHR && !own && !manager {
+	if !a.hrReads(iam.LeafCuti) && !own && !manager {
 		return nil, httpx.Forbidden("Insufficient permissions")
 	}
 	return row, nil

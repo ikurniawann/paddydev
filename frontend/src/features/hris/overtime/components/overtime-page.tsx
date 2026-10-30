@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useHrApproveAccess } from "@/features/hris/approve-access";
+import { useEssMe } from "@/features/hris/ess/queries";
 import type { OvertimeDecisionAction } from "@/lib/hris/overtime-rules";
 import type { OvertimeDayType, OvertimeRow } from "../types";
 import { countPendingEmployeeRequests, currentMonthValue } from "@/lib/hris/overtime-view";
@@ -39,6 +40,7 @@ export function OvertimePage({ canCorrect = false }: { canCorrect?: boolean }) {
   const decide = useDecideOvertime();
   // Gagal tutup: tombol keputusan baru tampil setelah server memastikan `approve` (EPIC-067 R14).
   const { data: access } = useHrApproveAccess();
+  const myEmployeeId = useEssMe().data?.employee?.id;
   const pendingEmployeeRequests = countPendingEmployeeRequests(rows);
 
   function handleDecide(id: string, action: OvertimeDecisionAction, day_type?: OvertimeDayType) {
@@ -102,6 +104,7 @@ export function OvertimePage({ canCorrect = false }: { canCorrect?: boolean }) {
         canCorrect={canCorrect}
         canDecide={access?.overtime === true}
         onCorrect={setCorrecting}
+        myEmployeeId={myEmployeeId}
       />
 
       <OvertimeAssignDialog open={assignOpen} onOpenChange={setAssignOpen} />

@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { OvertimeRow } from "../types";
 import { OvertimeTable } from "./overtime-table";
@@ -104,5 +104,48 @@ describe("OvertimeTable — tombol keputusan mengikuti akses approve (EPIC-067 R
     render(table({ ...base, source: "company" }, onDecide, false, true));
     fireEvent.click(screen.getByRole("button", { name: "Batalkan" }));
     expect(onDecide).toHaveBeenCalledWith("o1", "cancel");
+  });
+});
+
+describe("OvertimeTable — Detail (EPIC-072)", () => {
+  it("Detail menampilkan alasan utuh dan dokumentasi; Setujui dari dialog memanggil onDecide", () => {
+    const onDecide = vi.fn();
+    const reason = "Closing akhir bulan dan stock opname gudang belakang sampai selesai";
+    render(table({ ...base, reason, break_minutes: 30, attachments: ["overtime-attachments/e1/b.pdf"] }, onDecide));
+    fireEvent.click(screen.getByRole("button", { name: "Detail lembur Crew Koreksi" }));
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText(reason)).toBeTruthy();
+    expect(within(dialog).getByRole("button", { name: "Dokumentasi 1" })).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Setujui" }));
+    expect(onDecide).toHaveBeenCalledWith("o1", "approve", undefined);
+  });
+
+  it("canDecide=false: Detail tanpa tombol keputusan", () => {
+    render(table(base, vi.fn(), false, false));
+    fireEvent.click(screen.getByRole("button", { name: "Detail lembur Crew Koreksi" }));
+    expect(within(screen.getByRole("dialog")).queryByRole("button", { name: "Setujui" })).toBeNull();
+  });
+});
+
+describe("OvertimeTable — pengajuan sendiri (EPIC-072 Review Focus #4)", () => {
+  it("myEmployeeId = pemilik: tanpa Setujui/Tolak di baris maupun Detail", () => {
+    render(
+      <OvertimeTable rows={[base]} loading={false} decidingId={null} onDecide={vi.fn()} canCorrect={false}
+        canDecide onCorrect={vi.fn()} myEmployeeId="e1" />
+    );
+    expect(screen.queryByRole("button", { name: "Setujui" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Detail lembur Crew Koreksi" }));
+    expect(within(screen.getByRole("dialog")).queryByRole("button", { name: "Setujui" })).toBeNull();
+  });
+
+  it("Detail menampilkan jenis hari yang dipilih di baris, sama dengan yang dikirim Setujui (review #4)", () => {
+    const onDecide = vi.fn();
+    render(table(base, onDecide));
+    fireEvent.change(screen.getByLabelText("Jenis hari"), { target: { value: "rest_day" } });
+    fireEvent.click(screen.getByRole("button", { name: "Detail lembur Crew Koreksi" }));
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText("Weekend / Libur")).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Setujui" }));
+    expect(onDecide).toHaveBeenCalledWith("o1", "approve", "rest_day");
   });
 });

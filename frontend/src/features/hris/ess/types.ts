@@ -139,7 +139,7 @@ export type EssOvertimeDecision = "approve" | "reject" | "cancel";
 
 export interface EssLoanRow {
   id: string;
-  employee?: { full_name: string } | null;
+  employee?: { full_name: string; nip?: string | null } | null;
   loan_type: string;
   principal_amount: string | number;
   monthly_installment: string | number;
@@ -150,7 +150,10 @@ export interface EssLoanRow {
   first_installment_year: number | null;
   status: string;
   purpose: string | null;
+  /** Catatan kasbon (antrean manager, EPIC-072 R8). */
+  notes?: string | null;
   rejection_reason: string | null;
+  created_at?: string;
 }
 
 export interface EssLoanPayload {
