@@ -160,6 +160,9 @@ func TestMigrationEssTeamAttendanceMenu(t *testing.T) {
 	}
 	h.exec(`INSERT INTO iam.menus (code, menu_name, menu_type) VALUES ('ess', 'Area Karyawan', 'group') ON CONFLICT (code) DO NOTHING`)
 	h.exec(`INSERT INTO iam.roles (code, name) VALUES ('go_test_role_074', 'go_test_role_074') ON CONFLICT (code) DO NOTHING`)
+	// The roles existing when the migration runs: other packages' tests may
+	// commit new roles concurrently (CI runs packages in parallel).
+	roles := h.scalar(`SELECT string_agg(id::text, ',') FROM iam.roles WHERE deleted_at IS NULL`)
 	h.exec(string(body))
 	h.exec(string(body))
 	got := h.scalar(`SELECT m.menu_name || '|' || m.route_path || '|' || m.module || '|' || p.code || '|' || (m.permission_context->'actions')::text
@@ -167,9 +170,9 @@ func TestMigrationEssTeamAttendanceMenu(t *testing.T) {
 	if got != `Absensi Tim|/dashboard/me/absensi-tim|ess|ess|["read"]` {
 		t.Fatalf("menu = %q", got)
 	}
-	if n := h.scalar(`SELECT count(*)::text FROM iam.roles r WHERE r.deleted_at IS NULL AND NOT EXISTS (
+	if n := h.scalar(`SELECT count(*)::text FROM iam.roles r WHERE r.id = ANY(string_to_array($1, ',')::uuid[]) AND NOT EXISTS (
 		SELECT 1 FROM iam.role_menu_permissions rmp JOIN iam.menus m ON m.id = rmp.menu_id
-		WHERE rmp.role_id = r.id AND m.code = 'ess.team-attendance' AND rmp.is_active AND rmp.granted_actions ? 'read')`); n != "0" {
+		WHERE rmp.role_id = r.id AND m.code = 'ess.team-attendance' AND rmp.is_active AND rmp.granted_actions ? 'read')`, roles); n != "0" {
 		t.Fatalf("%s roles without the grant", n)
 	}
 }
