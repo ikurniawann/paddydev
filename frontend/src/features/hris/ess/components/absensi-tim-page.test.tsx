@@ -59,5 +59,8 @@ describe("EssAbsensiTimPage (EPIC-074)", () => {
     api.fetchTeamAttendance.mockResolvedValue(roster([]));
     renderPage();
     expect(await screen.findByText("Belum ada anggota tim.")).toBeTruthy();
+    // EPIC-074 sisa: tanpa tim, ringkasan & filter tidak ditampilkan (bukan deretan angka nol).
+    expect(screen.queryByText(/Terjadwal/)).toBeNull();
+    expect(screen.queryByPlaceholderText("Nama / NIP…")).toBeNull();
   });
 });
