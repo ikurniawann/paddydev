@@ -129,3 +129,9 @@ Lihat rencana `docs/superpowers/plans/2026-10-29-pengatur-jadwal-toko.md`.
   - **Catatan untuk HR:** Dhimas (ODOO-WAREHOUSE-PADDY) dan Siti Asyah (MIZU-BANDUNG) tidak punya bawahan. Wilayah mereka = seluruh karyawan di toko itu (R3: toko ATAU bawahan). HR dapat mempersempit atau mencabut di Penempatan → Pengatur jadwal toko.
   - Rollback penunjukan saja: cabut di aplikasi, atau `DELETE FROM hris.schedule_delegates` (toko ikut terhapus lewat cascade).
   - Status `ready-for-qa`: koordinator/HR mencoba menu Jadwal Toko di production.
+- 2026-10-30: **Perbaikan layout dialog pengatur (PR #50, `405eddc6`)**, dilaporkan HR dari production.
+  - Masalah: dialog Ubah/Tambah pengatur meluber ke kanan karena nama toko panjang dan di HP; tabel di HP memotong kode toko.
+  - Fix: dialog memakai `DialogPanel` (isi bergulir, tombol menempel di bawah, nama toko dibungkus); tabel `min-w-[880px]` digeser ke samping, chip toko `whitespace-nowrap`. Tes baru untuk nama toko panjang (gagal di kode lama).
+  - Bukti: CI 4/4 hijau, vitest schedule-delegates 17/17. Probe Playwright di staging (laptop 1280 + HP 390, edit + tambah, juga nama toko panjang): 0 elemen keluar dari dialog, 0 error konsol. Diulang 30-10 pada image staging `local-20261030-002659`, hasil sama. Akun uji `qafix-hr` dibuat lalu dihapus (0 tersisa).
+  - **Deploy production 30-10 11:57 WIB** atas izin eksplisit user ("Ya, merge + deploy"). Image `local-20261030-115714` = main `405eddc6`, tanpa migrasi (565, verify 0 beda), container healthy, log API 0 error, 21 pengatur utuh. Chunk SSR halaman pengatur sama dengan staging yang sudah diuji.
+  - Backup `~/backups/prod-db-before-pengatur-dialog-20261030-115605.dump`; source lama `~/paddydev-src.before-pengatur-dialog-20261030-115605` (= `f270c919`). Rollback: kembalikan folder source itu lalu jalankan `tools/deploy-paddydev.sh`.
