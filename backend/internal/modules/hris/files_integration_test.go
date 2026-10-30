@@ -13,6 +13,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -324,6 +325,15 @@ func TestAttendanceExportBranchFilter(t *testing.T) {
 	doc := h.send(&hr, httptest.NewRequest("GET", base+"&branch_id="+tokoB+"&format=pdf", nil))
 	if doc.Code != 200 || !strings.HasPrefix(doc.Body.String(), "%PDF") {
 		t.Fatalf("pdf long store = %d", doc.Code)
+	}
+	// Review #4: the store sits on its own line, so a long name cannot wrap
+	// the summary line into the table header.
+	pdfText, err := extract.PDFText(doc.Body.Bytes())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if regexp.MustCompile(`·\s*Toko:`).MatchString(pdfText) || !strings.Contains(pdfText, "Toko: ") {
+		t.Fatalf("pdf header: %s", pdfText)
 	}
 }
 

@@ -48,3 +48,15 @@ func TestContractNumberSkipsTakenNumbers(t *testing.T) {
 		t.Fatalf("second number = %q after %q", next, got)
 	}
 }
+
+// Review #2: one odd row with a huge prefix must not break numbering for the
+// rest of the year (an int overflow made every new contract a 500).
+func TestContractNumberIgnoresHugePrefix(t *testing.T) {
+	h := newHarness(t)
+	hr, _ := h.staff("hrd", []string{menuKepegawaian, "hris.compensation"}, false)
+	e := h.employee(emp{status: "contract"})
+	h.exec(`INSERT INTO hris.employment_contracts (employee_id, contract_number, contract_type, start_date, end_date)
+		VALUES ($1, '99999999999/PKWT/X/2026', 'pkwt', '2026-01-01', '2026-12-31')`, e)
+	expect(t, h.do(&hr, "POST", "/api/hris/employees/"+e+"/contracts",
+		map[string]any{"contract_type": "pkwt", "start_date": "2026-11-01", "end_date": "2027-04-30"}), 201, "")
+}

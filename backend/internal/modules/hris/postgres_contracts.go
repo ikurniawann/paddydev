@@ -47,10 +47,19 @@ func (s *store) PkwtChain(ctx context.Context, employeeID string) ([]domain.Cont
 }
 
 func (s *store) MaxContractSeq(ctx context.Context, contractType string, year int) (int, error) {
+	return MaxContractSeq(ctx, s.db, contractType, year)
+}
+
+// MaxContractSeq is the highest manual contract number "NNNN/TYPE/<month>/
+// <year>" of the type in year, 0 when none (EPIC-075 R6). Imported ODOO-…
+// numbers are ignored and prefixes longer than 9 digits too (an odd row must
+// not overflow int and block numbering). Shared with recruitment's promotion
+// draft (internal/app), so both pick the same next number.
+func MaxContractSeq(ctx context.Context, q database.Querier, contractType string, year int) (int, error) {
 	var n int
-	err := s.db.QueryRow(ctx, `SELECT coalesce(max(split_part(contract_number, '/', 1)::int), 0)
+	err := q.QueryRow(ctx, `SELECT coalesce(max(split_part(contract_number, '/', 1)::int), 0)
 		FROM hris.employment_contracts
-		WHERE contract_number ~ ('^[0-9]+/' || upper($1) || '/[IVXLC]+/' || $2 || '$')`,
+		WHERE contract_number ~ ('^[0-9]{1,9}/' || upper($1) || '/[IVXLC]+/' || $2 || '$')`,
 		contractType, strconv.Itoa(year)).Scan(&n)
 	return n, err
 }

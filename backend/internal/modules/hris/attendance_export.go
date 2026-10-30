@@ -361,10 +361,13 @@ func attendancePDF(rows []domain.ReportRow, m reportMeta, photo func(path string
 	d.Font(pdfgen.HelveticaBold, 14).Color(reportText)
 	d.Text(m.CompanyName+" — Rekap Absensi", reportMargin, reportMargin, pdfgen.TextOpts{})
 	d.Font(pdfgen.Helvetica, 9).Color(reportMuted)
-	d.Text(fmt.Sprintf("Periode: %s   ·   Karyawan: %s   ·   Toko: %s   ·   Dicetak: %s", m.PeriodLabel, employeeLabel(m),
-		storeLabel(m), printedAt(m.GeneratedAt)),
+	d.Text(fmt.Sprintf("Periode: %s   ·   Karyawan: %s   ·   Dicetak: %s", m.PeriodLabel, employeeLabel(m), printedAt(m.GeneratedAt)),
 		reportMargin, reportMargin+20, pdfgen.TextOpts{})
-	y := drawReportHeader(d, reportMargin+40)
+	// EPIC-075: the store on its own line, cut to one line so a long name
+	// never wraps into the table header.
+	d.Text("Toko: "+storeLabel(m), reportMargin, reportMargin+32,
+		pdfgen.TextOpts{Width: reportTableW, Height: 11, Ellipsis: true})
+	y := drawReportHeader(d, reportMargin+52)
 
 	center := func(text string, size, x, y, w float64) {
 		d.Font(pdfgen.Helvetica, size).Color(reportMuted)

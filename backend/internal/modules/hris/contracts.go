@@ -136,8 +136,9 @@ func firstOf(a, b *string) *string {
 	return b
 }
 
-// contractNumberAttempts bounds the retries when a number is already taken.
-const contractNumberAttempts = 5
+// ContractNumberAttempts bounds the retries when a number is already taken
+// (also used by recruitment's promotion draft).
+const ContractNumberAttempts = 5
 
 // insertNumbered is withContractNumber: insert with the next number of the
 // type this year, the highest manual number + 1 (EPIC-075 R6: counting rows
@@ -159,7 +160,7 @@ func (s *Service) insertNumbered(ctx context.Context, contractType string, f fie
 		})
 		var pgErr *pgconn.PgError
 		taken := errors.As(err, &pgErr) && strings.Contains(pgErr.Error(), "employment_contracts_contract_number_key")
-		if !taken || attempt == contractNumberAttempts {
+		if !taken || attempt == ContractNumberAttempts {
 			return row, err
 		}
 	}
