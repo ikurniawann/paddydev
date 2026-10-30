@@ -1,8 +1,10 @@
 import "server-only";
 import { cache } from "react";
+import type { UserRole } from "@/types";
+import { userHasIamAction } from "./has-menu";
 import { iamDbQueryOne, isIamDbConfigured } from "./pg-client";
 
-/** Halaman ESS Jadwal Toko; menunya hanya tampil untuk pengatur aktif. */
+/** Halaman ESS Jadwal Toko; menunya tampil untuk pengatur aktif dan HR Jadwal Kerja (EPIC-073). */
 export const JADWAL_TOKO_PATH = "/dashboard/me/jadwal-toko";
 
 /**
@@ -41,3 +43,23 @@ export const isScheduleDelegate = cache(async (userId: string): Promise<boolean>
     return false;
   }
 });
+
+/** Menu HR Jadwal Kerja; `update` di sini = syarat server untuk mengubah jadwal. */
+const SCHEDULE_MANAGERS = ["hris.kepegawaian.schedules"] as const;
+
+/**
+ * Menu Area Karyawan → Jadwal Toko tampil untuk pengatur aktif ATAU akun yang
+ * boleh mengubah Jadwal Kerja HR (EPIC-073 R1); halamannya memakai mode HR
+ * untuk yang kedua (GET /api/hris/me/schedule-access → `hr`). Gagal dibaca →
+ * false (menu disembunyikan; aksesnya tetap diperiksa API).
+ */
+export const canOpenJadwalToko = cache(async (userId: string, role: UserRole): Promise<boolean> => {
+  if (await isScheduleDelegate(userId)) return true;
+  try {
+    return await userHasIamAction(userId, role, SCHEDULE_MANAGERS, "update");
+  } catch (error) {
+    console.error("[iam] canOpenJadwalToko failed:", error);
+    return false;
+  }
+});
+

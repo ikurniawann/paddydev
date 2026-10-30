@@ -34,12 +34,20 @@ interface Props {
    * jadwal tetap Non-Shift dan tautan ke halaman HR.
    */
   mode?: "hr" | "store";
-  /** Mode toko dengan hak penempatan: langkah berikut saat toko belum punya karyawan Shift. */
+  /** Langkah berikut saat cabang belum punya karyawan Shift: tab Penempatan di halaman yang sama. */
   onOpenPlacements?: () => void;
+  /** Di dalam halaman lain (Jadwal Toko mode HR, EPIC-073): tanpa judul halaman sendiri. */
+  embedded?: boolean;
 }
 
 /** Jadwal Kerja per cabang (EPIC-056, EPIC-070): grid bisa diedit, pola, salin, unggah. */
-export function SchedulesPage({ initialBranchId = "", initialEmployeeIds = [], mode = "hr", onOpenPlacements }: Props) {
+export function SchedulesPage({
+  initialBranchId = "",
+  initialEmployeeIds = [],
+  mode = "hr",
+  onOpenPlacements,
+  embedded = false,
+}: Props) {
   const store = mode === "store";
   const today = todayWib();
   const [pickedBranchId, setBranchId] = useState(initialBranchId);
@@ -82,7 +90,7 @@ export function SchedulesPage({ initialBranchId = "", initialEmployeeIds = [], m
 
   return (
     <div className="space-y-5">
-      {store ? null : (
+      {store || embedded ? null : (
         <div className="border-b border-gray-200/70 pb-4">
           <h1 className="text-2xl font-bold text-gray-900">Jadwal Kerja</h1>
           <p className="text-sm text-gray-500">Atur jadwal shift per cabang: ubah per kotak, terapkan pola, atau unggah Excel</p>
@@ -192,9 +200,15 @@ export function SchedulesPage({ initialBranchId = "", initialEmployeeIds = [], m
           ) : grid.data.employees.length === 0 ? (
             <p className="py-10 text-center text-sm text-gray-400">
               Belum ada karyawan Shift yang ditempatkan di cabang ini.{" "}
-              <Link href="/dashboard/hris/placements" className="underline">
-                Atur penempatan karyawan
-              </Link>
+              {onOpenPlacements ? (
+                <button type="button" className="underline" onClick={onOpenPlacements}>
+                  Atur penempatan karyawan
+                </button>
+              ) : (
+                <Link href="/dashboard/hris/placements" className="underline">
+                  Atur penempatan karyawan
+                </Link>
+              )}
             </p>
           ) : (
             <ScheduleGrid

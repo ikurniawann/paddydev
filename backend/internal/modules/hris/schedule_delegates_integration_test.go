@@ -265,3 +265,25 @@ func TestLoadDelegateAccessSeveralEmployeesOneUser(t *testing.T) {
 		}
 	}
 }
+
+// EPIC-073 R3: HR who may edit Jadwal Kerja opens Jadwal Toko in HR mode;
+// the placement tab follows the placement menu. Others get both false.
+func TestScheduleAccessHRFlags(t *testing.T) {
+	h := newHarness(t)
+	// Jadwal Kerja sits under hris.kepegawaian, which placementManagers
+	// covers too: the server lets this account place, so the tab shows.
+	hr, _ := h.staff("pos", []string{"hris.kepegawaian.schedules"}, true)
+	c := h.do(&hr, "GET", scheduleAccessURL, nil)
+	expect(t, c, 200, "")
+	if d := c.data(); d["hr"] != true || d["hr_can_place"] != true || d["is_delegate"] != false {
+		t.Fatalf("schedules HR = %s", c.raw)
+	}
+	placer, _ := h.staff("pos", []string{"hris.master.placements"}, true)
+	if d := h.do(&placer, "GET", scheduleAccessURL, nil).data(); d["hr"] != false || d["hr_can_place"] != true {
+		t.Fatalf("placements only = %v", d)
+	}
+	plain, _ := h.staff("pos", nil, true)
+	if d := h.do(&plain, "GET", scheduleAccessURL, nil).data(); d["hr"] != false || d["hr_can_place"] != false {
+		t.Fatalf("plain = %v", d)
+	}
+}

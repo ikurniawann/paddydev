@@ -93,6 +93,9 @@ type Actor struct {
 	// menu; both set by handlers.actorFor.
 	LeaveBalanceActions []string
 	EmployeeRecords     bool
+	// grants are the account's menu grants (code → actions) as actorFor read
+	// them, for checks that need more than Approves (EPIC-073 schedule-access).
+	grants map[string][]string
 }
 
 // CanApprove reports whether the account holds "approve" on leaf (one of

@@ -11,4 +11,8 @@ export interface ScheduleAccess {
   /** Boleh memindah/menambah/mengakhiri penempatan di tokonya. */
   can_place: boolean;
   branches: ScheduleAccessBranch[];
+  /** EPIC-073 R3: boleh mengubah Jadwal Kerja HR → Jadwal Toko dalam mode HR (semua toko). */
+  hr?: boolean;
+  /** Mode HR dengan tab Penempatan (menu penempatan, syarat rute penempatan). */
+  hr_can_place?: boolean;
 }

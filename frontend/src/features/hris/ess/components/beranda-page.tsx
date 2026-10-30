@@ -13,8 +13,10 @@ import { monthName, monthYearLabel } from "@/lib/hris/month-label";
 import { TherapistBerandaCard } from "@/features/spa/components/therapist-beranda-card";
 import { useSpaMe } from "@/features/spa/queries";
 import { formatDays } from "@/features/hris/leave-balances/balance-math";
+import { useScheduleAccess } from "@/features/hris/schedule-access/queries";
 import { useEssBeranda } from "../queries";
 import { EssClockPanel } from "./ess-clock-panel";
+import { JadwalTokoShortcut } from "./jadwal-toko-shortcut";
 import { balanceSubtitle } from "./leave-balance-summary";
 import {
   AnnouncementsCard,
@@ -33,6 +35,8 @@ import {
  */
 export function EssBerandaPage() {
   const { data, isLoading } = useEssBeranda();
+  // Dimuat paralel dengan beranda agar kartu Jadwal Toko tidak muncul belakangan (EPIC-073).
+  useScheduleAccess();
   const spaMe = useSpaMe();
   const isTherapist = !!spaMe.data?.therapist?.is_active;
 
@@ -111,6 +115,9 @@ export function EssBerandaPage() {
         </div>
         <EssClockPanel />
       </div>
+
+      {/* ── Pengatur jadwal toko / HR Jadwal Kerja: pintasan Jadwal Toko (EPIC-073) ── */}
+      <JadwalTokoShortcut />
 
       {/* ── Terapis spa: booking berikutnya & komisi (hanya akun terapis) ── */}
       <TherapistBerandaCard />
