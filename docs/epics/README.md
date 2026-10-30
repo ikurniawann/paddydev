@@ -74,7 +74,7 @@ deploying-dev · ready-for-qa · blocked · done).
 | [EPIC-069](./EPIC-069-work-location-toko.md) | Work Location Toko — Lengkapi Profil, Tambah Toko Baru, Benahi Penempatan (`MODULE-HRIS`) | ready-for-qa | 2026-10-28 |
 | [EPIC-070](./EPIC-070-penempatan-jadwal-massal.md) | Penempatan & Jadwal Shift — Massal, Manual, Lebih Jelas (`MODULE-HRIS`) | ready-for-qa | 2026-10-29 |
 | [EPIC-071](./EPIC-071-pengatur-jadwal-toko.md) | Pengatur Jadwal Toko — Jabatan Tertentu Mengatur Jadwal & Penempatan (`MODULE-HRIS`) | ready-for-qa | 2026-10-29 |
-| [EPIC-072](./EPIC-072-detail-pengajuan-penyetuju.md) | Detail Pengajuan untuk Penyetuju — Alasan & Dokumentasi Terlihat Sebelum Memutus (`MODULE-HRIS`) | coding | 2026-10-30 |
+| [EPIC-072](./EPIC-072-detail-pengajuan-penyetuju.md) | Detail Pengajuan untuk Penyetuju — Alasan & Dokumentasi Terlihat Sebelum Memutus (`MODULE-HRIS`) | review | 2026-10-30 |
 
 Aturan:
 - Epic + registry ini adalah sumber kebenaran status pekerjaan (canonical).

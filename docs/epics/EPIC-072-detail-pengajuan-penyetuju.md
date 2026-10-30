@@ -1,6 +1,6 @@
 # EPIC-072: Detail Pengajuan untuk Penyetuju — Alasan & Dokumentasi Terlihat Sebelum Memutus (`MODULE-HRIS`)
 
-status: coding
+status: review
 environment: dev
 retries: 0
 
@@ -25,10 +25,16 @@ Server sudah mengirim alasan dan path dokumentasi di semua antrean; celahnya ada
 - **R3** Dialog **Tolak** di ESS (cuti, lembur) dan dialog **Setujui lembur** ikut menampilkan ringkasan pengajuan + alasan, supaya keputusan tidak buta walau tombol baris yang ditekan.
 - **R4** Kasbon tim di ESS: Tolak kini **wajib alasan** (server sudah menerima `rejection_reason`); `notes` kasbon ditampilkan bila ada.
 - **R5** Pratinjau dokumentasi lembur (`OvertimeAttachmentButtons`) digeneralisasi menjadi `AttachmentPreviewButtons` dengan `hrefFor`. Lampiran cuti dan foto bukti absensi memakai pratinjau yang sama, tidak lagi tab baru.
-- **R6** Panel **Hari Ini** (desktop): cuti tidak lagi diputus langsung dari panel (sebelumnya tolak dengan alasan tetap "Ditolak dari panel Hari Ini" tanpa melihat alasan/lampiran). Panel menampilkan alasan singkat; "Buka" menuju `/dashboard/hris/leaves` (tautan lama `/dashboard/hris/workforce/leaves` tidak ada).
+- **R6** Panel **Hari Ini** (desktop): cuti tidak lagi diputus langsung dari panel (sebelumnya tolak dengan alasan tetap "Ditolak dari panel Hari Ini" tanpa melihat alasan/lampiran). "Buka" menuju `/dashboard/hris/leaves` (tautan lama `/dashboard/hris/workforce/leaves` tidak ada). *Direvisi saat review:* panel **tidak** menampilkan alasan, karena panel terlihat oleh semua menu `hris.*` (lebih luas dari pembaca Cuti, R7) dan alasan cuti sering medis.
 - **R7** Server: daftar HR Cuti dan Lembur, detail cuti, serta file lampiran cuti/lembur terbuka untuk `IsHR` **atau** `CanApprove(leaf)` daun masing-masing (Cuti `hris.workforce.leaves`, Lembur `hris.kepegawaian.overtime`). Atasan langsung tetap seperti sekarang (bawahan langsung saja). Tidak ada perubahan siapa yang boleh memutus.
 - **R8** Antrean kasbon manager ikut mengirim `notes` (kolom non-gaji, aman untuk R8 EPIC-060).
 - **R9** Tanpa migrasi DB. Tidak ada perubahan aturan approval (matriks tetap).
+
+### Ruling saat implementasi & review (R10+)
+- **R10** Halaman ESS "milik saya" (Izin & Cuti, Lembur) meminta `employee_id=me`; `GET /api/hris/leaves` kini menerima `employee_id=me`. Tanpa ini, pemegang approve (R7) melihat daftar seluruh karyawan di ESS seolah miliknya.
+- **R11** Pengajuan milik penonton sendiri tidak menampilkan Setujui/Tolak di Detail maupun baris HR Cuti/Lembur (server juga menolak).
+- **R12** Detail lembur HR menampilkan jenis hari yang dipilih di baris (yang akan dikirim Setujui).
+- **R13** Dialog Detail di halaman HR mengikuti baris per id, sehingga status/aksi ikut data terbaru setelah keputusan.
 
 ## Tasks
 Rencana: `docs/superpowers/plans/2026-10-30-detail-pengajuan-penyetuju.md`.
@@ -43,3 +49,11 @@ Rencana: `docs/superpowers/plans/2026-10-30-detail-pengajuan-penyetuju.md`.
 
 ## Automation Log
 - 2026-10-30: Epic dibuat dari permintaan user; pemetaan layar penyetuju dan endpoint (read-only) selesai.
+- 2026-10-30: **Implementasi** (eksekusi inline, plan T1–T5):
+  - T1 `446f67dd`, `ee909115`: `Actor.hrReads` (IsHR atau approve daun) untuk daftar/detail cuti, daftar lembur, lampiran cuti/lembur; `notes` di antrean kasbon manager; Hari Ini tanpa putus langsung. Tes `TestApproverReadsRequestDetails`.
+  - T2 `12bf831f`: `RequestDetailDialog` + `AttachmentPreviewButtons` (dengan `hrefFor`), `leaveAttachmentHref`, URL foto absensi di-encode.
+  - T3 `32837601`: Detail cuti/lembur/Perjalanan Dinas di ESS Persetujuan Tim; alasan di dialog Setujui lembur dan dialog Tolak.
+  - T4 `7ffe2308`: Detail kasbon tim; tolak wajib alasan.
+  - T5 `e4b52722`: Detail di HR Cuti (lampiran tampil), Lembur, Pengajuan Absensi, Perjalanan Dinas, Pinjaman.
+- 2026-10-30: **Review akhir seluruh branch:** With fixes, 0 kritis. Diperbaiki di `6e82a83f`: R10 (ESS milik sendiri), R6 direvisi (alasan tidak di Hari Ini), R11, R12, baris kasbon tim di HP bisa turun baris. Ditunda (minor): nama aksesibel tombol "Lampiran 1" sama antarbaris; fallback Next `/api/desktop/inbox` masih actionable (hanya tanpa `BACKEND_URL`); Detail Persetujuan Tim bisa tetap terbuka bila penyetuju lain memutus lebih dulu (server menolak).
+- 2026-10-30: **Gerbang lokal:** `go vet` bersih; `go test -p 1` payroll/hris/desktop ok; frontend `tsc` 0, `lint` 0, `pnpm test` 865 file / 6286 tes lulus.
