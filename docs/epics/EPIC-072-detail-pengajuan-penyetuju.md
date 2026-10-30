@@ -1,6 +1,6 @@
 # EPIC-072: Detail Pengajuan untuk Penyetuju — Alasan & Dokumentasi Terlihat Sebelum Memutus (`MODULE-HRIS`)
 
-status: review
+status: ready-for-qa
 environment: dev
 retries: 0
 
@@ -57,3 +57,6 @@ Rencana: `docs/superpowers/plans/2026-10-30-detail-pengajuan-penyetuju.md`.
   - T5 `e4b52722`: Detail di HR Cuti (lampiran tampil), Lembur, Pengajuan Absensi, Perjalanan Dinas, Pinjaman.
 - 2026-10-30: **Review akhir seluruh branch:** With fixes, 0 kritis. Diperbaiki di `6e82a83f`: R10 (ESS milik sendiri), R6 direvisi (alasan tidak di Hari Ini), R11, R12, baris kasbon tim di HP bisa turun baris. Ditunda (minor): nama aksesibel tombol "Lampiran 1" sama antarbaris; fallback Next `/api/desktop/inbox` masih actionable (hanya tanpa `BACKEND_URL`); Detail Persetujuan Tim bisa tetap terbuka bila penyetuju lain memutus lebih dulu (server menolak).
 - 2026-10-30: **Gerbang lokal:** `go vet` bersih; `go test -p 1` payroll/hris/desktop ok; frontend `tsc` 0, `lint` 0, `pnpm test` 865 file / 6286 tes lulus.
+- 2026-10-30 13:10: **Deploy staging** branch `783bd26b` (PR #52), image `local-20261030-131040`, tanpa migrasi (verify 0 beda). Backup `~/Desktop/paddydev-backups/staging-db-before-epic072-20261030-131033.dump`.
+- 2026-10-30: **QA staging** dengan data demo (akun `qa072-hr` peran hrd + `hris_manager`, karyawan fiktif "QA072 Atasan" dan "QA072 Pemohon…", 1 cuti sakit berlampiran, 1 lembur berdokumentasi PDF + gambar). Probe Playwright laptop 1280 + HP 390: ESS Persetujuan Tim (Detail cuti, Detail lembur gambar + PDF), HR Cuti, HR Lembur, 10/10 lulus. 0 elemen keluar dari dialog, alasan utuh tampil, lampiran 200 dan termuat, `employee_id=me` tidak memuat pengajuan orang lain, 0 error konsol, 0 respons API ≥ 400, log API 0 error. Data demo, sesi, dan file lampiran dihapus (0 tersisa). Keputusan (Setujui/Tolak) tidak diuji di staging agar tidak mengirim WhatsApp ke nomor fiktif; logika keputusan tidak berubah dan tercakup tes unit.
+
