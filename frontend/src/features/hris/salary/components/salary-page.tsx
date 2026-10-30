@@ -1,14 +1,20 @@
 "use client";
 
 import Link from "next/link";
+import { useMemo, useState } from "react";
+import { toast } from "sonner";
+import { Download, Search } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { PlusIcon, PencilIcon } from "@heroicons/react/24/outline";
 import { formatDate, formatRupiah } from "@/lib/format";
 import { EntityTabs, useEntityParam } from "@/features/hris/payroll";
+import { todayWib } from "@/lib/dates";
 import { useSalaryList } from "../queries";
+import { downloadSalaryXlsx, matchesSalarySearch, sortSalaries } from "../salary-export";
 
 export function SalaryPage() {
   const router = useRouter();
@@ -19,8 +25,23 @@ export function SalaryPage() {
   const unassigned = salaries.filter((s) => s.is_active !== false && !s.company_id);
   const { entity, setEntity, entities, loading: entitiesLoading } = useEntityParam();
   const entityName = entities.find((e) => e.id === entity)?.name ?? "";
-  const visible = salaries.filter((s) => s.company_id === entity);
+  // EPIC-075 R3/R4: urut nama A–Z, cari nama/NIP di tab entitas yang terbuka.
+  const [search, setSearch] = useState("");
+  const [exporting, setExporting] = useState(false);
+  const inEntity = useMemo(() => sortSalaries(salaries.filter((s) => s.company_id === entity)), [salaries, entity]);
+  const visible = inEntity.filter((s) => matchesSalarySearch(s, search));
   const loading = salaryQuery.isLoading || entitiesLoading;
+
+  async function handleExport() {
+    setExporting(true);
+    try {
+      await downloadSalaryXlsx(visible, entityName, todayWib());
+    } catch (err) {
+      toast.error("Export gagal: " + (err instanceof Error ? err.message : "unknown"));
+    } finally {
+      setExporting(false);
+    }
+  }
 
   if (loading) {
     return (
@@ -68,8 +89,27 @@ export function SalaryPage() {
 
       {/* Salary Table */}
       <Card>
-        <CardHeader>
+        <CardHeader className="space-y-3">
           <CardTitle>Daftar Salary Structure{entityName ? ` — ${entityName}` : ""}</CardTitle>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative w-full sm:w-72">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+              <Input
+                className="pl-9"
+                placeholder="Cari nama atau NIP"
+                aria-label="Cari nama atau NIP"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+            <Button variant="outline" onClick={() => void handleExport()} disabled={exporting || visible.length === 0}>
+              <Download className="mr-2 h-4 w-4" />
+              Export Excel
+            </Button>
+            <span className="text-xs text-gray-500">
+              {visible.length} dari {inEntity.length} karyawan
+            </span>
+          </div>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
@@ -90,7 +130,11 @@ export function SalaryPage() {
                 {visible.length === 0 ? (
                   <tr>
                     <td colSpan={8} className="py-8 text-center text-gray-500">
-                      {entityName ? `Belum ada struktur gaji untuk ${entityName}.` : "Belum ada entitas aktif."}
+                      {inEntity.length > 0
+                        ? "Tidak ada karyawan yang cocok"
+                        : entityName
+                          ? `Belum ada struktur gaji untuk ${entityName}.`
+                          : "Belum ada entitas aktif."}
                     </td>
                   </tr>
                 ) : (
