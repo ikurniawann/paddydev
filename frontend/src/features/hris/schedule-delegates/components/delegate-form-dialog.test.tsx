@@ -111,6 +111,22 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("DelegateFormDialog (EPIC-071)", () => {
+  it("nama toko panjang dibungkus di dalam panel, footer tetap di luar area gulir", async () => {
+    const long = "ODOO-BXST - BXST - Mini Paddy Playstore Bobobox Sultan Tirtayasa";
+    placementsApi.fetchStoreBranches.mockResolvedValue([...branches, branch("b4", "ODOO-BXST", long)]);
+    renderDialog({ delegate });
+
+    const name = await screen.findByText(long);
+    // truncate memaksa lebar min-content baris = teks penuh, sehingga dialog melebar di HP
+    expect(name.className).toContain("break-words");
+    expect(name.className).not.toContain("truncate");
+    const body = name.closest('[data-slot="dialog-panel-body"]');
+    expect(body).toBeTruthy();
+    const footer = screen.getByRole("button", { name: "Simpan" }).closest('[data-slot="dialog-footer"]');
+    expect(footer).toBeTruthy();
+    expect(body?.contains(footer)).toBe(false);
+  });
+
   it("pilih karyawan -> toko terisi dari saran -> simpan mengirim PUT dengan can_place false", async () => {
     api.saveScheduleDelegate.mockResolvedValue({ ...delegate, employee_id: "e1" });
     const { onOpenChange } = renderDialog();
