@@ -15,6 +15,7 @@ import { useSpaMe } from "@/features/spa/queries";
 import { formatDays } from "@/features/hris/leave-balances/balance-math";
 import { useEssBeranda } from "../queries";
 import { EssClockPanel } from "./ess-clock-panel";
+import { JadwalTokoShortcut } from "./jadwal-toko-shortcut";
 import { balanceSubtitle } from "./leave-balance-summary";
 import {
   AnnouncementsCard,
@@ -111,6 +112,9 @@ export function EssBerandaPage() {
         </div>
         <EssClockPanel />
       </div>
+
+      {/* ── Pengatur jadwal toko / HR Jadwal Kerja: pintasan Jadwal Toko (EPIC-073) ── */}
+      <JadwalTokoShortcut />
 
       {/* ── Terapis spa: booking berikutnya & komisi (hanya akun terapis) ── */}
       <TherapistBerandaCard />
