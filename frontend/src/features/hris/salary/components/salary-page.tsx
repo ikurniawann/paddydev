@@ -20,7 +20,7 @@ export function SalaryPage() {
   const router = useRouter();
 
   const salaryQuery = useSalaryList();
-  const salaries = salaryQuery.data ?? [];
+  const salaries = useMemo(() => salaryQuery.data ?? [], [salaryQuery.data]);
   // Gaji aktif tanpa entitas tidak milik tab mana pun: tampil sebagai peringatan, bukan tab.
   const unassigned = salaries.filter((s) => s.is_active !== false && !s.company_id);
   const { entity, setEntity, entities, loading: entitiesLoading } = useEntityParam();
