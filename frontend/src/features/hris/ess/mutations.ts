@@ -81,7 +81,8 @@ export function useSubmitLoan() {
 export function useDecideTeamLoan() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, approved }: { id: string; approved: boolean }) => decideTeamLoan(id, approved),
+    mutationFn: ({ id, approved, rejectionReason }: { id: string; approved: boolean; rejectionReason?: string }) =>
+      decideTeamLoan(id, approved, rejectionReason),
     retry: false,
     onSuccess: () => qc.invalidateQueries({ queryKey: essQueryKeys.loans() }),
   });

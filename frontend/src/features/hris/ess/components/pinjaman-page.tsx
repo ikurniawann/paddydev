@@ -4,7 +4,10 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { BanknotesIcon, PlusIcon } from "@heroicons/react/24/outline";
 import { Loader2 } from "lucide-react";
+import { RequestDetailDialog } from "@/components/hris/request-detail-dialog";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Combobox } from "@/components/ui/combobox";
 import {
@@ -14,11 +17,12 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { formatRupiah } from "@/lib/format";
+import { formatDateTime, formatRupiah } from "@/lib/format";
 import { installmentPreview, loanPaidPercent } from "@/lib/hris/ess-view";
 import { LOAN_TYPE_OPTIONS, kasbonTenorOptions, loanTypeLabel } from "@/lib/hris/loans-view";
 import { useEssMe, useMyLoans, useTeamLoanApprovals } from "../queries";
 import { useDecideTeamLoan, useSubmitLoan } from "../mutations";
+import type { EssLoanRow } from "../types";
 import { EssLoading, EssNotLinked } from "./ess-states";
 
 /**
@@ -50,6 +54,10 @@ export function EssPinjamanPage() {
   const decideTeamLoan = useDecideTeamLoan();
   const [dialog, setDialog] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
+  // Kasbon tim (EPIC-072): detail sebelum memutus; tolak wajib alasan.
+  const [detail, setDetail] = useState<EssLoanRow | null>(null);
+  const [rejecting, setRejecting] = useState<EssLoanRow | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
   const previewInstallment = installmentPreview(form.principal_amount, form.tenor_months);
 
   function handleSubmit() {
@@ -79,9 +87,28 @@ export function EssPinjamanPage() {
     );
   }
 
-  function handleDecideTeam(id: string, approved: boolean) {
+  function askRejectTeam(loan: EssLoanRow) {
+    setDetail(null);
+    setRejectReason("");
+    setRejecting(loan);
+  }
+
+  function confirmRejectTeam() {
+    if (!rejecting) return;
+    const text = rejectReason.trim();
+    if (!text) {
+      toast.error("Alasan penolakan wajib diisi");
+      return;
+    }
+    const id = rejecting.id;
+    setRejecting(null);
+    handleDecideTeam(id, false, text);
+  }
+
+  function handleDecideTeam(id: string, approved: boolean, rejectionReason?: string) {
+    setDetail(null);
     decideTeamLoan.mutate(
-      { id, approved },
+      { id, approved, ...(rejectionReason ? { rejectionReason } : {}) },
       {
         onSuccess: (res) => toast.success(res.message || (approved ? "Kasbon disetujui" : "Kasbon ditolak")),
         onError: (error) => toast.error(error.message || "Gagal memproses kasbon"),
@@ -176,10 +203,18 @@ export function EssPinjamanPage() {
                   <p className="text-xs text-gray-500">
                     {loanTypeLabel(loan.loan_type)} · {formatRupiah(loan.principal_amount)} ·{" "}
                     {loan.tenor_months} bln
-                    {loan.purpose ? ` · ${loan.purpose}` : ""}
                   </p>
+                  {loan.purpose && <p className="line-clamp-2 break-words text-xs text-gray-500">{loan.purpose}</p>}
                 </div>
                 <div className="flex shrink-0 gap-2">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    aria-label={`Detail kasbon ${loan.employee?.full_name ?? ""}`}
+                    onClick={() => setDetail(loan)}
+                  >
+                    Detail
+                  </Button>
                   <Button
                     size="sm"
                     disabled={decideTeamLoan.isPending}
@@ -191,7 +226,8 @@ export function EssPinjamanPage() {
                     size="sm"
                     variant="outline"
                     disabled={decideTeamLoan.isPending}
-                    onClick={() => handleDecideTeam(loan.id, false)}
+                    aria-label={`Tolak kasbon ${loan.employee?.full_name ?? ""}`}
+                    onClick={() => askRejectTeam(loan)}
                   >
                     Tolak
                   </Button>
@@ -201,6 +237,62 @@ export function EssPinjamanPage() {
           </ul>
         </div>
       )}
+
+      {detail && (
+        <RequestDetailDialog
+          open
+          onOpenChange={(o) => !o && setDetail(null)}
+          title="Detail kasbon"
+          employee={{ name: detail.employee?.full_name ?? "—", nip: detail.employee?.nip }}
+          fields={[
+            { label: "Jenis", value: loanTypeLabel(detail.loan_type) },
+            { label: "Nominal", value: formatRupiah(detail.principal_amount) },
+            { label: "Tenor", value: `${detail.tenor_months} bulan` },
+            ...(detail.created_at ? [{ label: "Diajukan", value: formatDateTime(detail.created_at, "—") }] : []),
+          ]}
+          reason={{ label: "Keperluan", text: detail.purpose }}
+          notes={
+            detail.notes?.trim() ? (
+              <div>
+                <p className="mb-1 text-xs font-medium text-gray-600">Catatan</p>
+                <p className="whitespace-pre-line break-words text-sm text-gray-900">{detail.notes}</p>
+              </div>
+            ) : undefined
+          }
+          actions={
+            <>
+              <Button variant="outline" disabled={decideTeamLoan.isPending} onClick={() => askRejectTeam(detail)}>
+                Tolak
+              </Button>
+              <Button disabled={decideTeamLoan.isPending} onClick={() => handleDecideTeam(detail.id, true)}>
+                Setujui
+              </Button>
+            </>
+          }
+        />
+      )}
+
+      <ConfirmDialog
+        open={rejecting !== null}
+        onOpenChange={(o) => !o && setRejecting(null)}
+        title={`Tolak kasbon ${rejecting?.employee?.full_name ?? ""}?`}
+        confirmLabel="Tolak pengajuan"
+        cancelLabel="Kembali"
+        onConfirm={confirmRejectTeam}
+      >
+        <div className="space-y-1.5">
+          <label htmlFor="team-loan-rejection-reason" className="block text-xs font-medium text-gray-600">
+            Alasan penolakan
+          </label>
+          <Textarea
+            id="team-loan-rejection-reason"
+            rows={3}
+            maxLength={500}
+            value={rejectReason}
+            onChange={(e) => setRejectReason(e.target.value)}
+          />
+        </div>
+      </ConfirmDialog>
 
       <Dialog open={dialog} onOpenChange={setDialog}>
         <DialogContent className="max-w-md">

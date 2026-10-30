@@ -113,8 +113,11 @@ export const fetchMyLoans = () => softGet<EssLoanRow[]>("/api/hris/loans?employe
 export const fetchTeamLoanApprovals = () =>
   softGet<EssLoanRow[]>("/api/hris/loans?scope=approvals", []);
 
-export const decideTeamLoan = (id: string, approved: boolean) =>
-  apiPost<{ message?: string }>(`/api/hris/loans/${id}/approve`, { approved });
+export const decideTeamLoan = (id: string, approved: boolean, rejectionReason?: string) =>
+  apiPost<{ message?: string }>(`/api/hris/loans/${id}/approve`, {
+    approved,
+    ...(rejectionReason ? { rejection_reason: rejectionReason } : {}),
+  });
 
 export const submitLoan = (payload: EssLoanPayload) =>
   apiPost<{ data: unknown }>("/api/hris/loans", payload);
