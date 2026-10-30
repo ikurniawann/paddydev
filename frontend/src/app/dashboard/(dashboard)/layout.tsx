@@ -9,6 +9,7 @@ import {
   isEssOnlyUser,
 } from "@/lib/iam/get-user-menus";
 import { canOpenJadwalToko, JADWAL_TOKO_PATH } from "@/lib/iam/schedule-delegate";
+import { ABSENSI_TIM_PATH, hasActiveTeam } from "@/lib/iam/team";
 import {
   allowedModulePaths,
   canAccessPath,
@@ -45,10 +46,11 @@ export default async function DashboardGroupLayout({
   }
   // Kebijakan ESS-only ditentukan IAM (permission menu non-ESS), bukan daftar role di kode.
   const essOnly = await isEssOnlyUser(user.id, user.role);
-  const [allNavItems, grantedCodes, scheduleDelegate] = await Promise.all([
+  const [allNavItems, grantedCodes, scheduleDelegate, teamManager] = await Promise.all([
     getUserMenus(user.id, user.role),
     loadGrantedMenuCodesForUser(user.id, user.role),
     canOpenJadwalToko(user.id, user.role),
+    hasActiveTeam(user.id),
   ]);
 
   const pathname = (await headers()).get("x-pathname") ?? "";
@@ -80,7 +82,9 @@ export default async function DashboardGroupLayout({
   // Menu Jadwal Toko di-grant ke semua role; hanya pengatur aktif dan HR Jadwal Kerja
   // yang melihatnya (EPIC-071 R8, EPIC-073 R1). Buka lewat URL tetap aman: halamannya
   // menjelaskan "bukan pengatur".
-  const navItems = scheduleDelegate ? essNav : dropNavHref(essNav, JADWAL_TOKO_PATH);
+  const withStore = scheduleDelegate ? essNav : dropNavHref(essNav, JADWAL_TOKO_PATH);
+  // Absensi Tim hanya untuk akun yang punya bawahan aktif (EPIC-074 R6).
+  const navItems = teamManager ? withStore : dropNavHref(withStore, ABSENSI_TIM_PATH);
 
   return (
     <IamAccessProvider grantedCodes={grantedCodes}>

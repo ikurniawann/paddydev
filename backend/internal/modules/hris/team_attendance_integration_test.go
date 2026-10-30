@@ -1,6 +1,7 @@
 package hris
 
 import (
+	"os"
 	"testing"
 )
 
@@ -91,4 +92,30 @@ func TestTeamAttendanceUnlinked(t *testing.T) {
 		t.Fatalf("unlinked = %s", c.raw)
 	}
 	expect(t, h.do(&admin, "GET", teamAttendanceURL+"?date=salah", nil), 400, "Format tanggal tidak valid")
+}
+
+const teamAttendanceMenuMigration = "../../../database/migrations/deltas/20261030120000_ess_team_attendance_menu.sql"
+
+// EPIC-074 R6: the migration adds ESS → Absensi Tim under "ess", granted
+// (read) to every role; running it twice changes nothing.
+func TestMigrationEssTeamAttendanceMenu(t *testing.T) {
+	h := newHarness(t)
+	body, err := os.ReadFile(teamAttendanceMenuMigration)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.exec(`INSERT INTO iam.menus (code, menu_name, menu_type) VALUES ('ess', 'Area Karyawan', 'group') ON CONFLICT (code) DO NOTHING`)
+	h.exec(`INSERT INTO iam.roles (code, name) VALUES ('go_test_role_074', 'go_test_role_074') ON CONFLICT (code) DO NOTHING`)
+	h.exec(string(body))
+	h.exec(string(body))
+	got := h.scalar(`SELECT m.menu_name || '|' || m.route_path || '|' || m.module || '|' || p.code || '|' || (m.permission_context->'actions')::text
+		FROM iam.menus m JOIN iam.menus p ON p.id = m.parent_id WHERE m.code = 'ess.team-attendance'`)
+	if got != `Absensi Tim|/dashboard/me/absensi-tim|ess|ess|["read"]` {
+		t.Fatalf("menu = %q", got)
+	}
+	if n := h.scalar(`SELECT count(*)::text FROM iam.roles r WHERE r.deleted_at IS NULL AND NOT EXISTS (
+		SELECT 1 FROM iam.role_menu_permissions rmp JOIN iam.menus m ON m.id = rmp.menu_id
+		WHERE rmp.role_id = r.id AND m.code = 'ess.team-attendance' AND rmp.is_active AND rmp.granted_actions ? 'read')`); n != "0" {
+		t.Fatalf("%s roles without the grant", n)
+	}
 }
