@@ -7,6 +7,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+
+	"nuhabit/backend/internal/platform/database"
 	"nuhabit/backend/internal/platform/httpx"
 	"nuhabit/backend/internal/platform/iam"
 	"nuhabit/backend/internal/platform/validate"
@@ -157,13 +160,21 @@ func (s *service) createSalary(ctx context.Context, employeeID, companyID string
 		}
 		endDate = iso
 	}
-	if _, err := s.db.Exec(ctx, `UPDATE hris.employee_salary SET is_active = false, end_date = $2, updated_at = $3
-		WHERE employee_id = $1 AND (company_id = $4::uuid OR company_id IS NULL) AND is_active = true`, employeeID, endDate, now, entity.ID); err != nil {
-		s.log.ErrorContext(ctx, "employee-salary: deactivate previous failed", "employee_id", employeeID, "error", err)
-	}
 	effectiveDate := now
 	if effective != nil && *effective != "" {
 		effectiveDate = *effective
+	}
+	// EPIC-075 R8: one version per employee, entity and effective date. Refuse
+	// before touching anything, with a message HR can act on.
+	var duplicate bool
+	if err := s.db.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM hris.employee_salary
+		WHERE employee_id = $1 AND company_id = $2::uuid AND effective_date = $3::text::date)`,
+		employeeID, entity.ID, effectiveDate).Scan(&duplicate); err != nil {
+		return nil, err
+	}
+	if duplicate {
+		return nil, httpx.Conflict("Struktur gaji karyawan ini untuk entitas tersebut dengan tanggal efektif " +
+			dateOnly(effectiveDate) + " sudah ada. Ubah lewat Edit atau pilih tanggal efektif lain.")
 	}
 	val := func(key string, def any) any {
 		if v, ok := in.get(key); ok && v != nil && v != "" && v != "0" {
@@ -183,7 +194,27 @@ func (s *service) createSalary(ctx context.Context, employeeID, companyID string
 	if !ok {
 		minService = 0
 	}
-	return queryObj(ctx, s.db, `INSERT INTO hris.employee_salary (employee_id, base_salary, fixed_allowance,
+	// EPIC-075 R7: deactivating the previous version and inserting the new
+	// one succeed or fail together, so a failed insert never leaves the
+	// employee without an active salary.
+	var created *obj
+	err = database.WithTx(ctx, s.db, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, `UPDATE hris.employee_salary SET is_active = false, end_date = $2, updated_at = $3
+			WHERE employee_id = $1 AND (company_id = $4::uuid OR company_id IS NULL) AND is_active = true`,
+			employeeID, endDate, now, entity.ID); err != nil {
+			return err
+		}
+		var err error
+		created, err = s.insertSalary(ctx, tx, employeeID, base, effectiveDate, notes, divisor, minService, entity.ID, val, flag)
+		return err
+	})
+	return created, err
+}
+
+// insertSalary inserts the new active version (createSalary's INSERT).
+func (s *service) insertSalary(ctx context.Context, q database.Querier, employeeID string, base float64, effectiveDate string,
+	notes, divisor, minService any, entityID string, val func(string, any) any, flag func(string) any) (*obj, error) {
+	return queryObj(ctx, q, `INSERT INTO hris.employee_salary (employee_id, base_salary, fixed_allowance,
 		variable_allowance, transport_allowance, meal_allowance, housing_allowance, loan_deduction, other_deduction,
 		ptkp_status, is_taxable, bpjs_tk_enrolled, bpjs_kes_enrolled, tapera_enrolled, effective_date, notes, company_id,
 		pay_basis, working_days_divisor, transport_mode, meal_mode, position_allowance, position_mode,
@@ -192,7 +223,7 @@ func (s *service) createSalary(ctx context.Context, employeeID, companyID string
 		employeeID, numParam(base), val("fixed_allowance", 0), val("variable_allowance", 0), val("transport_allowance", 0),
 		val("meal_allowance", 0), val("housing_allowance", 0), val("loan_deduction", 0), val("other_deduction", 0),
 		val("ptkp_status", "TK/0"), flag("is_taxable"), flag("bpjs_tk_enrolled"), flag("bpjs_kes_enrolled"),
-		flag("tapera_enrolled"), effectiveDate, notes, entity.ID,
+		flag("tapera_enrolled"), effectiveDate, notes, entityID,
 		val("pay_basis", "monthly"), divisor, val("transport_mode", "flat"), val("meal_mode", "flat"),
 		val("position_allowance", 0), val("position_mode", "flat"), val("health_allowance", 0), minService,
 		val("overtime_scheme", "standard"))
@@ -332,4 +363,13 @@ func (h *handler) deleteSalary(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	return writeJSON(w, messageBody{"Data salary berhasil dihapus"})
+}
+
+// dateOnly is the YYYY-MM-DD of an effective date as sent (a date or an ISO
+// timestamp).
+func dateOnly(v string) string {
+	if len(v) >= 10 {
+		return v[:10]
+	}
+	return v
 }
