@@ -1,7 +1,7 @@
 # EPIC-075: Export Absensi per Toko, Cari & Export Salary, Bug Kontrak dan Struktur Gaji (`MODULE-HRIS`)
 
 status: ready-for-qa
-environment: dev
+environment: production
 retries: 0
 
 ## Goal
@@ -63,3 +63,7 @@ Rencana: `docs/superpowers/plans/2026-10-30-export-absensi-salary-kontrak.md`.
 - 2026-10-30: **Catatan tertunda:**
   - `48409760`: tanggal efektif yang sama dengan versi gaji lama yang sudah **tidak aktif** kini mendapat pesan sendiri ("… sudah dipakai versi struktur gaji lama yang sudah tidak aktif. Pilih tanggal efektif lain."), bukan saran "Ubah lewat Edit".
   - Nomor kontrak dipakai lagi bila draft bernomor tertinggi dihapus: **diterima**. Nomor tetap unik di antara kontrak yang ada (constraint UNIK), dan draft yang dihapus tidak punya dokumen resmi.
+- 2026-10-30 20:02 WIB: **Deploy production** bersama EPIC-073, 074, 075 + PR #57 (catatan tertunda) + PR #58 (tab HP & redirect menu 404), atas izin eksplisit user ("Ya, deploy prod").
+  - Image `local-20261030-200228` = main `589ac8c8`. Migrasi `20261030120000_ess_team_attendance_menu.sql` diterapkan (566 migrasi, verify 0 beda; menu Absensi Tim grant 26 peran). Container healthy, log API 0 error, absensi tetap masuk, 21 pengatur utuh, redirect `kpi-templates` → `kpi-config` dan `/dashboard/shop` → `/dashboard/shop/orders` aktif.
+  - Backup `~/backups/prod-db-before-main-e073-075-20261030-200119.dump`. Source lama `~/paddydev-src.before-main-e073-075-20261030-200119` (= `28721f40`). Rollback: kembalikan folder source itu lalu jalankan `tools/deploy-paddydev.sh`. Migrasi menu boleh tetap ada: menunya tersembunyi bagi akun tanpa bawahan.
+  - Status tetap `ready-for-qa` sampai HR/atasan mencoba di production (tanpa sesi uji di production).

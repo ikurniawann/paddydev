@@ -1,7 +1,7 @@
 # EPIC-073: Jadwal Toko — Tampil untuk HR & Pintasan di Beranda HP (`MODULE-HRIS`)
 
 status: ready-for-qa
-environment: dev
+environment: production
 retries: 0
 
 ## Goal
@@ -53,3 +53,7 @@ Keputusan user 30-10-2026: **"HR juga + pintasan HP"**.
   - Tidak ada halaman meluber, 0 error konsol, 0 respons API ≥ 400. Log API hanya mencatat 4 permintaan yang dibatalkan browser saat probe pindah halaman (`context canceled`), bukan galat aplikasi.
   - Data demo dihapus (0 tersisa; 10 pengatur staging utuh).
 - 2026-10-30: **PR #54 merged** (`a8169dc0`), CI 4/4 hijau. Staging sudah menjalankan isi yang sama (QA 12/12 di atas). Production belum (menunggu izin user). Status `ready-for-qa`.
+- 2026-10-30 20:02 WIB: **Deploy production** bersama EPIC-073, 074, 075 + PR #57 (catatan tertunda) + PR #58 (tab HP & redirect menu 404), atas izin eksplisit user ("Ya, deploy prod").
+  - Image `local-20261030-200228` = main `589ac8c8`. Migrasi `20261030120000_ess_team_attendance_menu.sql` diterapkan (566 migrasi, verify 0 beda; menu Absensi Tim grant 26 peran). Container healthy, log API 0 error, absensi tetap masuk, 21 pengatur utuh, redirect `kpi-templates` → `kpi-config` dan `/dashboard/shop` → `/dashboard/shop/orders` aktif.
+  - Backup `~/backups/prod-db-before-main-e073-075-20261030-200119.dump`. Source lama `~/paddydev-src.before-main-e073-075-20261030-200119` (= `28721f40`). Rollback: kembalikan folder source itu lalu jalankan `tools/deploy-paddydev.sh`. Migrasi menu boleh tetap ada: menunya tersembunyi bagi akun tanpa bawahan.
+  - Status tetap `ready-for-qa` sampai HR/atasan mencoba di production (tanpa sesi uji di production).
