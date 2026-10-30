@@ -759,6 +759,8 @@ func TestDatabaseErrorMapping(t *testing.T) {
 		emp := e.employee("Dup", "", true)
 		body := map[string]any{"employee_id": emp, "base_salary": 1, "effective_date": "2026-07-01", "company_id": e.co}
 		e.call(&e.hr, "POST", "/api/hris/employee-salary", body, 200)
-		wantErr(t, e.call(&e.hr, "POST", "/api/hris/employee-salary", body, 409), "Data sudah ada di sistem")
+		// EPIC-075 R8: refused before any write, with a message HR can act on.
+		wantErr(t, e.call(&e.hr, "POST", "/api/hris/employee-salary", body, 409),
+			"Struktur gaji karyawan ini untuk entitas tersebut dengan tanggal efektif 2026-07-01 sudah ada. Ubah lewat Edit atau pilih tanggal efektif lain.")
 	})
 }

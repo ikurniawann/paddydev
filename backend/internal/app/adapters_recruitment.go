@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
+	"nuhabit/backend/internal/modules/hris"
 	"nuhabit/backend/internal/modules/recruitment"
 	"nuhabit/backend/internal/modules/recruitment/domain"
 	"nuhabit/backend/internal/platform/database"
@@ -131,29 +132,19 @@ func (c recruitmentContracts) CreateDraft(ctx context.Context, q database.Querie
 		}
 		return out, run(q)
 	}
-	number, err := c.nextNumber(ctx, q, in.ContractType)
+	// EPIC-075 R6: the next number follows the highest manual number of the
+	// type this year (hris.MaxContractSeq), moving on when one is taken.
+	now := c.now().In(jakarta)
+	last, err := hris.MaxContractSeq(ctx, q, in.ContractType, now.Year())
 	if err != nil {
 		return "", "", err
 	}
-	out, err := insert(number)
-	if isContractNumberConflict(err) {
-		if number, err = c.nextNumber(ctx, q, in.ContractType); err != nil {
-			return "", "", err
+	for attempt := 1; ; attempt++ {
+		out, err := insert(domain.ContractNumber(in.ContractType, last+attempt, now))
+		if !isContractNumberConflict(err) || attempt == hris.ContractNumberAttempts {
+			return out, "", err
 		}
-		out, err = insert(number)
 	}
-	return out, "", err
-}
-
-// nextNumber counts this year's contracts of the type (by created_at).
-func (c recruitmentContracts) nextNumber(ctx context.Context, q database.Querier, contractType string) (string, error) {
-	var count int
-	if err := q.QueryRow(ctx, `SELECT count(*) FROM hris.employment_contracts
-     WHERE contract_type = $1
-       AND date_part('year', created_at) = date_part('year', now())`, contractType).Scan(&count); err != nil {
-		return "", err
-	}
-	return domain.ContractNumber(contractType, count+1, c.now().In(jakarta)), nil
 }
 
 func isContractNumberConflict(err error) bool {

@@ -406,3 +406,31 @@ func TestBackfillCombinedRunEntity(t *testing.T) {
 		}
 	}
 }
+
+// EPIC-075 R7/R8: a new version with the same entity and effective date as an
+// existing one is refused with a clear message and changes nothing; before,
+// the active version was deactivated first and the failed insert left the
+// employee with no active salary (kasbon then said "belum punya struktur gaji
+// aktif").
+func TestSalaryDuplicateEffectiveKeepsActive(t *testing.T) {
+	e := setup(t)
+	emp := e.employee("Gaji Kembar", "", true)
+	post := func(date string, base, status int) map[string]any {
+		return e.call(&e.hr, "POST", "/api/hris/employee-salary",
+			map[string]any{"employee_id": emp, "base_salary": base, "effective_date": date, "company_id": e.co}, status)
+	}
+	activeBase := func() (n int, base string) {
+		e.scalar(&n, `SELECT count(*)::int FROM hris.employee_salary WHERE employee_id = $1 AND is_active`, emp)
+		e.scalar(&base, `SELECT coalesce(max(base_salary)::text, '') FROM hris.employee_salary WHERE employee_id = $1 AND is_active`, emp)
+		return
+	}
+	post("2026-01-01", 3_000_000, 200)
+	wantErr(t, post("2026-01-01", 3_500_000, 409), "Struktur gaji karyawan ini untuk entitas tersebut dengan tanggal efektif 2026-01-01 sudah ada. Ubah lewat Edit atau pilih tanggal efektif lain.")
+	if n, base := activeBase(); n != 1 || base != "3000000.00" {
+		t.Fatalf("after duplicate: %d active, base %s; want the first version still active", n, base)
+	}
+	post("2026-02-01", 3_500_000, 200)
+	if n, base := activeBase(); n != 1 || base != "3500000.00" {
+		t.Fatalf("after new date: %d active, base %s", n, base)
+	}
+}

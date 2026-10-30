@@ -31,6 +31,8 @@ export async function exportAttendanceCsv(
   }
   if (params.start_date) search.set("start_date", params.start_date);
   if (params.end_date) search.set("end_date", params.end_date);
+  if (params.branch_id && params.branch_id !== "all") search.set("branch_id", params.branch_id);
+  if (params.is_late) search.set("is_late", "true");
   if (format !== "csv") search.set("format", format);
 
   const response = await fetch(`/api/hris/attendance/export?${search.toString()}`);

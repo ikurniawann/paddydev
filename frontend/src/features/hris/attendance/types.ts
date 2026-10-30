@@ -5,6 +5,9 @@ export interface AttendanceExportParams {
   status?: string;
   start_date?: string;
   end_date?: string;
+  /** Toko tempat absen (EPIC-075 R1); "none" = tanpa toko, "all"/kosong = semua. */
+  branch_id?: string;
+  is_late?: boolean;
 }
 
 // ── Roster harian (monitoring HRD) ──────────────────────────────────────

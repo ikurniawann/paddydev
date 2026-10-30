@@ -98,7 +98,7 @@ export function AttendanceRecapTab() {
 
   // Permintaan owner 2026-08-28: HR kesulitan membaca CSV — sediakan juga
   // Excel yang rapi dan PDF ber-foto selfie. Ketiganya mengikuti filter
-  // karyawan + periode (bulan) yang sedang dipilih di halaman ini.
+  // karyawan, periode, toko, dan "hanya terlambat" di halaman ini (EPIC-075 R1).
   async function handleExport(format: AttendanceExportFormat) {
     setExporting(format);
     try {
@@ -107,6 +107,8 @@ export function AttendanceRecapTab() {
           employee_id: filterEmployee,
           start_date: range.start,
           end_date: range.end,
+          branch_id: store === ALL_STORES ? undefined : store,
+          is_late: lateOnly || undefined,
         },
         format
       );

@@ -26,7 +26,9 @@ type ContractRepo interface {
 	ContractByID(ctx context.Context, id string) (*Row, error)
 	ContractSnapshot(ctx context.Context, employeeID string) (*contractSnapshot, error)
 	PkwtChain(ctx context.Context, employeeID string) ([]domain.ContractPeriod, error)
-	ContractsThisYear(ctx context.Context, contractType string) (int64, error)
+	// MaxContractSeq is the highest manual number "NNNN/TYPE/<month>/<year>"
+	// of the type in year (0 when none); imported ODOO-… numbers are ignored.
+	MaxContractSeq(ctx context.Context, contractType string, year int) (int, error)
 	InsertContract(ctx context.Context, f fields) (*Row, error)
 	LoadContract(ctx context.Context, id string) (*contractRow, error)
 	ActiveContractNumber(ctx context.Context, employeeID, exceptID string) (*string, error)
@@ -134,29 +136,34 @@ func firstOf(a, b *string) *string {
 	return b
 }
 
+// ContractNumberAttempts bounds the retries when a number is already taken
+// (also used by recruitment's promotion draft).
+const ContractNumberAttempts = 5
+
 // insertNumbered is withContractNumber: insert with the next number of the
-// type this year, retrying once when another insert took the number.
+// type this year, the highest manual number + 1 (EPIC-075 R6: counting rows
+// collided once a contract was deleted or rows were imported), moving to the
+// following number when another insert took it.
 func (s *Service) insertNumbered(ctx context.Context, contractType string, f fields) (*Row, error) {
-	attempt := func() (*Row, error) {
-		n, err := s.repo.ContractsThisYear(ctx, contractType)
-		if err != nil {
-			return nil, err
-		}
-		f.set("contract_number", domain.BuildContractNumber(contractType, int(n)+1, domain.NowWIB(s.now())))
+	now := domain.NowWIB(s.now())
+	last, err := s.repo.MaxContractSeq(ctx, contractType, now.Year())
+	if err != nil {
+		return nil, err
+	}
+	for attempt := 1; ; attempt++ {
+		f.set("contract_number", domain.BuildContractNumber(contractType, last+attempt, now))
 		var row *Row
-		err = s.repo.InTx(ctx, func(r Repository) error {
+		err := s.repo.InTx(ctx, func(r Repository) error {
 			var err error
 			row, err = r.InsertContract(ctx, f)
 			return err
 		})
-		return row, err
+		var pgErr *pgconn.PgError
+		taken := errors.As(err, &pgErr) && strings.Contains(pgErr.Error(), "employment_contracts_contract_number_key")
+		if !taken || attempt == ContractNumberAttempts {
+			return row, err
+		}
 	}
-	row, err := attempt()
-	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) && strings.Contains(pgErr.Error(), "employment_contracts_contract_number_key") {
-		return attempt()
-	}
-	return row, err
 }
 
 func (s *Service) EmployeeContracts(ctx context.Context, employeeID string) ([]*Row, error) {

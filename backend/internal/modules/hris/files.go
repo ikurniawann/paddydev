@@ -85,6 +85,11 @@ func (s *store) AttendanceRecord(ctx context.Context, id string) (*Row, error) {
 // exportFilter is AttendanceExportFilters; empty strings are absent.
 type exportFilter struct {
 	EmployeeID, StartDate, EndDate, Status string
+	// BranchID is the store of the attendance (hris.attendance.branch_id),
+	// "none" for attendance without a store; LateOnly keeps late rows
+	// (EPIC-075 R1, the Rekap tab's filters).
+	BranchID string
+	LateOnly bool
 }
 
 // AttendanceExport is listAttendanceForExport, newest first.
@@ -105,12 +110,24 @@ func (s *store) AttendanceExport(ctx context.Context, f exportFilter) ([]*Row, e
 	if f.Status != "" {
 		add("a.status = $%d", f.Status)
 	}
+	switch f.BranchID {
+	case "":
+	case "none":
+		where = append(where, "a.branch_id IS NULL")
+	default:
+		add("a.branch_id = $%d", f.BranchID)
+	}
+	if f.LateOnly {
+		add("a.is_late = $%d", true)
+	}
 	sql := `SELECT a.date::text, a.clock_in, a.clock_out, a.clock_in_location, a.clock_out_location,
 		a.work_hours, a.break_minutes, a.status::text, a.is_late, a.late_minutes, a.notes,
 		a.is_short_hours, a.min_work_hours,
 		a.clock_in_photo_url, a.clock_out_photo_url,
-		e.full_name, e.nip, d.name AS department, p.title AS job_title
+		e.full_name, e.nip, d.name AS department, p.title AS job_title,
+		b.code AS branch_code, b.name AS branch_name
 		FROM hris.attendance a
+		LEFT JOIN configuration.branches b ON b.id = a.branch_id
 		LEFT JOIN hris.employees e ON e.id = a.employee_id
 		LEFT JOIN hris.departments d ON d.id = e.department_id
 		LEFT JOIN hris.positions p ON p.id = e.job_title_id`
