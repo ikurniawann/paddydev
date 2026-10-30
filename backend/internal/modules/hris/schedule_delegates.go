@@ -205,21 +205,38 @@ func delegateBranches(ctx context.Context, q database.Querier, ids []string) ([]
 
 // GET /api/hris/me/schedule-access: whether the signed-in account is a store
 // schedule delegate, whether it may also place, and its active stores. Anyone
-// else gets is_delegate false (the ESS menu is granted to every role).
+// else gets is_delegate false (the ESS menu is granted to every role). hr and
+// hr_can_place (EPIC-073 R3) say the account opens Jadwal Toko in HR mode:
+// "update" on Jadwal Kerja (the schedule write routes' check) and the
+// placement routes' menu prefix.
 func (h handlers) myScheduleAccess(w http.ResponseWriter, r *http.Request, a *Actor) error {
+	u, err := h.auth.RequireUser(r)
+	if err != nil {
+		return err
+	}
+	hr, err := h.auth.HasMenuAction(r.Context(), u, "update", scheduleManagers...)
+	if err != nil {
+		return err
+	}
+	hrPlace, err := h.auth.HasMenuPrefix(r.Context(), u, placementManagers...)
+	if err != nil {
+		return err
+	}
 	q := h.svc.repo.querier()
 	d, err := loadDelegateAccess(r.Context(), q, a.UserID)
 	if err != nil {
 		return err
 	}
 	if d == nil {
-		return ok(w, dataOf(obj("is_delegate", false, "can_place", false, "branches", []*Row{})))
+		return ok(w, dataOf(obj("is_delegate", false, "can_place", false, "branches", []*Row{},
+			"hr", hr, "hr_can_place", hrPlace)))
 	}
 	branches, err := delegateBranches(r.Context(), q, d.BranchIDs)
 	if err != nil {
 		return err
 	}
-	return ok(w, dataOf(obj("is_delegate", true, "can_place", d.CanPlace, "branches", branches)))
+	return ok(w, dataOf(obj("is_delegate", true, "can_place", d.CanPlace, "branches", branches,
+		"hr", hr, "hr_can_place", hrPlace)))
 }
 
 /* ── HR: kelola pengatur (R9) ───────────────────────────────────────── */
