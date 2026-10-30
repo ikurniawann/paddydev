@@ -2487,6 +2487,11 @@
   {
     "module": "hris",
     "method": "GET",
+    "path": "/api/hris/me/team-attendance"
+  },
+  {
+    "module": "hris",
+    "method": "GET",
     "path": "/api/hris/nav-badges"
   },
   {

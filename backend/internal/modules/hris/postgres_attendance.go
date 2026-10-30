@@ -77,7 +77,11 @@ func (s *store) DeleteAttendance(ctx context.Context, id string) error {
 
 // RosterRows is the roster query of loadDailyRoster; super admin account
 // shells are excluded by user id.
-func (s *store) RosterRows(ctx context.Context, date string, dow int, superAdmins []string) ([]*Row, error) {
+func (s *store) RosterRows(ctx context.Context, date string, dow int, superAdmins, employeeIDs []string) ([]*Row, error) {
+	var only any // NULL = every active employee
+	if employeeIDs != nil {
+		only = employeeIDs
+	}
 	return queryRows(ctx, s.db, `WITH scheduled AS (
 		  SELECT DISTINCT ON (es.employee_id) es.employee_id, es.shift_id
 		  FROM hris.v_employee_schedule es
@@ -116,7 +120,8 @@ func (s *store) RosterRows(ctx context.Context, date string, dow int, superAdmin
 		LEFT JOIN hris.positions p ON p.id = e.job_title_id
 		WHERE e.is_active
 		  AND (e.user_id IS NULL OR NOT (e.user_id = ANY($3::uuid[])))
-		ORDER BY e.full_name`, date, dow, nonNil(superAdmins))
+		  AND ($4::uuid[] IS NULL OR e.id = ANY($4::uuid[]))
+		ORDER BY e.full_name`, date, dow, nonNil(superAdmins), only)
 }
 
 func (s *store) ActiveShifts(ctx context.Context) ([]*Row, error) {
