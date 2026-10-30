@@ -142,6 +142,10 @@ const nextConfig: NextConfig = {
   },
   async redirects() {
     return [
+      // Menu IAM aktif tanpa halaman fisik (cek 243 menu staging 30-10): jangan 404.
+      // KPI dikelola di Konfigurasi KPI Department; Ecommerce membuka Pesanan.
+      { source: "/dashboard/hris/kpi-templates", destination: "/dashboard/hris/kpi-config", permanent: false },
+      { source: "/dashboard/shop", destination: "/dashboard/shop/orders", permanent: false },
       // EPIC-050 Fase 1: "Follow-up Hari Ini" → Tasks & Kalender (bookmark lama)
       {
         source: "/dashboard/sales-funnel/followups",
