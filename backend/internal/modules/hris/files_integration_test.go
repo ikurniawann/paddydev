@@ -221,8 +221,8 @@ func TestAttendanceExport(t *testing.T) {
 		t.Fatalf("csv = %d %v", csv.Code, csv.Header())
 	}
 	lines := strings.Split(csv.Body.String(), "\n")
-	if len(lines) != 3 || !strings.HasPrefix(lines[0], "NIP,Nama Karyawan") ||
-		!strings.Contains(lines[1], `"Nanda Ekspor","Dapur Ekspor","-","2099-06-02","2 Jun 2099, 08.58","2 Jun 2099, 15.58","-6.2,106.8 (Kantor)","-"`) ||
+	if len(lines) != 3 || !strings.HasPrefix(lines[0], "NIP,Nama Karyawan,Departemen,Jabatan,Toko,Tanggal") ||
+		!strings.Contains(lines[1], `"Nanda Ekspor","Dapur Ekspor","-","-","2099-06-02","2 Jun 2099, 08.58","2 Jun 2099, 15.58","-6.2,106.8 (Kantor)","-"`) ||
 		!strings.HasSuffix(lines[0], `Keterlambatan (menit),Kurang Jam,Jam Minimum (jam),Catatan`) ||
 		!strings.HasSuffix(lines[1], `"Ya","5","Ya","9.00","kata ""kutip"""`) || !strings.Contains(lines[2], `"2099-06-01"`) ||
 		!strings.HasSuffix(lines[2], `"Tidak","0","-","-","-"`) {
@@ -239,7 +239,7 @@ func TestAttendanceExport(t *testing.T) {
 		t.Fatal(err)
 	}
 	text, _ := json.Marshal(matrix)
-	for _, want := range []string{"Paddy — Rekap Absensi", "Periode: 1–30 Juni 2099", "Karyawan: Nanda Ekspor",
+	for _, want := range []string{"Paddy — Rekap Absensi", "Periode: 1–30 Juni 2099", "Karyawan: Nanda Ekspor", "Toko: Semua Toko",
 		"Dicetak: 5 Okt 2026, 10.00 WIB", "Sen, 01 Jun 2099", "Sel, 02 Jun 2099", "08.58", "Hadir"} {
 		if !strings.Contains(string(text), want) {
 			t.Fatalf("xlsx misses %q: %s", want, text)
@@ -271,6 +271,60 @@ func TestAttendanceExport(t *testing.T) {
 	expect(t, h.do(&hr, "GET", "/api/hris/attendance/export?employee_id="+worker+"&start_date=2098-01-01&end_date=2098-01-31", nil),
 		404, "No attendance data found")
 	expect(t, h.do(&staff, "GET", "/api/hris/attendance/export", nil), 403, "")
+}
+
+// EPIC-075 R1/R2: the export follows the store and late-only filters of
+// the Rekap tab and names the store of each attendance.
+func TestAttendanceExportBranchFilter(t *testing.T) {
+	h, _ := newFileHarness(t)
+	hr, _ := h.staff("hrd", []string{"hris.workforce"}, true)
+	_, worker := h.staff("pos", nil, true, emp{name: "Rina Toko"})
+	tokoA := h.branch("Toko Ekspor A")
+	tokoB := h.branch(strings.Repeat("Toko Bernama Sangat Panjang ", 2) + "B")
+	codeA := h.scalar(`SELECT code FROM configuration.branches WHERE id = $1`, tokoA)
+	h.exec(`INSERT INTO hris.attendance (employee_id, date, clock_in, status, is_late, late_minutes, branch_id) VALUES
+		($1, '2099-07-01', '2099-07-01T01:00:00Z', 'present', false, 0, $2),
+		($1, '2099-07-02', '2099-07-02T01:30:00Z', 'present', true, 30, $3),
+		($1, '2099-07-03', '2099-07-03T01:00:00Z', 'present', false, 0, NULL)`, worker, tokoA, tokoB)
+	base := "/api/hris/attendance/export?start_date=2099-07-01&end_date=2099-07-31"
+	csvOf := func(q string) []string {
+		t.Helper()
+		rec := h.send(&hr, httptest.NewRequest("GET", base+q, nil))
+		if rec.Code != 200 {
+			t.Fatalf("%s = %d %s", q, rec.Code, rec.Body)
+		}
+		return strings.Split(rec.Body.String(), "\n")[1:]
+	}
+	if got := csvOf("&branch_id=" + tokoA); len(got) != 1 || !strings.Contains(got[0], `"`+codeA+` - Toko Ekspor A","2099-07-01"`) {
+		t.Fatalf("branch A rows = %q", got)
+	}
+	if got := csvOf("&branch_id=none"); len(got) != 1 || !strings.Contains(got[0], `"-","2099-07-03"`) {
+		t.Fatalf("no-store rows = %q", got)
+	}
+	if got := csvOf("&is_late=true"); len(got) != 1 || !strings.Contains(got[0], `"2099-07-02"`) {
+		t.Fatalf("late rows = %q", got)
+	}
+	if got := csvOf(""); len(got) != 3 {
+		t.Fatalf("all rows = %q", got)
+	}
+	empty := h.branch("Toko Kosong")
+	expect(t, h.do(&hr, "GET", base+"&branch_id="+empty, nil), 404, "No attendance data found")
+
+	book := h.send(&hr, httptest.NewRequest("GET", base+"&branch_id="+tokoA+"&format=xlsx", nil))
+	matrix, err := xlsx.ParseMatrix(book.Body.Bytes(), xlsx.ReadOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	text, _ := json.Marshal(matrix)
+	for _, want := range []string{"Toko: " + codeA + " - Toko Ekspor A", `"Jabatan","Toko","Jam Masuk"`} {
+		if !strings.Contains(string(text), want) {
+			t.Fatalf("xlsx misses %q: %s", want, text)
+		}
+	}
+	doc := h.send(&hr, httptest.NewRequest("GET", base+"&branch_id="+tokoB+"&format=pdf", nil))
+	if doc.Code != 200 || !strings.HasPrefix(doc.Body.String(), "%PDF") {
+		t.Fatalf("pdf long store = %d", doc.Code)
+	}
 }
 
 func TestLeaveAttachmentsAndCovers(t *testing.T) {

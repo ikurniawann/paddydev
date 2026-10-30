@@ -92,6 +92,7 @@ func (h handlers) exportAttendance(w http.ResponseWriter, r *http.Request, _ *au
 	q := r.URL.Query()
 	file, err := h.svc.ExportAttendance(r.Context(), exportFilter{
 		EmployeeID: q.Get("employee_id"), StartDate: q.Get("start_date"), EndDate: q.Get("end_date"), Status: q.Get("status"),
+		BranchID: q.Get("branch_id"), LateOnly: q.Get("is_late") == "true",
 	}, q.Get("format"))
 	if err != nil {
 		return err

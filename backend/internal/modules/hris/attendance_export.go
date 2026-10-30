@@ -29,7 +29,9 @@ type exportFile struct {
 type reportMeta struct {
 	CompanyName, PeriodLabel string
 	EmployeeLabel            *string
-	GeneratedAt              time.Time
+	// BranchLabel is the filtered store (EPIC-075 R2); nil = every store.
+	BranchLabel *string
+	GeneratedAt time.Time
 }
 
 // ExportAttendance builds the export of the rows matching f in format
@@ -63,6 +65,14 @@ func (s *Service) ExportAttendance(ctx context.Context, f exportFilter, format s
 	}
 	if f.EmployeeID != "" {
 		meta.EmployeeLabel = &rows[0].EmployeeName
+	}
+	switch f.BranchID {
+	case "":
+	case "none":
+		label := "Tanpa toko"
+		meta.BranchLabel = &label
+	default:
+		meta.BranchLabel = rows[0].Branch
 	}
 	if format == "xlsx" {
 		data, err := attendanceXlsx(rows, meta)
@@ -104,6 +114,7 @@ func toReportRows(records []*Row) []domain.ReportRow {
 		row := domain.ReportRow{
 			Date: r.Str("date"), EmployeeName: name,
 			NIP: r.StrPtr("nip"), Department: r.StrPtr("department"), Position: r.StrPtr("job_title"),
+			Branch: branchLabel(r),
 			Status: r.StrPtr("status"), IsLate: r.Bool("is_late"), IsShortHours: r.Bool("is_short_hours"), Notes: r.StrPtr("notes"),
 			ClockInPhoto: r.StrPtr("clock_in_photo_url"), ClockOutPhoto: r.StrPtr("clock_out_photo_url"),
 		}
@@ -130,7 +141,21 @@ func toReportRows(records []*Row) []domain.ReportRow {
 
 /* ── CSV ─────────────────────────────────────────────────────────────── */
 
-const attendanceCSVHeader = "NIP,Nama Karyawan,Departemen,Jabatan,Tanggal,Clock In,Clock Out," +
+// branchLabel is the store of an export row as the app shows it: the name
+// alone when it already starts with the code, else "code - name"; nil
+// without a store.
+func branchLabel(r *Row) *string {
+	code, name := r.Str("branch_code"), r.Str("branch_name")
+	if name == "" {
+		return nil
+	}
+	if code != "" && !strings.HasPrefix(name, code) {
+		name = code + " - " + name
+	}
+	return &name
+}
+
+const attendanceCSVHeader = "NIP,Nama Karyawan,Departemen,Jabatan,Toko,Tanggal,Clock In,Clock Out," +
 	"Lokasi Clock In,Lokasi Clock Out,Jam Kerja (jam),Istirahat (menit),Status,Terlambat," +
 	"Keterlambatan (menit),Kurang Jam,Jam Minimum (jam),Catatan"
 
@@ -177,7 +202,7 @@ func attendanceCSV(records []*Row) string {
 		}
 		cells := []string{
 			orDash(r, "nip"), orDash(r, "full_name"), orDash(r, "department"), orDash(r, "job_title"),
-			r.Str("date"), when(r, "clock_in"), when(r, "clock_out"),
+			orHyphen(branchLabel(r)), r.Str("date"), when(r, "clock_in"), when(r, "clock_out"),
 			csvLocation(r.Child("clock_in_location")), csvLocation(r.Child("clock_out_location")),
 			orZero(r, "work_hours"), orZero(r, "break_minutes"), orDash(r, "status"), late,
 			orZero(r, "late_minutes"), short, minHours, orDash(r, "notes"),
@@ -233,6 +258,13 @@ func employeeLabel(m reportMeta) string {
 	return *m.EmployeeLabel
 }
 
+func storeLabel(m reportMeta) string {
+	if m.BranchLabel == nil {
+		return "Semua Toko"
+	}
+	return *m.BranchLabel
+}
+
 func orHyphen(s *string) string {
 	if s == nil {
 		return "-"
@@ -242,12 +274,13 @@ func orHyphen(s *string) string {
 
 // attendanceXlsx is buildAttendanceXlsx.
 func attendanceXlsx(rows []domain.ReportRow, m reportMeta) ([]byte, error) {
-	header := []any{"Tanggal", "Nama Karyawan", "NIP", "Departemen", "Jabatan",
+	header := []any{"Tanggal", "Nama Karyawan", "NIP", "Departemen", "Jabatan", "Toko",
 		"Jam Masuk", "Jam Pulang", "Jam Kerja", "Status", "Terlambat (menit)", "Kurang Jam", "Jam Minimum", "Catatan"}
 	aoa := [][]any{
 		{m.CompanyName + " — Rekap Absensi"},
 		{"Periode: " + m.PeriodLabel},
 		{"Karyawan: " + employeeLabel(m)},
+		{"Toko: " + storeLabel(m)},
 		{"Dicetak: " + printedAt(m.GeneratedAt)},
 		{},
 		header,
@@ -271,15 +304,15 @@ func attendanceXlsx(rows []domain.ReportRow, m reportMeta) ([]byte, error) {
 			minHours = *r.MinWorkHours
 		}
 		aoa = append(aoa, []any{domain.TanggalShort(r.Date), r.EmployeeName, orHyphen(r.NIP), orHyphen(r.Department),
-			orHyphen(r.Position), domain.ClockWIB(r.ClockIn, "—"), domain.ClockWIB(r.ClockOut, "—"), hours,
+			orHyphen(r.Position), orHyphen(r.Branch), domain.ClockWIB(r.ClockIn, "—"), domain.ClockWIB(r.ClockOut, "—"), hours,
 			domain.StatusLabel(r.Status), late, short, minHours, notes})
 	}
-	merges := make([]xlsx.Merge, 4)
+	merges := make([]xlsx.Merge, 5)
 	for i := range merges {
 		merges[i] = xlsx.Merge{R1: i, R2: i, C2: len(header) - 1}
 	}
 	return xlsx.Build(xlsx.SheetSpec{Name: "Rekap Absensi", Rows: aoa,
-		ColumnWidths: []float64{18, 26, 20, 18, 18, 10, 11, 9, 12, 16, 11, 13, 30}, Merges: merges})
+		ColumnWidths: []float64{18, 26, 20, 18, 18, 24, 10, 11, 9, 12, 16, 11, 13, 30}, Merges: merges})
 }
 
 /* ── PDF with selfies ────────────────────────────────────────────────── */
@@ -303,8 +336,8 @@ var reportCols = []struct {
 	label string
 	w     float64
 }{
-	{"Tanggal", 78}, {"Karyawan", 128}, {"Masuk", 46}, {"Pulang", 46}, {"Jam", 34},
-	{"Status", 74}, {"Foto Masuk", 92}, {"Foto Pulang", 92}, {"Catatan", 180},
+	{"Tanggal", 78}, {"Karyawan", 128}, {"Toko", 80}, {"Masuk", 46}, {"Pulang", 46}, {"Jam", 34},
+	{"Status", 74}, {"Foto Masuk", 92}, {"Foto Pulang", 92}, {"Catatan", 100},
 }
 
 const reportTableW = 770.0
@@ -328,7 +361,8 @@ func attendancePDF(rows []domain.ReportRow, m reportMeta, photo func(path string
 	d.Font(pdfgen.HelveticaBold, 14).Color(reportText)
 	d.Text(m.CompanyName+" — Rekap Absensi", reportMargin, reportMargin, pdfgen.TextOpts{})
 	d.Font(pdfgen.Helvetica, 9).Color(reportMuted)
-	d.Text(fmt.Sprintf("Periode: %s   ·   Karyawan: %s   ·   Dicetak: %s", m.PeriodLabel, employeeLabel(m), printedAt(m.GeneratedAt)),
+	d.Text(fmt.Sprintf("Periode: %s   ·   Karyawan: %s   ·   Toko: %s   ·   Dicetak: %s", m.PeriodLabel, employeeLabel(m),
+		storeLabel(m), printedAt(m.GeneratedAt)),
 		reportMargin, reportMargin+20, pdfgen.TextOpts{})
 	y := drawReportHeader(d, reportMargin+40)
 
@@ -390,20 +424,21 @@ func attendancePDF(rows []domain.ReportRow, m reportMeta, photo func(path string
 		}
 		cell(domain.TanggalShort(r.Date), reportCols[0].w, pdfgen.Helvetica, reportText, "")
 		cell(r.EmployeeName, reportCols[1].w, pdfgen.HelveticaBold, reportText, strings.Join(sub, " · "))
-		cell(domain.ClockWIB(r.ClockIn, "—"), reportCols[2].w, pdfgen.Helvetica, reportText, "")
-		cell(domain.ClockWIB(r.ClockOut, "—"), reportCols[3].w, pdfgen.Helvetica, reportText, "")
-		cell(hours, reportCols[4].w, pdfgen.Helvetica, reportText, "")
-		cell(status, reportCols[5].w, pdfgen.Helvetica, statusColor, "")
-		drawPhoto(r.ClockInPhoto, x, y, reportCols[6].w)
-		x += reportCols[6].w
-		drawPhoto(r.ClockOutPhoto, x, y, reportCols[7].w)
+		cell(orHyphen(r.Branch), reportCols[2].w, pdfgen.Helvetica, reportText, "")
+		cell(domain.ClockWIB(r.ClockIn, "—"), reportCols[3].w, pdfgen.Helvetica, reportText, "")
+		cell(domain.ClockWIB(r.ClockOut, "—"), reportCols[4].w, pdfgen.Helvetica, reportText, "")
+		cell(hours, reportCols[5].w, pdfgen.Helvetica, reportText, "")
+		cell(status, reportCols[6].w, pdfgen.Helvetica, statusColor, "")
+		drawPhoto(r.ClockInPhoto, x, y, reportCols[7].w)
 		x += reportCols[7].w
+		drawPhoto(r.ClockOutPhoto, x, y, reportCols[8].w)
+		x += reportCols[8].w
 		notes := ""
 		if r.Notes != nil {
 			notes = *r.Notes
 		}
 		d.Font(pdfgen.Helvetica, 8).Color(reportText)
-		d.Text(notes, x+4, textY, pdfgen.TextOpts{Width: reportCols[8].w - 8, Height: reportRowH - 14, Ellipsis: true})
+		d.Text(notes, x+4, textY, pdfgen.TextOpts{Width: reportCols[9].w - 8, Height: reportRowH - 14, Ellipsis: true})
 
 		y += reportRowH
 		d.Line(reportMargin, y, reportMargin+reportTableW, y, reportLine, 0.5)

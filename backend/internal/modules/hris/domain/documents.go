@@ -120,6 +120,7 @@ type ReportRow struct {
 	Date                      string
 	EmployeeName              string
 	NIP, Department, Position *string
+	Branch                    *string // EPIC-075 R2: store of the attendance, nil = none
 	ClockIn, ClockOut         *time.Time
 	WorkHours                 *float64
 	Status                    *string
