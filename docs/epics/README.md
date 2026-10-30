@@ -77,6 +77,7 @@ deploying-dev · ready-for-qa · blocked · done).
 | [EPIC-072](./EPIC-072-detail-pengajuan-penyetuju.md) | Detail Pengajuan untuk Penyetuju — Alasan & Dokumentasi Terlihat Sebelum Memutus (`MODULE-HRIS`) | ready-for-qa | 2026-10-30 |
 | [EPIC-073](./EPIC-073-jadwal-toko-akses-hr-pintasan.md) | Jadwal Toko — Tampil untuk HR & Pintasan di Beranda HP (`MODULE-HRIS`) | review | 2026-10-30 |
 | [EPIC-074](./EPIC-074-absensi-tim-atasan.md) | Absensi Tim — Atasan Melihat Presensi Anggota Timnya (`MODULE-HRIS`) | ready-for-qa | 2026-10-30 |
+| [EPIC-075](./EPIC-075-export-absensi-salary-kontrak.md) | Export Absensi per Toko, Cari & Export Salary, Bug Kontrak dan Struktur Gaji (`MODULE-HRIS`) | on-progress | 2026-10-30 |
 
 Aturan:
 - Epic + registry ini adalah sumber kebenaran status pekerjaan (canonical).
