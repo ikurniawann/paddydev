@@ -13,10 +13,13 @@ import { monthName, monthYearLabel } from "@/lib/hris/month-label";
 import { TherapistBerandaCard } from "@/features/spa/components/therapist-beranda-card";
 import { useSpaMe } from "@/features/spa/queries";
 import { formatDays } from "@/features/hris/leave-balances/balance-math";
+import { useTeamAttendance } from "@/features/hris/attendance/queries";
 import { useScheduleAccess } from "@/features/hris/schedule-access/queries";
+import { todayWib } from "@/lib/dates";
 import { useEssBeranda } from "../queries";
 import { EssClockPanel } from "./ess-clock-panel";
 import { JadwalTokoShortcut } from "./jadwal-toko-shortcut";
+import { TeamAttendanceCard } from "./team-attendance-card";
 import { balanceSubtitle } from "./leave-balance-summary";
 import {
   AnnouncementsCard,
@@ -37,6 +40,7 @@ export function EssBerandaPage() {
   const { data, isLoading } = useEssBeranda();
   // Dimuat paralel dengan beranda agar kartu Jadwal Toko tidak muncul belakangan (EPIC-073).
   useScheduleAccess();
+  useTeamAttendance(todayWib());
   const spaMe = useSpaMe();
   const isTherapist = !!spaMe.data?.therapist?.is_active;
 
@@ -118,6 +122,9 @@ export function EssBerandaPage() {
 
       {/* ── Pengatur jadwal toko / HR Jadwal Kerja: pintasan Jadwal Toko (EPIC-073) ── */}
       <JadwalTokoShortcut />
+
+      {/* ── Atasan: ringkasan Absensi Tim hari ini (EPIC-074) ── */}
+      <TeamAttendanceCard />
 
       {/* ── Terapis spa: booking berikutnya & komisi (hanya akun terapis) ── */}
       <TherapistBerandaCard />

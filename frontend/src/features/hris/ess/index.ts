@@ -7,3 +7,4 @@ export { EssPengumumanPage } from "./components/pengumuman-page";
 export { EssBerandaPage } from "./components/beranda-page";
 export { EssShiftTimPage } from "./components/shift-tim-page";
 export { EssJadwalTokoPage } from "./components/jadwal-toko-page";
+export { EssAbsensiTimPage } from "./components/absensi-tim-page";

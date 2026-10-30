@@ -24,6 +24,7 @@ INSERT INTO iam.menus (code, menu_name, route_path, icon, menu_type, order_numbe
   ('ess.leave', 'Izin & Cuti', '/dashboard/me/cuti', 'paper-airplane', 'sidebar', 20, '{"actions":["read"]}'::jsonb),
   ('ess.team-shifts', 'Shift Tim', '/dashboard/me/shift-tim', 'calendar', 'sidebar', 45, '{"actions":["read","update"]}'::jsonb),
   ('ess.store-schedule', 'Jadwal Toko', '/dashboard/me/jadwal-toko', 'calendar', 'sidebar', 46, '{"actions":["read","update"]}'::jsonb),
+  ('ess.team-attendance', 'Absensi Tim', '/dashboard/me/absensi-tim', 'users', 'sidebar', 44, '{"actions":["read"]}'::jsonb),
   ('hris', 'HRIS', '/dashboard/hris', 'users', 'group', 10, '{"actions":["read"]}'::jsonb),
   ('items', 'Items', '/dashboard/items', 'cube', 'group', 35, '{"actions":["read"]}'::jsonb),
   ('pos', 'Point of Sales', '/dashboard/pos', 'shopping', 'group', 70, '{"actions":["read"]}'::jsonb),
@@ -251,7 +252,7 @@ WHERE deleted_at IS NULL
     -- Epic 005-012 (ditambahkan 19 Jul 2026 — insiden retire menyapu menu baru;
     -- SETIAP migrasi menu baru WAJIB menambahkan code-nya ke daftar ini):
     'ess.home', 'ess.overtime', 'ess.loans', 'ess.payroll', 'ess.kpi',
-    'ess.announcements', 'ess.team-shifts', 'ess.store-schedule', 'ess.business-trip', 'ess.team-approvals',
+    'ess.announcements', 'ess.team-shifts', 'ess.store-schedule', 'ess.team-attendance', 'ess.business-trip', 'ess.team-approvals',
     -- Spa / Paddy Experience (EPIC-052, 8 Okt 2026)
     -- Payroll multi-toko (15 Okt 2026): Penempatan Karyawan + Biaya Gaji per Toko
     'hris.master.placements', 'hris.compensation.store-costs',

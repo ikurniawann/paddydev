@@ -26,7 +26,7 @@ func TestPerDateScheduleWinsInReaders(t *testing.T) {
 	if snap, _ := h.svc.shiftSnapshot(ctx, e, "2026-10-20"); snap == nil || snap.shiftID != ns {
 		t.Fatalf("snapshot 10-20 = %+v, want weekly NS", snap)
 	}
-	rows, err := h.svc.repo.RosterRows(ctx, "2026-10-06", 2, nil)
+	rows, err := h.svc.repo.RosterRows(ctx, "2026-10-06", 2, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

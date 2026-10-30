@@ -15,6 +15,7 @@ import {
   fetchAttendanceMonthStats,
   fetchCalendarAttendances,
   fetchDailyRoster,
+  fetchTeamAttendance,
   fetchEmployeeSchedule,
 } from "./api";
 import type { AttendanceListParams } from "./types";
@@ -39,8 +40,12 @@ export const useAttendanceMonthStats = (month: string) =>
     },
   });
 
-export const useDailyRoster = (date: string) =>
-  useQuery({ queryKey: attendanceQueryKeys.roster(date), queryFn: () => fetchDailyRoster(date) });
+export const useDailyRoster = (date: string, enabled = true) =>
+  useQuery({ queryKey: attendanceQueryKeys.roster(date), queryFn: () => fetchDailyRoster(date), enabled });
+
+/** Absensi Tim atasan (EPIC-074); `enabled` false = tidak diminta. */
+export const useTeamAttendance = (date: string, enabled = true) =>
+  useQuery({ queryKey: attendanceQueryKeys.team(date), queryFn: () => fetchTeamAttendance(date), enabled });
 
 /** Ringkasan absen terlewat satu tanggal (default kemarin WIB, diputuskan server). */
 export const useAttendanceGapSummary = (date?: string) =>

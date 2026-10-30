@@ -18,7 +18,8 @@ type AttendanceRepo interface {
 	AttendanceDetail(ctx context.Context, id string) (*Row, error)
 	UpdateAttendance(ctx context.Context, id string, f fields) (*Row, error)
 	DeleteAttendance(ctx context.Context, id string) error
-	RosterRows(ctx context.Context, date string, dow int, superAdmins []string) ([]*Row, error)
+	// RosterRows: employeeIDs nil = every active employee, else only those.
+	RosterRows(ctx context.Context, date string, dow int, superAdmins, employeeIDs []string) ([]*Row, error)
 	ActiveShifts(ctx context.Context) ([]*Row, error)
 	HolidaysOn(ctx context.Context, date string) ([]*Row, error)
 	AttendanceMonth(ctx context.Context, month, year float64, employeeID *string) (*Row, error)
@@ -156,12 +157,17 @@ func buildRoster(rows []*Row, date, today string, isPublicHoliday bool, now time
 
 // DailyRoster is loadDailyRoster for the HR monitoring page.
 func (s *Service) DailyRoster(ctx context.Context, date, today string) (*Row, error) {
+	return s.rosterFor(ctx, date, today, nil)
+}
+
+// rosterFor is DailyRoster over employeeIDs (nil = every active employee).
+func (s *Service) rosterFor(ctx context.Context, date, today string, employeeIDs []string) (*Row, error) {
 	dow := domain.IsoDayOfWeek(date)
 	admins, err := s.directory.SuperAdminUserIDs(ctx, s.repo.querier())
 	if err != nil {
 		return nil, err
 	}
-	rows, err := s.repo.RosterRows(ctx, date, dow, admins)
+	rows, err := s.repo.RosterRows(ctx, date, dow, admins, employeeIDs)
 	if err != nil {
 		return nil, err
 	}

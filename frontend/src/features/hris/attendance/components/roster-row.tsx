@@ -49,6 +49,9 @@ export function RosterRow({ emp, isToday }: { emp: RosterEmployee; isToday: bool
         <p className="truncate text-xs text-gray-500">
           {[emp.nip, emp.department_name, emp.job_title].filter(Boolean).join(" · ") || "—"}
         </p>
+        {emp.direct === false && emp.reporting_to_name ? (
+          <p className="truncate text-xs text-gray-400">Atasan: {emp.reporting_to_name}</p>
+        ) : null}
       </div>
       {emp.attendance ? (
         <div className="text-right text-xs text-gray-600">
