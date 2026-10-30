@@ -1,6 +1,6 @@
 # EPIC-075: Export Absensi per Toko, Cari & Export Salary, Bug Kontrak dan Struktur Gaji (`MODULE-HRIS`)
 
-status: on-progress
+status: ready-for-qa
 environment: dev
 retries: 0
 
@@ -25,6 +25,9 @@ Penyelidikan (kode `main` `36b374f5`, data staging read-only):
 - **R6** Nomor kontrak berikutnya = **nomor manual terbesar** jenis itu tahun ini + 1. Hanya nomor berpola `NNNN/<JENIS>/<bulan romawi>/<tahun>` yang dihitung; nomor impor `ODOO-…` diabaikan. Bila bentrok, coba lagi dengan nomor berikutnya, sampai 5 kali.
 - **R7** Tambah struktur gaji berjalan dalam **satu transaksi**: bila gagal, versi lama tetap aktif.
 - **R8** Bila sudah ada struktur gaji untuk karyawan + entitas + tanggal efektif yang sama, server menjawab 409 dengan pesan jelas tanpa mengubah apa pun: "Struktur gaji karyawan ini untuk entitas tersebut dengan tanggal efektif <tanggal> sudah ada. Ubah lewat Edit atau pilih tanggal efektif lain."
+- **R10** Draft kontrak otomatis saat **promosi kandidat** (Rekrutmen) memakai penomoran yang sama (`hris.MaxContractSeq`, maksimal 5 percobaan). Sebelumnya jalur itu masih memakai jumlah+1 dan gagal dengan bug yang sama.
+- **R11** Nomor berawalan lebih dari 9 digit tidak ikut dihitung, supaya satu baris aneh tidak memblokir penomoran setahun.
+- **R12** Di PDF, "Toko: …" berada di baris sendiri (dipotong satu baris) dan tabel turun 12 pt, supaya nama toko panjang tidak menimpa header tabel.
 - **R9** Data yang sudah terlanjur rusak (karyawan tanpa gaji aktif) **tidak** diperbaiki otomatis oleh migrasi. Daftar read-only untuk HR menyusul atas izin user.
 
 ## Tasks
@@ -39,3 +42,21 @@ Rencana: `docs/superpowers/plans/2026-10-30-export-absensi-salary-kontrak.md`.
 
 ## Automation Log
 - 2026-10-30: Epic dibuat. Penyelidikan kode dan data staging (read-only). Reproduksi nomor kontrak bentrok di staging.
+- 2026-10-30: **Implementasi** (eksekusi inline):
+  - `16dd0499`: export server.
+  - `7cc09706`: export frontend.
+  - `3f7c7d27`, `70112bdb`: Salary.
+  - `477853d0`: nomor kontrak.
+  - `95e58153`: struktur gaji dalam transaksi.
+- 2026-10-30: **Review akhir** (opus): Ready with fixes, 0 kritis. Diperbaiki di `f21969fd` (R10–R12).
+  - Ditunda (minor): menghapus draft bernomor tertinggi membuat nomor itu dipakai lagi oleh kontrak berikutnya (nomor tetap unik di antara kontrak yang ada).
+  - Ditunda (minor): pesan R8 menyarankan "Ubah lewat Edit" juga bila versi bertanggal sama sudah nonaktif.
+- 2026-10-30: **Gerbang lokal:** `go vet ./...` bersih; `go test -p 1` app/hris/payroll/recruitment/platform ok; frontend `tsc` 0, `lint` 0, `pnpm test` 872 file / 6313 tes lulus.
+- 2026-10-30 17:43: **Staging** image `local-20261030-174347` (branch `f21969fd`), tanpa migrasi. Backup `~/Desktop/paddydev-backups/staging-db-before-epic075-20261030-173419.dump`.
+- 2026-10-30: **QA staging** (akun `qa075-hr` hrd + `hris_manager`, karyawan demo), 18/18 lulus.
+  - Export Oktober: semua toko 3.975 baris dengan kolom Toko; toko ODOO-WAREHOUSE-PADDY 874 baris, satu label toko. Excel 200.
+  - Kontrak PKWT baru → `0569/PKWT/X/2026`. Sebelumnya bentrok dengan draf `0568`.
+  - Gaji kembar → pesan R8; versi pertama tetap aktif.
+  - Salary: 135 baris urut A–Z, pencarian, unduh `struktur-gaji-paddy-2026-10-30.xlsx` (laptop dan HP); tidak meluber; 0 error konsol / API.
+  - Data demo (akun, karyawan, kontrak, gaji) dihapus.
+
