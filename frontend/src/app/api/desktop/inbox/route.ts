@@ -2,12 +2,11 @@ import { NextResponse } from "next/server";
 import { ApiError, requireApiUser } from "@/lib/api/auth";
 import { getPool } from "@/lib/db";
 import { loadGrantedMenuCodesForUser } from "@/lib/iam/has-menu";
-import { leaveTypeLabel } from "@/lib/hris/leave-types";
 import {
   INBOX_ITEM_LIMIT,
   INBOX_SECTION_LABEL,
   allowedInboxSections,
-  describeLeaveRange,
+  leaveInboxItem,
   type InboxSection,
 } from "@/lib/desktop/inbox";
 
@@ -32,19 +31,7 @@ async function loadLeaves(): Promise<InboxSection> {
     key: "cuti",
     label: INBOX_SECTION_LABEL.cuti,
     total: Number(rows[0]?.total ?? 0),
-    items: rows.map((row) => ({
-      id: String(row.id),
-      title: String(row.full_name ?? "Karyawan"),
-      subtitle: `${leaveTypeLabel(String(row.leave_type ?? "Cuti"))} · ${describeLeaveRange(
-        String(row.start_date).slice(0, 10),
-        String(row.end_date).slice(0, 10),
-        Number(row.total_days ?? 1)
-      )}`,
-      href: "/dashboard/hris/workforce/leaves",
-      // Cuti punya API approval resmi (potong kuota + notifikasi) → aman
-      // disetujui dari widget. Seksi lain sengaja hanya membuka halamannya.
-      actionable: true,
-    })),
+    items: rows.map(leaveInboxItem),
   };
 }
 
