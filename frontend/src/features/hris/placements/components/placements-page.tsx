@@ -173,8 +173,9 @@ export function PlacementsPage({
           : `Jadwal Kerja dibuka untuk ${SCHEDULE_LINK_LIMIT} karyawan pertama yang dipilih`
       );
     }
-    if (store) {
-      onOpenSchedule?.(branch, ids.slice(0, SCHEDULE_LINK_LIMIT));
+    // Di dalam Jadwal Toko (mode toko, atau mode HR EPIC-073) tetap di halaman: buka tab Jadwal.
+    if (onOpenSchedule) {
+      onOpenSchedule(branch, ids.slice(0, SCHEDULE_LINK_LIMIT));
       return;
     }
     const params = [branch ? `branch_id=${encodeURIComponent(branch)}` : "", `employees=${ids.slice(0, SCHEDULE_LINK_LIMIT).join(",")}`];

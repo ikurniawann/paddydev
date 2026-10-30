@@ -269,3 +269,26 @@ it("hak penempatan dicabut saat tab Penempatan terbuka → kembali ke tab Jadwal
   expect(screen.getByRole("tab", { name: "Jadwal" }).getAttribute("aria-selected")).toBe("true");
   expect(await screen.findByLabelText("Pilih Ana")).toBeTruthy();
 });
+
+it("HR Jadwal Kerja (bukan pengatur): mode HR semua toko dengan tab Penempatan (EPIC-073 R2)", async () => {
+  placementApi.fetchStoreBranches.mockResolvedValue([STORE, { id: "s2", code: "PVJ", name: "PVJ - Paddy PVJ" }]);
+  renderPage({ is_delegate: false, can_place: false, branches: [], hr: true, hr_can_place: true });
+  expect(await screen.findByText(/Mode HR/)).toBeTruthy();
+  expect(screen.queryByText("Anda bukan pengatur jadwal toko. Hubungi HR bila seharusnya punya akses.")).toBeNull();
+  await waitFor(() => expect(placementApi.fetchStoreBranches).toHaveBeenCalled());
+  expect(screen.getByRole("tab", { name: "Penempatan" })).toBeTruthy();
+});
+
+it("HR tanpa menu penempatan: hanya tab Jadwal (EPIC-073 R2)", async () => {
+  placementApi.fetchStoreBranches.mockResolvedValue([STORE]);
+  renderPage({ is_delegate: false, can_place: false, branches: [], hr: true, hr_can_place: false });
+  expect(await screen.findByText(/Mode HR/)).toBeTruthy();
+  expect(screen.queryByRole("tab", { name: "Penempatan" })).toBeNull();
+});
+
+it("HR yang juga pengatur memakai mode HR (EPIC-073 R2)", async () => {
+  placementApi.fetchStoreBranches.mockResolvedValue([STORE]);
+  renderPage({ is_delegate: true, can_place: false, branches: [STORE], hr: true, hr_can_place: true });
+  expect(await screen.findByText(/Mode HR/)).toBeTruthy();
+});
+

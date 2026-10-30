@@ -25,7 +25,8 @@ interface ScheduleTarget {
  * Area Karyawan → Jadwal Toko (EPIC-071 R8): pengatur jadwal toko yang
  * ditunjuk HR mengatur jadwal kerja (dan, bila boleh, penempatan) karyawan
  * di toko wilayahnya. Memakai halaman Jadwal Kerja & Penempatan HR dalam
- * mode toko; server yang membatasi wilayahnya.
+ * mode toko; server yang membatasi wilayahnya. HR yang boleh mengubah Jadwal
+ * Kerja membuka halaman yang sama dalam mode HR, semua toko (EPIC-073 R2).
  */
 export function EssJadwalTokoPage() {
   const qc = useQueryClient();
@@ -50,10 +51,12 @@ export function EssJadwalTokoPage() {
   }
 
   const data = access.data;
+  // HR Jadwal Kerja (EPIC-073 R2): mode HR, semua toko; juga bila akun itu sekaligus pengatur.
+  const hrMode = data?.hr === true;
   // Kartu bukan pengatur sampai akses yang dimuat sesudah penolakan berkata lain (gagal muat = tetap kartu).
   const lost = lostAt !== null && access.dataUpdatedAt <= lostAt;
   // Hak penempatan dicabut saat tab Penempatan terbuka: kembali ke tab Jadwal.
-  const shownTab: Tab = data?.can_place ? tab : "jadwal";
+  const shownTab: Tab = (hrMode ? data?.hr_can_place : data?.can_place) ? tab : "jadwal";
   return (
     <div className="space-y-5">
       <div>
@@ -79,6 +82,30 @@ export function EssJadwalTokoPage() {
             <Loader2 className="h-4 w-4 animate-spin" /> Memuat…
           </CardContent>
         </Card>
+      ) : hrMode ? (
+        <div className="space-y-3">
+          <p className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-800">
+            Mode HR: semua toko. Perubahan sama dengan HRIS → Jadwal Kerja dan Penempatan Karyawan.
+          </p>
+          <Tabs value={shownTab} onValueChange={(value) => setTab(value as Tab)}>
+            <TabsList>
+              <TabsTrigger value="jadwal">Jadwal</TabsTrigger>
+              {data.hr_can_place ? <TabsTrigger value="penempatan">Penempatan</TabsTrigger> : null}
+            </TabsList>
+            <TabsContent value="jadwal" className="pt-2">
+              <SchedulesPage
+                key={target.n}
+                initialBranchId={target.branchId}
+                initialEmployeeIds={target.employeeIds}
+              />
+            </TabsContent>
+            {data.hr_can_place ? (
+              <TabsContent value="penempatan" className="pt-2">
+                <PlacementsPage onOpenSchedule={openSchedule} />
+              </TabsContent>
+            ) : null}
+          </Tabs>
+        </div>
       ) : !data.is_delegate || lost ? (
         <Card>
           <CardContent className="flex flex-col items-center gap-2 p-10 text-center">
