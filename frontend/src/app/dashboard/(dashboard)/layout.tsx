@@ -8,7 +8,7 @@ import {
   filterNavByPrefixes,
   isEssOnlyUser,
 } from "@/lib/iam/get-user-menus";
-import { isScheduleDelegate, JADWAL_TOKO_PATH } from "@/lib/iam/schedule-delegate";
+import { canOpenJadwalToko, JADWAL_TOKO_PATH } from "@/lib/iam/schedule-delegate";
 import {
   allowedModulePaths,
   canAccessPath,
@@ -48,7 +48,7 @@ export default async function DashboardGroupLayout({
   const [allNavItems, grantedCodes, scheduleDelegate] = await Promise.all([
     getUserMenus(user.id, user.role),
     loadGrantedMenuCodesForUser(user.id, user.role),
-    isScheduleDelegate(user.id),
+    canOpenJadwalToko(user.id, user.role),
   ]);
 
   const pathname = (await headers()).get("x-pathname") ?? "";
@@ -77,8 +77,9 @@ export default async function DashboardGroupLayout({
         ...allowedModulePaths(user.role),
       ])
     : allNavItems.filter((item) => item.href !== "/dashboard/me");
-  // Menu Jadwal Toko di-grant ke semua role; hanya pengatur aktif yang melihatnya
-  // (EPIC-071 R8). Buka lewat URL tetap aman: halamannya menjelaskan "bukan pengatur".
+  // Menu Jadwal Toko di-grant ke semua role; hanya pengatur aktif dan HR Jadwal Kerja
+  // yang melihatnya (EPIC-071 R8, EPIC-073 R1). Buka lewat URL tetap aman: halamannya
+  // menjelaskan "bukan pengatur".
   const navItems = scheduleDelegate ? essNav : dropNavHref(essNav, JADWAL_TOKO_PATH);
 
   return (

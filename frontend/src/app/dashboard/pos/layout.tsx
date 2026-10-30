@@ -2,7 +2,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { requireUser, type AuthUser } from "@/lib/auth/require-user";
 import { dropNavHref, getUserMenus, isEssOnlyUser } from "@/lib/iam/get-user-menus";
-import { isScheduleDelegate, JADWAL_TOKO_PATH } from "@/lib/iam/schedule-delegate";
+import { canOpenJadwalToko, JADWAL_TOKO_PATH } from "@/lib/iam/schedule-delegate";
 import { loadGrantedMenuCodesForUser } from "@/lib/iam/has-menu";
 import { hasAnyIamMenuPrefix } from "@/lib/iam/match";
 import { IAM } from "@/lib/iam/prefixes";
@@ -31,9 +31,9 @@ export default async function PosDashboardLayout({
       getUserMenus(user.id, user.role),
       isEssOnlyUser(user.id, user.role),
       loadGrantedMenuCodesForUser(user.id, user.role),
-      isScheduleDelegate(user.id),
+      canOpenJadwalToko(user.id, user.role),
     ]);
-    // Menu Jadwal Toko hanya untuk pengatur aktif (EPIC-071 R8), sama dengan layout dashboard.
+    // Menu Jadwal Toko hanya untuk pengatur aktif dan HR Jadwal Kerja (EPIC-073 R1), sama dengan layout dashboard.
     if (!scheduleDelegate) navItems = dropNavHref(navItems, JADWAL_TOKO_PATH);
   } catch (error) {
     if (isNextControlFlowError(error)) throw error;

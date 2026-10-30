@@ -4,9 +4,11 @@ import type { NavItem } from "./types";
 const pg = vi.hoisted(() => ({ iamDbQueryOne: vi.fn(), isIamDbConfigured: vi.fn(() => true) }));
 vi.mock("./pg-client", () => pg);
 vi.mock("@/lib/crm/loyalty-features-server", () => ({ getLoyaltyFeatures: vi.fn() }));
+const iamAction = vi.hoisted(() => ({ userHasIamAction: vi.fn(async () => false) }));
+vi.mock("./has-menu", () => iamAction);
 
 import { dropNavHref } from "./get-user-menus";
-import { isScheduleDelegate } from "./schedule-delegate";
+import { canOpenJadwalToko, isScheduleDelegate } from "./schedule-delegate";
 
 afterEach(() => {
   vi.clearAllMocks();
@@ -81,3 +83,26 @@ describe("isScheduleDelegate", () => {
     expect(pg.iamDbQueryOne).not.toHaveBeenCalled();
   });
 });
+
+describe("canOpenJadwalToko (EPIC-073 R1)", () => {
+  it("pengatur aktif melihat menu", async () => {
+    pg.iamDbQueryOne.mockResolvedValue({ ok: true });
+    await expect(canOpenJadwalToko("u-del", "employee")).resolves.toBe(true);
+  });
+
+  it("bukan pengatur tetapi punya update di Jadwal Kerja HR → melihat menu", async () => {
+    pg.iamDbQueryOne.mockResolvedValue({ ok: false });
+    iamAction.userHasIamAction.mockResolvedValue(true);
+    await expect(canOpenJadwalToko("u-hr", "hrd")).resolves.toBe(true);
+    expect(iamAction.userHasIamAction).toHaveBeenCalledWith("u-hr", "hrd", ["hris.kepegawaian.schedules"], "update");
+  });
+
+  it("bukan keduanya → tidak melihat menu; cek HR gagal dibaca → tidak melihat", async () => {
+    pg.iamDbQueryOne.mockResolvedValue({ ok: false });
+    iamAction.userHasIamAction.mockResolvedValue(false);
+    await expect(canOpenJadwalToko("u-emp", "employee")).resolves.toBe(false);
+    iamAction.userHasIamAction.mockRejectedValue(new Error("db down"));
+    await expect(canOpenJadwalToko("u-emp2", "employee")).resolves.toBe(false);
+  });
+});
+
