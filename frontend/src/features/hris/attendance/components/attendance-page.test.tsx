@@ -60,3 +60,17 @@ describe("AttendancePage: kartu ringkasan absen terlewat (EPIC-067)", () => {
     expect(card.compareDocumentPosition(tabs) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });
+
+describe("AttendancePage: tab di HP (permintaan 30-10)", () => {
+  it("di layar kecil daftar tab bisa digeser, bukan dipaksa 5 kolom sama lebar; grid baru dari sm", () => {
+    grant(true);
+    render(<AttendancePage />);
+    const list = screen.getByRole("tablist");
+    const classes = list.className.split(/\s+/);
+    expect(classes).not.toContain("grid");
+    expect(classes).toContain("overflow-x-auto");
+    expect(classes).toContain("sm:grid");
+    expect(classes).toContain("sm:grid-cols-5");
+  });
+});
+

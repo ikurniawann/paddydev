@@ -39,7 +39,8 @@ export function AttendancePage() {
       <AttendanceGapSummaryCard />
 
       <Tabs defaultValue="monitoring" className="w-full flex-col">
-        <TabsList className={`grid h-9 w-full max-w-3xl ${hrd ? "grid-cols-5" : "grid-cols-3"}`}>
+        {/* HP: tab digeser horizontal (bawaan TabsList); dari sm baru kolom sama lebar. */}
+        <TabsList className={`sm:grid sm:h-9 sm:w-full sm:max-w-3xl ${hrd ? "sm:grid-cols-5" : "sm:grid-cols-3"}`}>
           <TabsTrigger value="monitoring">Monitoring</TabsTrigger>
           <TabsTrigger value="rekap">Rekap</TabsTrigger>
           <TabsTrigger value="periode">Periode Absensi</TabsTrigger>

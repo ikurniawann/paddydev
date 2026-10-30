@@ -92,7 +92,8 @@ export function LogbookPage() {
       )}
 
       <Tabs value={tab} onValueChange={setTab} className="w-full flex-col">
-        <TabsList className="grid h-9 w-full max-w-xl grid-cols-4">
+        {/* HP: tab digeser horizontal (bawaan TabsList); dari sm baru kolom sama lebar. */}
+        <TabsList className="sm:grid sm:h-9 sm:w-full sm:max-w-xl sm:grid-cols-4">
           <TabsTrigger value="checklist">Checklist</TabsTrigger>
           <TabsTrigger value="riwayat">Riwayat</TabsTrigger>
           <TabsTrigger value="template">Template</TabsTrigger>
