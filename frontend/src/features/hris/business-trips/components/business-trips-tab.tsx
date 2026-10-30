@@ -10,6 +10,7 @@ import { useActiveEmployees } from "@/features/hris/attendance/queries";
 import { useEssMe } from "@/features/hris/ess/queries";
 import { useBusinessTrips } from "../queries";
 import { useTripDecision } from "../use-trip-decision";
+import { TripDetailDialog } from "./trip-detail-dialog";
 import { TripRequestDialog } from "./trip-request-dialog";
 import { TripStatusBadge } from "./trip-status-badge";
 
@@ -23,6 +24,8 @@ const ALL = "all";
 export function BusinessTripsTab() {
   const [status, setStatus] = useState<string>("pending");
   const [dialog, setDialog] = useState(false);
+  // Detail per id (EPIC-072) agar status mengikuti data terbaru setelah keputusan.
+  const [detailId, setDetailId] = useState<string | null>(null);
   const trips = useBusinessTrips(status === ALL ? {} : { status: status as TripStatus });
   const employees = useActiveEmployees().data;
   const employeeOptions = useMemo(
@@ -33,6 +36,7 @@ export function BusinessTripsTab() {
   const { request, busyId, dialog: decisionDialog } = useTripDecision();
 
   const rows = trips.data ?? [];
+  const detailTrip = rows.find((t) => t.id === detailId);
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -90,6 +94,14 @@ export function BusinessTripsTab() {
                         {trip.rejection_reason && <p className="text-xs text-red-600">{trip.rejection_reason}</p>}
                       </td>
                       <td className="p-3 text-right whitespace-nowrap">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          aria-label={`Detail perjalanan dinas ${trip.employee?.full_name ?? ""}`}
+                          onClick={() => setDetailId(trip.id)}
+                        >
+                          Detail
+                        </Button>{" "}
                         {trip.status === "pending" && trip.employee_id !== myEmployeeId && (
                           <>
                             <Button size="sm" disabled={busyId === trip.id} onClick={() => request(trip, "approve")}>
@@ -115,6 +127,30 @@ export function BusinessTripsTab() {
         </CardContent>
       </Card>
       <TripRequestDialog open={dialog} onOpenChange={setDialog} employees={employeeOptions} />
+      {detailTrip && (
+        <TripDetailDialog
+          trip={detailTrip}
+          onClose={() => setDetailId(null)}
+          actions={
+            detailTrip.status === "pending" && detailTrip.employee_id !== myEmployeeId ? (
+              <>
+                <Button variant="outline" disabled={busyId === detailTrip.id} onClick={() => {
+                  setDetailId(null);
+                  request(detailTrip, "reject");
+                }}>
+                  Tolak
+                </Button>
+                <Button disabled={busyId === detailTrip.id} onClick={() => {
+                  setDetailId(null);
+                  request(detailTrip, "approve");
+                }}>
+                  Setujui
+                </Button>
+              </>
+            ) : undefined
+          }
+        />
+      )}
       {decisionDialog}
     </div>
   );

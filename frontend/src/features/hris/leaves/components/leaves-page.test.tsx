@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LeavesPage } from "./leaves-page";
 
@@ -24,7 +24,8 @@ vi.mock("../queries", () => ({
         start_date: "2026-10-27",
         end_date: "2026-10-28",
         total_days: 2,
-        reason: "Acara keluarga",
+        reason: "Acara keluarga di Garut.\nBerangkat Senin pagi.",
+        attachment_url: "leave-attachments/e1/undangan.png",
         created_at: "2026-10-26T01:00:00Z",
         employee: { full_name: "Budi Santoso", nip: "N01", department: { name: "Dapur" } },
       },
@@ -55,5 +56,27 @@ describe("LeavesPage: tombol keputusan mengikuti akses approve (EPIC-067 R14)", 
     access = {};
     render(<LeavesPage />);
     expect(screen.queryByText("tombol-keputusan")).toBeNull();
+  });
+});
+
+describe("LeavesPage: detail & lampiran (EPIC-072)", () => {
+  it("kartu menampilkan lampiran dengan pratinjau; Detail memuat alasan utuh dan tombol keputusan", () => {
+    grant(true);
+    render(<LeavesPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Lampiran 1" }));
+    expect(screen.getByAltText("Lampiran 1").getAttribute("src")).toBe(
+      "/api/hris/leaves/attachment/leave-attachments/e1/undangan.png");
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
+    fireEvent.click(screen.getByRole("button", { name: "Detail cuti Budi Santoso" }));
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText((_, el) => el?.tagName === "P" && el.textContent === "Acara keluarga di Garut.\nBerangkat Senin pagi.")).toBeTruthy();
+    expect(within(dialog).getByText("tombol-keputusan")).toBeTruthy();
+  });
+
+  it("tanpa akses approve: Detail tetap bisa dibuka, tanpa tombol keputusan", () => {
+    grant(false);
+    render(<LeavesPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Detail cuti Budi Santoso" }));
+    expect(within(screen.getByRole("dialog")).queryByText("tombol-keputusan")).toBeNull();
   });
 });

@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { BusinessTrip } from "../types";
 import { BusinessTripsTab } from "./business-trips-tab";
@@ -100,5 +100,16 @@ describe("BusinessTripsTab", () => {
       { start_date: "2099-03-02", end_date: "2099-03-03", destination: "Toko Bandung", purpose: "Audit stok", employee_id: "e9" },
       expect.anything()
     );
+  });
+});
+
+describe("BusinessTripsTab — Detail (EPIC-072)", () => {
+  it("Detail menampilkan tujuan dan keperluan", () => {
+    rows.push(trip({ employee: { id: "e1", full_name: "Rina", nip: "N01", reporting_to: null } }));
+    render(<BusinessTripsTab />);
+    fireEvent.click(screen.getByRole("button", { name: "Detail perjalanan dinas Rina" }));
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText("Gudang Cikarang")).toBeTruthy();
+    expect(within(dialog).getByText("Stock opname")).toBeTruthy();
   });
 });

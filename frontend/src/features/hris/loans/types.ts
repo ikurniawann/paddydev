@@ -14,6 +14,8 @@ export interface LoanRow {
   first_installment_year: number | null;
   status: string;
   purpose: string | null;
+  /** Catatan pengajuan (EPIC-072: tampil di Detail). */
+  notes?: string | null;
   rejection_reason: string | null;
   manager_approver_id?: string | null;
   created_at: string;

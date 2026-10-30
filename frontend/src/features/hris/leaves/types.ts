@@ -33,6 +33,9 @@ export interface LeaveItem {
   end_date: string;
   total_days: number;
   reason: string;
+  /** Path lampiran privat (EPIC-072: tampil di kartu dan Detail). */
+  attachment_url?: string | null;
+  rejection_reason?: string | null;
   status: string;
   created_at: string;
   employee?: {
