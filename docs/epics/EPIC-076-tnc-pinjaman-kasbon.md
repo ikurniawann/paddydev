@@ -1,6 +1,6 @@
 # EPIC-076: Syarat & Ketentuan Pinjaman dan Kasbon (`MODULE-HRIS`)
 
-status: coding
+status: review
 environment: dev
 retries: 0
 
@@ -67,3 +67,19 @@ Rencana: `docs/superpowers/plans/2026-11-01-tnc-pinjaman-kasbon.md`.
 - 2026-11-01: Epic dibuat dari TnC user. Pemetaan kode (`payroll/domain/kasbon.go`, `domain/loans.go`, `loans.go`, `service_runs.go`) dan acuan MOM (KP-02/03, PY-02). Belum dikerjakan (user: "sbg epic nanti").
 - 2026-11-01: User mengonfirmasi ruling R1–R9 ("sesuai") dan menegaskan ada dua jenis, Kasbon dan Pinjaman Karyawan, keduanya mengikuti TnC ini. Status tetap `backlog` sampai dijadwalkan.
 - 2026-11-01: User meminta dikerjakan sekarang, dengan prosedur baru (gambar): syarat masa kerja, plafon/tenor per jenis, jaminan untuk pinjaman, atasan melihat detail. Jawaban user: ikuti prosedur; atasan menyetujui Pinjaman Karyawan dulu; dokumen wajib untuk keduanya. Ruling diganti R1–R13 (menggantikan R1–R9 lama); status `coding`.
+- 2026-11-01: **Implementasi** (eksekusi inline): `cace6bf3` backend (validator per jenis, approval Manager untuk kedua jenis, periode 21–20, lampiran + migrasi `20261101090000_loans_attachments.sql`), `14d20497` frontend (form ESS/HR, unggah dokumen/jaminan, detail lampiran untuk atasan & HR, label "Pinjaman Karyawan"), `37cdee00` acuan MOM.
+- 2026-11-01: **Review akhir** (opus): Ready with fixes, 0 kritis. Diperbaiki di `4dca73c9`:
+  - R6 diperluas: run `processing` juga dianggap tutup (hanya run draft yang dihitung ulang), supaya bulan potong & pesan tidak salah.
+  - Dialog form ESS/HR bisa di-scroll di HP (`max-h-[90dvh]`).
+  - Lampiran tidak basi saat unggah (ganti karyawan / hapus di tengah unggahan, unggahan sebagian gagal); dua bidang unggah berbagi status sibuk.
+  - UUID karyawan dari HR di-lowercase; antrean Manager menyertakan cicilan/bulan.
+  - Ditunda (minor): pengecekan run tutup belum per entitas (run selesai entitas mana pun memundurkan bulan potong); akun di luar `LoanManageRoles` yang membuka halaman HR Pinjaman tetap mengajukan untuk diri sendiri (perilaku lama).
+- 2026-11-01: **Gerbang lokal:** `go vet ./...` bersih; `go test -p 1` app/payroll/hris/desktop ok; frontend `tsc` 0, `lint` 0, `pnpm test` 873 file / 6327 tes lulus (sebelum perbaikan review; suite terkait diulang sesudahnya, lulus).
+- 2026-11-01 21:40: **Staging** image `local-20261101-214002` (branch `4dca73c9`), 1 migrasi. Backup `~/Desktop/paddydev-backups/staging-db-before-epic076-20261101-213954.dump`.
+- 2026-11-01: **QA staging** (akun demo Manager, PKWT, Tetap, Probation, HR), 35/35 lulus:
+  - kasbon via laptop dengan dokumen pendukung; Pinjaman Karyawan 200% THP × 6 via HP dengan jaminan;
+  - probation ditolak, PKWT < 12 bulan tidak bisa pinjaman, lewat plafon ditolak;
+  - Manager membuka detail + pratinjau lampiran (HP & laptop) lalu menyetujui; HR menyetujui → dipotong mulai payroll November 2026;
+  - karyawan lain 403 saat membuka jaminan, HR 200;
+  - tidak meluber di HP, 0 error konsol / API.
+  - Data demo dan file lampiran dihapus.
