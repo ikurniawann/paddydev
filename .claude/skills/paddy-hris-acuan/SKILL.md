@@ -36,6 +36,7 @@ Detail lengkap ada di `docs/hris/acuan-mom-20261019/`:
 | Cuti Tahunan | 12/tahun setelah 12 bulan kerja: jatah default 0 → prorata tahun genap 12 bulan → 12 (ditegakkan saat baris saldo dibuat, EPIC-068); HR atur jatah/penyesuaian/sisa bawaan di menu Saldo Cuti; maks. 3/bulan belum ditegakkan |
 | Lembur | Weekday 1,5×, libur/istirahat 2× Gaji Pokok/173 per jam; min. 1 jam; diajukan **sebelum**; approver atasan langsung |
 | Keterlambatan | Terlambat = lewat toleransi shift (`is_late`), dihitung per periode absensi: 1–2 teguran lisan & tertulis, 3–4 SP 1, 5–6 SP 2, > 6 SP 3 dan/atau PHK; info di ESS & Absensi Tim, SP diterbitkan HR. Potongan telat `tier` payroll tetap terpisah (EPIC-077) |
+| Jam kerja | HQ Sen–Jum masuk 08.00–09.00, istirahat 12–13, pulang 17.00–18.00 → shift NS 09.00 toleransi 0. Operations (Warehouse) Sen–Jum 08.00–16.00, Sab 08.00–14.00 → OPS/OPSSAT toleransi 10. Jadwal tetap Non-Shift mengikuti departemen (EPIC-078) |
 | Kasbon & Pinjaman Karyawan | Hanya PKWT/PKWTT (probation dll. tidak bisa). Kasbon: masa kerja ≥ 3 bln, maks. ½ THP, 1–2 kali, wajib dokumen pendukung. Pinjaman Karyawan: masa kerja ≥ 12 bln, maks. 200% THP, 1–6 kali, wajib jaminan. Keduanya: approver Manager Departemen lalu HR (kasbon: HR Penggajian); dipotong payroll periode pengajuan (21–20). Pinjaman Darurat dihapus (EPIC-076) |
 | Subsidi BPJS Kes | Rp100.000 bila masa kerja > 1 tahun pada tanggal cutoff |
 | Time-off | Approver atasan langsung; SPV ke atasannya |
