@@ -8,16 +8,21 @@ import { Input } from "@/components/ui/input";
 import { Combobox } from "@/components/ui/combobox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { formatRupiah } from "@/lib/format";
+import { todayWib } from "@/lib/dates";
 import {
   EMPTY_LOAN_FORM,
   LOAN_TYPE_OPTIONS,
-  kasbonTenorOptions,
   loanPayload,
+  loanPayrollPeriodLabel,
+  loanTenorOptions,
+  loanTermsText,
   previewInstallment,
+  tenorForType,
   validateLoanForm,
 } from "@/lib/hris/loans-view";
 import { useCreateLoan } from "../mutations";
 import { useEmployeeOptions } from "@/features/hris/shared/use-employee-options";
+import { LoanAttachmentsFields } from "./loan-attachments-fields";
 
 interface LoanFormDialogProps {
   open: boolean;
@@ -39,6 +44,7 @@ export function LoanFormDialog({ open, onOpenChange }: LoanFormDialogProps) {
 
 function LoanFormBody({ onClose }: { onClose: () => void }) {
   const [form, setForm] = useState(EMPTY_LOAN_FORM);
+  const [uploading, setUploading] = useState(false);
   const { data: employeeOptions = [] } = useEmployeeOptions();
   const create = useCreateLoan();
   const installment = previewInstallment(form);
@@ -66,7 +72,10 @@ function LoanFormBody({ onClose }: { onClose: () => void }) {
           <Combobox
             options={employeeOptions}
             value={form.employee_id}
-            onChange={(value) => setForm((f) => ({ ...f, employee_id: value }))}
+            // Lampiran disimpan di folder karyawan: ganti karyawan = unggah ulang.
+            onChange={(value) =>
+              setForm((f) => (value === f.employee_id ? f : { ...f, employee_id: value, attachments: [], collateral_attachments: [] }))
+            }
             placeholder="Pilih karyawan"
           />
         </div>
@@ -76,15 +85,12 @@ function LoanFormBody({ onClose }: { onClose: () => void }) {
             options={LOAN_TYPE_OPTIONS}
             value={form.loan_type}
             onChange={(value) =>
-              setForm((f) => ({
-                ...f,
-                loan_type: value,
-                tenor_months: value === "kasbon" && !["1", "2"].includes(f.tenor_months) ? "2" : f.tenor_months,
-              }))
+              setForm((f) => ({ ...f, loan_type: value, tenor_months: tenorForType(value, f.tenor_months) }))
             }
             placeholder="Pilih jenis"
           />
         </div>
+        <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">{loanTermsText(form.loan_type)}</p>
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="mb-1 block text-xs font-medium text-gray-600">Jumlah (Rp)</label>
@@ -96,23 +102,13 @@ function LoanFormBody({ onClose }: { onClose: () => void }) {
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-gray-600">Tenor (bulan)</label>
-            {form.loan_type === "kasbon" ? (
-              <Combobox
-                options={kasbonTenorOptions}
-                value={form.tenor_months}
-                onChange={(value) => setForm((f) => ({ ...f, tenor_months: value }))}
-                placeholder="Pilih tenor"
-              />
-            ) : (
-              <Input
-                type="number"
-                min="1"
-                max="60"
-                value={form.tenor_months}
-                onChange={(e) => setForm((f) => ({ ...f, tenor_months: e.target.value }))}
-              />
-            )}
+            <label className="mb-1 block text-xs font-medium text-gray-600">Cicilan</label>
+            <Combobox
+              options={loanTenorOptions(form.loan_type)}
+              value={form.tenor_months}
+              onChange={(value) => setForm((f) => ({ ...f, tenor_months: value }))}
+              placeholder="Pilih cicilan"
+            />
           </div>
         </div>
         <div>
@@ -135,20 +131,34 @@ function LoanFormBody({ onClose }: { onClose: () => void }) {
             onChange={(e) => setForm((f) => ({ ...f, purpose: e.target.value }))}
           />
         </div>
-        {installment !== null && (
-          <p className="rounded-lg bg-sky-50 px-3 py-2 text-xs text-sky-700">
-            Perkiraan cicilan: <strong>{formatRupiah(installment)}</strong>
-            /bulan × {form.tenor_months} bulan. Cicilan mulai terpotong di
-            payroll bulan setelah approval. Batas cicilan mengikuti
-            pengaturan payroll (default 30% gaji pokok).
-          </p>
+        {form.employee_id ? (
+          <LoanAttachmentsFields
+            loanType={form.loan_type}
+            attachments={form.attachments}
+            collateral={form.collateral_attachments}
+            onAttachmentsChange={(paths) => setForm((f) => ({ ...f, attachments: paths }))}
+            onCollateralChange={(paths) => setForm((f) => ({ ...f, collateral_attachments: paths }))}
+            onBusyChange={setUploading}
+            employeeId={form.employee_id}
+          />
+        ) : (
+          <p className="text-xs text-gray-500">Pilih karyawan dulu untuk melampirkan dokumen.</p>
         )}
+        <p className="rounded-lg bg-sky-50 px-3 py-2 text-xs text-sky-700">
+          {installment !== null && (
+            <>
+              Perkiraan cicilan: <strong>{formatRupiah(installment)}</strong> × {form.tenor_months} kali.{" "}
+            </>
+          )}
+          Dipotong mulai payroll <strong>{loanPayrollPeriodLabel(todayWib())}</strong> setelah disetujui (pengajuan
+          tanggal 21–20 masuk payroll bulan berjalan).
+        </p>
       </div>
       <DialogFooter>
         <Button variant="outline" onClick={onClose}>
           Batal
         </Button>
-        <Button onClick={handleSubmit} disabled={create.isPending}>
+        <Button onClick={handleSubmit} disabled={create.isPending || uploading}>
           {create.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Ajukan"}
         </Button>
       </DialogFooter>

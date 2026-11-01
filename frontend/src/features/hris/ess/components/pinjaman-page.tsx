@@ -18,8 +18,19 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { formatDateTime, formatRupiah } from "@/lib/format";
+import { todayWib } from "@/lib/dates";
 import { installmentPreview, loanPaidPercent } from "@/lib/hris/ess-view";
-import { LOAN_TYPE_OPTIONS, kasbonTenorOptions, loanTypeLabel } from "@/lib/hris/loans-view";
+import {
+  LOAN_TYPE_OPTIONS,
+  loanDeductionLabel,
+  loanPayrollPeriodLabel,
+  loanTenorOptions,
+  loanTermsText,
+  loanTypeLabel,
+  tenorForType,
+  validateLoanRequest,
+} from "@/lib/hris/loans-view";
+import { LoanAttachmentsFields, loanAttachmentGroups } from "@/features/hris/loans/components/loan-attachments-fields";
 import { useEssMe, useMyLoans, useTeamLoanApprovals } from "../queries";
 import { useDecideTeamLoan, useSubmitLoan } from "../mutations";
 import type { EssLoanRow } from "../types";
@@ -29,6 +40,7 @@ import { EssLoading, EssNotLinked } from "./ess-states";
  * ESS → Pinjaman (/dashboard/me/pinjaman): karyawan mengajukan
  * pinjaman/kasbon utk dirinya sendiri + memantau status & pelunasan.
  * Server memaksa employee_id = diri sendiri, bunga 0, status pending.
+ * Syarat per jenis & lampiran wajib mengikuti prosedur 01-11 (EPIC-076).
  */
 
 const STATUS_BADGES: Record<string, { label: string; className: string }> = {
@@ -44,7 +56,12 @@ const EMPTY_FORM = {
   principal_amount: "",
   tenor_months: "2",
   purpose: "",
+  attachments: [] as string[],
+  collateral_attachments: [] as string[],
 };
+
+/** "kasbon" / "pinjaman" untuk judul & label tombol. */
+const nounOf = (loanType: string) => (loanType === "kasbon" ? "kasbon" : "pinjaman");
 
 export function EssPinjamanPage() {
   const { data: me, isLoading } = useEssMe();
@@ -54,6 +71,7 @@ export function EssPinjamanPage() {
   const decideTeamLoan = useDecideTeamLoan();
   const [dialog, setDialog] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
+  const [uploading, setUploading] = useState(false);
   // Kasbon tim (EPIC-072): detail sebelum memutus; tolak wajib alasan.
   const [detail, setDetail] = useState<EssLoanRow | null>(null);
   const [rejecting, setRejecting] = useState<EssLoanRow | null>(null);
@@ -61,12 +79,9 @@ export function EssPinjamanPage() {
   const previewInstallment = installmentPreview(form.principal_amount, form.tenor_months);
 
   function handleSubmit() {
-    if (!Number(form.principal_amount) || !Number(form.tenor_months)) {
-      toast.error("Jumlah pinjaman dan tenor wajib diisi");
-      return;
-    }
-    if (form.loan_type === "kasbon" && !["1", "2"].includes(form.tenor_months)) {
-      toast.error("Tenor kasbon hanya 1 atau 2 bulan");
+    const invalid = validateLoanRequest(form);
+    if (invalid) {
+      toast.error(invalid);
       return;
     }
     submitMutation.mutate(
@@ -75,6 +90,8 @@ export function EssPinjamanPage() {
         principal_amount: Number(form.principal_amount),
         tenor_months: Number(form.tenor_months),
         purpose: form.purpose || undefined,
+        attachments: form.attachments,
+        collateral_attachments: form.loan_type === "kasbon" ? [] : form.collateral_attachments,
       },
       {
         onSuccess: () => {
@@ -110,8 +127,8 @@ export function EssPinjamanPage() {
     decideTeamLoan.mutate(
       { id, approved, ...(rejectionReason ? { rejectionReason } : {}) },
       {
-        onSuccess: (res) => toast.success(res.message || (approved ? "Kasbon disetujui" : "Kasbon ditolak")),
-        onError: (error) => toast.error(error.message || "Gagal memproses kasbon"),
+        onSuccess: (res) => toast.success(res.message || (approved ? "Pengajuan disetujui" : "Pengajuan ditolak")),
+        onError: (error) => toast.error(error.message || "Gagal memproses pengajuan"),
       }
     );
   }
@@ -154,9 +171,12 @@ export function EssPinjamanPage() {
                         {loanTypeLabel(loan.loan_type)} · {formatRupiah(loan.principal_amount)}
                       </p>
                       <p className="text-xs text-gray-500">
-                        Cicilan {formatRupiah(loan.monthly_installment)}/bln × {loan.tenor_months} bln
+                        Cicilan {formatRupiah(loan.monthly_installment)} × {loan.tenor_months} kali
                         {loan.purpose ? ` · ${loan.purpose}` : ""}
                       </p>
+                      {["pending", "manager_approved", "approved"].includes(loan.status) && (
+                        <p className="text-xs text-gray-500">Dipotong mulai payroll {loanDeductionLabel(loan)}</p>
+                      )}
                       {loan.status === "rejected" && loan.rejection_reason && (
                         <p className="mt-0.5 text-xs text-red-500">
                           Alasan ditolak: {loan.rejection_reason}
@@ -192,7 +212,7 @@ export function EssPinjamanPage() {
 
       {teamLoans.length > 0 && (
         <div className="rounded-xl border border-gray-200/70 bg-white p-5 shadow-sm">
-          <h3 className="text-sm font-semibold text-gray-800">Persetujuan Kasbon Tim</h3>
+          <h3 className="text-sm font-semibold text-gray-800">Persetujuan Kasbon & Pinjaman Tim</h3>
           <ul className="mt-3 divide-y divide-gray-100">
             {teamLoans.map((loan) => (
               <li key={loan.id} className="flex flex-wrap items-start justify-between gap-3 py-3">
@@ -202,7 +222,7 @@ export function EssPinjamanPage() {
                   </p>
                   <p className="text-xs text-gray-500">
                     {loanTypeLabel(loan.loan_type)} · {formatRupiah(loan.principal_amount)} ·{" "}
-                    {loan.tenor_months} bln
+                    {loan.tenor_months} kali
                   </p>
                   {loan.purpose && <p className="line-clamp-2 break-words text-xs text-gray-500">{loan.purpose}</p>}
                 </div>
@@ -210,7 +230,7 @@ export function EssPinjamanPage() {
                   <Button
                     size="sm"
                     variant="ghost"
-                    aria-label={`Detail kasbon ${loan.employee?.full_name ?? ""}`}
+                    aria-label={`Detail ${nounOf(loan.loan_type)} ${loan.employee?.full_name ?? ""}`}
                     onClick={() => setDetail(loan)}
                   >
                     Detail
@@ -226,7 +246,7 @@ export function EssPinjamanPage() {
                     size="sm"
                     variant="outline"
                     disabled={decideTeamLoan.isPending}
-                    aria-label={`Tolak kasbon ${loan.employee?.full_name ?? ""}`}
+                    aria-label={`Tolak ${nounOf(loan.loan_type)} ${loan.employee?.full_name ?? ""}`}
                     onClick={() => askRejectTeam(loan)}
                   >
                     Tolak
@@ -242,15 +262,20 @@ export function EssPinjamanPage() {
         <RequestDetailDialog
           open
           onOpenChange={(o) => !o && setDetail(null)}
-          title="Detail kasbon"
+          title={`Detail ${nounOf(detail.loan_type)}`}
           employee={{ name: detail.employee?.full_name ?? "—", nip: detail.employee?.nip }}
           fields={[
             { label: "Jenis", value: loanTypeLabel(detail.loan_type) },
             { label: "Nominal", value: formatRupiah(detail.principal_amount) },
-            { label: "Tenor", value: `${detail.tenor_months} bulan` },
+            {
+              label: "Cicilan",
+              value: `${detail.tenor_months} kali × ${formatRupiah(installmentPreview(detail.principal_amount, detail.tenor_months) ?? 0)}`,
+            },
+            { label: "Mulai dipotong", value: loanDeductionLabel(detail) },
             ...(detail.created_at ? [{ label: "Diajukan", value: formatDateTime(detail.created_at, "—") }] : []),
           ]}
           reason={{ label: "Keperluan", text: detail.purpose }}
+          attachments={loanAttachmentGroups(detail)}
           notes={
             detail.notes?.trim() ? (
               <div>
@@ -275,7 +300,7 @@ export function EssPinjamanPage() {
       <ConfirmDialog
         open={rejecting !== null}
         onOpenChange={(o) => !o && setRejecting(null)}
-        title={`Tolak kasbon ${rejecting?.employee?.full_name ?? ""}?`}
+        title={`Tolak ${nounOf(rejecting?.loan_type ?? "kasbon")} ${rejecting?.employee?.full_name ?? ""}?`}
         confirmLabel="Tolak pengajuan"
         cancelLabel="Kembali"
         onConfirm={confirmRejectTeam}
@@ -306,16 +331,12 @@ export function EssPinjamanPage() {
                 options={LOAN_TYPE_OPTIONS}
                 value={form.loan_type}
                 onChange={(value) =>
-                  setForm((f) => ({
-                    ...f,
-                    loan_type: value,
-                    tenor_months:
-                      value === "kasbon" && !["1", "2"].includes(f.tenor_months) ? "2" : f.tenor_months,
-                  }))
+                  setForm((f) => ({ ...f, loan_type: value, tenor_months: tenorForType(value, f.tenor_months) }))
                 }
                 placeholder="Pilih jenis"
               />
             </div>
+            <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">{loanTermsText(form.loan_type)}</p>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="mb-1 block text-xs font-medium text-gray-600">Jumlah (Rp)</label>
@@ -327,23 +348,13 @@ export function EssPinjamanPage() {
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs font-medium text-gray-600">Tenor (bulan)</label>
-                {form.loan_type === "kasbon" ? (
-                  <Combobox
-                    options={kasbonTenorOptions}
-                    value={form.tenor_months}
-                    onChange={(value) => setForm((f) => ({ ...f, tenor_months: value }))}
-                    placeholder="Pilih tenor"
-                  />
-                ) : (
-                  <Input
-                    type="number"
-                    min="1"
-                    max="60"
-                    value={form.tenor_months}
-                    onChange={(e) => setForm((f) => ({ ...f, tenor_months: e.target.value }))}
-                  />
-                )}
+                <label className="mb-1 block text-xs font-medium text-gray-600">Cicilan</label>
+                <Combobox
+                  options={loanTenorOptions(form.loan_type)}
+                  value={form.tenor_months}
+                  onChange={(value) => setForm((f) => ({ ...f, tenor_months: value }))}
+                  placeholder="Pilih cicilan"
+                />
               </div>
             </div>
             <div>
@@ -354,19 +365,30 @@ export function EssPinjamanPage() {
                 onChange={(e) => setForm((f) => ({ ...f, purpose: e.target.value }))}
               />
             </div>
-            {previewInstallment !== null && (
-              <p className="rounded-lg bg-sky-50 px-3 py-2 text-xs text-sky-700">
-                Perkiraan cicilan: <strong>{formatRupiah(previewInstallment)}</strong>/bulan ×{" "}
-                {form.tenor_months} bulan (tanpa bunga). Cicilan otomatis
-                terpotong dari gaji setelah disetujui HRD.
-              </p>
-            )}
+            <LoanAttachmentsFields
+              loanType={form.loan_type}
+              attachments={form.attachments}
+              collateral={form.collateral_attachments}
+              onAttachmentsChange={(paths) => setForm((f) => ({ ...f, attachments: paths }))}
+              onCollateralChange={(paths) => setForm((f) => ({ ...f, collateral_attachments: paths }))}
+              onBusyChange={setUploading}
+            />
+            <p className="rounded-lg bg-sky-50 px-3 py-2 text-xs text-sky-700">
+              {previewInstallment !== null && (
+                <>
+                  Perkiraan cicilan: <strong>{formatRupiah(previewInstallment)}</strong> × {form.tenor_months} kali
+                  (tanpa bunga).{" "}
+                </>
+              )}
+              Dipotong mulai payroll <strong>{loanPayrollPeriodLabel(todayWib())}</strong> setelah disetujui Manager
+              dan HR (pengajuan tanggal 21–20 masuk payroll bulan berjalan).
+            </p>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialog(false)}>
               Batal
             </Button>
-            <Button onClick={handleSubmit} disabled={submitMutation.isPending}>
+            <Button onClick={handleSubmit} disabled={submitMutation.isPending || uploading}>
               {submitMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Kirim Pengajuan"}
             </Button>
           </DialogFooter>

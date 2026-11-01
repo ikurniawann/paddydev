@@ -124,7 +124,7 @@ describe("EssPersetujuanTimPage", () => {
     trips = [{ id: "t1" }];
     render(<EssPersetujuanTimPage />);
     expect(screen.getByText("Antrean Perjalanan Dinas")).toBeTruthy();
-    const link = screen.getByRole("link", { name: /2 kasbon tim menunggu persetujuan Anda/ });
+    const link = screen.getByRole("link", { name: /2 kasbon\/pinjaman tim menunggu persetujuan Anda/ });
     expect(link.getAttribute("href")).toBe("/dashboard/me/pinjaman");
     expect(screen.queryByText("Tidak ada pengajuan tim yang menunggu persetujuan Anda.")).toBeNull();
   });

@@ -26,3 +26,20 @@ describe("LoansTable — Detail (EPIC-072)", () => {
     expect(onDecide).toHaveBeenCalledWith("k1", false);
   });
 });
+
+describe("LoansTable — lampiran & bulan potong (EPIC-076)", () => {
+  it("HR melihat dokumen pendukung, jaminan, dan bulan potong yang tersimpan", () => {
+    const pinjaman: LoanRow = {
+      ...row, id: "p1", loan_type: "loan", status: "approved", first_installment_month: 12, first_installment_year: 2026,
+      attachments: ["loan-attachments/e1/1-0123456789abcdef.pdf"],
+      collateral_attachments: ["loan-attachments/e1/2-0123456789abcdef.jpg", "loan-attachments/e1/3-0123456789abcdef.pdf"],
+    };
+    render(<LoansTable rows={[pinjaman]} loading={false} decidingId={null} onDecide={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Detail pinjaman Peminjam K" }));
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText("Pinjaman Karyawan")).toBeTruthy();
+    expect(within(dialog).getByText("Desember 2026")).toBeTruthy();
+    expect(within(dialog).getByRole("button", { name: /Jaminan 2/ })).toBeTruthy();
+    expect(within(dialog).getByRole("button", { name: /Dokumen 1/ })).toBeTruthy();
+  });
+});

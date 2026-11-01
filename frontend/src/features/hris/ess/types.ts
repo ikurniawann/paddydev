@@ -154,6 +154,9 @@ export interface EssLoanRow {
   notes?: string | null;
   rejection_reason: string | null;
   created_at?: string;
+  /** Dokumen pendukung & jaminan (EPIC-076 R8). */
+  attachments?: string[];
+  collateral_attachments?: string[];
 }
 
 export interface EssLoanPayload {
@@ -161,6 +164,8 @@ export interface EssLoanPayload {
   principal_amount: number;
   tenor_months: number;
   purpose?: string;
+  attachments: string[];
+  collateral_attachments: string[];
 }
 
 export interface EssPayslip extends PayslipAmounts {
