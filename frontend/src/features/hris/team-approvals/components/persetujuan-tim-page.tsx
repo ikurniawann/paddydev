@@ -260,7 +260,7 @@ export function EssPersetujuanTimPage() {
           className="flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50/70 p-4 text-sm text-amber-900 shadow-sm hover:bg-amber-50"
         >
           <span className="flex items-center gap-2">
-            <BanknotesIcon className="h-4 w-4" /> {loans.length} kasbon tim menunggu persetujuan Anda
+            <BanknotesIcon className="h-4 w-4" /> {loans.length} kasbon/pinjaman tim menunggu persetujuan Anda
           </span>
           <span className="font-medium">Buka Pinjaman →</span>
         </Link>

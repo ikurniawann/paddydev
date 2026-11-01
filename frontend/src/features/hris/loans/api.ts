@@ -12,3 +12,18 @@ export const createLoan = (payload: LoanPayload) =>
 
 export const decideLoan = ({ id, approved, rejection_reason }: LoanDecision) =>
   apiPost<{ message?: string }>(`/api/hris/loans/${id}/approve`, { approved, rejection_reason });
+
+/**
+ * Unggah 1 lampiran pinjaman (PDF/JPG/PNG/WebP ≤ 5 MB) → path privat. HR
+ * mengunggah atas nama karyawan lewat employeeId; selain HR server memakai
+ * akun sendiri (EPIC-076 R8).
+ */
+export async function uploadLoanAttachment(file: File, employeeId?: string): Promise<string> {
+  const body = new FormData();
+  body.append("file", file);
+  if (employeeId) body.append("employee_id", employeeId);
+  const res = await fetch("/api/hris/loans/attachments", { method: "POST", body });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json?.error || "Gagal mengunggah lampiran");
+  return json.data.path as string;
+}

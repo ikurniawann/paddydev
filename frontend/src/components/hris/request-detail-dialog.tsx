@@ -17,6 +17,15 @@ export interface RequestDetailField {
   value: ReactNode;
 }
 
+export interface RequestAttachmentGroup {
+  paths: string[];
+  hrefFor: (path: string) => string;
+  /** Teks tombol, mis. "Lampiran" → "Lampiran 1". */
+  label?: string;
+  /** Judul kelompok; bawaan "Dokumentasi". */
+  title?: string;
+}
+
 export interface RequestDetailDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -26,7 +35,8 @@ export interface RequestDetailDialogProps {
   status?: ReactNode;
   fields: RequestDetailField[];
   reason?: { label?: string; text: string | null | undefined };
-  attachments?: { paths: string[]; hrefFor: (path: string) => string; label?: string };
+  /** Satu kelompok lampiran, atau beberapa (mis. jaminan + dokumen pendukung pinjaman). */
+  attachments?: RequestAttachmentGroup | RequestAttachmentGroup[];
   /** Info tambahan di bawah alasan: keputusan, catatan, koreksi. */
   notes?: ReactNode;
   /** Tombol kaki (Setujui/Tolak); tanpa ini hanya "Tutup". */
@@ -51,6 +61,9 @@ export function RequestDetailDialog({
   actions,
 }: RequestDetailDialogProps) {
   const reasonText = reason?.text?.trim();
+  const groups = (Array.isArray(attachments) ? attachments : attachments ? [attachments] : []).filter(
+    (g) => g.paths.length > 0
+  );
   const sub = [employee.nip, employee.subtitle].filter(Boolean).join(" · ");
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -87,18 +100,18 @@ export function RequestDetailDialog({
             </div>
           )}
 
-          {attachments && attachments.paths.length > 0 && (
-            <div>
-              <p className="mb-1 text-xs font-medium text-gray-600">Dokumentasi</p>
+          {groups.map((g) => (
+            <div key={g.title ?? "Dokumentasi"}>
+              <p className="mb-1 text-xs font-medium text-gray-600">{g.title ?? "Dokumentasi"}</p>
               <AttachmentPreviewButtons
-                paths={attachments.paths}
-                hrefFor={attachments.hrefFor}
-                label={attachments.label}
+                paths={g.paths}
+                hrefFor={g.hrefFor}
+                label={g.label}
                 buttonClassName="rounded-md border border-pink-200 bg-pink-50 px-2.5 py-1 text-xs font-medium text-pink-700 hover:bg-pink-100"
                 className="gap-2"
               />
             </div>
-          )}
+          ))}
 
           {notes}
         </DialogPanelBody>

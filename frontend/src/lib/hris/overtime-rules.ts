@@ -127,9 +127,7 @@ export function decidedAs(
 
 /* ── Input lembur setelah selesai (EPIC-066) ─────────────────────────── */
 
-export const OVERTIME_ATTACHMENT_ACCEPT = "application/pdf,image/jpeg,image/png,image/webp";
 export const MAX_OVERTIME_ATTACHMENTS = 3;
-export const MAX_OVERTIME_ATTACHMENT_BYTES = 5 * 1024 * 1024;
 
 function clockMinutes(s: string): number | null {
   const m = /^(\d{2}):(\d{2})/.exec(s);

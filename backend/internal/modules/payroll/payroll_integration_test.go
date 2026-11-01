@@ -13,6 +13,7 @@ import (
 
 	"nuhabit/backend/internal/modules/payroll/domain"
 	"nuhabit/backend/internal/platform/database"
+	"nuhabit/backend/internal/platform/storage"
 	"nuhabit/backend/internal/platform/testutil"
 )
 
@@ -236,6 +237,7 @@ type env struct {
 	staff     testutil.Staff
 	ents      *fakeEntities
 	co, store string // default entity and its store
+	files     *storage.Store
 }
 
 var fixedNow = time.Date(2026, 10, 4, 10, 0, 0, 0, time.UTC)
@@ -262,7 +264,9 @@ func setup(t *testing.T, periods ...AttendancePeriods) *env {
 		depts: &fakeDepartments{},
 		ents:  &fakeEntities{branches: map[string]string{}},
 		work:  &fakeWorkforce{records: map[string]domain.WorkforceRecords{}, holidays: map[string]bool{}}}
-	ports := Ports{Employees: e.emps, Departments: e.depts, Workforce: e.work, Settings: fakeSettings{}, Entities: e.ents}
+	e.files = storage.New(t.TempDir())
+	ports := Ports{Employees: e.emps, Departments: e.depts, Workforce: e.work, Settings: fakeSettings{}, Entities: e.ents,
+		Files: e.files}
 	if len(periods) > 0 {
 		ports.AttendancePeriods = periods[0]
 	}
@@ -679,26 +683,27 @@ func TestLoans(t *testing.T) {
 	worker := e.employee("Andi", e.staff.UserID, true)
 	inactive := e.employee("Keluar", "", false)
 
-	wantErr(t, e.call(&e.hr, "POST", "/api/hris/loans", map[string]any{"loan_type": "", "principal_amount": 0, "tenor_months": 61}, 400), invalidLoan)
-	wantErr(t, e.call(&e.hr, "POST", "/api/hris/loans", map[string]any{"employee_id": inactive, "loan_type": "loan",
+	wantErr(t, e.loan(&e.hr, map[string]any{"loan_type": "", "principal_amount": 0, "tenor_months": 61}, 400), invalidLoan)
+	wantErr(t, e.loan(&e.hr, map[string]any{"employee_id": inactive, "loan_type": "loan",
 		"principal_amount": 1000000, "tenor_months": 2}, 400), "Karyawan sudah tidak aktif")
-	wantErr(t, e.call(&e.hr, "POST", "/api/hris/loans", map[string]any{"employee_id": worker, "loan_type": "loan",
+	wantErr(t, e.loan(&e.hr, map[string]any{"employee_id": worker, "loan_type": "loan",
 		"principal_amount": 1000000, "tenor_months": 2}, 400),
 		"Karyawan belum punya struktur gaji aktif — atur gaji dulu sebelum mengajukan pinjaman")
 	e.exec(`INSERT INTO hris.employee_salary (employee_id, company_id, base_salary, effective_date) VALUES ($1, $2, 5000000, '2026-01-01')`, worker, e.co)
-	wantErr(t, e.call(&e.hr, "POST", "/api/hris/loans", map[string]any{"employee_id": worker, "loan_type": "loan",
-		"principal_amount": 6000000, "tenor_months": 3}, 400),
-		"Cicilan Rp 2.000.000/bulan melebihi batas 30% dari gaji pokok (maks Rp 1.500.000)")
+	wantErr(t, e.loan(&e.hr, map[string]any{"employee_id": worker, "loan_type": "loan",
+		"principal_amount": 10000001, "tenor_months": 3}, 400),
+		"Pinjaman Karyawan maksimal 200% THP (maks Rp 10.000.000)")
 
 	// The employee files for themselves: interest forced to 0.
-	created := e.call(&e.staff, "POST", "/api/hris/loans", map[string]any{"employee_id": hrEmp, "loan_type": "kasbon",
-		"principal_amount": "2000000", "tenor_months": 2, "interest_rate": 5}, 200)
+	// employee_id is ignored for them, so the document is their own.
+	created := e.loan(&e.staff, map[string]any{"employee_id": hrEmp, "loan_type": "kasbon",
+		"principal_amount": "2000000", "tenor_months": 2, "interest_rate": 5, "attachments": []string{e.loanDoc(worker)}}, 200)
 	loan := created["data"].(map[string]any)
 	if created["message"] != "Pengajuan pinjaman berhasil dibuat, menunggu approval" || loan["employee_id"] != worker ||
 		loan["interest_rate"] != "0.00" || loan["monthly_installment"] != "1000000.00" || loan["status"] != "pending" {
 		t.Fatalf("created %v", created)
 	}
-	wantErr(t, e.call(&e.staff, "POST", "/api/hris/loans", map[string]any{"loan_type": "kasbon",
+	wantErr(t, e.loan(&e.staff, map[string]any{"loan_type": "kasbon",
 		"principal_amount": 100000, "tenor_months": 1}, 400), "Karyawan sudah punya 1 pinjaman aktif (maks 1)")
 
 	mine := e.call(&e.staff, "GET", "/api/hris/loans?employee_id="+hrEmp, nil, 200)["data"].([]any)
@@ -715,8 +720,9 @@ func TestLoans(t *testing.T) {
 	}
 	ok := e.call(&e.hr, "POST", "/api/hris/loans/"+loanID+"/approve", map[string]any{"approved": true}, 200)
 	data := ok["data"].(map[string]any)
-	if ok["message"] != "Pinjaman disetujui — cicilan mulai bulan depan" || data["approved_by"] != hrEmp ||
-		data["first_installment_month"] != 11.0 || data["first_installment_year"] != 2026.0 {
+	// Filed 4 Oct (≤ 20): deducted in the October payroll (EPIC-076 R6).
+	if ok["message"] != "Kasbon disetujui — dipotong mulai payroll Oktober 2026" || data["approved_by"] != hrEmp ||
+		data["first_installment_month"] != 10.0 || data["first_installment_year"] != 2026.0 {
 		t.Fatalf("approve %v", ok)
 	}
 	wantErr(t, e.call(&e.hr, "POST", "/api/hris/loans/"+loanID+"/approve", map[string]any{"approved": false}, 400), "Pinjaman sudah diproses")
@@ -726,7 +732,7 @@ func TestLoans(t *testing.T) {
 	e.scalar(&other, `INSERT INTO hris.loans (employee_id, loan_type, principal_amount, tenor_months, status)
 		VALUES ($1, 'loan', 100, 1, 'pending') RETURNING id::text`, hrEmp)
 	rej := e.call(&e.hr, "POST", "/api/hris/loans/"+other+"/approve", map[string]any{}, 200)
-	if rej["message"] != "Pinjaman ditolak" || rej["data"].(map[string]any)["rejection_reason"] != "Tidak disetujui" ||
+	if rej["message"] != "Pinjaman Karyawan ditolak" || rej["data"].(map[string]any)["rejection_reason"] != "Tidak disetujui" ||
 		rej["data"].(map[string]any)["is_active"] != false {
 		t.Fatalf("reject %v", rej)
 	}

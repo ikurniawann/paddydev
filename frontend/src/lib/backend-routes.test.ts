@@ -217,6 +217,8 @@ describe("Go route manifest", () => {
       // Payroll multi-toko (penempatan karyawan, laporan biaya gaji per toko).
       "/api/hris/branches", "/api/hris/employee-placements", "/api/hris/me/placements", "/api/hris/places",
       "/api/hris/payroll/{id}/store-costs", "/api/hris/payroll/entities",
+      // Lampiran kasbon & Pinjaman Karyawan (EPIC-076).
+      "/api/hris/loans/attachments", "/api/hris/loans/attachment",
       // Closing periode absensi + penyesuaian manual HRD.
       "/api/hris/attendance-periods", "/api/hris/attendance-settings", "/api/hris/attendance-adjustments",
       "/api/hris/attendance/manual",

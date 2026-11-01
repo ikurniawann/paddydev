@@ -7,8 +7,12 @@ import {
   loanPaidPercent,
   loanPayload,
   loanSummary,
-  kasbonTenorOptions,
+  loanDeductionLabel,
+  loanPayrollPeriodLabel,
+  loanTenorOptions,
+  loanTermsText,
   loanTypeLabel,
+  tenorForType,
   previewInstallment,
   validateLoanForm,
 } from "./loans-view";
@@ -64,7 +68,12 @@ describe("validateLoanForm & loanPayload", () => {
     expect(validateLoanForm({ ...EMPTY_LOAN_FORM, employee_id: "e1" })).toBe(
       "Jumlah pinjaman dan tenor wajib diisi"
     );
-    expect(validateLoanForm({ ...EMPTY_LOAN_FORM, employee_id: "e1", principal_amount: "100" })).toBeNull();
+    expect(validateLoanForm({ ...EMPTY_LOAN_FORM, employee_id: "e1", principal_amount: "100" })).toBe(
+      "Lampirkan minimal 1 dokumen pendukung kasbon"
+    );
+    expect(
+      validateLoanForm({ ...EMPTY_LOAN_FORM, employee_id: "e1", principal_amount: "100", attachments: ["a.pdf"] })
+    ).toBeNull();
   });
 
   it("payload berisi angka dan keperluan kosong dihilangkan", () => {
@@ -77,7 +86,15 @@ describe("validateLoanForm & loanPayload", () => {
       interest_rate: 0,
       tenor_months: 2,
       purpose: undefined,
+      attachments: [],
+      collateral_attachments: [],
     });
+  });
+
+  it("jaminan hanya dikirim untuk Pinjaman Karyawan", () => {
+    const form = { ...EMPTY_LOAN_FORM, attachments: ["d.pdf"], collateral_attachments: ["j.pdf"] };
+    expect(loanPayload(form).collateral_attachments).toEqual([]);
+    expect(loanPayload({ ...form, loan_type: "loan" }).collateral_attachments).toEqual(["j.pdf"]);
   });
 });
 
@@ -117,13 +134,56 @@ describe("kasbon EPIC-060", () => {
     expect(loanTypeLabel("emergency")).toBe("Pinjaman Darurat");
   });
   it("tenor kasbon 1 atau 2, default 2", () => {
-    expect(kasbonTenorOptions.map((o) => o.value)).toEqual(["1", "2"]);
+    expect(loanTenorOptions("kasbon").map((o) => o.value)).toEqual(["1", "2"]);
     expect(EMPTY_LOAN_FORM.tenor_months).toBe("2");
     expect(
       validateLoanForm({ ...EMPTY_LOAN_FORM, employee_id: "e", principal_amount: "100000", tenor_months: "3" })
-    ).toBe("Tenor kasbon hanya 1 atau 2 bulan");
+    ).toBe("Cicilan kasbon hanya 1 atau 2 kali");
   });
   it("status antara manager", () => {
     expect(LOAN_STATUS_LABELS.manager_approved).toBe("Disetujui Manager");
+  });
+});
+
+describe("prosedur kasbon & Pinjaman Karyawan (EPIC-076)", () => {
+  it("label jenis loan = Pinjaman Karyawan", () => {
+    expect(loanTypeLabel("loan")).toBe("Pinjaman Karyawan");
+  });
+
+  it("cicilan Pinjaman Karyawan 1–6; tenor di luar batas ikut maksimum jenis", () => {
+    expect(loanTenorOptions("loan").map((o) => o.value)).toEqual(["1", "2", "3", "4", "5", "6"]);
+    expect(tenorForType("kasbon", "6")).toBe("2");
+    expect(tenorForType("loan", "2")).toBe("2");
+    expect(tenorForType("loan", "12")).toBe("6");
+    const base = { ...EMPTY_LOAN_FORM, employee_id: "e", principal_amount: "100000", loan_type: "loan" };
+    expect(validateLoanForm({ ...base, tenor_months: "7" })).toBe("Cicilan Pinjaman Karyawan 1 sampai 6 kali");
+    expect(validateLoanForm({ ...base, tenor_months: "6" })).toBe("Lampirkan minimal 1 dokumen jaminan (surat berharga)");
+    expect(validateLoanForm({ ...base, tenor_months: "6", collateral_attachments: ["j.pdf"] })).toBeNull();
+  });
+
+  it("syarat per jenis", () => {
+    expect(loanTermsText("kasbon")).toContain("masa kerja minimal 3 bulan");
+    expect(loanTermsText("kasbon")).toContain("maks 50% THP · 1–2 kali cicilan");
+    expect(loanTermsText("loan")).toContain("masa kerja minimal 12 bulan");
+    expect(loanTermsText("loan")).toContain("maks 200% THP · 1–6 kali cicilan");
+    expect(loanTermsText("loan")).toContain("jaminan (surat berharga)");
+  });
+
+  it("periode potong 21–20", () => {
+    expect(loanPayrollPeriodLabel("2026-11-20")).toBe("November 2026");
+    expect(loanPayrollPeriodLabel("2026-11-21")).toBe("Desember 2026");
+    expect(loanPayrollPeriodLabel("2026-12-21")).toBe("Januari 2027");
+    expect(loanPayrollPeriodLabel("")).toBe("");
+  });
+
+  it("bulan potong: tersimpan, atau perkiraan dari tanggal pengajuan WIB", () => {
+    expect(loanDeductionLabel({ first_installment_month: 12, first_installment_year: 2026 })).toBe("Desember 2026");
+    // 20 Nov 23.30 WIB = 16.30 UTC
+    expect(
+      loanDeductionLabel({ first_installment_month: null, first_installment_year: null, created_at: "2026-11-20T16:30:00Z" })
+    ).toBe("November 2026 (perkiraan)");
+    expect(
+      loanDeductionLabel({ first_installment_month: null, first_installment_year: null, created_at: "2026-11-20T17:30:00Z" })
+    ).toBe("Desember 2026 (perkiraan)");
   });
 });

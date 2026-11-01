@@ -19,6 +19,9 @@ export interface LoanRow {
   rejection_reason: string | null;
   manager_approver_id?: string | null;
   created_at: string;
+  /** Dokumen pendukung & jaminan (EPIC-076 R8). */
+  attachments?: string[];
+  collateral_attachments?: string[];
   employee?: {
     id: string;
     full_name: string;

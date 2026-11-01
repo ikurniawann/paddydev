@@ -14,6 +14,7 @@ import (
 	"nuhabit/backend/internal/platform/database"
 	"nuhabit/backend/internal/platform/httpx"
 	"nuhabit/backend/internal/platform/module"
+	"nuhabit/backend/internal/platform/storage"
 )
 
 // Name is the MODULES key.
@@ -38,7 +39,11 @@ func NewOn(deps module.Deps, db database.DB, ports Ports) module.Module {
 	if log == nil {
 		log = slog.Default()
 	}
-	svc := &service{db: db, ports: ports, now: now, log: log}
+	files := ports.Files
+	if files == nil {
+		files = storage.FromEnv()
+	}
+	svc := &service{db: db, ports: ports, now: now, log: log, files: files}
 	h := &handler{svc: svc, auth: deps.Auth}
 	return payrollModule{routes: append(h.routes(), h.fileRoutes()...)}
 }
@@ -55,6 +60,7 @@ type service struct {
 	ports Ports
 	now   func() time.Time
 	log   *slog.Logger
+	files *storage.Store
 }
 
 // jakarta is the zone the TS server computes "now"-based periods in.
@@ -104,6 +110,8 @@ func (h *handler) routes() []module.Route {
 		route("GET /api/hris/loans", h.listLoans),
 		route("POST /api/hris/loans", h.createLoan),
 		route("POST /api/hris/loans/{id}/approve", h.decideLoan),
+		route("POST /api/hris/loans/attachments", h.uploadLoanAttachment),
+		route("GET /api/hris/loans/attachment/{path...}", h.loanAttachment),
 
 		route("GET /api/hris/kpi/targets", h.listTargets),
 		route("POST /api/hris/kpi/targets", h.createTarget),

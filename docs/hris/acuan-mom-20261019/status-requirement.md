@@ -44,7 +44,7 @@ Kolom "Status MOM" menyalin status di dokumen MOM (Disepakati / Konfirmasi / Men
 | ID | Requirement | Status MOM | Kode | Bukti / perilaku sekarang | Langkah berikutnya |
 |---|---|---|---|---|---|
 | PY-01 | 4 komponen gaji: Gaji Pokok, Tunj. Makan, Tunj. Transport, Tunj. Jabatan | Disepakati | ✅ (EPIC-059, menunggu review & rilis) | Keempat komponen ada di struktur gaji (plus fixed/variable/housing/health). "1 hari THP" = 4 komponen untuk PIP dan potongan telat tier basis THP (upah harian: 1 hari upah + tunjangan); lembur, bonus, insentif, THR tidak ikut. Gaji Pokok/Jabatan mengikuti hari kerja aktif dibayar, Transport/Makan mengikuti hari hadir | — |
-| PY-02 | Cut off tanggal 20 (periode 21 → 20) | Disepakati | 🟡 | Mekanisme ada (`hris.attendance_settings.cutoff_day`), tetapi **live = 0 (bulan kalender)**. `payroll_settings.payroll_day` live = 25. Cicilan pinjaman masih per bulan kalender | Set `cutoff_day = 20` (keputusan data, bukan kode); cek ulang cicilan & THR terhadap periode |
+| PY-02 | Cut off tanggal 20 (periode 21 → 20) | Disepakati | 🟡 | Mekanisme ada (`hris.attendance_settings.cutoff_day`), tetapi **live = 0 (bulan kalender)**. `payroll_settings.payroll_day` live = 25. Cicilan kasbon/pinjaman mengikuti periode 21–20 sejak EPIC-076: pengajuan tgl 1–20 dipotong payroll bulan itu, 21–akhir bulan berikutnya; mundur sebulan bila run bulan itu sudah `completed`/`paid` (`domain.LoanPayrollPeriod`, `loans.go` `loanFirstInstallment`) | Set `cutoff_day = 20` (keputusan data, bukan kode); cek ulang cicilan & THR terhadap periode |
 | PY-03 | Skema 5 hari & 6 hari kerja per periode | Konfirmasi K-10 | ✅ (EPIC-059, menunggu review & rilis) | Pembagi gaji bulanan = hari kerja terjadwal karyawan dalam periode dari jadwal shift (K-10/K-12 diputuskan: skema 5/6 hari mengikuti jadwal, bukan field baru). Tanpa jadwal: pembagi struktur gaji, lalu hari kerja hasil hitung. Upah harian tidak berubah | Pembagi struktur live (20/25/26 campur) hanya jadi cadangan; `cutoff_day = 20` (PY-02) tetap keputusan user |
 | PY-04 | Prorate untuk karyawan keluar di tengah periode | Konfirmasi K-12 | ✅ (EPIC-059, menunggu review & rilis) | Payroll run mengambil karyawan aktif dan nonaktif yang `end_date`-nya jatuh di dalam periode; tanggal setelah `end_date` di luar cakupan, dibayar prorata sampai `end_date` (mekanisme sama dengan kontrak parsial). **Catatan:** PPh21 Pasal 17 pada masa pajak terakhir karyawan yang keluar di tengah tahun masih follow-up (sekarang hanya Desember) | Follow-up PPh21 masa pajak terakhir |
 | PY-05 | Payroll mingguan untuk daily worker | Disepakati | ❌ | Run hanya bulanan; `pay_basis = daily` ada tanpa periode mingguan | Fitur run mingguan (live: 5 daily worker aktif) |
@@ -54,8 +54,8 @@ Kolom "Status MOM" menyalin status di dokumen MOM (Disepakati / Konfirmasi / Men
 | ID | Requirement | Status MOM | Kode | Bukti / perilaku sekarang | Langkah berikutnya |
 |---|---|---|---|---|---|
 | KP-01 | Hapus fitur Pinjaman Darurat | Disepakati | ✅ | Pengajuan baru `emergency` ditolak 400 di API dan tidak ada di form ESS/HR; riwayat tetap terbaca dengan label lama (EPIC-060). Live: 1 pengajuan darurat **pending** | HR memutus manual 1 pengajuan pending sebelum rilis (Q-KP-1) |
-| KP-02 | Kasbon maks. 50% THP, tenor 1 atau 2 | Konfirmasi K-6 | ✅ | Kasbon: pokok ≤ 50% THP (Gaji Pokok + Transport + Makan + Jabatan dari struktur gaji aktif), tenor 1 atau 2 (default 2, 50/50), status Probation/Freelance/Intern/Magang diblokir, maksimal kasbon aktif ditegakkan saat pengajuan & approve (EPIC-060). Jenis `loan` tetap aturan lama (menunggu TnC, KP-03). Live: 1 kasbon lama tenor 3 tidak diubah | Menunggu review & rilis |
-| KP-03 | Aturan Pinjaman | Menunggu TnC | ⏳ | Jenis sekarang: `kasbon`, `loan` (`emergency` hanya riwayat); bunga flat (hanya HR) | Tunggu TnC |
+| KP-02 | Kasbon maks. 50% THP, tenor 1 atau 2 | Disepakati (prosedur 01-11) | ✅ (EPIC-076, menunggu review & rilis) | Kasbon: hanya PKWT/PKWTT (`contract`, `pkwt`, `permanent`; probation/intern/freelance/harian ditolak), masa kerja ≥ 3 bulan dari `join_date`, pokok ≤ 50% THP (4 komponen), cicilan 1 atau 2, wajib dokumen pendukung, approval Manager → HR Penggajian (`domain/kasbon.go` `ValidateLoanTnC`). Live: 1 kasbon lama tenor 3 tidak diubah | Rilis EPIC-076 |
+| KP-03 | Aturan Pinjaman | Disepakati (prosedur 01-11) | ✅ (EPIC-076, menunggu review & rilis) | Pinjaman Karyawan (`loan`): hanya PKWT/PKWTT, masa kerja ≥ 12 bulan, pokok ≤ 200% THP, cicilan 1–6, wajib jaminan (surat berharga), approval Manager atasan → HR; bunga flat tetap hanya HR. `loan_max_installment_percent` tidak dipakai lagi | Rilis EPIC-076 |
 
 ## Absensi & Timesheet
 
@@ -79,9 +79,9 @@ Kolom "Status MOM" menyalin status di dokumen MOM (Disepakati / Konfirmasi / Men
 
 | Status | Jumlah | ID |
 |---|---|---|
-| ✅ selesai (termasuk yang menunggu deploy/merge) | 23 | ES-01, ES-02, ES-04, ES-06, ES-07, ES-08, AB-07 (mekanisme; aturan final menunggu TnC), AP-05, KP-01, KP-02 (EPIC-060, menunggu review & rilis), PY-01, PY-03, PY-04 (EPIC-059, menunggu review & rilis; PPh21 masa pajak terakhir follow-up), AB-01, AB-02, AB-03 (EPIC-062, menunggu review & rilis; koordinat toko live menunggu K-14), AP-01, AP-02, AP-03, AP-04 (EPIC-063, menunggu review & rilis; data `reporting_to` live keputusan user), AB-04, AB-05, AB-06 (EPIC-065, menunggu review & rilis; jam minimum HQ live diisi HR saat rilis) |
+| ✅ selesai (termasuk yang menunggu deploy/merge) | 24 | ES-01, ES-02, ES-04, ES-06, ES-07, ES-08, AB-07 (mekanisme; aturan final menunggu TnC), AP-05, KP-01, KP-02, KP-03 (EPIC-076, prosedur 01-11, menunggu review & rilis), PY-01, PY-03, PY-04 (EPIC-059, menunggu review & rilis; PPh21 masa pajak terakhir follow-up), AB-01, AB-02, AB-03 (EPIC-062, menunggu review & rilis; koordinat toko live menunggu K-14), AP-01, AP-02, AP-03, AP-04 (EPIC-063, menunggu review & rilis; data `reporting_to` live keputusan user), AB-04, AB-05, AB-06 (EPIC-065, menunggu review & rilis; jam minimum HQ live diisi HR saat rilis) |
 | 🟡 sebagian | 4 | ES-03, ES-05, PY-02, LA-01 |
 | ⚠️ berbeda | 0 | — |
 | ❌ belum ada | 2 | AP-06, PY-05 |
-| ⏳ hanya menunggu TnC | 2 | ES-09, KP-03 |
+| ⏳ hanya menunggu TnC | 1 | ES-09 |
 | **Total** | **31** | |

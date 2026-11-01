@@ -3,7 +3,8 @@ import { Loader2 } from "lucide-react";
 import { RequestDetailDialog } from "@/components/hris/request-detail-dialog";
 import { Button } from "@/components/ui/button";
 import { formatDateTime, formatRupiah } from "@/lib/format";
-import { isAwaitingHr, loanPaidPercent, loanTypeLabel } from "@/lib/hris/loans-view";
+import { isAwaitingHr, loanDeductionLabel, loanPaidPercent, loanTypeLabel } from "@/lib/hris/loans-view";
+import { loanAttachmentGroups } from "./loan-attachments-fields";
 import type { LoanRow } from "../types";
 
 const STATUS_BADGES: Record<string, { label: string; className: string }> = {
@@ -90,7 +91,7 @@ function LoanTableRow({ row, deciding, onDecide }: LoanTableRowProps) {
       <td className="px-4 py-3">{formatRupiah(row.principal_amount)}</td>
       <td className="px-4 py-3">{formatRupiah(row.monthly_installment)}</td>
       <td className="px-4 py-3">
-        {row.tenor_months} bln
+        {row.tenor_months} kali
         {row.first_installment_month
           ? ` · mulai ${row.first_installment_month}/${row.first_installment_year}`
           : ""}
@@ -153,10 +154,12 @@ function LoanTableRow({ row, deciding, onDecide }: LoanTableRowProps) {
               { label: "Jenis", value: loanTypeLabel(row.loan_type) },
               { label: "Pokok", value: formatRupiah(row.principal_amount) },
               { label: "Cicilan/bulan", value: formatRupiah(row.monthly_installment) },
-              { label: "Tenor", value: `${row.tenor_months} bulan` },
+              { label: "Cicilan", value: `${row.tenor_months} kali` },
+              { label: "Mulai dipotong", value: loanDeductionLabel(row) },
               { label: "Diajukan", value: formatDateTime(row.created_at, "—") },
             ]}
             reason={{ label: "Keperluan", text: row.purpose }}
+            attachments={loanAttachmentGroups(row)}
             notes={
               row.notes?.trim() || (row.status === "rejected" && row.rejection_reason) ? (
                 <div className="space-y-2">

@@ -2411,6 +2411,16 @@
   },
   {
     "module": "payroll",
+    "method": "GET",
+    "path": "/api/hris/loans/attachment/{path...}"
+  },
+  {
+    "module": "payroll",
+    "method": "POST",
+    "path": "/api/hris/loans/attachments"
+  },
+  {
+    "module": "payroll",
     "method": "POST",
     "path": "/api/hris/loans/{id}/approve"
   },
