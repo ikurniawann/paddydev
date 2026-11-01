@@ -101,6 +101,7 @@
   - perkiraan "Dipotong mulai payroll <bulan>" (dengan `todayWib` di-mock);
   - pilihan tenor hanya 1 dan 2 untuk jenis Pinjaman.
 - [ ] Form HR: tenor 1/2 dan teks TnC yang sama.
+- [ ] Label jenis `loan` menjadi **"Pinjaman Karyawan"** (sebutan user): `LOAN_TYPE_OPTIONS` di `lib/hris/loans-view.ts` dan `loanTypeLabels` di `backend/internal/modules/payroll/domain/payslip.go` (slip). Sesuaikan tes yang memakai label "Pinjaman".
 - [ ] RED → GREEN → `pnpm vitest run src/lib/hris src/features/hris/ess src/features/hris/loans` → commit.
 
 ### Task 4: Acuan, dokumen, gerbang, QA
