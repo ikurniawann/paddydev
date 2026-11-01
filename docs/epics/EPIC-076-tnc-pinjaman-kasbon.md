@@ -1,6 +1,6 @@
 # EPIC-076: Syarat & Ketentuan Pinjaman dan Kasbon (`MODULE-HRIS`)
 
-status: backlog
+status: coding
 environment: dev
 retries: 0
 
@@ -21,28 +21,49 @@ Ini adalah TnC yang ditunggu acuan MOM **KP-03 "Aturan Pinjaman"** (status "Menu
 
 Payroll mengambil cicilan pada run bulan `M` bila `first_installment ≤ M` (`domain.IsLoanDue`), dihitung saat run diproses dan dilunasi saat run `paid`. Status run: `draft → processing → completed → paid`. Pengaturan cutoff absensi live masih `cutoff_day = 0` (PY-02).
 
-## Ruling (dibuat tanpa tanya; mohon dicek saat review rencana)
-- **R1** TnC berlaku sama untuk **Kasbon dan Pinjaman Karyawan** (dikonfirmasi user 01-11): eligibilitas, plafon 50% THP, dan tenor 1–2. Alur approval **tidak** berubah: kasbon dua tahap, pinjaman satu tahap HR. Bunga flat pinjaman tetap hanya bisa diisi HR (TnC tidak menyebutnya).
-- **R2** Eligibilitas memakai **daftar izin**: hanya status `contract` (Kontrak/PKWT), `pkwt`, dan `permanent` (Tetap/PKWTT) yang boleh mengajukan. Pesannya: probation → "Karyawan masa percobaan (probation) tidak dapat mengajukan pinjaman atau kasbon"; status lain (`intern`, `freelance`, `daily_worker`, kosong) → "Pinjaman dan kasbon hanya untuk karyawan PKWT atau PKWTT". Catatan: Pekerja Harian (`daily_worker`), yang sebelumnya boleh kasbon, kini tidak boleh.
-- **R3** Plafon: **pokok pinjaman ≤ 50% THP** (THP 4 komponen, seperti KP-02). Pengaturan `loan_max_installment_percent` tidak lagi dipakai untuk pengajuan baru (nilainya tidak dihapus). Tanpa struktur gaji aktif → pesan yang ada ("belum punya struktur gaji aktif").
-- **R4** Tenor hanya **1 atau 2** kali cicilan, untuk kedua jenis. Pinjaman lama dengan tenor > 2 yang sudah berjalan tidak diubah.
-- **R5** Periode potong: tanggal **pengajuan** (`created_at`, WIB) menentukan periode payroll. Tanggal 1–20 → payroll bulan itu; tanggal 21–akhir bulan → payroll bulan berikutnya (periode 21–20, MOM PY-02). Batas tanggal 20 ditetapkan di kode sesuai TnC, tidak bergantung pada `cutoff_day` absensi (live 0).
-- **R6** Saat disetujui, cicilan pertama = periode R5. Bila run payroll bulan itu sudah **`completed` atau `paid`** untuk entitas mana pun, cicilan pertama mundur ke bulan berikutnya, karena slip yang sudah selesai tidak bisa memotong lagi. Respons persetujuan menyebut bulan potong yang dipakai.
-- **R7** Pengajuan (ESS dan HR) menampilkan TnC singkat dan **perkiraan bulan potong** ("Dipotong mulai payroll November 2026"). Isian tenor menjadi pilihan 1 atau 2 untuk kedua jenis.
-- **R8** Acuan MOM diperbarui: KP-03 → Disepakati (TnC 01-11), KP-02 mengikuti daftar izin R2, PY-02 mencatat periode potong pinjaman.
-- **R9** Tanpa migrasi data. Pengajuan pending yang sudah ada divalidasi ulang dengan aturan baru saat diputus (perilaku approve sekarang memang memvalidasi ulang).
+## Prosedur 01-11 (gambar dari user) — menggantikan sebagian TnC di atas
+> PROSEDUR PENGAJUAN KASBON DAN PINJAMAN KARYAWAN. Kasbon: karyawan yang sudah bekerja minimal 3 bulan berturut-turut; nominal maksimal 50% dari total THP, cicilan maksimal 2 kali. Pinjaman Karyawan: karyawan yang sudah bekerja minimal 1 tahun (12 bulan) berturut-turut; nominal maksimal 200% THP, cicilan maksimal 6 kali; wajib menyertakan surat berharga sebagai dokumen pendukung. Seluruh cicilan otomatis terpotong dari gaji setiap bulan.
+
+Jawaban user 01-11: ikuti prosedur (plafon/tenor per jenis); atasan menyetujui Pinjaman Karyawan dulu (sama seperti kasbon), lalu HR; dokumen wajib untuk keduanya (kasbon: dokumen pendukung; pinjaman: jaminan).
+
+## Ruling
+| Aturan | Kasbon (`kasbon`) | Pinjaman Karyawan (`loan`) |
+|---|---|---|
+| Status | Hanya `contract`/`pkwt` (PKWT) dan `permanent` (PKWTT) | sama |
+| Masa kerja (dari `join_date` s.d. hari ini WIB) | ≥ 3 bulan | ≥ 12 bulan |
+| Plafon pokok | ≤ 50% THP | ≤ 200% THP |
+| Cicilan | 1 atau 2 kali | 1 sampai 6 kali |
+| Lampiran wajib | Dokumen pendukung 1–3 file | Jaminan (surat berharga) 1–3 file; dokumen pendukung opsional (0–3) |
+| Approval | Manager atasan (rantai `reporting_to`) → HR Penggajian | Manager atasan → HR (approve Pinjaman) |
+| Mulai potong | Payroll periode pengajuan (21–20) | sama |
+
+- **R1** Kedua jenis memakai satu validator dengan aturan per jenis (tabel di atas). Urutan cek: status → masa kerja → cicilan → jumlah pinjaman aktif → struktur gaji → plafon.
+- **R2** Daftar izin status: `contract`, `pkwt`, `permanent` (trim, case-insensitive). Pesan: probation → "Karyawan masa percobaan (probation) tidak dapat mengajukan kasbon atau pinjaman"; status lain (`intern`, `freelance`, `daily_worker`, kosong) → "Kasbon dan pinjaman hanya untuk karyawan PKWT atau PKWTT". Pekerja Harian yang dulu boleh kasbon kini ditolak.
+- **R3** Masa kerja: bulan penuh sejak `join_date` (`join_date` + N bulan ≤ hari ini, WIB). Tanpa `join_date` → "Tanggal masuk karyawan belum diisi — hubungi HR". Pesan: "Kasbon hanya untuk karyawan dengan masa kerja minimal 3 bulan" / "Pinjaman Karyawan hanya untuk karyawan dengan masa kerja minimal 12 bulan".
+- **R4** THP = 4 komponen struktur gaji aktif (Gaji Pokok + Transport + Makan + Jabatan, seperti KP-02). Plafon dari **pokok**. Pesan "Kasbon maksimal 50% THP" / "Pinjaman Karyawan maksimal 200% THP" (+ " (maks Rp…)" hanya untuk pemohon sendiri atau pemegang Penggajian, EPIC-057). `loan_max_installment_percent` tidak lagi dipakai (nilai tidak dihapus).
+- **R5** Cicilan: pesan "Cicilan kasbon hanya 1 atau 2 kali" / "Cicilan Pinjaman Karyawan 1 sampai 6 kali". Input server tetap menerima 1–60 lalu divalidasi per jenis.
+- **R6** Periode potong: tanggal **pengajuan** (`created_at`, WIB) 1–20 → payroll bulan itu; 21–akhir → bulan berikutnya. Batas 20 ditetapkan di kode. Saat HR menyetujui, bila run payroll bulan itu sudah `completed`/`paid`, mundur ke bulan berikutnya. Pesan persetujuan menyebut bulannya ("Pinjaman disetujui — dipotong mulai payroll November 2026").
+- **R7** Approval: approver Manager disimpan saat pengajuan untuk **kedua** jenis (`LoanApprover`, seperti kasbon EPIC-060). Tanpa Manager di rantai → langsung ke HR. HR hanya bisa menyetujui setelah Manager setuju (boleh menolak kapan saja). Kasbon tetap butuh Penggajian di sisi HR; Pinjaman Karyawan cukup approve Pinjaman.
+- **R8** Lampiran: kolom baru `attachments text[]` (dokumen pendukung) dan `collateral_attachments text[]` (jaminan), maks 3 masing-masing. Unggah `POST /api/hris/loans/attachments` (multipart `file`, PDF/JPG/PNG/WebP ≤ 5 MB, folder `loan-attachments/<employeeId>`; HR pemegang akses penuh boleh mengunggah untuk karyawan lain lewat `employee_id`). Path divalidasi saat pengajuan: pola folder, pemilik = karyawan pemohon, file ada. Kasbon menolak `collateral_attachments`. Pesan: "Lampirkan minimal 1 dokumen pendukung kasbon" / "Lampirkan minimal 1 dokumen jaminan (surat berharga)".
+- **R9** Baca lampiran `GET /api/hris/loans/attachment/{path…}`: pemohon, Manager approver tersimpan pada pinjaman yang memuat file itu, dan peran akses penuh pinjaman (HR/super admin).
+- **R10** Detail: atasan (antrean ESS dan banner Persetujuan Tim), HR, dan super admin membuka detail berisi jenis, pokok, cicilan, perkiraan bulan potong, keperluan, dokumen pendukung, dan jaminan sebelum memutus.
+- **R11** Form ESS dan HR: teks syarat per jenis, pilihan cicilan sesuai jenis (kasbon 1/2, pinjaman 1–6), perkiraan bulan potong, unggah lampiran wajib. Label jenis `loan` = "Pinjaman Karyawan" (form, tabel, slip).
+- **R12** Migrasi hanya menambah dua kolom (default `{}`); data lama tidak diubah. Pengajuan pending lama divalidasi ulang dengan aturan baru saat HR memutus, **kecuali** syarat lampiran (hanya saat pengajuan). Pending lama tanpa approver Manager tetap langsung ke HR.
+- **R13** Acuan MOM diperbarui: KP-02/KP-03 (Disepakati, prosedur 01-11), PY-02 (periode potong pinjaman), matriks approval Pinjaman Karyawan.
 
 ## Tasks
 Rencana: `docs/superpowers/plans/2026-11-01-tnc-pinjaman-kasbon.md`.
 
 ## Acceptance Criteria
-- Karyawan probation (dan intern/freelance/harian) ditolak saat mengajukan pinjaman maupun kasbon. PKWT dan PKWTT bisa.
-- Pokok > 50% THP atau tenor selain 1–2 ditolak untuk kedua jenis.
-- Diajukan 20 Nov → cicilan pertama payroll November; diajukan 21 Nov → Desember. Bila run November sudah `completed`/`paid` saat disetujui → Desember.
-- Form ESS/HR menampilkan TnC dan perkiraan bulan potong; tenor hanya 1/2.
-- go test, pnpm test, lint, tsc hijau; CI 4/4; QA staging.
+- Probation/intern/freelance/harian ditolak untuk kedua jenis; PKWT/PKWTT diterima bila memenuhi masa kerja.
+- Kasbon: masa kerja < 3 bulan, pokok > 50% THP, cicilan ≠ 1/2, atau tanpa dokumen pendukung → ditolak.
+- Pinjaman Karyawan: masa kerja < 12 bulan, pokok > 200% THP, cicilan > 6, atau tanpa jaminan → ditolak.
+- Pinjaman Karyawan masuk antrean Manager atasan dulu, lalu HR.
+- Atasan, HR, dan super admin melihat detail beserta lampiran; karyawan lain tidak bisa membuka file.
+- Diajukan 20 Nov → potong payroll November; 21 Nov → Desember; run November sudah `completed`/`paid` saat disetujui → Desember.
+- go test, pnpm test, lint, tsc hijau; CI 4/4; QA staging laptop + HP.
 
 ## Automation Log
 - 2026-11-01: Epic dibuat dari TnC user. Pemetaan kode (`payroll/domain/kasbon.go`, `domain/loans.go`, `loans.go`, `service_runs.go`) dan acuan MOM (KP-02/03, PY-02). Belum dikerjakan (user: "sbg epic nanti").
 - 2026-11-01: User mengonfirmasi ruling R1–R9 ("sesuai") dan menegaskan ada dua jenis, Kasbon dan Pinjaman Karyawan, keduanya mengikuti TnC ini. Status tetap `backlog` sampai dijadwalkan.
-
+- 2026-11-01: User meminta dikerjakan sekarang, dengan prosedur baru (gambar): syarat masa kerja, plafon/tenor per jenis, jaminan untuk pinjaman, atasan melihat detail. Jawaban user: ikuti prosedur; atasan menyetujui Pinjaman Karyawan dulu; dokumen wajib untuk keduanya. Ruling diganti R1–R13 (menggantikan R1–R9 lama); status `coding`.
