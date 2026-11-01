@@ -5,13 +5,13 @@ environment: dev
 retries: 0
 
 ## Goal
-Terms & conditions dari user 01-11-2026 untuk **Pinjaman dan Kasbon**:
+Terms & conditions dari user 01-11-2026 untuk **dua jenis pinjaman: Kasbon (`kasbon`) dan Pinjaman Karyawan (`loan`)**. TnC berikut berlaku untuk keduanya (dikonfirmasi user 01-11):
 
 > Masa probation tidak dapat mengajukan, PKWT dan PKWTT bisa mengajukan dengan catatan max. 50% dari THP dengan 1 s.d 2x cicilan dipotong dari Payroll. Pengajuan dalam masa periode payroll 21 s.d 20 yang akan terpotong di periode payroll bulan berjalan.
 
 Ini adalah TnC yang ditunggu acuan MOM **KP-03 "Aturan Pinjaman"** (status "Menunggu TnC"). Kondisi kode per 01-11 (main `b97e10d3`):
 
-| Aturan | Kasbon (`kasbon`) | Pinjaman (`loan`) |
+| Aturan | Kasbon (`kasbon`) | Pinjaman Karyawan (`loan`) |
 |---|---|---|
 | Status yang boleh | Semua kecuali `probation`, `freelance`, `intern`, `internship` (daftar blokir, EPIC-060) | Semua status |
 | Plafon | Pokok ≤ 50% THP (Gaji Pokok + Transport + Makan + Jabatan, struktur gaji aktif) | Cicilan/bulan ≤ `loan_max_installment_percent` (default 30%) dari **gaji pokok** |
@@ -22,7 +22,7 @@ Ini adalah TnC yang ditunggu acuan MOM **KP-03 "Aturan Pinjaman"** (status "Menu
 Payroll mengambil cicilan pada run bulan `M` bila `first_installment ≤ M` (`domain.IsLoanDue`), dihitung saat run diproses dan dilunasi saat run `paid`. Status run: `draft → processing → completed → paid`. Pengaturan cutoff absensi live masih `cutoff_day = 0` (PY-02).
 
 ## Ruling (dibuat tanpa tanya; mohon dicek saat review rencana)
-- **R1** TnC berlaku sama untuk **Pinjaman dan Kasbon**: eligibilitas, plafon 50% THP, dan tenor 1–2. Alur approval **tidak** berubah: kasbon dua tahap, pinjaman satu tahap HR. Bunga flat pinjaman tetap hanya bisa diisi HR (TnC tidak menyebutnya).
+- **R1** TnC berlaku sama untuk **Kasbon dan Pinjaman Karyawan** (dikonfirmasi user 01-11): eligibilitas, plafon 50% THP, dan tenor 1–2. Alur approval **tidak** berubah: kasbon dua tahap, pinjaman satu tahap HR. Bunga flat pinjaman tetap hanya bisa diisi HR (TnC tidak menyebutnya).
 - **R2** Eligibilitas memakai **daftar izin**: hanya status `contract` (Kontrak/PKWT), `pkwt`, dan `permanent` (Tetap/PKWTT) yang boleh mengajukan. Pesannya: probation → "Karyawan masa percobaan (probation) tidak dapat mengajukan pinjaman atau kasbon"; status lain (`intern`, `freelance`, `daily_worker`, kosong) → "Pinjaman dan kasbon hanya untuk karyawan PKWT atau PKWTT". Catatan: Pekerja Harian (`daily_worker`), yang sebelumnya boleh kasbon, kini tidak boleh.
 - **R3** Plafon: **pokok pinjaman ≤ 50% THP** (THP 4 komponen, seperti KP-02). Pengaturan `loan_max_installment_percent` tidak lagi dipakai untuk pengajuan baru (nilainya tidak dihapus). Tanpa struktur gaji aktif → pesan yang ada ("belum punya struktur gaji aktif").
 - **R4** Tenor hanya **1 atau 2** kali cicilan, untuk kedua jenis. Pinjaman lama dengan tenor > 2 yang sudah berjalan tidak diubah.
@@ -44,3 +44,5 @@ Rencana: `docs/superpowers/plans/2026-11-01-tnc-pinjaman-kasbon.md`.
 
 ## Automation Log
 - 2026-11-01: Epic dibuat dari TnC user. Pemetaan kode (`payroll/domain/kasbon.go`, `domain/loans.go`, `loans.go`, `service_runs.go`) dan acuan MOM (KP-02/03, PY-02). Belum dikerjakan (user: "sbg epic nanti").
+- 2026-11-01: User mengonfirmasi ruling R1–R9 ("sesuai") dan menegaskan ada dua jenis, Kasbon dan Pinjaman Karyawan, keduanya mengikuti TnC ini. Status tetap `backlog` sampai dijadwalkan.
+
