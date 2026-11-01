@@ -216,6 +216,7 @@ func TestLoanFirstInstallmentFollowsSubmission(t *testing.T) {
 		{"21 Des", "2026-12-21T02:00:00Z", "", 1, 2027, "Kasbon disetujui — dipotong mulai payroll Januari 2027"},
 		{"run November selesai", "2026-11-10T02:00:00Z", "completed", 12, 2026, "Kasbon disetujui — dipotong mulai payroll Desember 2026"},
 		{"run November dibayar", "2026-11-10T02:00:00Z", "paid", 12, 2026, "Kasbon disetujui — dipotong mulai payroll Desember 2026"},
+		{"run November diproses", "2026-11-10T02:00:00Z", "processing", 12, 2026, "Kasbon disetujui — dipotong mulai payroll Desember 2026"},
 		{"run November draft", "2026-11-10T02:00:00Z", "draft", 11, 2026, "Kasbon disetujui — dipotong mulai payroll November 2026"},
 	} {
 		t.Run(c.name, func(t *testing.T) {

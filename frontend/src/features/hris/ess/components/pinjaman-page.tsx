@@ -269,7 +269,7 @@ export function EssPinjamanPage() {
             { label: "Nominal", value: formatRupiah(detail.principal_amount) },
             {
               label: "Cicilan",
-              value: `${detail.tenor_months} kali × ${formatRupiah(installmentPreview(detail.principal_amount, detail.tenor_months) ?? 0)}`,
+              value: `${detail.tenor_months} kali × ${formatRupiah(detail.monthly_installment ?? installmentPreview(detail.principal_amount, detail.tenor_months) ?? 0)}`,
             },
             { label: "Mulai dipotong", value: loanDeductionLabel(detail) },
             ...(detail.created_at ? [{ label: "Diajukan", value: formatDateTime(detail.created_at, "—") }] : []),
@@ -320,7 +320,7 @@ export function EssPinjamanPage() {
       </ConfirmDialog>
 
       <Dialog open={dialog} onOpenChange={setDialog}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Ajukan Pinjaman / Kasbon</DialogTitle>
           </DialogHeader>
@@ -381,7 +381,7 @@ export function EssPinjamanPage() {
                 </>
               )}
               Dipotong mulai payroll <strong>{loanPayrollPeriodLabel(todayWib())}</strong> setelah disetujui Manager
-              dan HR (pengajuan tanggal 21–20 masuk payroll bulan berjalan).
+              dan HR (pengajuan tgl 1–20 → payroll bulan ini; tgl 21–akhir bulan → payroll bulan berikutnya).
             </p>
           </div>
           <DialogFooter>

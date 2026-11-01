@@ -32,7 +32,7 @@ interface LoanFormDialogProps {
 export function LoanFormDialog({ open, onOpenChange }: LoanFormDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Pengajuan Pinjaman / Kasbon</DialogTitle>
         </DialogHeader>
@@ -133,6 +133,7 @@ function LoanFormBody({ onClose }: { onClose: () => void }) {
         </div>
         {form.employee_id ? (
           <LoanAttachmentsFields
+            key={form.employee_id}
             loanType={form.loan_type}
             attachments={form.attachments}
             collateral={form.collateral_attachments}
@@ -150,8 +151,8 @@ function LoanFormBody({ onClose }: { onClose: () => void }) {
               Perkiraan cicilan: <strong>{formatRupiah(installment)}</strong> × {form.tenor_months} kali.{" "}
             </>
           )}
-          Dipotong mulai payroll <strong>{loanPayrollPeriodLabel(todayWib())}</strong> setelah disetujui (pengajuan
-          tanggal 21–20 masuk payroll bulan berjalan).
+          Dipotong mulai payroll <strong>{loanPayrollPeriodLabel(todayWib())}</strong> setelah disetujui (pengajuan tgl
+          1–20 → payroll bulan ini; tgl 21–akhir bulan → payroll bulan berikutnya).
         </p>
       </div>
       <DialogFooter>

@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef } from "react";
 import { PrivateAttachmentsField } from "@/components/hris/private-attachments-field";
 import { MAX_LOAN_ATTACHMENTS, loanAttachmentHref } from "@/lib/hris/loans-view";
 import { uploadLoanAttachment } from "../api";
@@ -31,6 +32,12 @@ export function LoanAttachmentsFields({
   disabled,
 }: LoanAttachmentsFieldsProps) {
   const upload = (file: File) => uploadLoanAttachment(file, employeeId);
+  // Dua bidang bisa mengunggah bersamaan: sibuk selama salah satunya masih jalan.
+  const pending = useRef(0);
+  const busyChange = (busy: boolean) => {
+    pending.current = Math.max(0, pending.current + (busy ? 1 : -1));
+    onBusyChange?.(pending.current > 0);
+  };
   const kasbon = loanType === "kasbon";
   return (
     <div className="space-y-3">
@@ -38,7 +45,7 @@ export function LoanAttachmentsFields({
         <PrivateAttachmentsField
           value={collateral}
           onChange={onCollateralChange}
-          onBusyChange={onBusyChange}
+          onBusyChange={busyChange}
           upload={upload}
           label="Jaminan / surat berharga (wajib, 1–3 file PDF/foto)"
           noun="jaminan"
@@ -51,7 +58,7 @@ export function LoanAttachmentsFields({
       <PrivateAttachmentsField
         value={attachments}
         onChange={onAttachmentsChange}
-        onBusyChange={onBusyChange}
+        onBusyChange={busyChange}
         upload={upload}
         label={kasbon ? "Dokumen pendukung (wajib, 1–3 file PDF/foto)" : "Dokumen pendukung (opsional, maks 3 file)"}
         noun="dokumen pendukung"

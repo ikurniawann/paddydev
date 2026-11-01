@@ -5,6 +5,7 @@ import (
 	"math"
 	"net/http"
 	"slices"
+	"strings"
 	"time"
 
 	"nuhabit/backend/internal/modules/payroll/domain"
@@ -73,8 +74,8 @@ func (s *service) listLoanApprovals(ctx context.Context, a *actor) ([]*obj, erro
 	if a.EmployeeID == nil {
 		return []*obj{}, nil
 	}
-	rows, err := queryObjs(ctx, s.db, `SELECT id, employee_id, loan_type, principal_amount, tenor_months, purpose, notes,
-		status, created_at, attachments, collateral_attachments FROM hris.loans WHERE status = 'pending' AND manager_approver_id = $1 ORDER BY created_at`,
+	rows, err := queryObjs(ctx, s.db, `SELECT id, employee_id, loan_type, principal_amount, tenor_months, monthly_installment,
+		purpose, notes, status, created_at, attachments, collateral_attachments FROM hris.loans WHERE status = 'pending' AND manager_approver_id = $1 ORDER BY created_at`,
 		*a.EmployeeID)
 	if err != nil {
 		return nil, opaque(err)
@@ -114,12 +115,14 @@ func (s *service) checkLoanTnC(ctx context.Context, emp *EmployeeBrief, loanType
 	return nil
 }
 
-// runClosed: a payroll run of that month is completed or paid for any
-// entity, so its slips can no longer take a deduction (EPIC-076 R6).
+// runClosed: a payroll run of that month is past draft (processing,
+// completed, paid) for any entity; only draft runs are recalculated
+// (domain.CanCalculateRun), so its slips can no longer take a deduction
+// (EPIC-076 R6).
 func (s *service) runClosed(ctx context.Context, month, year int) (bool, error) {
 	var closed bool
 	err := s.db.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM hris.payroll_runs WHERE period_month = $1 AND period_year = $2
-		AND status IN ('completed', 'paid'))`, month, year).Scan(&closed)
+		AND status <> 'draft')`, month, year).Scan(&closed)
 	return closed, err
 }
 
@@ -164,7 +167,8 @@ func (s *service) createLoan(ctx context.Context, a *actor, in loanInput) (*obj,
 	full := domain.HasLoanFullAccess(a.Role)
 	var target string
 	if full && in.EmployeeID != nil && *in.EmployeeID != "" && *in.EmployeeID != "me" {
-		target = *in.EmployeeID
+		// Lower case: attachment folders use the id as Postgres prints it.
+		target = strings.ToLower(*in.EmployeeID)
 	} else if a.EmployeeID != nil {
 		target = *a.EmployeeID
 	}

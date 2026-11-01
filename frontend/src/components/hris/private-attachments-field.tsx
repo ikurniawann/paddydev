@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Loader2, Paperclip, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -45,6 +45,20 @@ export function PrivateAttachmentsField({
   const input = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  // Daftar terbaru saat unggahan selesai (bisa berubah selama menunggu), dan
+  // apakah bidang masih terpasang: hasil unggahan bidang yang sudah diganti
+  // (mis. karyawan lain dipilih) dibuang.
+  const latest = useRef(value);
+  const alive = useRef(true);
+  useEffect(() => {
+    latest.current = value;
+  }, [value]);
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+    };
+  }, []);
   const title = noun.charAt(0).toUpperCase() + noun.slice(1);
 
   async function add(files: FileList | null) {
@@ -60,14 +74,15 @@ export function PrivateAttachmentsField({
     }
     setBusy(true);
     onBusyChange?.(true);
+    const paths: string[] = [];
     try {
-      const paths: string[] = [];
       for (const f of picked) paths.push(await upload(f));
-      onChange([...value, ...paths]);
     } catch (e) {
-      setError(e instanceof Error ? e.message : `Gagal mengunggah ${noun}`);
+      if (alive.current) setError(e instanceof Error ? e.message : `Gagal mengunggah ${noun}`);
     } finally {
-      setBusy(false);
+      // File yang sudah terunggah tetap masuk walau file berikutnya gagal.
+      if (alive.current && paths.length > 0) onChange([...latest.current, ...paths]);
+      if (alive.current) setBusy(false);
       onBusyChange?.(false);
       if (input.current) input.current.value = "";
     }
@@ -82,7 +97,12 @@ export function PrivateAttachmentsField({
             <span className="truncate">
               {title} {i + 1} ({p.split(".").pop()?.toUpperCase()})
             </span>
-            <button type="button" aria-label={`Hapus ${noun} ${i + 1}`} onClick={() => onChange(value.filter((x) => x !== p))}>
+            <button
+              type="button"
+              aria-label={`Hapus ${noun} ${i + 1}`}
+              disabled={busy}
+              onClick={() => onChange(value.filter((x) => x !== p))}
+            >
               <X className="h-3.5 w-3.5" />
             </button>
           </li>
