@@ -91,7 +91,7 @@ func TestFixedScheduleByDepartment(t *testing.T) {
 	if got := h.weekPattern(gudang, "2026-10-12"); got != opsWeek {
 		t.Errorf("re-applied warehouse = %s", got)
 	}
-	if got := h.scalar(`SELECT after->>'pattern' FROM audit.audit_log WHERE entity_id = $1 AND action = 'schedule.fixed_apply'`, gudang); got != patternOperations {
+	if got := h.scalar(`SELECT after->>'pattern' FROM audit.audit_log WHERE entity_id = $1 AND action = 'schedule.fixed_apply'`, gudang); got != "Operations: Sen–Jum OPS 08.00–16.00, Sab OPSSAT 08.00–14.00, Min libur" {
 		t.Errorf("audit pattern = %q", got)
 	}
 }
@@ -123,6 +123,10 @@ func TestApplyWorkHoursRule(t *testing.T) {
 	hqNS := h.employee(emp{name: "Finance NS", dept: &fin})
 	h.exec(`UPDATE hris.employees SET schedule_type = 'non_shift' WHERE id = $1`, hqNS)
 	store := h.employee(emp{name: "Kru Toko", dept: &retail})
+	mkt := h.department("Marketing Uji")
+	csTitle := h.scalar(`INSERT INTO hris.positions (title) VALUES ('Customer Service Staff Uji') RETURNING id::text`)
+	cs := h.employee(emp{name: "CS Marketing", dept: &mkt})
+	h.exec(`UPDATE hris.employees SET job_title_id = $2 WHERE id = $1`, cs, csTitle)
 	noDept := h.employee(emp{name: "Tanpa Departemen"})
 	gone := h.employee(emp{name: "Finance Nonaktif", dept: &fin, inactive: true})
 
@@ -146,16 +150,110 @@ func TestApplyWorkHoursRule(t *testing.T) {
 	if got := h.scalar(`SELECT string_agg(work_date::text, ',') FROM hris.employee_shift_days WHERE employee_id = $1`, gudangNS); got != "2026-11-01" {
 		t.Errorf("per-date rows = %s", got)
 	}
-	for _, e := range []string{hqScheduled, hqNS, store, noDept, gone} {
+	for _, e := range []string{hqScheduled, hqNS, store, cs, noDept, gone} {
 		if n := h.scalar(`SELECT count(*)::text FROM hris.employee_shifts WHERE employee_id = $1`, e); n != "0" {
 			t.Errorf("%s got a pattern", e)
 		}
 	}
-	if h.scalar(`SELECT schedule_type FROM hris.employees WHERE id = $1`, store) != "shift" {
-		t.Error("store crew changed type")
+	for _, e := range []string{store, cs} {
+		if h.scalar(`SELECT schedule_type FROM hris.employees WHERE id = $1`, e) != "shift" {
+			t.Errorf("%s changed type", e)
+		}
 	}
 	if got := h.scalar(`SELECT count(*)::text FROM audit.audit_log WHERE actor_name = 'Sistem uji'
 		AND entity_id = ANY(ARRAY[$1, $2, $3])`, gudangNS, gudangShift, hqShift); got != "5" {
 		t.Errorf("audit rows = %s (want 3 fixed_apply + 2 schedule_type)", got)
+	}
+}
+
+// R9: a Non-Shift employee moved into or out of Warehouse gets the other
+// fixed week from today (WIB); a move inside HQ changes nothing.
+func TestDepartmentMoveSwitchesFixedWeek(t *testing.T) {
+	h := newHarness(t)
+	hr, _ := h.staff("hrd", scheduleTestMenus, false)
+	wh := h.department("Warehouse")
+	h.exec(`UPDATE hris.departments SET name = 'Warehouse' WHERE id = $1`, wh)
+	fin := h.department("Finance Uji")
+	hrga := h.department("HRGA Uji")
+	e := h.employee(emp{name: "Staf Pindah", dept: &fin})
+	expect(t, h.do(&hr, http.MethodPut, "/api/hris/employees/"+e+"/schedule-type", map[string]any{
+		"schedule_type": "non_shift", "effective_from": "2026-10-06"}), http.StatusOK, "")
+	today := h.scalar(`SELECT ((now() AT TIME ZONE 'Asia/Jakarta')::date)::text`)
+
+	h.exec(`UPDATE hris.employees SET department_id = $2 WHERE id = $1`, e, hrga)
+	if n := h.scalar(`SELECT count(*)::text FROM hris.employee_shifts WHERE employee_id = $1 AND effective_from = $2::date`, e, today); n != "0" {
+		t.Fatalf("HQ → HQ re-applied: %s rows", n)
+	}
+	h.exec(`UPDATE hris.employees SET department_id = $2 WHERE id = $1`, e, wh)
+	if got := h.weekPattern(e, today); got != opsWeek {
+		t.Fatalf("to Warehouse = %s", got)
+	}
+	h.exec(`UPDATE hris.employees SET department_id = $2 WHERE id = $1`, e, fin)
+	if got := h.weekPattern(e, today); got != hqWeek {
+		t.Fatalf("back to HQ = %s", got)
+	}
+	if n := h.scalar(`SELECT count(*)::text FROM audit.audit_log WHERE entity_id = $1 AND reason = 'Pindah departemen (EPIC-078)'`, e); n != "2" {
+		t.Errorf("department move audits = %s", n)
+	}
+	// A Shift employee keeps their schedule untouched.
+	shift := h.employee(emp{name: "Staf Shift", dept: &fin})
+	h.exec(`UPDATE hris.employees SET department_id = $2 WHERE id = $1`, shift, wh)
+	if n := h.scalar(`SELECT count(*)::text FROM hris.employee_shifts WHERE employee_id = $1`, shift); n != "0" {
+		t.Errorf("Shift employee got a fixed week")
+	}
+}
+
+// R10: clock-in stores the shift tolerance; an HR correction of an older
+// row keeps the tolerance of its clock-in (NS was 15 minutes before
+// EPIC-078), a row without one uses the shift's current tolerance.
+func TestAdjustKeepsClockInTolerance(t *testing.T) {
+	h := newHarness(t)
+	h.exec(`UPDATE hris.attendance_settings SET cutoff_day = 0, closing_offset_days = 3`)
+	hr, _ := h.staff("hrd", nil, true)
+	e := h.employee(emp{})
+	ns := h.scalar(`SELECT id::text FROM hris.shifts WHERE code = 'NS'`)
+	row := func(date, tol string) string {
+		return h.scalar(`INSERT INTO hris.attendance (employee_id, date, clock_in, scheduled_start, scheduled_end, shift_id, status,
+			is_late, late_minutes, late_tolerance_minutes)
+			VALUES ($1, $2::date, ($2 || ' 09:05+07')::timestamptz, ($2 || ' 09:00+07')::timestamptz, ($2 || ' 18:00+07')::timestamptz,
+			$3, 'present', false, 0, $4::int) RETURNING id::text`, e, date, ns, tol)
+	}
+	old := row("2026-10-01", "15")
+	legacy := h.scalar(`INSERT INTO hris.attendance (employee_id, date, clock_in, scheduled_start, shift_id, status, is_late, late_minutes)
+		VALUES ($1, '2026-10-02', '2026-10-02 09:05+07', '2026-10-02 09:00+07', $2, 'present', false, 0) RETURNING id::text`, e, ns)
+
+	kept := h.do(&hr, "PUT", "/api/hris/attendance/"+old, map[string]any{"clock_in": "09:12", "reason": "Jam masuk sesuai CCTV"})
+	expect(t, kept, 200, "")
+	if d := kept.data(); d["is_late"] != false || d["late_minutes"] != 0.0 {
+		t.Fatalf("stored tolerance 15 ignored: %s", kept.raw)
+	}
+	now := h.do(&hr, "PUT", "/api/hris/attendance/"+legacy, map[string]any{"clock_in": "09:12", "reason": "Jam masuk sesuai CCTV"})
+	expect(t, now, 200, "")
+	if d := now.data(); d["is_late"] != true || d["late_minutes"] != 12.0 {
+		t.Fatalf("current NS tolerance 0 not applied: %s", now.raw)
+	}
+}
+
+// R10: clock-in on the HQ week stores tolerance 0 and counts from 09.00.
+func TestClockInStoresTolerance(t *testing.T) {
+	h, _ := newFileHarness(t)
+	h.exec(`UPDATE hris.attendance_settings SET cutoff_day = 0, closing_offset_days = 3`)
+	hr, _ := h.staff("hrd", scheduleTestMenus, false)
+	fin := h.department("Finance Uji")
+	staff, own := h.staff("pos", nil, true, emp{name: "Staf HQ", dept: &fin})
+	store := h.branch("HQ Uji")
+	h.exec(`INSERT INTO hris.employee_placements (employee_id, branch_id, is_primary, start_date) VALUES ($1, $2, true, '2026-01-01')`, own, store)
+	h.setNow("2026-10-05 08:00")
+	expect(t, h.do(&hr, http.MethodPut, "/api/hris/employees/"+own+"/schedule-type", map[string]any{
+		"schedule_type": "non_shift", "effective_from": "2026-10-05"}), http.StatusOK, "")
+	h.setNow("2026-10-05 09:20")
+	in := h.do(&staff, "POST", "/api/hris/attendance", clockInBody(dataURL("image/png", pngBytes(t)),
+		map[string]any{"latitude": -6.9, "longitude": 107.6, "accuracy": 10}, ""))
+	expect(t, in, 200, "")
+	if d := in.data(); d["is_late"] != true || d["late_minutes"] != 20.0 {
+		t.Fatalf("clock-in = %s", in.raw)
+	}
+	if got := h.scalar(`SELECT late_tolerance_minutes::text FROM hris.attendance WHERE employee_id = $1`, own); got != "0" {
+		t.Errorf("stored tolerance = %q", got)
 	}
 }

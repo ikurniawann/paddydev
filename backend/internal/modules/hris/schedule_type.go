@@ -16,65 +16,14 @@ import (
 // non_shift = jadwal tetap menurut departemen (EPIC-078, TnC Hari dan Jam
 // Kerja): HQ Sen–Jum NS (masuk 08.00–09.00), Sab–Min libur; Operations
 // (departemen Warehouse) Sen–Jum OPS 08.00–16.00, Sab OPSSAT 08.00–14.00,
-// Min libur. Penerapan awal: migrasi 20261102090000 (apply_work_hours_rule).
+// Min libur. Pola dibuat oleh hris.apply_fixed_week (migrasi 20261102090000),
+// yang juga dipakai trigger pindah departemen dan penerapan saat deploy.
 
 const (
 	scheduleShift    = "shift"
 	scheduleNonShift = "non_shift"
 	msgFromPast      = "Tanggal mulai tidak boleh sebelum hari ini"
 )
-
-// operationsDepartment is the department on the Operations hours.
-const operationsDepartment = "warehouse"
-
-const (
-	patternHQ         = "HQ: Sen–Jum NS (masuk 08.00–09.00), Sab–Min libur"
-	patternOperations = "Operations: Sen–Jum OPS 08.00–16.00, Sab OPSSAT 08.00–14.00, Min libur"
-)
-
-// fixedPatternDays is the week of weekday (Mon–Fri) and saturday shift ids;
-// "" is a day off.
-func fixedPatternDays(weekday, saturday string) []patternDay {
-	days := make([]patternDay, 7)
-	for i := range days {
-		days[i].DayOfWeek = i + 1
-		id := ""
-		if i < 5 {
-			id = weekday
-		} else if i == 5 {
-			id = saturday
-		}
-		if id != "" {
-			days[i].ShiftID = &id
-		}
-	}
-	return days
-}
-
-// fixedPattern is the employee's fixed week by department and its label.
-func fixedPattern(ctx context.Context, q database.Querier, employeeID string) ([]patternDay, string, error) {
-	var ops bool
-	if err := q.QueryRow(ctx, `SELECT coalesce(lower(btrim(d.name)) = $2, false) FROM hris.employees e
-		LEFT JOIN hris.departments d ON d.id = e.department_id WHERE e.id = $1`, employeeID, operationsDepartment).Scan(&ops); err != nil {
-		return nil, "", err
-	}
-	if !ops {
-		ns, err := shiftIDByCode(ctx, q, "NS")
-		return fixedPatternDays(ns, ""), patternHQ, err
-	}
-	weekday, err := shiftIDByCode(ctx, q, "OPS")
-	if err != nil {
-		return nil, "", err
-	}
-	saturday, err := shiftIDByCode(ctx, q, "OPSSAT")
-	return fixedPatternDays(weekday, saturday), patternOperations, err
-}
-
-func shiftIDByCode(ctx context.Context, q database.Querier, code string) (string, error) {
-	var id string
-	err := q.QueryRow(ctx, `SELECT id::text FROM hris.shifts WHERE code = $1`, code).Scan(&id)
-	return id, err
-}
 
 // applyFixedSchedule clears per-date schedules from `from` on and saves the
 // fixed weekly pattern from `from`; it returns the cleared per-date rows.
@@ -98,11 +47,11 @@ func applyFixedPattern(ctx context.Context, r Repository, employeeID, from strin
 	if err := g.audit(ctx, q, actor, "hris.schedule.clear", employeeID, map[string]any{"cleared_days": n, "from": from}, n); err != nil {
 		return 0, "", err
 	}
-	days, label, err := fixedPattern(ctx, q, employeeID)
-	if err != nil {
+	var label string
+	if err := q.QueryRow(ctx, `SELECT hris.apply_fixed_week($1::uuid, $2::date, $3)`, employeeID, from, actor.FullName).Scan(&label); err != nil {
 		return 0, "", err
 	}
-	return n, label, r.SaveShiftPattern(ctx, employeeID, from, days, actor.FullName)
+	return n, label, nil
 }
 
 // stopWeeklyPattern ends running weekly rows the day before `from` and

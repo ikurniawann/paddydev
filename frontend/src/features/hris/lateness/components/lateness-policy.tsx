@@ -33,9 +33,9 @@ export function LatenessPolicy() {
                 <p className="mt-0.5 text-xs text-gray-500">{g.scope}</p>
                 <dl className="mt-2 space-y-1">
                   {g.rows.map(([k, v]) => (
-                    <div key={k} className="flex flex-wrap items-baseline justify-between gap-x-3">
+                    <div key={k} className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-3">
                       <dt className="text-gray-600">{k}</dt>
-                      <dd className="font-medium tabular-nums text-gray-900">{v}</dd>
+                      <dd className="whitespace-nowrap text-right font-medium tabular-nums text-gray-900">{v}</dd>
                     </div>
                   ))}
                 </dl>

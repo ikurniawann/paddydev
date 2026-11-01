@@ -152,10 +152,12 @@ func (s *Service) ClockIn(ctx context.Context, a *Actor, in clockInput) (row *Ro
 	f.add("scheduled_end", nil)
 	f.add("is_late", false)
 	f.add("late_minutes", 0)
+	f.add("late_tolerance_minutes", nil)
 	if snap != nil {
 		start, end := domain.ScheduledWindow(date, snap.times)
 		late, minutes := domain.Lateness(clockIn, date, snap.times)
 		f.set("shift_id", snap.shiftID)
+		f.set("late_tolerance_minutes", snap.times.LateToleranceMinutes)
 		f.set("scheduled_start", start)
 		f.set("scheduled_end", end)
 		f.set("is_late", late)
