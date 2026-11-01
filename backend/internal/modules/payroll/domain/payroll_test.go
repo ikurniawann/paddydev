@@ -5,7 +5,6 @@ import (
 	"reflect"
 	"strings"
 	"testing"
-	"time"
 )
 
 func ptr[T any](v T) *T { return &v }
@@ -368,28 +367,12 @@ func TestLoans(t *testing.T) {
 		t.Fatal(alloc)
 	}
 
-	if msg := ValidateLoanLimits(2_000_000, ptr(10_000_000.0), 30, 0, 1); msg != "" {
-		t.Fatal(msg)
-	}
-	if msg := ValidateLoanLimits(3_500_000, ptr(10_000_000.0), 30, 0, 1); msg != "Cicilan Rp 3.500.000/bulan melebihi batas 30% dari gaji pokok (maks Rp 3.000.000)" {
-		t.Fatal(msg)
-	}
-	if msg := ValidateLoanLimits(1, ptr(10_000_000.0), 30, 1, 1); msg != "Karyawan sudah punya 1 pinjaman aktif (maks 1)" {
-		t.Fatal(msg)
-	}
-	if msg := ValidateLoanLimits(1, nil, 30, 0, 1); !strings.Contains(msg, "struktur gaji") {
-		t.Fatal(msg)
-	}
-
 	raw, monthly, total := LoanTerms(1_000_000, 2, 3)
 	if math.Abs(raw-353_333.333) > 0.01 || monthly != 353_333 || total != 1_059_999 {
 		t.Fatal(raw, monthly, total)
 	}
 	if _, m, tot := LoanTerms(1_000_000, 0, 3); m != 333_333 || tot != 999_999 {
 		t.Fatal(m, tot)
-	}
-	if m, y := FirstInstallmentPeriod(time.Date(2026, 12, 31, 10, 0, 0, 0, time.UTC)); m != 1 || y != 2027 {
-		t.Fatal(m, y)
 	}
 
 	base := LoanRow{ID: "loan-1", LoanType: ptr("kasbon"), PrincipalAmount: "3000000", MonthlyInstallment: "1000000",

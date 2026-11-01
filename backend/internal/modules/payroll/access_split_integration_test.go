@@ -51,19 +51,17 @@ func TestHRWithoutPayrollMenuSeesOnlyOwnPayslips(t *testing.T) {
 	}
 }
 
-// The over-limit message must not reveal another employee's base salary
-// (30% cap) to an account without Penggajian.
+// The over-limit message must not reveal another employee's THP (200% cap,
+// EPIC-076) to an account without Penggajian.
 func TestLoanLimitMessageHidesCapWithoutPayrollMenu(t *testing.T) {
 	e := setup(t)
 	loansHR := hrStaff(e, map[string][]string{"hris.kepegawaian.loans": {"read", "create", "update", "approve"}})
 	e.employee("HR Pinjaman", loansHR.UserID, true)
 	worker := e.employee("Peminjam", "", true)
 	e.salary(worker, e.co, 5000000)
-	body := map[string]any{"employee_id": worker, "loan_type": "loan", "principal_amount": 6000000, "tenor_months": 3}
-	wantErr(t, e.call(&loansHR, "POST", "/api/hris/loans", body, 400),
-		"Cicilan Rp 2.000.000/bulan melebihi batas 30% dari gaji pokok")
-	wantErr(t, e.call(&e.hr, "POST", "/api/hris/loans", body, 400),
-		"Cicilan Rp 2.000.000/bulan melebihi batas 30% dari gaji pokok (maks Rp 1.500.000)")
+	body := map[string]any{"employee_id": worker, "loan_type": "loan", "principal_amount": 10000001, "tenor_months": 3}
+	wantErr(t, e.loan(&loansHR, body, 400), "Pinjaman Karyawan maksimal 200% THP")
+	wantErr(t, e.loan(&e.hr, body, 400), "Pinjaman Karyawan maksimal 200% THP (maks Rp 10.000.000)")
 }
 
 func TestLoanApprovalFollowsLoansMenu(t *testing.T) {
@@ -72,7 +70,7 @@ func TestLoanApprovalFollowsLoansMenu(t *testing.T) {
 	e.employee("HR Pinjaman", loansHR.UserID, true)
 	worker := e.employee("Peminjam", e.staff.UserID, true)
 	e.exec(`INSERT INTO hris.employee_salary (employee_id, company_id, base_salary, effective_date) VALUES ($1, $2, 5000000, '2026-01-01')`, worker, e.co)
-	loan := e.call(&e.staff, "POST", "/api/hris/loans", map[string]any{
+	loan := e.loan(&e.staff, map[string]any{
 		"loan_type": "loan", "principal_amount": 1000000, "tenor_months": 2}, 200)["data"].(map[string]any)
 	e.call(&loansHR, "POST", "/api/hris/loans/"+loan["id"].(string)+"/approve", map[string]any{"approved": true}, 200)
 }
@@ -84,7 +82,7 @@ func TestLoanApprovalNeedsApproveAction(t *testing.T) {
 	e.employee("HR Baca", readOnly.UserID, true)
 	worker := e.employee("Peminjam", e.staff.UserID, true)
 	e.salary(worker, e.co, 5000000)
-	loan := e.call(&e.staff, "POST", "/api/hris/loans", map[string]any{
+	loan := e.loan(&e.staff, map[string]any{
 		"loan_type": "kasbon", "principal_amount": 1000000, "tenor_months": 2}, 200)["data"].(map[string]any)
 	wantErr(t, e.call(&readOnly, "POST", "/api/hris/loans/"+loan["id"].(string)+"/approve", map[string]any{"approved": true}, 403),
 		"Insufficient permissions")
@@ -163,9 +161,9 @@ func TestLoanApprovalHidesCapWithoutPayrollMenu(t *testing.T) {
 	e.employee("HR Pinjaman", loansHR.UserID, true)
 	worker := e.employee("Peminjam", e.staff.UserID, true)
 	e.salary(worker, e.co, 5000000)
-	loan := e.call(&e.staff, "POST", "/api/hris/loans", map[string]any{
+	loan := e.loan(&e.staff, map[string]any{
 		"loan_type": "loan", "principal_amount": 3000000, "tenor_months": 3}, 200)["data"].(map[string]any)
-	e.exec(`UPDATE hris.employee_salary SET base_salary = 2000000 WHERE employee_id = $1`, worker)
+	e.exec(`UPDATE hris.employee_salary SET base_salary = 1000000 WHERE employee_id = $1`, worker) // plafon 2.000.000
 	wantErr(t, e.call(&loansHR, "POST", "/api/hris/loans/"+loan["id"].(string)+"/approve", map[string]any{"approved": true}, 400),
-		"Cicilan Rp 1.000.000/bulan melebihi batas 30% dari gaji pokok")
+		"Pinjaman Karyawan maksimal 200% THP")
 }

@@ -32,7 +32,7 @@ func ShareOfGross(amount, gross float64) *string {
 	return &s
 }
 
-var loanTypeLabels = map[string]string{"kasbon": "Kasbon", "loan": "Pinjaman", "emergency": "Pinjaman Darurat"}
+var loanTypeLabels = map[string]string{"kasbon": "Kasbon", "loan": "Pinjaman Karyawan", "emergency": "Pinjaman Darurat"}
 
 // LoanInstallmentLabel is loanInstallmentLabel: "Cicilan Kasbon (2/3)",
 // without the count when the tenor is unknown.

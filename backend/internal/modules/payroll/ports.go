@@ -5,6 +5,7 @@ import (
 
 	"nuhabit/backend/internal/modules/payroll/domain"
 	"nuhabit/backend/internal/platform/database"
+	"nuhabit/backend/internal/platform/storage"
 )
 
 // Employees, departments, positions, attendance, shifts, leaves, overtime,
@@ -170,4 +171,6 @@ type Ports struct {
 	// AttendancePeriods gives the attendance period of a run; nil means the
 	// calendar month, always treated as closed.
 	AttendancePeriods AttendancePeriods
+	// Files stores loan attachments (EPIC-076); nil means storage.FromEnv().
+	Files *storage.Store
 }

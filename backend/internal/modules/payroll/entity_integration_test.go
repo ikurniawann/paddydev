@@ -67,10 +67,10 @@ func TestSalaryNullCompanySuperseded(t *testing.T) {
 	e := setup(t)
 	emp := e.employee("Tanpa Entitas", "", true)
 	e.exec(`INSERT INTO hris.employee_salary (employee_id, base_salary, effective_date) VALUES ($1, 5000000, '2026-01-01')`, emp)
-	// Only a NULL-company salary: the loan limit still sees it (30% of 5.000.000).
-	wantErr(t, e.call(&e.hr, "POST", "/api/hris/loans", map[string]any{"employee_id": emp, "loan_type": "loan",
-		"principal_amount": 6000000, "tenor_months": 3}, 400),
-		"Cicilan Rp 2.000.000/bulan melebihi batas 30% dari gaji pokok (maks Rp 1.500.000)")
+	// Only a NULL-company salary: the loan limit still sees it (200% of 5.000.000).
+	wantErr(t, e.loan(&e.hr, map[string]any{"employee_id": emp, "loan_type": "loan",
+		"principal_amount": 10000001, "tenor_months": 3}, 400),
+		"Pinjaman Karyawan maksimal 200% THP (maks Rp 10.000.000)")
 
 	e.call(&e.hr, "POST", "/api/hris/employee-salary",
 		map[string]any{"employee_id": emp, "base_salary": 6_000_000, "effective_date": "2026-03-01", "company_id": e.co}, 200)

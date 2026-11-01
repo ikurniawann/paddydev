@@ -1,6 +1,10 @@
 package payroll
 
-import "testing"
+import (
+	"testing"
+
+	"nuhabit/backend/internal/platform/testutil"
+)
 
 // THP kasbon = pokok + transport + makan + jabatan dari semua struktur aktif.
 func kasbonWorker(e *env, status string) string {
@@ -21,12 +25,12 @@ func TestKasbonCreateRules(t *testing.T) {
 	e := setup(t)
 	kasbonWorker(e, "contract") // THP 5.000.000 → plafon 2.500.000
 	post := func(body map[string]any, status int) map[string]any {
-		return e.call(&e.staff, "POST", "/api/hris/loans", body, status)
+		return e.loan(&e.staff, body, status)
 	}
 	wantErr(t, post(map[string]any{"loan_type": "emergency", "principal_amount": 500000, "tenor_months": 1}, 400),
 		"Pinjaman Darurat sudah tidak tersedia")
 	wantErr(t, post(map[string]any{"loan_type": "kasbon", "principal_amount": 1000000, "tenor_months": 3}, 400),
-		"Tenor kasbon hanya 1 atau 2 bulan")
+		"Cicilan kasbon hanya 1 atau 2 kali")
 	wantErr(t, post(map[string]any{"loan_type": "kasbon", "principal_amount": 2600000, "tenor_months": 2}, 400),
 		"Kasbon maksimal 50% THP (maks Rp 2.500.000)")
 	created := post(map[string]any{"loan_type": "kasbon", "principal_amount": 2500000, "tenor_months": 2}, 200)
@@ -38,9 +42,9 @@ func TestKasbonCreateRules(t *testing.T) {
 func TestKasbonBlockedForProbation(t *testing.T) {
 	e := setup(t)
 	kasbonWorker(e, "probation")
-	wantErr(t, e.call(&e.staff, "POST", "/api/hris/loans", map[string]any{"loan_type": "kasbon",
+	wantErr(t, e.loan(&e.staff, map[string]any{"loan_type": "kasbon",
 		"principal_amount": 500000, "tenor_months": 1}, 400),
-		"Karyawan berstatus Probation/Freelance/Magang tidak dapat mengajukan kasbon")
+		"Karyawan masa percobaan (probation) tidak dapat mengajukan kasbon atau pinjaman")
 }
 
 // Approving (HR step) re-checks the kasbon cap against the current THP. The
@@ -49,7 +53,7 @@ func TestKasbonApproveRechecksCap(t *testing.T) {
 	e := setup(t)
 	e.employee("HR Penggajian", e.hr.UserID, true)
 	worker := kasbonWorker(e, "contract") // THP 5.000.000
-	loan := e.call(&e.staff, "POST", "/api/hris/loans", map[string]any{
+	loan := e.loan(&e.staff, map[string]any{
 		"loan_type": "kasbon", "principal_amount": 2500000, "tenor_months": 2}, 200)["data"].(map[string]any)
 	e.exec(`UPDATE hris.employee_salary SET base_salary = 1000000 WHERE employee_id = $1`, worker) // THP 3.000.000
 	wantErr(t, e.call(&e.hr, "POST", "/api/hris/loans/"+loan["id"].(string)+"/approve", map[string]any{"approved": true}, 400),
@@ -69,7 +73,7 @@ func TestKasbonTwoStepApproval(t *testing.T) {
 	e.setLevel(mgr, "Manager")
 	e.setLevel(spv, "Supervisor")
 
-	loan := e.call(&e.staff, "POST", "/api/hris/loans", map[string]any{"loan_type": "kasbon",
+	loan := e.loan(&e.staff, map[string]any{"loan_type": "kasbon",
 		"principal_amount": 1000000, "tenor_months": 2}, 200)["data"].(map[string]any)
 	id := loan["id"].(string)
 	if loan["manager_approver_id"] != mgr {
@@ -107,7 +111,7 @@ func TestKasbonWithoutManagerGoesToHR(t *testing.T) {
 	e := setup(t)
 	worker := kasbonWorker(e, "contract")
 	e.exec(`UPDATE hris.employees SET reporting_to = id WHERE id = $1`, worker) // siklus diri sendiri
-	loan := e.call(&e.staff, "POST", "/api/hris/loans", map[string]any{"loan_type": "kasbon",
+	loan := e.loan(&e.staff, map[string]any{"loan_type": "kasbon",
 		"principal_amount": 1000000, "tenor_months": 1}, 200)["data"].(map[string]any)
 	if loan["manager_approver_id"] != nil {
 		t.Fatalf("approver = %v, want nil", loan["manager_approver_id"])
@@ -120,7 +124,7 @@ func TestKasbonHRStepNeedsPayrollMenu(t *testing.T) {
 	e := setup(t)
 	loansOnly := hrStaff(e, map[string][]string{"hris.kepegawaian.loans": {"read", "create", "update", "approve"}})
 	kasbonWorker(e, "contract")
-	loan := e.call(&e.staff, "POST", "/api/hris/loans", map[string]any{"loan_type": "kasbon",
+	loan := e.loan(&e.staff, map[string]any{"loan_type": "kasbon",
 		"principal_amount": 1000000, "tenor_months": 1}, 200)["data"].(map[string]any)
 	wantErr(t, e.call(&loansOnly, "POST", "/api/hris/loans/"+loan["id"].(string)+"/approve", map[string]any{"approved": true}, 403),
 		"Persetujuan kasbon oleh HR butuh akses Penggajian")
@@ -136,7 +140,7 @@ func TestKasbonManagerRejectAndActiveCount(t *testing.T) {
 	e.exec(`UPDATE hris.employees SET reporting_to = $2 WHERE id = $1`, worker, mgr)
 	e.setLevel(mgr, "Manager")
 	file := func() string {
-		return e.call(&e.staff, "POST", "/api/hris/loans", map[string]any{"loan_type": "kasbon",
+		return e.loan(&e.staff, map[string]any{"loan_type": "kasbon",
 			"principal_amount": 500000, "tenor_months": 1}, 200)["data"].(map[string]any)["id"].(string)
 	}
 	id := file()
@@ -147,7 +151,7 @@ func TestKasbonManagerRejectAndActiveCount(t *testing.T) {
 	}
 	id = file()
 	e.call(&mgrStaff, "POST", "/api/hris/loans/"+id+"/approve", map[string]any{"approved": true}, 200)
-	e.call(&e.staff, "POST", "/api/hris/loans", map[string]any{"loan_type": "kasbon",
+	e.loan(&e.staff, map[string]any{"loan_type": "kasbon",
 		"principal_amount": 500000, "tenor_months": 1}, 400)
 }
 
@@ -160,7 +164,7 @@ func TestKasbonHRCanRejectWhileWaitingManager(t *testing.T) {
 	worker := kasbonWorker(e, "contract")
 	e.exec(`UPDATE hris.employees SET reporting_to = $2 WHERE id = $1`, worker, mgr)
 	e.setLevel(mgr, "Manager")
-	loan := e.call(&e.staff, "POST", "/api/hris/loans", map[string]any{"loan_type": "kasbon",
+	loan := e.loan(&e.staff, map[string]any{"loan_type": "kasbon",
 		"principal_amount": 500000, "tenor_months": 1}, 200)["data"].(map[string]any)
 	id := loan["id"].(string)
 	wantErr(t, e.call(&e.hr, "POST", "/api/hris/loans/"+id+"/approve", map[string]any{"approved": true}, 400),
@@ -183,9 +187,47 @@ func TestKasbonTHPSumsAllActiveSalaryRows(t *testing.T) {
 		position_allowance, ptkp_status, effective_date) VALUES ($1, $2, 2000000, 500000, 500000, 0, 'TK/0', '2026-01-01')`,
 		worker, co2) // baris 2: THP 3.000.000 → total 8.000.000, plafon 4.000.000
 	post := func(amount int, status int) map[string]any {
-		return e.call(&e.staff, "POST", "/api/hris/loans", map[string]any{"loan_type": "kasbon",
+		return e.loan(&e.staff, map[string]any{"loan_type": "kasbon",
 			"principal_amount": amount, "tenor_months": 2}, status)
 	}
 	wantErr(t, post(4100000, 400), "Kasbon maksimal 50% THP (maks Rp 4.000.000)")
 	post(4000000, 200)
+}
+
+// loanDoc stores a PDF under loan-attachments/<employeeID>/ and returns its path.
+func (e *env) loanDoc(employeeID string) string {
+	e.t.Helper()
+	p, err := e.files.SavePrivateDocument([]byte("%PDF-1.4 lampiran uji"), loanAttachmentFolder+"/"+employeeID)
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	return p
+}
+
+// loan posts a loan request with the attachment its type requires (EPIC-076
+// R8) unless the body already names one: a supporting document for a kasbon,
+// collateral for a loan, owned by employee_id or the caller's employee.
+func (e *env) loan(s *testutil.Staff, body map[string]any, status int) map[string]any {
+	e.t.Helper()
+	_, hasDocs := body["attachments"]
+	_, hasCollateral := body["collateral_attachments"]
+	if !hasDocs && !hasCollateral {
+		owner, _ := body["employee_id"].(string)
+		if owner == "" || owner == "me" {
+			owner = e.emps.byUser[s.UserID]
+		}
+		if owner != "" {
+			out := map[string]any{}
+			for k, v := range body {
+				out[k] = v
+			}
+			if body["loan_type"] == "loan" {
+				out["collateral_attachments"] = []string{e.loanDoc(owner)}
+			} else {
+				out["attachments"] = []string{e.loanDoc(owner)}
+			}
+			body = out
+		}
+	}
+	return e.call(s, "POST", "/api/hris/loans", body, status)
 }
