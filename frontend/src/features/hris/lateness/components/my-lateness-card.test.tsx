@@ -1,0 +1,83 @@
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import type { MyLateness } from "../types";
+import { MyLatenessCard } from "./my-lateness-card";
+import { lateDay, myLateness } from "./test-fixtures";
+
+const hook = vi.hoisted(() => ({ calls: [] as number[], data: undefined as MyLateness | undefined }));
+vi.mock("../queries", () => ({
+  useMyLateness: (back: number) => {
+    hook.calls.push(back);
+    return { data: hook.data, isLoading: false, isError: false, refetch: vi.fn() };
+  },
+}));
+vi.mock("@/components/ui/select", () => ({
+  Select: ({ children, onValueChange }: { children: React.ReactNode; onValueChange: (v: string) => void }) => (
+    <div>
+      <button type="button" onClick={() => onValueChange("1")}>
+        pilih September
+      </button>
+      {children}
+    </div>
+  ),
+  SelectTrigger: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  SelectValue: () => null,
+  SelectContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  SelectItem: ({ children }: { children: React.ReactNode }) => <span>{children}</span>,
+}));
+
+afterEach(() => {
+  cleanup();
+  hook.calls.length = 0;
+  hook.data = undefined;
+});
+
+describe("MyLatenessCard (EPIC-077 R8)", () => {
+  it("3 kali terlambat: badge SP 1, petunjuk tingkat berikutnya, hari terlambat, catatan HR", () => {
+    hook.data = myLateness("sp1", [lateDay("2026-10-02"), lateDay("2026-10-05", 20), lateDay("2026-10-09", 45)], {
+      code: "sp2", label: "Surat Peringatan 2", at: 5, remaining: 2,
+    });
+    render(<MyLatenessCard />);
+    expect(screen.getByText("3")).toBeTruthy();
+    expect(screen.getByText("kali terlambat")).toBeTruthy();
+    expect(screen.getByText("Surat Peringatan 1")).toBeTruthy();
+    expect(screen.getByText("2 kali terlambat lagi → Surat Peringatan 2")).toBeTruthy();
+    expect(screen.getByText("Hari terlambat (3)")).toBeTruthy();
+    expect(screen.getByText("+45 mnt")).toBeTruthy();
+    expect(screen.getByText("Total terlambat 1 jam 17 mnt")).toBeTruthy();
+    expect(screen.getByText(/Surat peringatan resmi diterbitkan oleh HR/)).toBeTruthy();
+    expect(screen.queryByText(/potong/i)).toBeNull();
+  });
+
+  it("0 kali: status tidak ada keterlambatan, tanpa daftar hari", () => {
+    hook.data = myLateness("none", [], { code: "teguran", label: "Teguran lisan dan tertulis", at: 1, remaining: 1 });
+    render(<MyLatenessCard />);
+    expect(screen.getByText("Tidak ada keterlambatan")).toBeTruthy();
+    expect(screen.getByText(/Tidak ada keterlambatan di periode ini/)).toBeTruthy();
+    expect(screen.queryByText(/Hari terlambat/)).toBeNull();
+  });
+
+  it("tanpa jadwal shift: catatan belum dinilai", () => {
+    hook.data = myLateness("none", []);
+    render(<MyLatenessCard hasSchedule={false} />);
+    expect(screen.getByText(/Jadwal shift belum diatur HR/)).toBeTruthy();
+  });
+
+  it("ketentuan perusahaan bisa dibuka", () => {
+    hook.data = myLateness("none", []);
+    render(<MyLatenessCard />);
+    const toggle = screen.getByRole("button", { name: /Ketentuan Keterlambatan & Absensi/ });
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByText(/klik “check-in” saat jam masuk/)).toBeTruthy();
+    expect(screen.getByText(/surat peringatan 3 dan\/atau Pemutusan Hubungan Kerja/)).toBeTruthy();
+  });
+
+  it("ganti periode meminta back = 1", () => {
+    hook.data = myLateness("none", []);
+    render(<MyLatenessCard />);
+    fireEvent.click(screen.getByRole("button", { name: "pilih September" }));
+    expect(hook.calls.at(-1)).toBe(1);
+  });
+});

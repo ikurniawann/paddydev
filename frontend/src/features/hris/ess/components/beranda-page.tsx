@@ -19,6 +19,7 @@ import { todayWib } from "@/lib/dates";
 import { useEssBeranda } from "../queries";
 import { EssClockPanel } from "./ess-clock-panel";
 import { JadwalTokoShortcut } from "./jadwal-toko-shortcut";
+import { LatenessBerandaCard } from "@/features/hris/lateness";
 import { TeamAttendanceCard } from "./team-attendance-card";
 import { balanceSubtitle } from "./leave-balance-summary";
 import {
@@ -125,6 +126,9 @@ export function EssBerandaPage() {
 
       {/* ── Atasan: ringkasan Absensi Tim hari ini (EPIC-074) ── */}
       <TeamAttendanceCard />
+
+      {/* ── Keterlambatan periode ini (EPIC-077) ── */}
+      <LatenessBerandaCard />
 
       {/* ── Terapis spa: booking berikutnya & komisi (hanya akun terapis) ── */}
       <TherapistBerandaCard />

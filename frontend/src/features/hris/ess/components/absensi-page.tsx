@@ -3,6 +3,7 @@
 import { CalendarDaysIcon } from "@heroicons/react/24/outline";
 import { AttendanceCalendar } from "@/components/hris/AttendanceCalendar";
 import { EssAttendanceRequests } from "@/features/hris/attendance-requests";
+import { MyLatenessCard } from "@/features/hris/lateness";
 import { TherapistAttendanceDay, TherapistAttendanceLegend } from "@/features/spa/components/therapist-attendance-day";
 import { useEssMe } from "../queries";
 import { EssClockPanel } from "./ess-clock-panel";
@@ -11,7 +12,8 @@ import { EssLoading, EssNotLinked } from "./ess-states";
 /**
  * ESS → Absensi (/dashboard/me/absensi): shift hari ini, clock-in/out
  * dengan selfie + GPS, absen terlewat & pengajuan absen manual/koreksi
- * (EPIC-065), dan kalender absensi milik sendiri.
+ * (EPIC-065), info keterlambatan & tingkat teguran/SP (EPIC-077), dan
+ * kalender absensi milik sendiri.
  */
 
 export function EssAbsensiPage() {
@@ -45,6 +47,9 @@ export function EssAbsensiPage() {
           <EssClockPanel />
         </div>
       </div>
+
+      {/* EPIC-077: jumlah terlambat per periode + tingkat teguran/SP sesuai ketentuan. */}
+      <MyLatenessCard hasSchedule={me.has_schedule} />
 
       {/* EPIC-065 (MOM AB-04/AB-06): absen terlewat + pengajuan absen manual/koreksi ke HR. */}
       <EssAttendanceRequests />

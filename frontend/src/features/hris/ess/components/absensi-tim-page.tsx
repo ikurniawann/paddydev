@@ -2,12 +2,14 @@
 
 import { Users } from "lucide-react";
 import { AttendanceMonitoringTab } from "@/features/hris/attendance/components/attendance-monitoring-tab";
+import { TeamLatenessCard } from "@/features/hris/lateness";
 
 /**
  * Area Karyawan → Absensi Tim (EPIC-074): atasan melihat presensi harian
  * seluruh timnya, langsung dan tidak langsung (rantai reporting_to). Hanya
  * baca; koreksi tetap lewat Pengajuan Absensi atau HR. Server
  * (/api/hris/me/team-attendance) yang membatasi isinya ke tim akun ini.
+ * Keterlambatan Tim per periode (EPIC-077) di atas roster harian.
  */
 export function EssAbsensiTimPage() {
   return (
@@ -22,6 +24,7 @@ export function EssAbsensiTimPage() {
           Pengajuan Absensi atau HR.
         </p>
       </div>
+      <TeamLatenessCard />
       <AttendanceMonitoringTab scope="team" />
     </div>
   );
