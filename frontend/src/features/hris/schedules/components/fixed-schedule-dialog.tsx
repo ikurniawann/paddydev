@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Input } from "@/components/ui/input";
 import { applyFixedSchedule } from "@/features/users/api";
 import { dmy } from "@/lib/hris/schedule-type";
+import { FIXED_SCHEDULE_SUMMARY } from "@/lib/hris/work-hours";
 import { retryWithReason } from "@/lib/hris/delete-reason";
 
 interface Props {
@@ -18,7 +19,7 @@ interface Props {
   onDone: () => void;
 }
 
-/** Jadwal tetap Sen–Jum 09.00–18.00 untuk semua karyawan Non-Shift di cabang. */
+/** Jadwal tetap (HQ / Operations per departemen, EPIC-078) untuk semua karyawan Non-Shift di cabang. */
 export function FixedScheduleDialog({ open, onOpenChange, branchId, branchName, today, onDone }: Props) {
   const [from, setFrom] = useState(today);
   const [busy, setBusy] = useState(false);
@@ -51,8 +52,8 @@ export function FixedScheduleDialog({ open, onOpenChange, branchId, branchName, 
             <Input type="date" min={today} value={from} onChange={(e) => setFrom(e.target.value)} className="mt-1" />
           </label>
           <p className="rounded-lg bg-info-soft p-3 text-info">
-            Semua karyawan Non-Shift di {branchName} mendapat jadwal Senin–Jumat 09.00–18.00, Sabtu–Minggu libur, mulai{" "}
-            {dmy(from)}.
+            Semua karyawan Non-Shift di {branchName} mendapat jadwal tetap sesuai departemennya mulai {dmy(from)} —{" "}
+            {FIXED_SCHEDULE_SUMMARY}. Hari lain libur.
           </p>
         </div>
         <DialogFooter>

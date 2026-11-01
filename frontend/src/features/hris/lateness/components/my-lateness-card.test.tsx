@@ -78,12 +78,19 @@ describe("MyLatenessCard (EPIC-077 R8)", () => {
   it("ketentuan perusahaan bisa dibuka", () => {
     hook.data = myLateness("none", []);
     render(<MyLatenessCard />);
-    const toggle = screen.getByRole("button", { name: /Ketentuan Keterlambatan & Absensi/ });
+    const toggle = screen.getByRole("button", { name: /Jam Kerja & Ketentuan Keterlambatan/ });
     expect(toggle.getAttribute("aria-expanded")).toBe("false");
     fireEvent.click(toggle);
     expect(toggle.getAttribute("aria-expanded")).toBe("true");
     expect(screen.getByText(/klik “check-in” saat jam masuk/)).toBeTruthy();
     expect(screen.getByText(/surat peringatan 3 dan\/atau Pemutusan Hubungan Kerja/)).toBeTruthy();
+    // EPIC-078: jam kerja HQ dan Operations tampil apa adanya.
+    const hq = screen.getByRole("region", { name: "Karyawan Headquarter" });
+    expect(hq.textContent).toContain("08.00 – 09.00 WIB");
+    expect(hq.textContent).toContain("17.00 – 18.00 WIB");
+    const ops = screen.getByRole("region", { name: "Karyawan Operations" });
+    expect(ops.textContent).toContain("Seluruh staff Warehouse.");
+    expect(ops.textContent).toMatch(/Sabtu\s*08\.00 – 14\.00 WIB/);
   });
 
   it("ganti periode meminta back = 1", () => {

@@ -8,7 +8,7 @@ func TestGoLiveSchema(t *testing.T) {
 		t.Fatalf("default shift = %q, want DEF", got)
 	}
 	if got := h.scalar(`SELECT start_time::text || '-' || end_time::text || '/' || break_minutes || '/' || late_tolerance_minutes
-		FROM hris.shifts WHERE code = 'NS'`); got != "09:00:00-18:00:00/60/15" {
+		FROM hris.shifts WHERE code = 'NS'`); got != "09:00:00-18:00:00/60/0" { // EPIC-078: HQ terlambat lewat 09.00
 		t.Fatalf("NS = %q", got)
 	}
 	if got := h.scalar(`SELECT count(*)::text FROM hris.shifts WHERE code IS NULL`); got != "0" {

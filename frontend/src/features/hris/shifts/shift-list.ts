@@ -4,10 +4,10 @@ import type { ShiftRow } from "./types";
 export const DEFAULT_GROUP = "Bawaan";
 const OTHER_GROUP = "Lainnya";
 
-/** DEF dan NS dipakai jadwal bawaan & jadwal tetap Non-Shift: tidak bisa diubah kodenya, dihapus, atau dinonaktifkan. */
-export const isProtectedShiftCode = (code: string) => code === "DEF" || code === "NS";
+/** DEF, NS, OPS, OPSSAT dipakai jadwal bawaan & jadwal tetap Non-Shift (HQ/Operations): tidak bisa diubah kodenya, dihapus, atau dinonaktifkan. */
+export const isProtectedShiftCode = (code: string) => ["DEF", "NS", "OPS", "OPSSAT"].includes(code);
 
-/** Awalan kode = huruf sebelum angka pertama ("PAGI8" → "PAGI"); DEF/NS masuk "Bawaan". */
+/** Awalan kode = huruf sebelum angka pertama ("PAGI8" → "PAGI"); kode bawaan masuk "Bawaan". */
 export function shiftGroupName(code: string): string {
   if (isProtectedShiftCode(code)) return DEFAULT_GROUP;
   const prefix = code.match(/^[^0-9]*/)?.[0] ?? "";

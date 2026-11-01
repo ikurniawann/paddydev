@@ -13,7 +13,10 @@ import (
 )
 
 // Tipe jadwal karyawan (Spec §2.2–2.3): shift = ditugaskan di Jadwal Kerja,
-// non_shift = jadwal tetap Sen–Jum NS 09.00–18.00, Sab–Min libur.
+// non_shift = jadwal tetap menurut departemen (EPIC-078, TnC Hari dan Jam
+// Kerja): HQ Sen–Jum NS (masuk 08.00–09.00), Sab–Min libur; Operations
+// (departemen Warehouse) Sen–Jum OPS 08.00–16.00, Sab OPSSAT 08.00–14.00,
+// Min libur. Penerapan awal: migrasi 20261102090000 (apply_work_hours_rule).
 
 const (
 	scheduleShift    = "shift"
@@ -21,16 +24,50 @@ const (
 	msgFromPast      = "Tanggal mulai tidak boleh sebelum hari ini"
 )
 
-func fixedPatternDays(ns string) []patternDay {
+// operationsDepartment is the department on the Operations hours.
+const operationsDepartment = "warehouse"
+
+const (
+	patternHQ         = "HQ: Sen–Jum NS (masuk 08.00–09.00), Sab–Min libur"
+	patternOperations = "Operations: Sen–Jum OPS 08.00–16.00, Sab OPSSAT 08.00–14.00, Min libur"
+)
+
+// fixedPatternDays is the week of weekday (Mon–Fri) and saturday shift ids;
+// "" is a day off.
+func fixedPatternDays(weekday, saturday string) []patternDay {
 	days := make([]patternDay, 7)
 	for i := range days {
 		days[i].DayOfWeek = i + 1
+		id := ""
 		if i < 5 {
-			id := ns
+			id = weekday
+		} else if i == 5 {
+			id = saturday
+		}
+		if id != "" {
 			days[i].ShiftID = &id
 		}
 	}
 	return days
+}
+
+// fixedPattern is the employee's fixed week by department and its label.
+func fixedPattern(ctx context.Context, q database.Querier, employeeID string) ([]patternDay, string, error) {
+	var ops bool
+	if err := q.QueryRow(ctx, `SELECT coalesce(lower(btrim(d.name)) = $2, false) FROM hris.employees e
+		LEFT JOIN hris.departments d ON d.id = e.department_id WHERE e.id = $1`, employeeID, operationsDepartment).Scan(&ops); err != nil {
+		return nil, "", err
+	}
+	if !ops {
+		ns, err := shiftIDByCode(ctx, q, "NS")
+		return fixedPatternDays(ns, ""), patternHQ, err
+	}
+	weekday, err := shiftIDByCode(ctx, q, "OPS")
+	if err != nil {
+		return nil, "", err
+	}
+	saturday, err := shiftIDByCode(ctx, q, "OPSSAT")
+	return fixedPatternDays(weekday, saturday), patternOperations, err
 }
 
 func shiftIDByCode(ctx context.Context, q database.Querier, code string) (string, error) {
@@ -43,23 +80,29 @@ func shiftIDByCode(ctx context.Context, q database.Querier, code string) (string
 // fixed weekly pattern from `from`; it returns the cleared per-date rows.
 // Clearing rows needs the clear guard and is audited (EPIC-061).
 func applyFixedSchedule(ctx context.Context, r Repository, employeeID, from string, actor *auth.User, g clearGuard) (int, error) {
+	n, _, err := applyFixedPattern(ctx, r, employeeID, from, actor, g)
+	return n, err
+}
+
+// applyFixedPattern is applyFixedSchedule that also returns the pattern label.
+func applyFixedPattern(ctx context.Context, r Repository, employeeID, from string, actor *auth.User, g clearGuard) (int, string, error) {
 	q := r.querier()
 	tag, err := q.Exec(ctx, `DELETE FROM hris.employee_shift_days WHERE employee_id = $1 AND work_date >= $2::date`, employeeID, from)
 	if err != nil {
-		return 0, err
+		return 0, "", err
 	}
 	n := int(tag.RowsAffected())
 	if err := g.check(n); err != nil {
-		return 0, err
+		return 0, "", err
 	}
 	if err := g.audit(ctx, q, actor, "hris.schedule.clear", employeeID, map[string]any{"cleared_days": n, "from": from}, n); err != nil {
-		return 0, err
+		return 0, "", err
 	}
-	ns, err := shiftIDByCode(ctx, q, "NS")
+	days, label, err := fixedPattern(ctx, q, employeeID)
 	if err != nil {
-		return 0, err
+		return 0, "", err
 	}
-	return n, r.SaveShiftPattern(ctx, employeeID, from, fixedPatternDays(ns), actor.FullName)
+	return n, label, r.SaveShiftPattern(ctx, employeeID, from, days, actor.FullName)
 }
 
 // stopWeeklyPattern ends running weekly rows the day before `from` and
@@ -185,14 +228,14 @@ func (s *Service) ApplyFixedSchedule(ctx context.Context, actor *auth.User, bran
 			}
 		}
 		for _, t := range targets {
-			n, err := applyFixedSchedule(ctx, r, t.ID, from, actor, g)
+			n, label, err := applyFixedPattern(ctx, r, t.ID, from, actor, g)
 			if err != nil {
 				return err
 			}
 			res.Changed++
 			res.ClearedDays += n
 			if err := writeEmployeeAudit(ctx, q, actor, "schedule.fixed_apply", t.ID, t.Name, nil,
-				map[string]any{"effective_from": from, "pattern": "Sen–Jum NS 09.00–18.00, Sab–Min libur"}); err != nil {
+				map[string]any{"effective_from": from, "pattern": label}); err != nil {
 				return err
 			}
 		}
