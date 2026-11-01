@@ -1,6 +1,6 @@
 # EPIC-076: Syarat & Ketentuan Pinjaman dan Kasbon (`MODULE-HRIS`)
 
-status: review
+status: ready-for-qa
 environment: dev
 retries: 0
 
@@ -83,3 +83,10 @@ Rencana: `docs/superpowers/plans/2026-11-01-tnc-pinjaman-kasbon.md`.
   - karyawan lain 403 saat membuka jaminan, HR 200;
   - tidak meluber di HP, 0 error konsol / API.
   - Data demo dan file lampiran dihapus.
+- 2026-11-01: CI PR #60 sempat merah pada audit: advisory baru `follow-redirects` ≤1.16.1 (GHSA-mrwp-f3q8-3g9p), tidak terkait epic. Override dinaikkan ke `^1.16.2` (`d0de3af0`), lalu CI 4/4 hijau. **PR #60 squash-merged → main `1493bbd3`.** Staging = main (`local-20261101-220036`, backup `staging-db-before-main-e076-20261101-220035.dump`).
+- 2026-11-01 22:11: **PRODUCTION** = main `1493bbd3`, image `local-20261101-221140`, atas izin user ("Ya, deploy prod").
+  - Migrasi `20261101090000_loans_attachments.sql` diterapkan (total 567).
+  - Backup `~/backups/prod-db-before-main-e076-20261101-221019.dump` (VPS). Source lama `~/paddydev-src.before-main-e076-20261101-221019` (= `589ac8c8`).
+  - Verifikasi: container healthy, 0 error API, kolom lampiran ada, rute halaman 307 (login) dan API 401 tanpa sesi.
+  - Saat rilis ada 6 pengajuan pinjaman pending. Saat HR memutusnya, aturan baru berlaku (R12), jadi yang tidak memenuhi syarat ditolak dengan pesan syarat.
+  - Status `ready-for-qa` menunggu QA HR.
