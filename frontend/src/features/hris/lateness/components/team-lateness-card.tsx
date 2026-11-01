@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { AlarmClock, CheckCircle2, ChevronDown } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { LATENESS_CODES, LATENESS_DISCLAIMER, LATENESS_SHORT, LATENESS_TONE } from "@/lib/hris/lateness-view";
 import { useTeamLateness } from "../queries";
@@ -22,7 +24,6 @@ function MemberRow({ member }: { member: TeamLatenessMember }) {
         type="button"
         disabled={!late}
         aria-expanded={late ? open : undefined}
-        aria-label={late ? `Hari terlambat ${member.full_name}` : undefined}
         onClick={() => setOpen((v) => !v)}
         className="flex min-h-12 w-full items-center gap-3 rounded-xl px-2 py-2 text-left transition enabled:hover:bg-gray-50 disabled:cursor-default"
       >
@@ -59,17 +60,24 @@ function MemberRow({ member }: { member: TeamLatenessMember }) {
 export function TeamLatenessCard() {
   const [back, setBack] = useState(0);
   const [filter, setFilter] = useState<Filter>("late");
-  const data = useTeamLateness(back).data;
-  if (!data || data.employees.length === 0) return null;
+  const query = useTeamLateness(back);
+  // Periode berjalan menentukan ada/tidaknya tim; kartu tetap ada (dengan pesan
+  // galat) bila periode lain gagal dimuat.
+  const current = useTeamLateness(0).data;
+  if (!current || current.employees.length === 0) return null;
+  const data = query.data;
+  const switching = query.isPlaceholderData;
+  const shell = data ?? current;
 
-  const lateCount = data.employees.filter((m) => m.count > 0).length;
-  const shown = data.employees.filter((m) => (filter === "late" ? m.count > 0 : m.level.code === filter));
+  const employees = data?.employees ?? [];
+  const lateCount = employees.filter((m) => m.count > 0).length;
+  const shown = employees.filter((m) => (filter === "late" ? m.count > 0 : m.level.code === filter));
   const chips: { key: Filter; label: string; count: number; tone: string }[] = [
     { key: "late", label: "Terlambat", count: lateCount, tone: "bg-gray-900 text-white ring-gray-900" },
     ...LATENESS_CODES.map((code) => ({
       key: code as Filter,
       label: LATENESS_SHORT[code],
-      count: data.summary[code] ?? 0,
+      count: data?.summary[code] ?? 0,
       tone: LATENESS_TONE[code].badge,
     })),
   ];
@@ -85,42 +93,57 @@ export function TeamLatenessCard() {
             <AlarmClock className="h-5 w-5 shrink-0 text-pink-600" />
             Keterlambatan Tim
           </h2>
-          <p className="mt-0.5 text-xs text-gray-500">
-            Periode absensi {data.period.label} · {data.employees.length} anggota
+          <p className="mt-0.5 text-xs text-gray-500" aria-live="polite">
+            {switching ? "Memuat periode…" : `Periode absensi ${shell.period.label} · ${shell.employees.length} anggota`}
           </p>
         </div>
-        <LatenessPeriodSelect periods={data.periods} value={back} onChange={setBack} label="Pilih periode tim" />
+        <LatenessPeriodSelect periods={shell.periods} value={back} onChange={setBack} label="Pilih periode tim" />
       </div>
 
-      <div className="flex flex-wrap gap-2" role="group" aria-label="Saring tingkat">
-        {chips.map((chip) => (
-          <button
-            key={chip.key}
-            type="button"
-            aria-pressed={filter === chip.key}
-            onClick={() => setFilter(chip.key)}
-            className={cn(
-              "inline-flex min-h-10 items-center gap-1 rounded-full px-3 text-xs font-semibold ring-1 transition",
-              chip.tone,
-              filter === chip.key ? "ring-2 ring-offset-1 ring-offset-white" : "opacity-80 hover:opacity-100"
-            )}
-          >
-            {chip.label} · <span className="tabular-nums">{chip.count}</span>
-          </button>
-        ))}
-      </div>
-
-      {shown.length > 0 ? (
-        <ul className="divide-y divide-gray-100">
-          {shown.map((m) => (
-            <MemberRow key={m.employee_id} member={m} />
-          ))}
-        </ul>
+      {!data ? (
+        query.isError ? (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-red-100 bg-red-50 p-3 text-sm text-red-700">
+            <span>Keterlambatan tim gagal dimuat.</span>
+            <Button size="sm" variant="outline" onClick={() => query.refetch()}>
+              Coba lagi
+            </Button>
+          </div>
+        ) : (
+          <Skeleton className="h-24 w-full rounded-xl" />
+        )
       ) : (
-        <p className="flex items-start gap-2 rounded-xl bg-emerald-50 p-3 text-sm text-emerald-800">
-          <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
-          {filter === "late" ? "Semua anggota tepat waktu di periode ini." : "Tidak ada anggota di tingkat ini."}
-        </p>
+        <div className={cn("space-y-4 transition-opacity", switching && "opacity-50")} aria-busy={switching}>
+          <div className="flex flex-wrap gap-2" role="group" aria-label="Saring tingkat">
+            {chips.map((chip) => (
+              <button
+                key={chip.key}
+                type="button"
+                aria-pressed={filter === chip.key}
+                onClick={() => setFilter(chip.key)}
+                className={cn(
+                  "inline-flex min-h-10 items-center gap-1 rounded-full px-3 text-xs font-semibold ring-1 transition",
+                  chip.tone,
+                  filter === chip.key ? "ring-2 ring-offset-1 ring-offset-white" : "opacity-80 hover:opacity-100"
+                )}
+              >
+                {chip.label} · <span className="tabular-nums">{chip.count}</span>
+              </button>
+            ))}
+          </div>
+
+          {shown.length > 0 ? (
+            <ul className="divide-y divide-gray-100">
+              {shown.map((m) => (
+                <MemberRow key={m.employee_id} member={m} />
+              ))}
+            </ul>
+          ) : (
+            <p className="flex items-start gap-2 rounded-xl bg-emerald-50 p-3 text-sm text-emerald-800">
+              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+              {filter === "late" ? "Semua anggota tepat waktu di periode ini." : "Tidak ada anggota di tingkat ini."}
+            </p>
+          )}
+        </div>
       )}
 
       <p className="text-xs text-gray-500">{LATENESS_DISCLAIMER}</p>

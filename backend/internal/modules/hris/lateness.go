@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"sort"
 	"strconv"
+	"strings"
 
 	"nuhabit/backend/internal/modules/hris/domain"
 	"nuhabit/backend/internal/platform/database"
@@ -30,19 +31,44 @@ func latenessBack(r *http.Request) (int, error) {
 	return n, nil
 }
 
-// latenessPeriods is the current attendance period and the five before it,
-// newest first; each step back is the period holding the day before.
+// latenessPeriods is the current attendance period and the five payroll
+// months before it, newest first. Only the current one goes through
+// periodContaining (as every attendance read does); earlier months are read
+// as stored, or computed from the settings without being inserted, so a GET
+// never creates or auto-closes an old period (R12).
 func latenessPeriods(ctx context.Context, q database.Querier, today string) ([]*AttendancePeriod, error) {
 	p, err := periodContaining(ctx, q, today, today)
 	if err != nil {
 		return nil, err
 	}
 	out := []*AttendancePeriod{p}
+	var settings *domain.PeriodSettings
+	y, m := p.Year, p.Month
 	for len(out) < latenessPeriodCount {
-		if p, err = periodContaining(ctx, q, domain.AddDaysISO(p.Start, -1), today); err != nil {
+		y, m = domain.ShiftMonth(y, m, -1)
+		prev, err := periodByMonth(ctx, q, y, m)
+		if err != nil {
 			return nil, err
 		}
-		out = append(out, p)
+		if prev == nil {
+			if settings == nil {
+				s, _, err := loadPeriodSettings(ctx, q)
+				if err != nil {
+					return nil, err
+				}
+				settings = &s
+			}
+			r, err := resolveRange(ctx, q, *settings, y, m)
+			if err != nil {
+				return nil, err
+			}
+			status := periodOpen
+			if domain.PeriodLocked(r.Closing, today) {
+				status = periodClosed
+			}
+			prev = &AttendancePeriod{Year: y, Month: m, Start: r.Start, End: r.End, Closing: r.Closing, Status: status}
+		}
+		out = append(out, prev)
 	}
 	return out, nil
 }
@@ -204,7 +230,7 @@ func (s *Service) TeamLateness(ctx context.Context, a *Actor, back int) (*Row, e
 		if list[i].count != list[j].count {
 			return list[i].count > list[j].count
 		}
-		return list[i].name < list[j].name
+		return strings.ToLower(list[i].name) < strings.ToLower(list[j].name)
 	})
 	rows := make([]*Row, len(list))
 	for i, m := range list {

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { AlarmClock, CheckCircle2, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
 import { LATENESS_DISCLAIMER } from "@/lib/hris/lateness-view";
 import { useMyLateness } from "../queries";
 import { LatenessDaysList } from "./lateness-days-list";
@@ -20,14 +21,23 @@ import { LatenessSummary } from "./lateness-summary";
 export function MyLatenessCard({ hasSchedule = true }: { hasSchedule?: boolean }) {
   const [back, setBack] = useState(0);
   const query = useMyLateness(back);
+  // Periode berjalan (query yang sama dengan Beranda): pemilih periode tetap ada
+  // walau periode lain gagal dimuat.
+  const current = useMyLateness(0).data;
   const data = query.data;
+  const periods = (data ?? current)?.periods ?? [];
+  const switching = query.isPlaceholderData;
   const ref = useRef<HTMLElement>(null);
+  const scrolled = useRef(false);
 
-  // Tautan Beranda "#keterlambatan": kartu baru ada setelah data ESS dimuat,
-  // jadi lompatan hash bawaan browser bisa terlewat.
+  // Tautan Beranda "#keterlambatan": lompat sekali setelah data pertama tampil
+  // (lompatan hash bawaan browser terjadi sebelum kartu ini ada).
+  const loaded = Boolean(data);
   useEffect(() => {
+    if (!loaded || scrolled.current) return;
+    scrolled.current = true;
     if (window.location.hash === "#keterlambatan") ref.current?.scrollIntoView({ block: "start" });
-  }, []);
+  }, [loaded]);
 
   return (
     <section
@@ -42,11 +52,11 @@ export function MyLatenessCard({ hasSchedule = true }: { hasSchedule?: boolean }
             <AlarmClock className="h-5 w-5 shrink-0 text-pink-600" />
             Keterlambatan
           </h2>
-          <p className="mt-0.5 text-xs text-gray-500">
-            {data ? `Periode absensi ${data.period.label}` : "Jumlah terlambat per periode absensi"}
+          <p className="mt-0.5 text-xs text-gray-500" aria-live="polite">
+            {switching ? "Memuat periode…" : data ? `Periode absensi ${data.period.label}` : "Jumlah terlambat per periode absensi"}
           </p>
         </div>
-        {data ? <LatenessPeriodSelect periods={data.periods} value={back} onChange={setBack} /> : null}
+        <LatenessPeriodSelect periods={periods} value={back} onChange={setBack} />
       </div>
 
       {query.isLoading ? (
@@ -62,7 +72,7 @@ export function MyLatenessCard({ hasSchedule = true }: { hasSchedule?: boolean }
           </Button>
         </div>
       ) : (
-        <>
+        <div className={cn("space-y-4 transition-opacity", switching && "opacity-50")} aria-busy={switching}>
           <LatenessSummary stats={data} />
           <LatenessLadder code={data.level.code} />
 
@@ -84,7 +94,7 @@ export function MyLatenessCard({ hasSchedule = true }: { hasSchedule?: boolean }
               Tidak ada keterlambatan di periode ini. Pertahankan!
             </p>
           )}
-        </>
+        </div>
       )}
 
       <LatenessPolicy />

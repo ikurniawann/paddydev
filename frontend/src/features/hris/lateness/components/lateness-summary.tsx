@@ -6,7 +6,8 @@ import { LatenessLevelBadge } from "./lateness-level-badge";
 /** Angka besar + tingkat sesuai ketentuan + petunjuk tingkat berikutnya. */
 export function LatenessSummary({ stats, compact }: { stats: LatenessStats; compact?: boolean }) {
   const tone = LATENESS_TONE[stats.level.code];
-  const hint = nextLevelHint(stats.next);
+  // Yang tepat waktu tidak diberi "1 kali terlambat lagi → Teguran" (terbaca seperti ancaman).
+  const hint = stats.count > 0 ? nextLevelHint(stats.next) : null;
   return (
     <div className="flex min-w-0 items-center gap-3 sm:gap-4">
       <div

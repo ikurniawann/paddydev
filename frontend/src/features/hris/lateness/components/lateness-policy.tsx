@@ -22,27 +22,25 @@ export function LatenessPolicy() {
         <span className="min-w-0 flex-1">Ketentuan Keterlambatan & Absensi</span>
         <ChevronDown className={cn("h-4 w-4 shrink-0 text-gray-500 transition-transform", open && "rotate-180")} />
       </button>
-      {open ? (
-        <div id={id} className="space-y-3 border-t border-gray-200 px-3 py-3 text-sm text-gray-700">
-          <div>
-            <p className="font-semibold text-gray-900">{LATENESS_POLICY.title}</p>
-            <p className="mt-1">{LATENESS_POLICY.lead}</p>
-            <ul className="mt-2 list-disc space-y-1 pl-5">
-              {LATENESS_POLICY.levels.map((t) => (
-                <li key={t}>{t}</li>
-              ))}
-            </ul>
-          </div>
-          <div>
-            <p>{LATENESS_POLICY.intro}</p>
-            <ol className="mt-2 list-decimal space-y-1 pl-5">
-              {LATENESS_POLICY.steps.map((t) => (
-                <li key={t}>{t}</li>
-              ))}
-            </ol>
-          </div>
+      <div id={id} hidden={!open} className="space-y-3 border-t border-gray-200 px-3 py-3 text-sm text-gray-700">
+        <div>
+          <p className="font-semibold text-gray-900">{LATENESS_POLICY.title}</p>
+          <p className="mt-1">{LATENESS_POLICY.lead}</p>
+          <ul className="mt-2 list-disc space-y-1 pl-5">
+            {LATENESS_POLICY.levels.map((t) => (
+              <li key={t}>{t}</li>
+            ))}
+          </ul>
         </div>
-      ) : null}
+        <div>
+          <p>{LATENESS_POLICY.intro}</p>
+          <ol className="mt-2 list-decimal space-y-1 pl-5">
+            {LATENESS_POLICY.steps.map((t) => (
+              <li key={t}>{t}</li>
+            ))}
+          </ol>
+        </div>
+      </div>
     </div>
   );
 }

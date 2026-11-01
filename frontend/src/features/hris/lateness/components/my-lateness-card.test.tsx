@@ -4,11 +4,17 @@ import type { MyLateness } from "../types";
 import { MyLatenessCard } from "./my-lateness-card";
 import { lateDay, myLateness } from "./test-fixtures";
 
-const hook = vi.hoisted(() => ({ calls: [] as number[], data: undefined as MyLateness | undefined }));
+const hook = vi.hoisted(() => ({
+  calls: [] as number[],
+  data: undefined as MyLateness | undefined,
+  /** Data periode back ≥ 1 (undefined + error = periode lain gagal dimuat). */
+  other: undefined as { data?: MyLateness; isError?: boolean; isPlaceholderData?: boolean } | undefined,
+}));
 vi.mock("../queries", () => ({
   useMyLateness: (back: number) => {
     hook.calls.push(back);
-    return { data: hook.data, isLoading: false, isError: false, refetch: vi.fn() };
+    const base = { data: hook.data, isLoading: false, isError: false, isPlaceholderData: false, refetch: vi.fn() };
+    return back > 0 && hook.other ? { ...base, ...hook.other } : base;
   },
 }));
 vi.mock("@/components/ui/select", () => ({
@@ -30,6 +36,7 @@ afterEach(() => {
   cleanup();
   hook.calls.length = 0;
   hook.data = undefined;
+  hook.other = undefined;
 });
 
 describe("MyLatenessCard (EPIC-077 R8)", () => {
@@ -55,6 +62,8 @@ describe("MyLatenessCard (EPIC-077 R8)", () => {
     expect(screen.getByText("Tidak ada keterlambatan")).toBeTruthy();
     expect(screen.getByText(/Tidak ada keterlambatan di periode ini/)).toBeTruthy();
     expect(screen.queryByText(/Hari terlambat/)).toBeNull();
+    // Yang tepat waktu tidak diberi petunjuk "1 kali terlambat lagi → …".
+    expect(screen.queryByText(/kali terlambat lagi/)).toBeNull();
   });
 
   it("tanpa jadwal shift: catatan belum dinilai", () => {
@@ -78,6 +87,24 @@ describe("MyLatenessCard (EPIC-077 R8)", () => {
     hook.data = myLateness("none", []);
     render(<MyLatenessCard />);
     fireEvent.click(screen.getByRole("button", { name: "pilih September" }));
-    expect(hook.calls.at(-1)).toBe(1);
+    expect(hook.calls).toContain(1);
+  });
+
+  it("periode lain gagal dimuat: pesan galat, pemilih periode tetap ada", () => {
+    hook.data = myLateness("none", []);
+    hook.other = { data: undefined, isError: true };
+    render(<MyLatenessCard />);
+    fireEvent.click(screen.getByRole("button", { name: "pilih September" }));
+    expect(screen.getByText("Info keterlambatan gagal dimuat.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "pilih September" })).toBeTruthy();
+  });
+
+  it("selama memuat periode lain: isi diredupkan dan ditandai sibuk", () => {
+    hook.data = myLateness("none", []);
+    hook.other = { data: myLateness("none", []), isPlaceholderData: true };
+    const { container } = render(<MyLatenessCard />);
+    fireEvent.click(screen.getByRole("button", { name: "pilih September" }));
+    expect(screen.getByText("Memuat periode…")).toBeTruthy();
+    expect(container.querySelector('[aria-busy="true"]')).toBeTruthy();
   });
 });

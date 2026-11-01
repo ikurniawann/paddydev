@@ -5,9 +5,22 @@ import { TeamLatenessCard } from "./team-lateness-card";
 import { lateDay, level, member, teamEnvelope } from "./test-fixtures";
 
 let data: TeamLateness | undefined;
-vi.mock("../queries", () => ({ useTeamLateness: () => ({ data }) }));
+let other: { data?: TeamLateness; isError?: boolean } | undefined;
+vi.mock("../queries", () => ({
+  useTeamLateness: (back: number) => {
+    const base = { data, isError: false, isPlaceholderData: false, refetch: vi.fn() };
+    return back > 0 && other ? { ...base, ...other } : base;
+  },
+}));
 vi.mock("@/components/ui/select", () => ({
-  Select: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  Select: ({ children, onValueChange }: { children: React.ReactNode; onValueChange: (v: string) => void }) => (
+    <div>
+      <button type="button" onClick={() => onValueChange("1")}>
+        pilih September
+      </button>
+      {children}
+    </div>
+  ),
   SelectTrigger: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   SelectValue: () => null,
   SelectContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
@@ -17,6 +30,7 @@ vi.mock("@/components/ui/select", () => ({
 afterEach(() => {
   cleanup();
   data = undefined;
+  other = undefined;
 });
 
 const days = (n: number) => Array.from({ length: n }, (_, i) => lateDay(`2026-10-${String(i + 1).padStart(2, "0")}`));
@@ -59,11 +73,20 @@ describe("TeamLatenessCard (EPIC-077 R10)", () => {
   it("membuka hari terlambat anggota", () => {
     data = team();
     render(<TeamLatenessCard />);
-    const row = screen.getByRole("button", { name: "Hari terlambat Staf S" });
+    const row = screen.getByRole("button", { name: /Staf S.*7x.*SP 3/ });
     expect(screen.queryByText(/Masuk/)).toBeNull();
     fireEvent.click(row);
     expect(row.getAttribute("aria-expanded")).toBe("true");
     expect(screen.getAllByText(/Masuk/)).toHaveLength(7);
+  });
+
+  it("periode lain gagal dimuat: kartu tetap ada dengan pesan galat", () => {
+    data = team();
+    other = { data: undefined, isError: true };
+    render(<TeamLatenessCard />);
+    fireEvent.click(screen.getByRole("button", { name: "pilih September" }));
+    expect(screen.getByText("Keterlambatan tim gagal dimuat.")).toBeTruthy();
+    expect(screen.getByText("Keterlambatan Tim")).toBeTruthy();
   });
 
   it("semua tepat waktu", () => {

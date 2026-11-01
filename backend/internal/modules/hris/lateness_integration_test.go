@@ -117,6 +117,14 @@ func TestMyLatenessCutoff20(t *testing.T) {
 	if got := latenessDays(t, prev.data()); len(got) != 1 || got[0] != "2026-10-20" {
 		t.Fatalf("previous = %s", prev.raw)
 	}
+	// R12: browsing earlier periods never inserts (or auto-closes) them.
+	if n := h.scalar(`SELECT count(*)::text FROM hris.attendance_periods
+		WHERE end_date >= '2026-08-01' AND (period_year, period_month) < (2026, 11)`); n != "0" {
+		t.Errorf("earlier periods materialized by a GET: %s", n)
+	}
+	if p, _ := prev.data()["period"].(map[string]any); p["start_date"] != "2026-09-21" || p["end_date"] != "2026-10-20" {
+		t.Errorf("previous period = %v", prev.data()["period"])
+	}
 }
 
 // R5: an account without an employee gets zero, not an error.
@@ -144,7 +152,8 @@ func TestTeamLateness(t *testing.T) {
 	boss, bossID := h.staff("pos", nil, true, emp{name: "Atasan Tim"})
 	coord := h.employee(emp{name: "Koordinator K", boss: &bossID})
 	staff := h.employee(emp{name: "Staf S", boss: &coord})
-	quiet := h.employee(emp{name: "Anggota Tepat", boss: &bossID})
+	quiet := h.employee(emp{name: "Citra Tepat", boss: &bossID})
+	lower := h.employee(emp{name: "budi tepat", boss: &bossID})
 	outsider := h.employee(emp{name: "Orang Luar"})
 	for _, d := range []string{"01", "02", "05", "06", "07", "08", "09"} {
 		h.late(staff, "2026-10-"+d, 11, true)
@@ -156,10 +165,14 @@ func TestTeamLateness(t *testing.T) {
 	c := h.do(&boss, "GET", teamLatenessURL, nil)
 	expect(t, c, 200, "")
 	list, _ := c.data()["employees"].([]any)
-	if len(list) != 3 {
+	if len(list) != 4 {
 		t.Fatalf("team = %s", c.raw)
 	}
-	first, second, third := list[0].(map[string]any), list[1].(map[string]any), list[2].(map[string]any)
+	// Same count: "budi" before "Citra" (case-insensitive, not byte order).
+	if list[2].(map[string]any)["employee_id"] != lower {
+		t.Errorf("name tiebreak must ignore case: %s", c.raw)
+	}
+	first, second, third := list[0].(map[string]any), list[1].(map[string]any), list[3].(map[string]any)
 	if first["employee_id"] != staff || levelCode(first) != "sp3" || first["count"] != float64(7) ||
 		first["direct"] != false || first["reporting_to_name"] != "Koordinator K" || first["full_name"] != "Staf S" {
 		t.Errorf("first = %v", first)
@@ -171,7 +184,7 @@ func TestTeamLateness(t *testing.T) {
 		t.Errorf("third = %v", third)
 	}
 	sum, _ := c.data()["summary"].(map[string]any)
-	if sum["sp3"] != float64(1) || sum["teguran"] != float64(1) || sum["none"] != float64(1) || sum["sp1"] != float64(0) {
+	if sum["sp3"] != float64(1) || sum["teguran"] != float64(1) || sum["none"] != float64(2) || sum["sp1"] != float64(0) {
 		t.Errorf("summary = %v", sum)
 	}
 
