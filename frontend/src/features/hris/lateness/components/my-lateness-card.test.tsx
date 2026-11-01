@@ -66,10 +66,13 @@ describe("MyLatenessCard (EPIC-077 R8)", () => {
     expect(screen.queryByText(/kali terlambat lagi/)).toBeNull();
   });
 
-  it("tanpa jadwal shift: catatan belum dinilai", () => {
+  it("tanpa jadwal shift: catatan belum dinilai, kecuali sudah ada hari terlambat", () => {
     hook.data = myLateness("none", []);
-    render(<MyLatenessCard hasSchedule={false} />);
+    const { rerender } = render(<MyLatenessCard hasSchedule={false} />);
     expect(screen.getByText(/Jadwal shift belum diatur HR/)).toBeTruthy();
+    hook.data = myLateness("teguran", [lateDay("2026-10-02")]);
+    rerender(<MyLatenessCard hasSchedule={false} />);
+    expect(screen.queryByText(/Jadwal shift belum diatur HR/)).toBeNull();
   });
 
   it("ketentuan perusahaan bisa dibuka", () => {

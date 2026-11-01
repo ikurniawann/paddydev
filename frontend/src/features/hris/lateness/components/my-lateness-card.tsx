@@ -76,7 +76,8 @@ export function MyLatenessCard({ hasSchedule = true }: { hasSchedule?: boolean }
           <LatenessSummary stats={data} />
           <LatenessLadder code={data.level.code} />
 
-          {!hasSchedule ? (
+          {/* Tanpa jadwal tidak ada penilaian terlambat; hari terlambat lama (jadwal dicabut) tetap tampil. */}
+          {!hasSchedule && data.count === 0 ? (
             <p className="flex items-start gap-2 rounded-xl bg-gray-50 p-3 text-xs text-gray-600">
               <Info className="mt-0.5 h-4 w-4 shrink-0 text-gray-400" />
               Jadwal shift belum diatur HR — keterlambatan belum dinilai.
