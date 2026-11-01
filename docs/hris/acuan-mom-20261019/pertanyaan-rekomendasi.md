@@ -30,6 +30,7 @@ Semua rekomendasi pada tabel di bawah **berlaku sebagai keputusan**, kecuali **K
 | K-9 | Alert absen terlewat (internet mati): alert ke siapa, kapan? | Gabungkan dengan pengajuan absen manual (AB-04): karyawan mengajukan dengan keterangan, HR menerima notifikasi dan menyetujui | AB-04, AB-06 |
 | Q-AB-1 | Penanda branch HQ untuk aturan "kurang dari 9 jam"? | Tambah flag `is_hq` di cabang; label "Kurang jam / pulang lebih cepat" disimpan di baris absensi. Notifikasi lama (< 7 jam, semua cabang) dihapus atau disesuaikan. **Diimplementasikan EPIC-065** R7–R8 (R9 dibatalkan) (Q-AB-1 diterima 20-10-2026): jam minimum per cabang (`min_work_hours`, HQ = 9 diisi HR), label tersimpan di baris; **notifikasi < 7 jam tetap seperti semula, tidak diubah** (ruling C1 meniadakan R9 "notifikasi mengikuti label"; label tidak mengirim notifikasi baru) | AB-05 |
 | Q-PY-4 | Cut off 20 berlaku mulai periode kapan? Live masih `cutoff_day = 0` (bulan kalender) dan `payroll_day = 25` | Berlaku mulai periode 21 Okt – 20 Nov 2026. HR mengubah setting setelah periode Oktober ditutup. Tanggal bayar dikonfirmasi | PY-02 |
+| TnC-AB-07 (02-11) | Keterlambatan: "1 bulan" pakai rentang apa, terlambat dihitung dari apa, potongan telat tetap, siapa yang melihat? | **Diputuskan user 02-11:** periode absensi (ikut setting cutoff); lewat toleransi shift (`is_late`); potongan `tier` tetap tanpa ditampilkan di ESS; karyawan + atasan (info saja, SP diterbitkan HR). Diimplementasikan EPIC-077 | AB-07 |
 
 ## Rekomendasi urutan eksekusi
 
