@@ -35,7 +35,7 @@ Jawaban user 02-11:
   - Migrasi langsung mengisi **false** untuk baris setting yang ada, sesuai keputusan user "tidak dipakai dulu".
   - HR bisa menyalakannya kembali di Pengaturan Payroll.
 - **R2** Kalkulasi, saklar dibaca saat run dihitung:
-  - `pph21_enabled = false` → PPh 21 = 0, termasuk Pasal 17 tahunan Desember. DPP/TER/PTKP di hasil = 0; metode tercatat `"nonaktif"`.
+  - `pph21_enabled = false` → PPh 21 = 0, termasuk Pasal 17 tahunan Desember. DPP/TER = 0; PTKP tetap dicatat (informasi); metode tercatat `"nonaktif"`.
   - `bpjs_tk_enabled = false` → JHT/JP karyawan dan JHT/JP/JKK/JKM perusahaan = 0.
   - `bpjs_kes_enabled = false` → BPJS Kes karyawan dan perusahaan = 0.
   - Tapera tidak berubah (tetap mengikuti kepesertaan per struktur; saat ini 0 peserta).

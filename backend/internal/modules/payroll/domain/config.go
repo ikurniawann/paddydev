@@ -74,6 +74,7 @@ type Config struct {
 
 	// EPIC-082: saklar global. Mati = komponen tidak dihitung (potongan karyawan
 	// dan iuran perusahaan 0); kepesertaan per struktur gaji dan tarif tetap.
+	// Zero value = nonaktif; buat Config lewat DefaultConfig/BuildConfig.
 	Pph21Enabled   bool
 	BpjsTkEnabled  bool
 	BpjsKesEnabled bool

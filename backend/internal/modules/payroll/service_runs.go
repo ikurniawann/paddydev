@@ -471,7 +471,7 @@ func (s *service) calculateRun(ctx context.Context, runID string, includeThr boo
 			continue
 		}
 		in.ManualInputs = manual[e.ID]
-		if config.Pph21Method == "ter" && run.PeriodMonth == 12 {
+		if config.Pph21Enabled && config.Pph21Method == "ter" && run.PeriodMonth == 12 {
 			if in.Ytd, err = yearToDate(ctx, s.db, run, e.ID); err != nil {
 				return nil, opaque(err)
 			}

@@ -253,8 +253,8 @@ export function PayrollSettingsPage() {
                   </label>
                   {sw.key === "pph21_enabled" && (
                     <p className="ml-6 mt-1 text-xs text-gray-500">
-                      Bila PPh 21 dinyalakan kembali di tengah tahun, perhitungan Desember (Pasal 17) menyesuaikan
-                      pajak setahun penuh.
+                      Bila PPh 21 dinyalakan kembali di tengah tahun, perhitungan Desember (Pasal 17, metode TER)
+                      menyesuaikan pajak setahun penuh.
                     </p>
                   )}
                 </div>

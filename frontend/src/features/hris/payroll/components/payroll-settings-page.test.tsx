@@ -36,7 +36,7 @@ describe("PayrollSettingsPage saklar PPh 21 / BPJS (EPIC-082)", () => {
     ).toBeTruthy();
     expect(
       screen.getByText(
-        "Bila PPh 21 dinyalakan kembali di tengah tahun, perhitungan Desember (Pasal 17) menyesuaikan pajak setahun penuh."
+        "Bila PPh 21 dinyalakan kembali di tengah tahun, perhitungan Desember (Pasal 17, metode TER) menyesuaikan pajak setahun penuh."
       )
     ).toBeTruthy();
   });
