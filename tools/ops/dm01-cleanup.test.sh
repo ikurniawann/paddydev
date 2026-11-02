@@ -91,6 +91,7 @@ B=bbbbbbbb-0000-4000-8000-00000000000b   # karyawan lain
 S=cccccccc-0000-4000-8000-00000000000c   # foldernya symlink ke luar private/
 ATT=dddddddd-0000-4000-8000-00000000000d # absensi ≤ 20 Okt yang dirujuk pengajuan 22 Okt
 REQ=eeeeeeee-0000-4000-8000-00000000000e # pengajuan absensi 22 Okt (tetap) → ATT
+ATT_S=ffffffff-0000-4000-8000-00000000000f # absensi S 16 Okt; bentrok (employee_id, date) dengan absensi baru
 
 # search_path sama dengan sesi aplikasi: fungsi trigger memakai nama tabel tanpa schema.
 SP='public,iam,configuration,hris,performance,recruitment,item,purchasing,inventory,manufacturing,pos,crm,accounting,auth'
@@ -131,7 +132,7 @@ ada() { vol "test -f /s/private/$1"; }
 # Isi baris uji ≤ 20 Okt per tabel (untuk membandingkan sebelum eksekusi dan sesudah pemulihan).
 jejak() {
   pg -c "SELECT md5(string_agg(x, '|' ORDER BY x)) FROM (
-    SELECT a::text AS x FROM hris.attendance a WHERE employee_id IN ('$A', '$S') AND date <= '2026-10-20'
+    SELECT a::text AS x FROM hris.attendance a WHERE employee_id = '$A' AND date <= '2026-10-20'
     UNION ALL SELECT l::text FROM hris.leaves l WHERE employee_id IN ('$A', '$S') AND end_date <= '2026-10-20'
       AND reason <> 'baru setelah cleanup'
     UNION ALL SELECT o::text FROM hris.overtime_requests o WHERE employee_id = '$A' AND date <= '2026-10-20') t"
@@ -173,6 +174,8 @@ INSERT INTO hris.attendance (id, employee_id, date, clock_in, clock_out, status)
   VALUES ('$ATT', '$A', '2026-10-15', '2026-10-15 08:00+07', '2026-10-15 17:00+07', 'present');
 INSERT INTO hris.attendance_requests (id, employee_id, date, kind, reason, clock_in, attendance_id)
   VALUES ('$REQ', '$A', '2026-10-22', 'correction', 'uji tautan absensi', '08:00', '$ATT');
+-- absensi S 16 Okt (dihapus); sesudah cleanup dibuat absensi baru di tanggal yang sama → restore melewatinya
+INSERT INTO hris.attendance (id, employee_id, date, status) VALUES ('$ATT_S', '$S', '2026-10-16', 'present');
 SQL
 
 vol "set -e; mkdir -p /s/private/leave-attachments/$A /s/private/leave-attachments/$B /s/private/overtime-attachments/$A
@@ -205,7 +208,7 @@ cek "SHA-256 pratinjau dicetak" "grep -q 'SHA-256 pratinjau: $SHA' <<<\"\$out\""
 cek "target.txt memuat host" "grep -q '^host=$(hostname) ' '$PDIR/target.txt'"
 cek "HAPUS leaves = 3" "grep -qx \$'HAPUS\tleaves\t3' '$P'"
 cek "HAPUS overtime_requests = 1" "grep -qx \$'HAPUS\tovertime_requests\t1' '$P'"
-cek "HAPUS attendance = 1" "grep -qx \$'HAPUS\tattendance\t1' '$P'"
+cek "HAPUS attendance = 2" "grep -qx \$'HAPUS\tattendance\t2' '$P'"
 cek "FILE_LAIN dicatat" "grep -qx \$'FILE_LAIN\tleave-attachments/$B/lain.pdf' '$P'"
 cek "inventaris FK attendance_requests → attendance" "grep -q \$'^FK\thris.attendance_requests\tattendance_requests_attendance_id_fkey' '$P'"
 cek "inventaris trigger notifikasi absensi" "grep -q \$'^TRIGGER\thris.attendance\ttrg_notify_attendance_changes\tO' '$P'"
@@ -328,6 +331,8 @@ harus_gagal "files kedua kali ditolak" "sudah" berkas
 echo "== Pemulihan (restore)"
 # Sesudah cleanup: cuti baru ≤ 20 Okt (id baru) dan perubahan pada cuti 25 Okt yang tetap.
 pg -c "UPDATE hris.leaves SET reason = 'diubah setelah cleanup' WHERE employee_id = '$A' AND end_date = '2026-10-25'"
+pg -c "INSERT INTO hris.attendance (employee_id, date, status) VALUES ('$S', '2026-10-16', 'absent')"
+ABSEN_BARU=$(pg -c "SELECT md5(a::text) FROM hris.attendance a WHERE employee_id = '$S' AND date = '2026-10-16'")
 pg -c "INSERT INTO hris.leaves (employee_id, leave_type, start_date, end_date, total_days, reason, status)
   VALUES ('$A', 'annual', '2026-10-14', '2026-10-14', 1, 'baru setelah cleanup', 'pending')"
 BARU_AWAL=$(pg -c "SELECT md5(l::text) FROM hris.leaves l WHERE reason = 'baru setelah cleanup'")
@@ -337,6 +342,9 @@ NOTIF_SEBELUM=$(pg -c "SELECT count(*) FROM public.notifications")
 harus_lolos "restore berhasil" pulihkan
 cek "baris yang dihapus kembali persis (isi baris sama dengan sebelum eksekusi)" "[ \"\$(jejak)\" = '$JEJAK_AWAL' ]"
 cek "tautan pengajuan 22 Okt → absensi 15 Okt pulih" "[ \"\$(pg -c \"SELECT attendance_id FROM hris.attendance_requests WHERE id = '$REQ'\")\" = '$ATT' ]"
+cek "absensi baru yang bentrok (employee_id, date) dipertahankan, baris lama dilewati" \
+  "[ \"\$(pg -c \"SELECT md5(a::text) FROM hris.attendance a WHERE employee_id = '$S' AND date = '2026-10-16'\")\" = '$ABSEN_BARU' ] && grep -qx \$'LEWAT\tattendance\t$ATT_S' \$(ls '$EDIR'/restore-*-db.txt)"
+cek "keluaran restore: absensi 1 dari 2, 1 dilewati" "grep -qE 'attendance +1 / 2' <<<\"\$out\" && grep -q 'dilewati karena bentrok' <<<\"\$out\""
 cek "cuti baru sesudah cleanup tidak disentuh" "[ \"\$(pg -c \"SELECT md5(l::text) FROM hris.leaves l WHERE reason = 'baru setelah cleanup'\")\" = '$BARU_AWAL' ]"
 cek "cuti 25 Okt yang diubah sesudah cleanup tidak dikembalikan" \
   "[ \"\$(pg -c \"SELECT reason FROM hris.leaves WHERE employee_id = '$A' AND end_date = '2026-10-25'\")\" = 'diubah setelah cleanup' ]"

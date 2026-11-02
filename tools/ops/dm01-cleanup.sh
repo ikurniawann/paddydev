@@ -40,8 +40,9 @@
 #        dengan daftar, baru hapus. Berkas yang sudah tidak ada dihitung, bukan error.
 #   5. Salin folder ~/backups/dm01-* (db.dump, files-*.tgz) ke lokal. FILE_LAIN ditinjau manual.
 #   Pemulihan: DM01_RESTORE_APPROVED=yes tools/ops/dm01-cleanup.sh restore <folder eksekusi>
-#        Baris yang cocok dengan kriteria cleanup di db.dump dimasukkan lagi (ON CONFLICT (id) DO
-#        NOTHING, satu transaksi, trigger dimatikan sementara), berkas dari files-*.tgz dikembalikan
+#        Baris yang cocok dengan kriteria cleanup di db.dump dimasukkan lagi (ON CONFLICT DO NOTHING:
+#        id/kunci unik yang bentrok dengan baris baru dilewati dan dicatat LEWAT; satu transaksi,
+#        trigger dimatikan sementara), berkas dari files-*.tgz dikembalikan
 #        tanpa menimpa (pemilik 1001:1001, mode 644). Baris yang dibuat sesudah cleanup tidak disentuh.
 #
 # Variabel (bawaan untuk paddydev/production):
@@ -881,8 +882,13 @@ SQL
       printf '%s\n' '\.'
       echo "DO \$\$ BEGIN IF (SELECT count(*) FROM dm01_r_$t) <> $n_file THEN
   RAISE EXCEPTION 'DM-01 restore dibatalkan: baris hris.$t terbaca % dari $n_file', (SELECT count(*) FROM dm01_r_$t); END IF; END \$\$;"
-      echo "WITH ins AS (INSERT INTO hris.$t ($cols) SELECT $cols FROM dm01_r_$t ON CONFLICT (id) DO NOTHING RETURNING 1)
-SELECT set_config('dm01.r_$t', count(*)::text, true), set_config('dm01.f_$t', '$n_file', true) FROM ins;"
+      # ON CONFLICT tanpa target: id yang sudah ada ATAU bentrok kunci unik/eksklusi lain dengan baris
+      # yang dibuat sesudah cleanup (mis. absensi baru di tanggal yang sama) → baris lama dilewati.
+      echo "CREATE TEMP TABLE dm01_ins_$t ON COMMIT DROP AS SELECT id FROM hris.$t WITH NO DATA;
+WITH ins AS (INSERT INTO hris.$t ($cols) SELECT $cols FROM dm01_r_$t ON CONFLICT DO NOTHING RETURNING id)
+INSERT INTO dm01_ins_$t SELECT id FROM ins;
+SELECT set_config('dm01.r_$t', (SELECT count(*) FROM dm01_ins_$t)::text, true), set_config('dm01.f_$t', '$n_file', true);
+SELECT format(E'LEWAT\t$t\t%s', r.id) FROM dm01_r_$t r WHERE NOT EXISTS (SELECT 1 FROM dm01_ins_$t i WHERE i.id = r.id) ORDER BY 1;"
     done
     # Tautan attendance_requests.attendance_id yang dikosongkan ON DELETE SET NULL pada baris yang tetap.
     echo "CREATE TEMP TABLE dm01_r_tautan (id uuid, attendance_id uuid) ON COMMIT DROP;"
@@ -927,8 +933,13 @@ SQL
   psql_db "$DB_NAME" -1 -qAt -f - <"$scr" >"$dir/restore-$st-db.txt" 2>&1 ||
     { cat "$dir/restore-$st-db.txt" >&2; die "pemulihan baris gagal; transaksi -1 dibatalkan sehingga database tidak berubah"; }
   rm -f -- "$scr"
-  echo "Baris dikembalikan (dimasukkan / ada di dump; selisih = id yang sudah ada):"
+  echo "Baris dikembalikan (dimasukkan / ada di dump):"
   grep_ok $'^PULIH\t' "$dir/restore-$st-db.txt" | awk -F'\t' '{printf "  %-28s %s%s\n", $2, $3, ($4 == "" ? "" : " / " $4)}'
+  local lewat
+  lewat=$(count_of $'^LEWAT\t' "$dir/restore-$st-db.txt")
+  if [ "$lewat" != 0 ]; then
+    echo "PERINGATAN: $lewat baris dilewati karena bentrok dengan baris yang sudah ada (id sama, atau kunci unik seperti absensi karyawan+tanggal dengan baris baru sesudah cleanup); baris yang ada dipertahankan. Daftar: baris LEWAT di $dir/restore-$st-db.txt"
+  fi
 
   # 3. Berkas: hanya yang belum ada, tanpa menimpa.
   local tgz name entries klas pulih n_pulih=0 n_ada=0 n_lewati=0 x

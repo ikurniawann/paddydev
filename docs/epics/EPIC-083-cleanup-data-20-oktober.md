@@ -73,7 +73,7 @@ FK `attendance_requests.attendance_id` → `attendance` (SET NULL).
   - pratinjau yang disetujui wajib ditunjuk (`DM01_PREVIEW_DIR`), dicetak SHA-256-nya (opsional dicocokkan dengan `DM01_PREVIEW_SHA256`), dan berumur ≤ 36 jam;
   - sebelum database asli disentuh, core dijalankan dulu pada DB uji restore (gladi); durasinya menjadi perkiraan lama kunci.
 - **R11 Pemulihan**: `tools/ops/dm01-cleanup.sh restore <folder eksekusi>` (`DM01_RESTORE_APPROVED=yes`). Cara kerjanya:
-  - baris berkriteria cleanup dari `db.dump` dikembalikan dalam satu transaksi (`ON CONFLICT (id) DO NOTHING`, trigger dimatikan sementara, tautan pengajuan absensi dipulihkan);
+  - baris berkriteria cleanup dari `db.dump` dikembalikan dalam satu transaksi (`ON CONFLICT DO NOTHING`: id atau kunci unik yang bentrok dengan baris baru dilewati dan dicatat `LEWAT`; trigger dimatikan sementara; tautan pengajuan absensi dipulihkan);
   - berkas dari `files-*.tgz` dikembalikan tanpa menimpa, dengan pemilik 1001:1001;
   - baris yang dibuat sesudah cleanup tidak disentuh.
 

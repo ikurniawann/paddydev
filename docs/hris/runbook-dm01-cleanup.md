@@ -232,6 +232,7 @@ chmod -R go-rwx ~/Desktop/paddydev-backups/dm01-*
 | `files`: `masih dirujuk baris di database` | Ada baris yang kembali merujuk berkas | Jangan hapus. Selidiki baris itu dulu. |
 | `files`: `dilewati (symlink)` > 0 | Folder atau berkas berupa symlink | Tinjau manual baris LEWATI di `files-*-status.txt` / `-hasil.txt`. |
 | `files`: `gagal` > 0 | Sebagian berkas tidak terhapus | Perbaiki izin, lalu jalankan `files` lagi. Arsip baru dibuat. Hanya berkas yang masih ada yang diarsipkan. |
+| `restore`: `… baris dilewati karena bentrok` | Baris lama tidak dikembalikan karena sudah ada baris dengan id/kunci unik yang sama (dibuat sesudah cleanup) | Tinjau daftar `LEWAT` bersama HR. Baris yang ada dipertahankan; bila baris lama yang benar, perbaiki manual. |
 | FILE_LAIN di pratinjau | Lampiran di luar folder milik barisnya | Tidak dihapus otomatis. Tinjau manual bersama HR. |
 
 Yang diperiksa bila cek pasca-eksekusi tidak lolos:
@@ -259,7 +260,7 @@ Cara kerjanya:
 - `db.dump` (dicek SHA-256-nya) di-restore ke DB sementara `paddydev_dm01_restore`. DB ini selalu dihapus di akhir.
 - Baris yang cocok dengan kriteria cleanup disalin ke database asli dalam **satu transaksi**:
   - urutannya induk lebih dulu: absensi, lalu pengajuan absensi, cuti, lembur, perjalanan dinas, pinjaman;
-  - `INSERT … ON CONFLICT (id) DO NOTHING`;
+  - `INSERT … ON CONFLICT DO NOTHING`: bila id sudah ada, atau baris bentrok dengan kunci unik baris baru sesudah cleanup (mis. absensi karyawan + tanggal yang sama), baris yang ada dipertahankan. Baris lama dicatat sebagai `LEWAT` di `restore-<stamp>-db.txt` dan dihitung di peringatan;
   - semua trigger aktif pada enam tabel dimatikan sementara, sehingga tidak ada notifikasi dan tidak ada hitung ulang;
   - tautan `attendance_requests.attendance_id` yang dikosongkan `ON DELETE SET NULL` dipulihkan.
 - Baris yang dibuat atau diubah **sesudah** cleanup tidak disentuh.
