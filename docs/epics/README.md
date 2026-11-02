@@ -84,7 +84,7 @@ deploying-dev · ready-for-qa · blocked · done).
 | [EPIC-079](./EPIC-079-jam-kerja-sistem-shift.md) | Jam Kerja Sistem Shift, Libur Nasional & Cuti Bersama (`MODULE-HRIS`) | ready-for-qa | 2026-11-02 |
 | [EPIC-080](./EPIC-080-checkout-otomatis.md) | Checkout Otomatis per Jabatan & 2 Shift dalam Sehari (`MODULE-HRIS`) | ready-for-qa | 2026-11-02 |
 | [EPIC-081](./EPIC-081-nip-manual.md) | NIP Karyawan Diisi Manual, Wajib (`MODULE-HRIS`) | review | 2026-11-02 |
-| [EPIC-082](./EPIC-082-pph21-bpjs-nonaktif.md) | Saklar Nonaktif PPh 21 & BPJS di Pengaturan Gaji (`MODULE-PAYROLL`) | review | 2026-11-02 |
+| [EPIC-082](./EPIC-082-pph21-bpjs-nonaktif.md) | Saklar Nonaktif PPh 21 & BPJS di Pengaturan Gaji (`MODULE-PAYROLL`) | ready-for-qa | 2026-11-02 |
 
 Aturan:
 - Epic + registry ini adalah sumber kebenaran status pekerjaan (canonical).

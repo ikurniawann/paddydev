@@ -1,6 +1,6 @@
 # EPIC-082: Saklar Nonaktif PPh 21 & BPJS di Pengaturan Gaji (`MODULE-PAYROLL`)
 
-status: review
+status: ready-for-qa
 environment: dev
 retries: 0
 
@@ -63,3 +63,32 @@ Jawaban user 02-11:
 ## Automation Log
 - 2026-11-02 — Analisis acuan dan kode; data staging dicek (263 struktur aktif semuanya kena pajak dan BPJS). Jawaban user untuk 4 keputusan dicatat. Rencana: `docs/superpowers/plans/2026-11-02-pph21-bpjs-nonaktif.md`.
 - 2026-11-02 — Kode selesai di branch `feat/epic082-pph21-bpjs-nonaktif`: saklar di kalkulator (`domain.Config.Pph21Enabled/BpjsTkEnabled/BpjsKesEnabled`), API + audit Pengaturan Payroll, UI saklar, slip tanpa baris nonaktif, migrasi `20261106090000` (ketiganya false). Regresi nol saat saklar menyala dibuktikan tes (`pph21_bpjs_toggle_test.go`, `pph21_bpjs_toggle_integration_test.go`). Acuan diperbarui (aturan-payroll, status-requirement PY-06, pertanyaan PPH-BPJS, skill paddy-hris-acuan). Keputusan: laporan biaya toko dan CSV run tetap punya kolom BPJS/PPh bernilai 0 (hanya slip yang menyembunyikan baris). Konsekuensi R2 yang diterima: bila HR menyalakan PPh 21 lagi di tengah tahun, Pasal 17 Desember menyusul PPh setahun penuh sekaligus (satu potongan besar di Desember). Sisa: staging (backup, deploy, simulasi run November sebelum/sesudah), PR, produksi hanya dengan persetujuan user.
+- 2026-11-02 — **Implementasi subagent-driven T1–T4**, masing-masing direview spec + kualitas:
+  - T1 `667ae733`: saklar di kalkulasi.
+  - T2 `ad10f899`: API + audit `payroll_settings.update`.
+  - T3 `fc897bef`: UI + slip.
+  - T4 `37e3db43` + `c8114306`: acuan; tes golden angka pra-EPIC; validasi PUT.
+- 2026-11-02 — **Review akhir** (Opus): siap merge. Perbaikan minor `ccf58305`: kata PTKP, catatan TER, guard query YTD.
+- **Gates**:
+  - Go: gofmt 0, vet, `go test ./... -count=1` paralel lulus.
+  - Frontend: tsc 0, vitest 6453 tes.
+- 2026-11-02 19.00 — **Staging** (`ccf58305` → `272d10bf`, image `local-20261102-191202`; backup `staging-db-before-epic082-20261102-190023.dump`): migrasi `20261106090000`, skema 10.762 objek 0 selisih, saklar f/f/f.
+- **Simulasi run November 2026 di staging** (128 karyawan dihitung, run dikembalikan ke kondisi semula):
+
+  | | Saklar mati | Saklar nyala |
+  |---|---|---|
+  | Bruto | 397.442.478 | 397.442.478 |
+  | THP | 393.792.478 | 373.669.025 |
+  | PPh 21 | 0 | 10.286.694 |
+  | BPJS karyawan | 0 | 9.836.759 |
+  | Iuran perusahaan | 0 | 30.612.990 |
+
+  Subsidi BPJS Kes (5.271.429) tidak berubah. Saklar satu per satu hanya mengubah komponennya sendiri.
+- **QA UI** (HP 360 px + laptop):
+  - kartu "Komponen yang Dihitung", input tarif redup, tersimpan + audit;
+  - catatan di struktur gaji;
+  - slip dan detail run tanpa baris PPh/BPJS.
+  - Bug tombol "Simpan Pengaturan" terpotong di HP diperbaiki `272d10bf` dan dicek ulang lulus.
+  - Tangkapan layar di `.share/qa-epic082/`.
+- **Langkah deploy production**: run draft yang sudah dihitung sebelum deploy harus **dihitung ulang** sebelum disetujui (saklar dibaca saat hitung). Beri tahu HR/Finance soal kenaikan THP dan hilangnya iuran perusahaan.
+
