@@ -1,6 +1,6 @@
 # EPIC-077: Info Keterlambatan & Tingkat Teguran/SP di ESS (`MODULE-HRIS`)
 
-status: review
+status: ready-for-qa
 environment: dev
 retries: 0
 
@@ -114,3 +114,5 @@ Rencana: `docs/superpowers/plans/2026-11-02-info-keterlambatan-ess.md`.
   - Atasan, laptop dan HP: staf 8x via koordinator, koordinator 4x; chip Tepat waktu dan SP 3 berfungsi; 8 hari staf bisa dibuka.
   - Tidak ada scroll horizontal di semua halaman.
   - Data demo disisipkan dan dihapus dengan trigger absensi dimatikan, jadi tidak ada notifikasi "Karyawan Terlambat" atau "Data Absensi Dihapus" ke HR staging. Sisa data 0.
+- 2026-11-02 — Sebelum merge, user meminta kecocokan dengan TnC Hari dan Jam Kerja. Hasilnya: jadwal HQ dan Operations dikerjakan di EPIC-078 pada PR yang sama. QA staging EPIC-078 35/35 juga mencakup kartu keterlambatan di Beranda dan Absensi.
+

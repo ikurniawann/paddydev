@@ -1,6 +1,6 @@
 # EPIC-078: Jam Kerja HQ & Operations untuk Penilaian Terlambat (`MODULE-HRIS`)
 
-status: review
+status: ready-for-qa
 environment: dev
 retries: 0
 
@@ -101,3 +101,25 @@ Jawaban user 02-11:
   - HQ 36 Shift → Non-Shift HQ: Finance 13, HRGA 8, Product RnD 6, Support 4, Marketing 3, Branding 1, Eksekutif 1.
   - 2 Customer Service Marketing dikecualikan.
   - 157 absen NS dibekukan di toleransi 15.
+- 2026-11-02 — **Gates lokal hijau.**
+  - Go: `go vet ./...` bersih; semua paket `./internal/...` lulus.
+  - Frontend: tsc 0, lint bersih, vitest 878 file / 6352 tes lulus.
+- 2026-11-02 — **Staging** (branch `34354e9e`, lalu `1cfd74de`).
+  - Backup: `~/Desktop/paddydev-backups/staging-db-before-epic078-20261102-055832.dump`.
+  - Migrasi `20261102090000` diterapkan; verifikasi skema 10.733 objek, 0 selisih.
+  - Hasil di staging sama dengan gladi: 94 `schedule.fixed_apply`, 38 `employee.schedule_type` (36 karyawan asli + 2 demo), 157 absen NS dibekukan.
+  - Image web `local-20261102-070547`, API `local-20261102-061231`. Rollback staging = image `local-20261102-010235` (EPIC-077).
+- 2026-11-02 — **Insiden disk host penuh (100%)** saat build pertama. Build web selesai, tetapi skrip berhenti di "no space left on device"; container lama tetap jalan dan staging tetap sehat.
+  - Dibebaskan: build cache Docker (cache saja) dan image staging paddydev lama. Image rollback 010235 dan 220036 disimpan.
+  - Deploy dilanjutkan dengan langkah skrip yang sama memakai image yang sudah jadi.
+  - Sisa ruang ±8 GB. Sebagian besar disk dipakai image Docker project lain; itu keputusan user.
+- 2026-11-02 — **QA staging dengan data demo QA078**: staf HQ, staf Warehouse, kru toko, akun HR. Hasil 35/35 di HP 360 px dan laptop: 0 error console, 0 API ≥ 400, tidak ada luberan horizontal.
+  - Halaman pertama setelah login = Beranda ESS: kartu Absensi Hari Ini (masuk 09.25 → terlambat 25 mnt) dan kartu Keterlambatan (1x → Teguran).
+  - Panel Jam Kerja HQ & Operations; nilai jam tidak terpotong di HP.
+  - Master Shift menampilkan OPS/OPSSAT dan NS "HQ"; profil Non-Shift menyebut jadwal per departemen.
+  - Migrasi: Gudang → OPS/OPSSAT, Kantor → NS, Kru Toko tetap Shift.
+  - **Bug ditemukan dan diperbaiki**: nama di kartu sapaan Beranda HP terjepit menjadi "G / F". Badge status dan NIP kini turun ke baris sendiri (`beranda-page.tsx`, commit `1cfd74de`).
+  - Tangkapan layar ada di `.share/qa-epic078/`.
+  - Data demo dihapus: 0 sisa akun, karyawan, absen dan audit; 0 notifikasi QA078.
+- **Langkah production (perlu izin user)**: merge PR #62, lalu gladi migrasi di salinan DB production (lihat daftar sasaran lewat `hris.work_hours_rule_targets`), lalu deploy jam sepi dan verifikasi baca-saja. QA akun asli oleh HR.
+

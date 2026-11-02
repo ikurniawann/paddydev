@@ -79,8 +79,8 @@ deploying-dev · ready-for-qa · blocked · done).
 | [EPIC-074](./EPIC-074-absensi-tim-atasan.md) | Absensi Tim — Atasan Melihat Presensi Anggota Timnya (`MODULE-HRIS`) | ready-for-qa | 2026-10-30 |
 | [EPIC-075](./EPIC-075-export-absensi-salary-kontrak.md) | Export Absensi per Toko, Cari & Export Salary, Bug Kontrak dan Struktur Gaji (`MODULE-HRIS`) | ready-for-qa | 2026-10-30 |
 | [EPIC-076](./EPIC-076-tnc-pinjaman-kasbon.md) | Syarat & Ketentuan Pinjaman dan Kasbon (`MODULE-HRIS`) | ready-for-qa | 2026-11-01 |
-| [EPIC-077](./EPIC-077-info-keterlambatan-ess.md) | Info Keterlambatan & Tingkat Teguran/SP di ESS (`MODULE-HRIS`) | review | 2026-11-02 |
-| [EPIC-078](./EPIC-078-jam-kerja-hq-operations.md) | Jam Kerja HQ & Operations untuk Penilaian Terlambat (`MODULE-HRIS`) | review | 2026-11-02 |
+| [EPIC-077](./EPIC-077-info-keterlambatan-ess.md) | Info Keterlambatan & Tingkat Teguran/SP di ESS (`MODULE-HRIS`) | ready-for-qa | 2026-11-02 |
+| [EPIC-078](./EPIC-078-jam-kerja-hq-operations.md) | Jam Kerja HQ & Operations untuk Penilaian Terlambat (`MODULE-HRIS`) | ready-for-qa | 2026-11-02 |
 
 Aturan:
 - Epic + registry ini adalah sumber kebenaran status pekerjaan (canonical).
