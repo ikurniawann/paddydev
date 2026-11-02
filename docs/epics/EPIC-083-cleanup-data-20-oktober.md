@@ -1,6 +1,6 @@
 # EPIC-083: Database Cleanup per 20 Oktober 2026 — DM-01 (`MODULE-HRIS`)
 
-status: backlog
+status: ready-for-qa
 environment: dev
 retries: 0
 
@@ -99,3 +99,35 @@ FK `attendance_requests.attendance_id` → `attendance` (SET NULL).
   - mode pemulihan (R11).
   
   Runbook: `docs/hris/runbook-dm01-cleanup.md`. Belum dijalankan di staging maupun production.
+- 2026-11-03 — **Gladi staging** (paddydev.reddie.id, host WIT; dijalankan controller dengan runner + runbook).
+  - Pratinjau, dihapus:
+    - attendance_requests 11;
+    - attendance 56.156;
+    - leaves 659;
+    - overtime_requests 2.694;
+    - business_trips 0;
+    - loans 18.
+  - Pratinjau, tetap: leaves melintasi 21 Okt 1, loans berjalan 15. Berkas: FILE 38, FILE_LAIN 0.
+  - Gerbang payroll/periode:
+    - `PAYROLL_BELUM` 2025-08..2026-10 untuk kedua perusahaan;
+    - `PERIODE_TERBUKA` 2026-10.
+    
+    Di staging dilewati dengan `DM01_PAYROLL_ACK=yes`: staging, persetujuan = rencana.
+  - Execute pertama **berhenti aman di uji restore**, sebelum ada yang dihapus. Staging punya baris FK yatim, yaitu sisa demo QA077/QA078:
+    - `leave_balances` 5;
+    - `employee_shifts` 14;
+    - `employee_placements` 1.
+    
+    Baris itu dibuat cleanup QA sebelumnya yang memakai `session_replication_role=replica`. Baris yatim dihapus, pratinjau diulang, lalu execute lolos: jumlah audit `data_cleanup.dm01` = angka pratinjau.
+  - Cek pasca-eksekusi:
+    - absensi ≤ 20 Okt = 0, absensi > 20 Okt = 816 utuh;
+    - payroll run utuh;
+    - pinjaman tersisa 17;
+    - 0 notifikasi baru;
+    - `/login` dan `/api/ready` 200;
+    - 0 error API.
+  - Berkas: 38 diarsipkan, 38 dihapus.
+  - Backup lokal: `~/Desktop/paddydev-backups/dm01-staging/dm01-20261103-000403-eksekusi`.
+  - Pelajaran: gladi production **wajib** juga dijalankan di salinan production yang di-restore (runbook §4), karena uji restore gagal pada setiap FK yatim. Masalah seperti ini harus ketemu sebelum jam eksekusi.
+  - Perbaikan menyusul: restore mengembalikan pengajuan absensi yang absensi induknya dilewati (bentrok) tanpa tautan (`LEWAT_TAUT`). Runbook diperbarui: gladi salinan production dengan `pg_isready` dan `docker rm -fv`, folder gladi dihapus, persetujuan HR mengutip baris gerbang, payroll Oktober wajib final sebelum execute production.
+  - Status → `ready-for-qa`. Production menunggu tiga hal: gladi di salinan production, persetujuan tertulis HR (K-22) atas pratinjau production + SHA-256, dan izin jam eksekusi.
