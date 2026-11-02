@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -307,11 +308,11 @@ func TestDM01CleanupEdges(t *testing.T) {
 			e, remaining, status, requested, active)
 	}
 	zero, half := 0, 500000
-	loan("2026-10-05 09:00+07", "paid_off", &zero, false)  // lunas lewat payroll → hapus
-	loan("2026-10-05 09:00+07", "approved", nil, true)     // approved tanpa sisa → hapus
-	loan("2026-10-05 09:00+07", "cancelled", &half, false) // → hapus
-	loan("2026-10-20 23:59+07", "pending", &half, true)    // 20 Okt WIB → hapus
-	keptManager := loan("2026-10-05 09:00+07", "manager_approved", &half, true)
+	loan("2026-10-05 09:00+07", "paid_off", &zero, false)        // lunas lewat payroll → hapus
+	loan("2026-10-05 09:00+07", "approved", nil, true)           // approved tanpa sisa → hapus
+	loan("2026-10-05 09:00+07", "cancelled", &half, false)       // → hapus
+	loan("2026-10-20 23:59+07", "pending", &half, true)          // 20 Okt WIB → hapus
+	loan("2026-10-05 09:00+07", "manager_approved", &half, true) // menunggu HR = pending → hapus
 	keptInactive := loan("2026-10-05 09:00+07", "approved", &half, false)
 	keptWIB := loan("2026-10-21 01:00+07", "pending", &half, true) // 20 Okt 18:00 UTC, 21 Okt WIB
 	keptNoDate := loan("2026-10-05 09:00+07", "pending", &half, true)
@@ -328,17 +329,16 @@ func TestDM01CleanupEdges(t *testing.T) {
 
 	preview := h.dm01Preview()
 	want := map[string]string{"attendance_requests": "0", "attendance": "0", "leaves": "1",
-		"overtime_requests": "0", "business_trips": "1", "loans": "4"}
+		"overtime_requests": "0", "business_trips": "1", "loans": "5"}
 	for _, table := range dm01Tables {
 		if got := dm01Count(preview, "HAPUS", table); got != want[table] {
 			t.Errorf("preview HAPUS %s = %q, want %s\n%s", table, got, want[table], strings.Join(preview, "\n"))
 		}
 	}
 	for key, n := range map[string]string{
-		"loans\tstatus manager_approved (tidak dihapus)": "1",
-		"loans\tberjalan (approved, sisa > 0)":           "1",
-		"loans\ttanpa requested_date":                    "1",
-		"business_trips\tmelintasi 21 Okt":               "1",
+		"loans\tberjalan (approved, sisa > 0)": "1",
+		"loans\ttanpa requested_date":          "1",
+		"business_trips\tmelintasi 21 Okt":     "1",
 	} {
 		if got := dm01Count(preview, "PENGECUALIAN", key); got != n {
 			t.Errorf("preview PENGECUALIAN %s = %q, want %s", key, got, n)
@@ -349,7 +349,7 @@ func TestDM01CleanupEdges(t *testing.T) {
 
 	got := strings.Split(h.scalar(`SELECT string_agg(id::text, ',') FROM hris.loans WHERE employee_id = $1`, e), ",")
 	slices.Sort(got)
-	wantLoans := []string{keptManager, keptInactive, keptWIB, keptNoDate}
+	wantLoans := []string{keptInactive, keptWIB, keptNoDate}
 	slices.Sort(wantLoans)
 	if !slices.Equal(got, wantLoans) {
 		t.Errorf("loans left = %v, want %v", got, wantLoans)
@@ -395,5 +395,85 @@ func TestDM01CoreNeedsTransaction(t *testing.T) {
 	h.exec("ROLLBACK TO SAVEPOINT dm01_noTx")
 	if err == nil || !strings.Contains(err.Error(), "psql -1") {
 		t.Fatalf("guard = %v, want an error naming psql -1", err)
+	}
+}
+
+// TestDM01CoreRefusesChangedTriggers: ENABLE TRIGGER always sets 'O', so the
+// script stops when a notify trigger is not enabled beforehand and leaves the
+// state (and the data) as it found it.
+func TestDM01CoreRefusesChangedTriggers(t *testing.T) {
+	h := newHarness(t)
+	e := h.employee(emp{name: "DM01 Trigger"})
+	h.exec(`INSERT INTO hris.attendance (employee_id, date, status) VALUES ($1, '2026-10-10', 'present')`, e)
+	h.exec(`ALTER TABLE hris.leaves DISABLE TRIGGER trg_notify_leave_changes`)
+
+	h.exec("SAVEPOINT dm01_triggers")
+	_, err := h.tx.Exec(context.Background(), dm01Script(t, "2026-11-03_dm01_cleanup_core.sql"))
+	h.exec("ROLLBACK TO SAVEPOINT dm01_triggers")
+	if err == nil || !strings.Contains(err.Error(), "DM-01 dibatalkan") {
+		t.Fatalf("core with a disabled trigger = %v, want the trigger guard error", err)
+	}
+	if got := h.scalar(`SELECT string_agg(tgname || '=' || tgenabled::text, ',' ORDER BY tgname) FROM pg_trigger
+		WHERE tgname IN ('trg_notify_attendance_changes', 'trg_notify_leave_changes')`); got !=
+		"trg_notify_attendance_changes=O,trg_notify_leave_changes=D" {
+		t.Errorf("notify triggers = %s, want the state left unchanged (leave trigger D)", got)
+	}
+	if got := h.scalar(`SELECT count(*)::text FROM hris.attendance WHERE employee_id = $1`, e); got != "1" {
+		t.Errorf("attendance rows = %s, want 1 (nothing deleted)", got)
+	}
+}
+
+// TestDM01PreviewFileSafety: only <folder of the column>/<row's employee>/<file>
+// is a FILE; another folder or another employee's folder is FILE_LAIN.
+func TestDM01PreviewFileSafety(t *testing.T) {
+	h := newHarness(t)
+	e := h.employee(emp{name: "DM01 Berkas"})
+	other := h.employee(emp{name: "DM01 Berkas Lain"})
+	leave := func(start, file string) {
+		h.exec(`INSERT INTO hris.leaves (employee_id, leave_type, start_date, end_date, total_days, reason, status, attachment_url)
+			VALUES ($1, 'annual', $2, $2, 1, 'Cuti uji berkas', 'approved', $3)`, e, start, file)
+	}
+	foreignFolder := "employee-documents/" + other + "/ktp.pdf"
+	foreignOwner := "leave-attachments/" + other + "/1002.jpg"
+	own := "leave-attachments/" + e + "/1003.jpg"
+	leave("2026-10-01", foreignFolder)
+	leave("2026-10-02", foreignOwner)
+	leave("2026-10-03", own)
+	leave("2026-10-04", "/srv/storage/private/leave-attachments/"+e+"/abs.jpg")
+	leave("2026-10-05", "leave-attachments/"+e+"/../"+other+"/x.jpg")
+
+	preview := h.dm01Preview()
+	if got := dm01Lines(preview, "FILE"); !slices.Equal(got, []string{own}) {
+		t.Errorf("FILE = %v, want only %s", got, own)
+	}
+	lain := dm01Lines(preview, "FILE_LAIN")
+	for _, v := range []string{foreignFolder, foreignOwner} {
+		if !slices.Contains(lain, v) {
+			t.Errorf("FILE_LAIN %v lacks %s", lain, v)
+		}
+	}
+	if len(lain) != 4 {
+		t.Errorf("FILE_LAIN = %v, want 4 values", lain)
+	}
+	if got := dm01Count(preview, "BERKAS", "leaves.attachment_url\tdi_luar_folder_baris"); got != "4" {
+		t.Errorf("BERKAS di_luar_folder_baris = %q, want 4", got)
+	}
+}
+
+// TestDM01SameCutoff: the preview and the core script use one cutoff, the
+// same literal, and no other date literal outside comments.
+func TestDM01SameCutoff(t *testing.T) {
+	date := regexp.MustCompile(`'\d{4}-\d{2}-\d{2}'`)
+	for _, name := range []string{"2026-11-03_dm01_preview.sql", "2026-11-03_dm01_cleanup_core.sql"} {
+		var found []string
+		for _, line := range strings.Split(dm01Script(t, name), "\n") {
+			if strings.HasPrefix(strings.TrimSpace(line), "--") {
+				continue
+			}
+			found = append(found, date.FindAllString(line, -1)...)
+		}
+		if !slices.Equal(found, []string{"'2026-10-20'"}) {
+			t.Errorf("%s date literals = %v, want exactly one '2026-10-20'", name, found)
+		}
 	}
 }
