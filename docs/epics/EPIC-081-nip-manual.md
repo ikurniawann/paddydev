@@ -43,3 +43,14 @@ Pertanyaan user 02-11-2026: "untuk NIK (nomor induk karyawan) bisa ga tidak auto
   - Bukti RED lebih dulu: domain `TestValidateEmployeeImportAdd` (error NIP baris 8 dan 9 tidak ada), `TestPromote` (200 menghasilkan `EMP-2026-00001` padahal diharapkan 400), vitest `PromoteCandidateButton.test.tsx` 4 gagal; lalu GREEN (hris, recruitment, accounts, app; vitest).
   - **Rilis**: migrasi `20261105090000` harus berjalan (`migrate -apply`) sebelum/bersama deploy Go, kalau tidak promosi gagal karena fungsi 6 argumen belum ada.
 - 2026-11-02 — Review: satu pembersih NIP bersama (`validate.CleanNIP` murni + `employeekeys.CleanNIP`: pangkas, kosong → "NIP wajib diisi", > 50 unit UTF-16 setelah pangkas → "NIP maksimal 50 karakter") dipakai accounts, hris buat/ubah, promosi kandidat, dan validasi import Excel (sebelumnya import tanpa batas 50); batas panjang hris kini dicek setelah pangkas. Dialog promosi mereset NIP/galat saat ditutup. Tes: PUT dengan NIP milik sendiri sukses di kedua endpoint; NIP 50 + spasi diterima, 51 ditolak; import NIP 52 karakter ditolak.
+- 2026-11-02 — **Review independen** (Opus): siap merge dengan perbaikan.
+  - Berkas biner `backend/.swarm` dikeluarkan dari commit yang belum dipush; `.swarm/` dan `.claude-flow/` masuk `.gitignore`.
+  - Pembersih NIP bersama `employeekeys.CleanNIP` dipakai di akun, HRIS, promosi, dan import. Import kini juga dibatasi 50 karakter.
+  - Dialog promosi direset saat ditutup.
+  - Tes PUT dengan NIP milik sendiri.
+- Gates:
+  - Go: gofmt 0, vet, seluruh `./internal/...` lulus 2× berturut-turut.
+  - Frontend: tsc 0, eslint, vitest 6429 tes.
+- Data staging: tidak ada NIP ganda setelah trim, dan tidak ada NIP kosong.
+- **Urutan deploy**: migrasi `20261105090000` harus jalan bersama Go (deploy script menjalankan migrasi sebelum container baru).
+
