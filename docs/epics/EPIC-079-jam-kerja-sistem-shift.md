@@ -1,6 +1,6 @@
 # EPIC-079: Jam Kerja Sistem Shift, Libur Nasional & Cuti Bersama (`MODULE-HRIS`)
 
-status: review
+status: ready-for-qa
 environment: dev
 retries: 0
 
@@ -129,5 +129,19 @@ Lihat `docs/superpowers/plans/2026-11-02-jam-kerja-sistem-shift.md`.
   - Karyawan yang pembaginya berubah.
   - Staf bertipe Shift di luar toko (R1, perlu konfirmasi HR sebelum 24/25-12).
   - Jabatan Host Live/Produksi/CRM beserta penempatannya; perkiraan ±7/7/1.
-- Staging belum dideploy: disk host tinggal ±5 GB, sedangkan build butuh ±6 GB (menunggu keputusan user soal pembersihan image Docker project lain).
+- 2026-11-02 12.25 — **Staging** (`3b2ea7fa`, image `local-20261102-122507`).
+  - Backup: `staging-db-before-epic079-20261102-122505.dump`.
+  - 3 migrasi diterapkan; verifikasi skema 10.735 objek, 0 selisih.
+  - Simulasi Okt–Nov: 15 karyawan pembaginya berubah. Semuanya Host Live/CRM/Produksi yang baru dijadikan Shift: pola tetap mereka berhenti, sehingga pembagi kembali ke jalur lama sampai roster dibuat.
+  - Daftar R1 hanya berisi akun sistem; tidak ada staf HQ yang kehilangan libur nasional.
+  - 15 jabatan shift berpenempatan: Host Live/Produksi di Warehouse Paddy, CRM Supervisor dan Host Live Coordinator di Paddy HQ Bandung.
+- 2026-11-02 — **QA staging 6/6 lulus** (HP 360 px + laptop, data demo QA079 dibersihkan), 0 error console, 0 API ≥ 400:
+  - panel ESS sistem shift;
+  - roster 25-12: kru toko ber-shift tidak libur, HQ libur;
+  - hitung cuti 4/4/1;
+  - tombol cuti bersama + audit, dikembalikan ke semula;
+  - peringatan 40 jam di grid;
+  - kalender HQ: 25-12 merah, 24-12 netral.
+  - Kosmetik: chip shift NS masih tampil di bawah label libur 25-12 pada kalender HQ.
+  - Tangkapan layar di `.share/qa-epic079/`.
 

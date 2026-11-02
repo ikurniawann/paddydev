@@ -122,4 +122,11 @@ Jawaban user 02-11:
   - Tangkapan layar ada di `.share/qa-epic078/`.
   - Data demo dihapus: 0 sisa akun, karyawan, absen dan audit; 0 notifikasi QA078.
 - **Langkah production (perlu izin user)**: merge PR #62, lalu gladi migrasi di salinan DB production (lihat daftar sasaran lewat `hris.work_hours_rule_targets`), lalu deploy jam sepi dan verifikasi baca-saja. QA akun asli oleh HR.
+- 2026-11-02 14.31 WIB — **LIVE production** (main `cfff8811`, PR #62).
+  - Image `local-20261102-143126`; backup `~/backups/prod-db-before-main-e078-20261102-143015.dump`.
+  - Migrasi `20261102090000` diterapkan; skema 10.733 objek, 0 selisih.
+  - Hasil: 88 `schedule.fixed_apply` (Warehouse → OPS/OPSSAT, HQ → NS), 36 Shift → Non-Shift; sama dengan gladi 07.21. 609 absen NS dibekukan.
+  - 0 error API; `/login` 200.
+  - Rollback: image `local-20261101-221140` + restore backup.
+  - Sisa: QA akun asli oleh HR.
 

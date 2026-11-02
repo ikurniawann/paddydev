@@ -115,4 +115,5 @@ Rencana: `docs/superpowers/plans/2026-11-02-info-keterlambatan-ess.md`.
   - Tidak ada scroll horizontal di semua halaman.
   - Data demo disisipkan dan dihapus dengan trigger absensi dimatikan, jadi tidak ada notifikasi "Karyawan Terlambat" atau "Data Absensi Dihapus" ke HR staging. Sisa data 0.
 - 2026-11-02 — Sebelum merge, user meminta kecocokan dengan TnC Hari dan Jam Kerja. Hasilnya: jadwal HQ dan Operations dikerjakan di EPIC-078 pada PR yang sama. QA staging EPIC-078 35/35 juga mencakup kartu keterlambatan di Beranda dan Absensi.
+- 2026-11-02 14.31 WIB — **LIVE production** bersama EPIC-078 (main `cfff8811`, image `local-20261102-143126`). Sisa: QA akun asli oleh HR.
 
