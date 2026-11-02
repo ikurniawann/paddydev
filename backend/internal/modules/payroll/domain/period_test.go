@@ -128,3 +128,88 @@ func TestShiftOvertimeOnNationalHolidayIsWeekday(t *testing.T) {
 		t.Fatalf("libur roster: %+v, want 2 jam hari libur", got)
 	}
 }
+
+// attendRoster: hadir di setiap tanggal ber-shift roster.
+func attendRoster(rows []ShiftRow) []AttendanceRow {
+	var att []AttendanceRow
+	for _, r := range rows {
+		if r.ShiftID != nil {
+			att = append(att, AttendanceRow{Date: r.EffectiveFrom, Status: "present", HasClockOut: true})
+		}
+	}
+	return att
+}
+
+func rosterBetween(from, to string) []ShiftRow {
+	var rows []ShiftRow
+	for _, r := range novemberRoster() {
+		if r.EffectiveFrom >= from && r.EffectiveFrom <= to {
+			rows = append(rows, r)
+		}
+	}
+	return rows
+}
+
+func prorated() Salary {
+	return Salary{BaseSalary: "2600000.00", PayBasis: ptr("monthly_prorated")}
+}
+
+func factorOf(t *testing.T, in Input) float64 {
+	t.Helper()
+	if in.ProrateFactor == nil {
+		t.Fatal("ProrateFactor nil")
+	}
+	return *in.ProrateFactor
+}
+
+// Karyawan baru 16/11 dengan roster hanya sejak 16/11: tanggal sebelumnya
+// tanpa jadwal sama sekali, jadi faktor cakupan memakai hari kalender
+// (15/30), sama seperti sebelum payroll membaca roster. Pembagi tetap hari
+// ber-shift di roster.
+func TestJoinerRosterOnlyProratesOnCalendar(t *testing.T) {
+	join := "2026-11-16"
+	emp := Employee{ID: "e", JoinDate: join, EmploymentStatus: "contract", IsActive: true, ScheduleType: "shift"}
+	roster := rosterBetween(join, "2026-11-30")
+	rec := WorkforceRecords{Schedule: roster, Attendance: attendRoster(roster),
+		Contracts: []Contract{{ContractType: ptr("pkwt"), StartDate: &join}}}
+	in := BuildInputRange(emp, prorated(), rec, nil, nil, 11, 2026, "2026-11-01", "2026-11-30", false)
+	if f := factorOf(t, in); f != 0.5 {
+		t.Fatalf("factor = %v, want 0.5 (15/30 hari kalender)", f)
+	}
+	if in.DivisorDays != 13 || in.WorkingDays != 13 {
+		t.Fatalf("pembagi = %v, hari kerja = %v, want 13 (roster)", in.DivisorDays, in.WorkingDays)
+	}
+	eq(t, "pokok 2,6 jt × 15/30", Calculate(in, DefaultConfig()).BaseSalary, 1_300_000)
+}
+
+// Resign 12/11: roster sesudah end_date dihapus alur Resign, jadi 13–30 Nov
+// tanpa jadwal dan faktor memakai hari kalender (12/30).
+func TestLeaverRosterStopsAtEndDateProratesOnCalendar(t *testing.T) {
+	end := "2026-11-12"
+	emp := Employee{ID: "e", JoinDate: "2020-01-01", EmploymentStatus: "resigned", EndDate: &end, ScheduleType: "shift"}
+	roster := rosterBetween("2026-11-01", end)
+	rec := WorkforceRecords{Schedule: roster, Attendance: attendRoster(roster)}
+	in := BuildInputRange(emp, prorated(), rec, nil, nil, 11, 2026, "2026-11-01", "2026-11-30", false)
+	if f := factorOf(t, in); Round(f*1000) != Round(12.0/30*1000) {
+		t.Fatalf("factor = %v, want 12/30", f)
+	}
+	eq(t, "pokok 2,6 jt × 12/30", Calculate(in, DefaultConfig()).BaseSalary, 1_040_000)
+}
+
+// Roster sebulan penuh dengan kontrak mulai 16/11: tidak ada tanggal tanpa
+// jadwal, jadi faktor tetap hari ber-shift tercakup / hari ber-shift periode.
+func TestFullRosterPartialContractProratesOnSchedule(t *testing.T) {
+	join := "2026-11-16"
+	emp := Employee{ID: "e", JoinDate: join, EmploymentStatus: "contract", IsActive: true, ScheduleType: "shift"}
+	roster := novemberRoster()
+	rec := WorkforceRecords{Schedule: roster, Attendance: attendRoster(rosterBetween(join, "2026-11-30")),
+		Contracts: []Contract{{ContractType: ptr("pkwt"), StartDate: &join}}}
+	in := BuildInputRange(emp, prorated(), rec, nil, nil, 11, 2026, "2026-11-01", "2026-11-30", false)
+	if f := factorOf(t, in); Round(f*1000) != Round(13.0/26*1000) {
+		t.Fatalf("factor = %v, want 13/26 (hari ber-shift)", f)
+	}
+	if in.DivisorDays != 26 || in.WorkingDays != 13 {
+		t.Fatalf("pembagi = %v, hari kerja = %v, want 26 and 13", in.DivisorDays, in.WorkingDays)
+	}
+	eq(t, "pokok 2,6 jt × 13/26", Calculate(in, DefaultConfig()).BaseSalary, 1_300_000)
+}

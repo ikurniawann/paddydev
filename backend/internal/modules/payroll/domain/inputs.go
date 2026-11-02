@@ -1,6 +1,9 @@
 package domain
 
-import "math"
+import (
+	"math"
+	"slices"
+)
 
 // fallbackWorkingDays applies without any shift pattern or attendance.
 const fallbackWorkingDays = 20
@@ -205,6 +208,14 @@ func BuildInputRange(emp Employee, salary Salary, rec WorkforceRecords, loans []
 		if partial {
 			workingDays = float64(coveredScheduled)
 			factor = float64(coveredScheduled) / float64(scheduled)
+			// Roster per tanggal tidak diperpanjang: bila sebagian periode tanpa
+			// jadwal sama sekali (roster karyawan baru baru mulai, atau roster
+			// resign dihapus sesudah end_date), hari ber-shift periode tidak
+			// diketahui, jadi faktor memakai hari kalender seperti tanpa jadwal
+			// (EPIC-079). Pembagi dan hari kerja tetap dari roster.
+			if slices.ContainsFunc(EachDate(start, end), func(d string) bool { return !ScheduleInForce(periodSchedule, d) }) {
+				factor = float64(coveredCalendar) / float64(totalCalendar)
+			}
 		}
 	case attendanceDays > 0:
 		workingDays = float64(attendanceDays)
