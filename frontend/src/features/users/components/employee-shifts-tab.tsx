@@ -6,10 +6,12 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
 import { Input } from "@/components/ui/input";
+import { canFollow } from "@/features/hris/schedules/schedule-cells";
 import { todayWib } from "@/lib/dates";
 import {
   SHIFT_DAY_NAMES,
   SHIFT_OFF,
+  currentShift2Pattern,
   currentShiftPattern,
   shiftPatternPayload,
   summarizeShiftHistory,
@@ -44,6 +46,8 @@ export function EmployeeShiftsTab({
   const [effectiveFrom, setEffectiveFrom] = useState(() => todayWib());
   // pilihan yang diubah pengguna, ditimpakan ke pola berjalan dari server
   const [edits, setEdits] = useState<ShiftPatternDraft>({});
+  // shift kedua opsional per hari (EPIC-080), ditimpakan dengan cara yang sama
+  const [edits2, setEdits2] = useState<ShiftPatternDraft>({});
 
   if (shiftsQuery.isLoading || scheduleQuery.isLoading) {
     return (
@@ -55,6 +59,25 @@ export function EmployeeShiftsTab({
 
   const history = scheduleQuery.data ?? [];
   const pattern = { ...currentShiftPattern(history, todayWib()), ...edits };
+  const pattern2 = { ...currentShift2Pattern(history, todayWib()), ...edits2 };
+  const shiftById = new Map((shiftsQuery.data ?? []).map((s) => [s.id, s]));
+  /** Shift kedua yang boleh mengikuti shift pertama hari itu: harus mulai setelah shift pertama selesai. */
+  const secondOptions = (firstId: string) => {
+    const first = shiftById.get(firstId);
+    return [
+      { value: SHIFT_OFF, label: "Tanpa shift kedua" },
+      ...(first ? (shiftsQuery.data ?? []).filter((s) => canFollow(first, s)) : []).map((s) => ({
+        value: s.id,
+        label: `${s.name} (${s.start_time.slice(0, 5)}–${s.end_time.slice(0, 5)})`,
+      })),
+    ];
+  };
+  function changeFirst(day: number, value: string) {
+    setEdits((prev) => ({ ...prev, [day]: value }));
+    const first = shiftById.get(value);
+    const second = shiftById.get(pattern2[day]);
+    if (!first || !second || !canFollow(first, second)) setEdits2((prev) => ({ ...prev, [day]: SHIFT_OFF }));
+  }
   const shiftOptions = [
     { value: SHIFT_OFF, label: "Libur" },
     ...(shiftsQuery.data ?? []).map((s) => ({
@@ -82,7 +105,7 @@ export function EmployeeShiftsTab({
     try {
       const res = await saveMutation.mutateAsync({
         effective_from: effectiveFrom,
-        days: shiftPatternPayload(pattern),
+        days: shiftPatternPayload(pattern, pattern2),
       });
       toast.success(res.message ?? "Jadwal disimpan");
     } catch (error) {
@@ -117,17 +140,27 @@ export function EmployeeShiftsTab({
           return (
             <div
               key={day}
-              className="flex items-center justify-between gap-3 rounded-lg border border-gray-200/70 bg-white px-3 py-2"
+              className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 rounded-lg border border-gray-200/70 bg-white px-3 py-2"
             >
               <span className="w-16 text-sm font-medium text-gray-700">{name}</span>
               <Combobox
                 options={shiftOptions}
                 value={pattern[day]}
-                onChange={(value) => setEdits((prev) => ({ ...prev, [day]: value }))}
+                onChange={(value) => changeFirst(day, value)}
                 placeholder="Pilih shift"
-                className="h-11 flex-1"
+                className="h-11 min-w-0 flex-1"
                 disabled={locked}
               />
+              {pattern[day] !== SHIFT_OFF ? (
+                <Combobox
+                  options={secondOptions(pattern[day])}
+                  value={pattern2[day]}
+                  onChange={(value) => setEdits2((prev) => ({ ...prev, [day]: value }))}
+                  placeholder="Shift kedua (opsional)"
+                  className="h-11 w-full"
+                  disabled={locked}
+                />
+              ) : null}
             </div>
           );
         })}

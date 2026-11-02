@@ -158,7 +158,8 @@ func buildRoster(rows []*Row, date, today string, holidays []domain.Holiday, now
 				"clock_in_geofence", row.Get("clock_in_geofence"), "clock_in_distance_m", row.Get("clock_in_distance_m"),
 				"clock_out_geofence", row.Get("clock_out_geofence"), "clock_out_distance_m", row.Get("clock_out_distance_m"),
 				"notes", row.Get("attendance_notes"),
-				"is_short_hours", row.Bool("is_short_hours"), "min_work_hours", minHours)
+				"is_short_hours", row.Bool("is_short_hours"), "min_work_hours", minHours,
+				"clock_out_auto", row.Bool("clock_out_auto"))
 		}
 		if row.Get("leave_id") != nil {
 			leave = obj("id", row.Get("leave_id"), "leave_type", row.Get("leave_type"))
@@ -270,6 +271,29 @@ func (s *Service) AttendanceStats(ctx context.Context, a *Actor, month, year flo
 	), nil
 }
 
+// ScheduleRows is the schedule pattern of an employee with its shift display:
+// a two-shift row (EPIC-080) reads "PAGI4 + SORE4", ends with the second
+// shift and carries the clocks of both in time_label.
 func (s *Service) ScheduleRows(ctx context.Context, employeeID string) ([]*Row, error) {
-	return s.repo.ScheduleRows(ctx, employeeID)
+	rows, err := s.repo.ScheduleRows(ctx, employeeID)
+	if err != nil {
+		return nil, err
+	}
+	for _, r := range rows {
+		if r.Str("shift_name") == "" || r.Str("start_time") == "" {
+			continue
+		}
+		first := domain.ShiftPart{Code: r.Str("shift_code"), Name: r.Str("shift_name"), Start: r.Str("start_time"), End: r.Str("end_time")}
+		var second *domain.ShiftPart
+		if r.Str("shift2_id") != "" && r.Str("shift2_name") != "" {
+			second = &domain.ShiftPart{Code: r.Str("shift2_code"), Name: r.Str("shift2_name"),
+				Start: r.Str("shift2_start_time"), End: r.Str("shift2_end_time")}
+			r.Set("is_overnight", r.Bool("shift2_is_overnight"))
+		}
+		d := domain.DisplayShifts(first, second)
+		r.Set("shift_name", d.Name)
+		r.Set("end_time", *d.EndTime)
+		r.Set("time_label", d.TimeLabel)
+	}
+	return rows, nil
 }

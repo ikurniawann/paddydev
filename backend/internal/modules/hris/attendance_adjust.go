@@ -137,6 +137,13 @@ func (s *Service) applyClockAndLateness(ctx context.Context, f *fields, in adjus
 			return httpx.BadRequest("Jam pulang lebih dari 24 jam setelah jam masuk")
 		}
 		f.set("clock_out", out)
+		// The "Checkout otomatis" marker says who set the time (EPIC-080 R4):
+		// once a correction changes clock_out it is no longer the system's.
+		if current != nil && current.Bool("clock_out_auto") {
+			if stored, found := current.Time("clock_out"); !found || out == nil || !out.Equal(stored) {
+				f.set("clock_out_auto", false)
+			}
+		}
 		if out == nil {
 			f.set("work_hours", nil) // the trigger only fills it when both times are set
 		}

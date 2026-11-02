@@ -1,5 +1,5 @@
 import { addDays, dayDiff, weekdayIndex } from "./schedule-range";
-import type { CellEdit, ScheduleGrid } from "./types";
+import type { CellEdit, ScheduleGrid, ScheduleShift } from "./types";
 
 /**
  * Logika murni grid Jadwal Kerja yang bisa diedit (EPIC-070): pola mingguan,
@@ -129,4 +129,49 @@ export function shiftTone(code: string): string {
   let h = 0;
   for (const ch of code) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
   return PALETTE[h % PALETTE.length];
+}
+
+/** Pemisah kode dua shift sehari (EPIC-080): KODE1+KODE2, mis. PAGI4+SORE4. */
+export const TWO_SHIFT_SEP = "+";
+
+export const isTwoShiftCode = (code: string) => code.includes(TWO_SHIFT_SEP);
+
+/** "PAGI4+SORE4" → ["PAGI4", "SORE4"]; kode tunggal → [kode]. */
+export function splitShiftCode(code: string): string[] {
+  return code.split(TWO_SHIFT_SEP);
+}
+
+/** Gabungkan shift 1 dan shift 2 (opsional) menjadi kode kotak. */
+export function joinShiftCodes(first: string, second?: string | null): string {
+  return second ? `${first}${TWO_SHIFT_SEP}${second}` : first;
+}
+
+const toMinutes = (t: string) => {
+  const [h, m] = t.split(":").map(Number);
+  return h * 60 + m;
+};
+
+/**
+ * Shift kedua harus mulai setelah shift pertama selesai. Shift pertama yang
+ * lewat tengah malam tidak bisa diikuti shift kedua di hari yang sama.
+ */
+export function canFollow(first: Pick<ScheduleShift, "start_time" | "end_time">, second: Pick<ScheduleShift, "start_time">): boolean {
+  const start = toMinutes(first.start_time);
+  const end = toMinutes(first.end_time);
+  if (end <= start) return false;
+  return toMinutes(second.start_time) >= end;
+}
+
+const hm = (t: string) => t.slice(0, 5).replace(":", ".");
+
+/**
+ * Keterangan kotak: "PAGI4 + SORE4 · 08.00–12.00, 17.00–21.00" untuk dua shift,
+ * "Pagi 08.00–16.00" untuk satu shift. null bila kode tidak dikenal.
+ */
+export function describeShiftCode(code: string, byCode: Map<string, ScheduleShift>): string | null {
+  const parts = splitShiftCode(code).map((c) => byCode.get(c));
+  if (parts.length === 0 || parts.some((p) => !p)) return null;
+  const shifts = parts as ScheduleShift[];
+  if (shifts.length === 1) return `${shifts[0].name} ${shifts[0].start_time.slice(0, 5)}–${shifts[0].end_time.slice(0, 5)}`;
+  return `${shifts.map((s) => s.code).join(" + ")} · ${shifts.map((s) => `${hm(s.start_time)}–${hm(s.end_time)}`).join(", ")}`;
 }

@@ -387,3 +387,116 @@ func TestManualClockOutAfterAutoCheckout(t *testing.T) {
 	expect(t, h.do(&staff, "POST", "/api/hris/attendance", body), 400, "Sudah clock-out untuk absensi ini")
 	unchanged()
 }
+
+// EPIC-080 R4: "Checkout otomatis" marks who set the time. A correction that
+// changes clock_out (HR adjustment or an approved attendance request) clears it;
+// one that leaves clock_out alone keeps it.
+func TestAutoCheckoutMarkerFollowsClockOutCorrection(t *testing.T) {
+	h := newHarness(t)
+	h.exec(`UPDATE hris.attendance_settings SET cutoff_day = 0, closing_offset_days = 3`)
+	hr, _ := h.staff("hrd", []string{"hris.workforce.attendance"}, true, emp{name: "HR Koreksi Penanda"})
+	crew, crewID := h.staff("pos", nil, true, emp{name: "Crew Penanda"})
+	h.setNow("2026-10-06 09:00")
+
+	autoRow := func(date string) string {
+		return h.scalar(`INSERT INTO hris.attendance (employee_id, date, clock_in, clock_out, clock_out_auto, status)
+			VALUES ($1, $2::date, ($2::text || ' 08:00:00+07')::timestamptz, ($2::text || ' 16:00:00+07')::timestamptz, true, 'present') RETURNING id::text`, crewID, date)
+	}
+	state := func(id string) string {
+		return h.scalar(`SELECT to_char(clock_out AT TIME ZONE 'Asia/Jakarta', 'HH24:MI') || '|' || clock_out_auto::text
+			FROM hris.attendance WHERE id = $1`, id)
+	}
+
+	// HR moves clock-in only: clock_out stays, so does the marker.
+	id := autoRow("2026-10-05")
+	expect(t, h.do(&hr, "PUT", "/api/hris/attendance/"+id, map[string]any{"clock_in": "08:30", "reason": "Koreksi jam masuk"}), 200, "")
+	if got := state(id); got != "16:00|true" {
+		t.Fatalf("after clock_in-only adjust = %s, want 16:00|true", got)
+	}
+	// HR sets clock_out to the same wall time: unchanged, keep.
+	expect(t, h.do(&hr, "PUT", "/api/hris/attendance/"+id, map[string]any{"clock_out": "16:00", "reason": "Konfirmasi jam pulang"}), 200, "")
+	if got := state(id); got != "16:00|true" {
+		t.Fatalf("after same clock_out = %s, want 16:00|true", got)
+	}
+	// HR changes clock_out: the time is now HR's.
+	expect(t, h.do(&hr, "PUT", "/api/hris/attendance/"+id, map[string]any{"clock_out": "17:15", "reason": "Pulang lebih lama"}), 200, "")
+	if got := state(id); got != "17:15|false" {
+		t.Fatalf("after clock_out adjust = %s, want 17:15|false", got)
+	}
+
+	// An approved attendance request that changes clock_out clears it too.
+	reqID := autoRow("2026-10-04")
+	c := h.do(&crew, "POST", "/api/hris/attendance-requests", attReqBody("2026-10-04", "", "17:30", "Lupa lembur sampai malam"))
+	expect(t, c, 201, "")
+	expect(t, h.do(&hr, "POST", "/api/hris/attendance-requests/"+c.data()["id"].(string)+"/decide", map[string]any{"action": "approve"}), 200, "")
+	if got := state(reqID); got != "17:30|false" {
+		t.Fatalf("after approved request = %s, want 17:30|false", got)
+	}
+}
+
+// EPIC-080 R4: the list behind the calendar and Rekap, and the HR roster
+// behind Monitoring, both carry the "Checkout otomatis" marker.
+func TestAutoCheckoutMarkerInListAndRoster(t *testing.T) {
+	h := newHarness(t)
+	hr, _ := h.staff("hrd", scheduleTestMenus, false)
+	_, crewID := h.staff("pos", nil, true, emp{name: "Crew Daftar Penanda"})
+	shift := h.scalar(`SELECT id::text FROM hris.shifts WHERE code = 'OPS'`)
+	h.exec(`INSERT INTO hris.employee_shift_days (employee_id, work_date, shift_id, batch_id)
+		VALUES ($1, '2026-10-05', $2, gen_random_uuid())`, crewID, shift)
+	h.exec(`INSERT INTO hris.attendance (employee_id, date, clock_in, clock_out, clock_out_auto, status)
+		VALUES ($1, '2026-10-05', '2026-10-05 08:00:00+07', '2026-10-05 16:00:00+07', true, 'present')`, crewID)
+	h.setNow("2026-10-06 09:00")
+
+	list := h.do(&hr, "GET", "/api/hris/attendance?employee_id="+crewID+"&start_date=2026-10-05&end_date=2026-10-05", nil)
+	expect(t, list, 200, "")
+	rows := list.list()
+	if len(rows) != 1 || rows[0].(map[string]any)["clock_out_auto"] != true {
+		t.Fatalf("list = %s", list.raw)
+	}
+
+	roster := h.do(&hr, "GET", "/api/hris/attendance/daily-roster?date=2026-10-05", nil)
+	expect(t, roster, 200, "")
+	found := false
+	for _, e := range roster.data()["employees"].([]any) {
+		m := e.(map[string]any)
+		if m["employee_id"] != crewID {
+			continue
+		}
+		found = true
+		if att, _ := m["attendance"].(map[string]any); att["clock_out_auto"] != true {
+			t.Fatalf("roster attendance = %v", att)
+		}
+	}
+	if !found {
+		t.Fatalf("crew missing from roster: %s", roster.raw)
+	}
+}
+
+// EPIC-080 R6/R7: the calendar's schedule endpoint names both shifts and gives
+// the clocks of both; a one-shift row reads as before.
+func TestScheduleEndpointTwoShift(t *testing.T) {
+	h := newHarness(t)
+	hr, _ := h.staff("hrd", scheduleTestMenus, false)
+	shiftA := h.scalar(`INSERT INTO hris.shifts (code, name, start_time, end_time, break_minutes)
+		VALUES ('PAGI4X', 'Pagi Empat', '08:00', '12:00', 0) RETURNING id::text`)
+	shiftB := h.scalar(`INSERT INTO hris.shifts (code, name, start_time, end_time, break_minutes)
+		VALUES ('SORE4X', 'Sore Empat', '17:00', '21:00', 0) RETURNING id::text`)
+	e := h.employee(emp{name: "Crew Kalender Dua"})
+	h.exec(`INSERT INTO hris.employee_shifts (employee_id, day_of_week, shift_id, shift2_id, effective_from) VALUES ($1, 1, $2, $3, '2026-01-01')`, e, shiftA, shiftB)
+	h.exec(`INSERT INTO hris.employee_shifts (employee_id, day_of_week, shift_id, effective_from) VALUES ($1, 2, $2, '2026-01-01')`, e, shiftA)
+
+	res := h.do(&hr, "GET", "/api/hris/attendance/schedule?employee_id="+e, nil)
+	expect(t, res, 200, "")
+	byDay := map[float64]map[string]any{}
+	for _, r := range res.list() {
+		m := r.(map[string]any)
+		byDay[m["day_of_week"].(float64)] = m
+	}
+	if two := byDay[1]; two["shift_name"] != "PAGI4X + SORE4X" || two["start_time"] != "08:00:00" || two["end_time"] != "21:00:00" ||
+		two["time_label"] != "08.00–12.00, 17.00–21.00" {
+		t.Fatalf("two-shift row = %v", two)
+	}
+	if one := byDay[2]; one["shift_name"] != "Pagi Empat" || one["end_time"] != "12:00:00" || one["time_label"] != "08.00–12.00" {
+		t.Fatalf("one-shift row = %v", one)
+	}
+}

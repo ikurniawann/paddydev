@@ -53,6 +53,8 @@ export interface RosterAttendance {
   is_short_hours?: boolean;
   /** Jam minimum cabang saat dilabel (jam); Go roster mengirim angka */
   min_work_hours?: string | number | null;
+  /** Jam pulang diisi sistem di jam selesai shift (EPIC-080) */
+  clock_out_auto?: boolean;
 }
 
 export interface RosterEmployee {
@@ -159,6 +161,8 @@ export interface AttendanceListRow {
   is_short_hours?: boolean;
   /** numeric(4,2) sebagai string, jam minimum cabang saat dilabel */
   min_work_hours?: string | number | null;
+  /** Jam pulang diisi sistem di jam selesai shift (EPIC-080) */
+  clock_out_auto?: boolean;
   branch: { id: string; code: string; name: string } | null;
   shift: { id: string; name: string } | null;
   employee: {
@@ -193,6 +197,8 @@ export interface CalendarAttendance {
   /** Kurang jam / pulang lebih cepat (EPIC-065 AB-05) */
   is_short_hours?: boolean;
   min_work_hours?: string | number | null;
+  /** Jam pulang diisi sistem di jam selesai shift (EPIC-080) */
+  clock_out_auto?: boolean;
 }
 
 /** Baris pola jadwal + detail shift dari /api/hris/attendance/schedule. */
@@ -205,6 +211,8 @@ export interface CalendarScheduleRow {
   start_time: string | null; // "HH:MM:SS"
   end_time: string | null;
   is_overnight: boolean | null;
+  /** "08.00–12.00, 17.00–21.00" (EPIC-080); shift_name "A + B" dan end_time shift kedua untuk dua shift. */
+  time_label?: string | null;
 }
 
 // ── Periode absensi (closing) & penyesuaian manual ─────────────────────

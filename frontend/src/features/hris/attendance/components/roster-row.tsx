@@ -7,6 +7,7 @@ import { formatTime } from "@/lib/format";
 import { LEAVE_TYPE_LABELS } from "@/types/hris";
 import { GeofenceBadge } from "./geofence-badge";
 import { SelfiePhotoDialog } from "./selfie-photo-dialog";
+import { AutoCheckoutBadge } from "./auto-checkout-badge";
 import { ShortHoursBadge } from "./short-hours-badge";
 import type { RosterEmployee, RosterStatus } from "../types";
 
@@ -86,6 +87,7 @@ export function RosterRow({ emp, isToday }: { emp: RosterEmployee; isToday: bool
             <GeofenceBadge status={emp.attendance.clock_in_geofence} distanceM={emp.attendance.clock_in_distance_m} prefix="Masuk" />
             <GeofenceBadge status={emp.attendance.clock_out_geofence} distanceM={emp.attendance.clock_out_distance_m} prefix="Pulang" />
             <ShortHoursBadge isShort={emp.attendance.is_short_hours} minHours={emp.attendance.min_work_hours} />
+            <AutoCheckoutBadge auto={emp.attendance.clock_out_auto} />
           </div>
           {emp.attendance.notes &&
             (emp.attendance.clock_in_geofence === "invalid" || emp.attendance.clock_out_geofence === "invalid") && (

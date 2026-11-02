@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { useStoreErrorText } from "@/features/hris/schedule-access/access-guard";
 import { fetchScheduleGrid } from "../api";
 import { CELLS_EMPLOYEE_LIMIT, CELLS_EMPLOYEE_LIMIT_MESSAGE, useScheduleCellsSave } from "../mutations";
-import { cellKey, copyWeek, fillCells, parseCellKey, rowRange, shiftTone } from "../schedule-cells";
+import { cellKey, copyWeek, describeShiftCode, fillCells, isTwoShiftCode, parseCellKey, rowRange, shiftTone, splitShiftCode } from "../schedule-cells";
 import { addDays, dm, weekdayIndex } from "../schedule-range";
 import type { ScheduleGrid as Grid } from "../types";
 import { CellsConfirmDialog } from "./cells-confirm-dialog";
@@ -201,6 +201,9 @@ export function ScheduleGrid({ grid, branchId, today, initialChecked, loading = 
                 <span className={`rounded px-1.5 py-0.5 font-mono font-semibold ${shiftTone("L")}`}>L</span>Libur
               </li>
               <li className="flex items-center gap-1.5">
+                <span className="rounded bg-gray-100 px-1.5 py-0.5 font-mono font-semibold text-gray-700">A+B</span>dua shift sehari
+              </li>
+              <li className="flex items-center gap-1.5">
                 <span className={`rounded px-1.5 py-0.5 ${shiftTone("")}`}>Belum ada</span>belum dijadwalkan
               </li>
               <li className="flex items-center gap-1.5">
@@ -278,12 +281,24 @@ export function ScheduleGrid({ grid, branchId, today, initialChecked, loading = 
                 </td>
                 {e.cells.map((c) => {
                   const key = cellKey(e.id, c.date);
-                  const shift = shiftByCode.get(c.code);
                   const meaning =
-                    c.code === "" ? "Belum ada jadwal" : c.code === "L" ? "Libur" : shift ? `${shift.name} ${hhmm(shift.start_time)}–${hhmm(shift.end_time)}` : c.code;
+                    c.code === "" ? "Belum ada jadwal" : c.code === "L" ? "Libur" : (describeShiftCode(c.code, shiftByCode) ?? c.code);
                   const title = `${meaning}${c.source === "weekly" ? " (dari pola mingguan)" : ""}`;
-                  const content = c.code === "" ? <span className="text-[10px] font-sans">Belum ada</span> : c.code;
-                  const base = "flex h-8 w-full min-w-11 items-center justify-center rounded-md font-mono text-xs font-semibold";
+                  const twoShifts = isTwoShiftCode(c.code);
+                  const content =
+                    c.code === "" ? (
+                      <span className="text-[10px] font-sans">Belum ada</span>
+                    ) : twoShifts ? (
+                      // Dua shift sehari: kode ditumpuk dua baris supaya kolom tidak melebar; teks gabungan tetap "A+B".
+                      <span className="flex flex-col items-center text-[10px] leading-tight">
+                        {splitShiftCode(c.code).map((part, i) => (
+                          <span key={part}>{i === 0 ? `${part}+` : part}</span>
+                        ))}
+                      </span>
+                    ) : (
+                      c.code
+                    );
+                  const base = `flex ${twoShifts ? "min-h-8 py-0.5" : "h-8"} w-full min-w-11 items-center justify-center rounded-md font-mono text-xs font-semibold`;
                   const weekly = c.source === "weekly" ? "underline decoration-dotted underline-offset-2" : "";
                   return (
                     <td key={c.date} className="border-b border-gray-100 p-0.5">

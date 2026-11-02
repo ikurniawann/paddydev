@@ -231,6 +231,8 @@ export interface EssWeekDay {
   shift_name: string | null;
   start_time: string | null;
   end_time: string | null;
+  /** "08.00–12.00, 17.00–21.00" (EPIC-080) */
+  time_label?: string | null;
 }
 
 export interface EssRecentRequest {

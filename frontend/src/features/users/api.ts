@@ -315,6 +315,8 @@ export interface EmployeeShiftScheduleRow extends ShiftScheduleRowLike {
   id: string;
   start_time: string | null;
   end_time: string | null;
+  shift2_start_time?: string | null;
+  shift2_end_time?: string | null;
 }
 
 export const fetchShiftOptions = () => apiGet<{ data: ShiftOption[] }>("/api/hris/shifts");
@@ -326,7 +328,7 @@ export const saveEmployeeShiftPattern = (
   employeeId: string,
   payload: {
     effective_from: string;
-    days: { day_of_week: number; shift_id: string | null }[];
+    days: { day_of_week: number; shift_id: string | null; shift2_id?: string | null }[];
   }
 ) => apiPut<{ message: string }>(`/api/hris/employees/${employeeId}/shifts`, payload);
 
