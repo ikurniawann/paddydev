@@ -1,6 +1,6 @@
 # EPIC-080: Checkout Otomatis per Jabatan & 2 Shift dalam Sehari (`MODULE-HRIS`)
 
-status: backlog
+status: review
 environment: dev
 retries: 0
 
@@ -85,3 +85,4 @@ Lihat `docs/superpowers/plans/2026-11-02-checkout-otomatis.md`.
 
 ## Automation Log
 - 2026-11-02 — Analisis kode (scheduler, unik per hari, alur clock-out, pola setting, trigger notifikasi). Jawaban user untuk 3 keputusan dicatat di atas. Rencana disusun. Branch ditumpuk di atas EPIC-079 (`docs/epic079-jam-kerja-shift`).
+- 2026-11-02 — Acuan diperbarui (status-requirement AB-08/AB-09, pertanyaan-rekomendasi CO-OTOMATIS, skill paddy-hris-acuan); status `review`. Temuan minor dirapikan (guard `EndTime` nil, hapus aturan dicek di leaf Shift Kerja, toast 403 hapus, format jam Beranda). Staging/QA dan PR menyusul.
