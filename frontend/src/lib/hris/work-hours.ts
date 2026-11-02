@@ -44,7 +44,7 @@ export const WORK_HOURS = {
     "Karyawan wajib menaati ketentuan jam kerja yang telah ditetapkan oleh perusahaan. Apabila terdapat perubahan atau penyesuaian terhadap waktu kerja karena kebutuhan operasional perusahaan, maka perubahan tersebut akan diinformasikan terlebih dahulu kepada karyawan secara layak.",
     "Hari libur untuk karyawan Operations dan Headquarter mengikuti hari libur nasional yang ditetapkan oleh pemerintah Republik Indonesia dan hari libur sesuai dengan shift yang telah ditentukan. Hari cuti bersama tidak secara otomatis menjadi hari libur, kecuali jika ditetapkan demikian oleh perusahaan.",
     "Hari libur untuk karyawan dengan sistem kerja shift diberikan begitu tercapai 40 jam kerja dan tidak mengikuti hari libur nasional atau tanggal merah yang ditetapkan oleh Pemerintah Republik Indonesia. Penetapan hari libur disesuaikan dengan kebijakan internal perusahaan dan/atau jadwal kerja (shift) yang telah ditentukan.",
-  ] as readonly string[],
+  ],
 } as const;
 
 /** Ringkasan jadwal tetap Non-Shift per kelompok, untuk teks konfirmasi HR. */
