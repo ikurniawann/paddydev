@@ -14,6 +14,7 @@ type ScheduleRow struct {
 	ShiftID       *string
 	EffectiveFrom string
 	EffectiveTo   *string
+	Shift2ID      *string // second shift of a two-shift day (EPIC-080), nil when none
 }
 
 // ResolveScheduleRow is resolveScheduleRowForDate: the index of the row that

@@ -70,20 +70,24 @@ func (h handlers) clearGuardScoped(r *http.Request, u *auth.User, reason string,
 }
 
 // replacedScheduleDays counts the per-date rows an upload would overwrite
-// with a different shift (a libur cell has no shift id).
+// with a different shift or second shift (a libur cell has no shift id).
 func replacedScheduleDays(ctx context.Context, q database.Querier, as []domain.ScheduleAssignment) (int, error) {
 	ids, dates := assignmentKeys(as)
-	shifts := make([]string, len(as))
+	shifts, shifts2 := make([]string, len(as)), make([]string, len(as))
 	for i, a := range as {
 		if a.ShiftID != nil {
 			shifts[i] = *a.ShiftID
 		}
+		if a.Shift2ID != nil {
+			shifts2[i] = *a.Shift2ID
+		}
 	}
 	var n int
 	err := q.QueryRow(ctx, `SELECT count(*) FROM hris.employee_shift_days d
-		JOIN unnest($1::uuid[], $2::date[], $3::text[]) AS k(employee_id, work_date, shift_id)
+		JOIN unnest($1::uuid[], $2::date[], $3::text[], $4::text[]) AS k(employee_id, work_date, shift_id, shift2_id)
 		  ON k.employee_id = d.employee_id AND k.work_date = d.work_date
-		WHERE d.shift_id IS DISTINCT FROM NULLIF(k.shift_id, '')::uuid`, ids, dates, shifts).Scan(&n)
+		WHERE d.shift_id IS DISTINCT FROM NULLIF(k.shift_id, '')::uuid
+		   OR d.shift2_id IS DISTINCT FROM NULLIF(k.shift2_id, '')::uuid`, ids, dates, shifts, shifts2).Scan(&n)
 	return n, err
 }
 

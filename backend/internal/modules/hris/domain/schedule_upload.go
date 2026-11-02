@@ -45,6 +45,66 @@ func shiftNetMinutes(s UploadShift) int {
 	return end - start - s.BreakMinutes
 }
 
+// shiftSpanMinutes is end minus start, across midnight for an overnight shift.
+func shiftSpanMinutes(s UploadShift) int {
+	return shiftNetMinutes(s) + s.BreakMinutes
+}
+
+// ScheduleTwoShiftSep joins the two shift codes of one day (EPIC-080 R7).
+const ScheduleTwoShiftSep = "+"
+
+// ParseScheduleCode splits a schedule code into its first and second shift
+// code ("PAGI4+SORE4" → PAGI4, SORE4; "SPG1" → SPG1, ""), trimming each part.
+// A second shift needs two shift codes: libur ("L"/"OFF") and "-" cannot be
+// combined, and a part cannot be empty.
+func ParseScheduleCode(code string) (first, second string, err error) {
+	code = strings.TrimSpace(code)
+	parts := strings.Split(code, ScheduleTwoShiftSep)
+	if len(parts) == 1 {
+		return code, "", nil
+	}
+	if len(parts) > 2 {
+		return "", "", fmt.Errorf("Kode '%s': maksimal 2 shift sehari (contoh PAGI4+SORE4)", code)
+	}
+	first, second = strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])
+	for _, p := range []string{first, second} {
+		switch u := strings.ToUpper(p); {
+		case u == "":
+			return "", "", fmt.Errorf("Kode '%s' tidak lengkap: isi dua kode shift, contoh PAGI4+SORE4", code)
+		case isOffCode(u) || u == ScheduleNotPlaced:
+			return "", "", fmt.Errorf("Kode '%s': L atau - tidak bisa digabung dengan shift", code)
+		}
+	}
+	return first, second, nil
+}
+
+// secondShiftOffset is the start of second in minutes from the start of
+// first, within the 24 hours after it (a clock time before first's start is
+// the next day).
+func secondShiftOffset(first, second UploadShift) int {
+	return ((clockMinutes(second.Start)-clockMinutes(first.Start))%(24*60) + 24*60) % (24 * 60)
+}
+
+// TwoShiftIssue checks a two-shift day (EPIC-080 R6): the second shift must
+// start at or after the first ends and end within 24 hours of the first's
+// start (so it cannot run into the next day's first shift).
+func TwoShiftIssue(first, second UploadShift) string {
+	off := secondShiftOffset(first, second)
+	if off >= shiftSpanMinutes(first) && off+shiftSpanMinutes(second) <= 24*60 {
+		return ""
+	}
+	return fmt.Sprintf("Shift kedua harus mulai setelah shift pertama selesai (%s selesai %s, %s mulai %s)",
+		first.Code, dotClock(first.End), second.Code, dotClock(second.Start))
+}
+
+// dotClock is "16:00:00" as "16.00".
+func dotClock(hms string) string {
+	if len(hms) >= 5 {
+		return strings.Replace(hms[:5], ":", ".", 1)
+	}
+	return hms
+}
+
 type ScheduleUploadContext struct {
 	BranchID, BranchName string
 	Dates                []string
@@ -90,7 +150,8 @@ type UploadIssue struct {
 type ScheduleAssignment struct {
 	EmployeeID, Date string
 	ShiftID          *string
-	Clear            bool // remove the per-date row only (back to the weekly pattern)
+	Shift2ID         *string // second shift of the day (EPIC-080), nil when none
+	Clear            bool    // remove the per-date row only (back to the weekly pattern)
 }
 
 type ScheduleUploadResult struct {
@@ -233,10 +294,11 @@ func ValidateScheduleUpload(c ScheduleUploadContext, f ScheduleFile) ScheduleUpl
 	}
 
 	type parsed struct {
-		emp   UploadEmployee
-		line  int
-		cells []*UploadShift // nil = libur / tidak dijadwalkan
-		set   []bool         // sel menghasilkan penugasan
+		emp    UploadEmployee
+		line   int
+		cells  []*UploadShift // nil = libur / tidak dijadwalkan
+		cells2 []*UploadShift // shift kedua, nil bila tidak ada
+		set    []bool         // sel menghasilkan penugasan
 	}
 	seen := map[string]int{}
 	var valid []parsed
@@ -265,7 +327,8 @@ func ValidateScheduleUpload(c ScheduleUploadContext, f ScheduleFile) ScheduleUpl
 			fail(r.Line, "NIP", e.Name, msg)
 			continue
 		}
-		p := parsed{emp: e, line: r.Line, cells: make([]*UploadShift, len(c.Dates)), set: make([]bool, len(c.Dates))}
+		p := parsed{emp: e, line: r.Line, cells: make([]*UploadShift, len(c.Dates)),
+			cells2: make([]*UploadShift, len(c.Dates)), set: make([]bool, len(c.Dates))}
 		rowOK := true
 		for i, d := range c.Dates {
 			col := ScheduleDateHeader(d)
@@ -286,13 +349,13 @@ func ValidateScheduleUpload(c ScheduleUploadContext, f ScheduleFile) ScheduleUpl
 			case isOffCode(code):
 				p.set[i] = true
 			default:
-				s, msg := shiftByCode(c, raw)
+				s, s2, msg := shiftsByCode(c, raw)
 				if msg != "" {
 					fail(r.Line, col, e.Name, msg)
 					rowOK = false
 					continue
 				}
-				p.cells[i], p.set[i] = s, true
+				p.cells[i], p.cells2[i], p.set[i] = s, s2, true
 				working[d]++
 			}
 		}
@@ -304,9 +367,10 @@ func ValidateScheduleUpload(c ScheduleUploadContext, f ScheduleFile) ScheduleUpl
 		res.EmployeeIDs = append(res.EmployeeIDs, p.emp.ID)
 		days := make([]plannedDay, len(c.Dates))
 		for i, d := range c.Dates {
-			days[i] = plannedDay{Date: d, Shift: p.cells[i], Edited: p.set[i], Off: p.set[i] && p.cells[i] == nil}
+			days[i] = plannedDay{Date: d, Shift: p.cells[i], Shift2: p.cells2[i], Edited: p.set[i], Off: p.set[i] && p.cells[i] == nil}
 			if p.set[i] {
-				res.Assignments = append(res.Assignments, ScheduleAssignment{EmployeeID: p.emp.ID, Date: d, ShiftID: shiftIDOf(p.cells[i])})
+				res.Assignments = append(res.Assignments, ScheduleAssignment{EmployeeID: p.emp.ID, Date: d,
+					ShiftID: shiftIDOf(p.cells[i]), Shift2ID: shiftIDOf(p.cells2[i])})
 			}
 		}
 		sequenceWarnings(c, p.emp, p.line, days, warn)
@@ -383,6 +447,47 @@ func shiftByCode(c ScheduleUploadContext, raw string) (*UploadShift, string) {
 	return &s, ""
 }
 
+// shiftsByCode resolves a working-day code: one shift code or KODE1+KODE2
+// (EPIC-080), the second starting after the first ends. second is nil for a
+// one-shift day.
+func shiftsByCode(c ScheduleUploadContext, raw string) (first, second *UploadShift, msg string) {
+	a, b, err := ParseScheduleCode(raw)
+	if err != nil {
+		return nil, nil, err.Error()
+	}
+	if first, msg = shiftByCode(c, a); msg != "" || b == "" {
+		return first, nil, msg
+	}
+	if second, msg = shiftByCode(c, b); msg != "" {
+		return nil, nil, msg
+	}
+	if msg = TwoShiftIssue(*first, *second); msg != "" {
+		return nil, nil, msg
+	}
+	return first, second, ""
+}
+
+// currentShifts reads a resolved current code (a shift code or KODE1+KODE2)
+// as shifts; nil when it is not a known working-day code.
+func currentShifts(c ScheduleUploadContext, code string) (first, second *UploadShift) {
+	a, b, err := ParseScheduleCode(code)
+	if err != nil {
+		return nil, nil
+	}
+	s1, ok := c.Shifts[strings.ToUpper(a)]
+	if !ok {
+		return nil, nil
+	}
+	if b == "" {
+		return &s1, nil
+	}
+	s2, ok := c.Shifts[strings.ToUpper(b)]
+	if !ok {
+		return &s1, nil
+	}
+	return &s1, &s2
+}
+
 func clockedInIssue(n int, d string) string {
 	return fmt.Sprintf("%d karyawan sudah clock-in %s; telatnya tidak dihitung ulang", n, FormatDateID(d))
 }
@@ -392,10 +497,38 @@ func clockedInIssue(n int, d string) string {
 type plannedDay struct {
 	Date   string
 	Shift  *UploadShift // nil = libur / tidak dijadwalkan
+	Shift2 *UploadShift // second shift of a two-shift day (EPIC-080), nil when none
 	Edited bool
 	// Off marks an explicit libur ("L"). A nil Shift without Off is unknown
 	// (empty, not placed, cleared): it is not a day off for the 40-hour rule.
 	Off bool
+}
+
+// code is the day's schedule code: the shift code, or KODE1+KODE2.
+func (d plannedDay) code() string {
+	if d.Shift2 == nil {
+		return d.Shift.Code
+	}
+	return d.Shift.Code + ScheduleTwoShiftSep + d.Shift2.Code
+}
+
+// netMinutes is the working time of both shifts (EPIC-080 R9).
+func (d plannedDay) netMinutes() int {
+	n := shiftNetMinutes(*d.Shift)
+	if d.Shift2 != nil {
+		n += shiftNetMinutes(*d.Shift2)
+	}
+	return n
+}
+
+// endMinutes is when the day's last shift ends, in minutes from the start of
+// its date (past 24*60 when it ends the next day).
+func (d plannedDay) endMinutes() int {
+	start := clockMinutes(d.Shift.Start)
+	if d.Shift2 == nil {
+		return start + shiftSpanMinutes(*d.Shift)
+	}
+	return start + secondShiftOffset(*d.Shift, *d.Shift2) + shiftSpanMinutes(*d.Shift2)
 }
 
 // sequenceWarnings checks consecutive days: leave on an edited working day,
@@ -425,21 +558,17 @@ func sequenceWarnings(c ScheduleUploadContext, e UploadEmployee, line int, days 
 			continue
 		}
 		run++
-		streakMin += shiftNetMinutes(*s)
+		streakMin += d.netMinutes()
 		edited = edited || d.Edited
 		if d.Edited && c.OnLeave[e.ID][d.Date] {
-			warn(line, ScheduleDateHeader(d.Date), e.Name, fmt.Sprintf("%s cuti %s tapi diberi %s", e.Name, FormatDateID(d.Date), s.Code))
+			warn(line, ScheduleDateHeader(d.Date), e.Name, fmt.Sprintf("%s cuti %s tapi diberi %s", e.Name, FormatDateID(d.Date), d.code()))
 		}
 		last := i+1 == len(days) || days[i+1].Shift == nil
 		if !last && (d.Edited || days[i+1].Edited) {
 			next := days[i+1]
-			end := clockMinutes(s.End)
-			if s.Overnight || end <= clockMinutes(s.Start) {
-				end += 24 * 60
-			}
-			if gap := 24*60 + clockMinutes(next.Shift.Start) - end; gap < minShiftGapMin {
+			if gap := 24*60 + clockMinutes(next.Shift.Start) - d.endMinutes(); gap < minShiftGapMin {
 				warn(line, ScheduleDateHeader(next.Date), e.Name, fmt.Sprintf("%s: jeda %d jam antara %s (%s) dan %s (%s)",
-					e.Name, gap/60, FormatDateID(d.Date), s.Code, FormatDateID(next.Date), next.Shift.Code))
+					e.Name, gap/60, FormatDateID(d.Date), d.code(), FormatDateID(next.Date), next.code()))
 			}
 		}
 		if last && run > maxStreak && edited {
@@ -489,8 +618,8 @@ func ValidateScheduleCells(c ScheduleUploadContext, cells []ScheduleCellInput) S
 		res.Warnings = append(res.Warnings, UploadIssue{line, col, name, msg})
 	}
 	type edit struct {
-		shift *UploadShift
-		clear bool
+		shift, shift2 *UploadShift
+		clear         bool
 	}
 	edits := map[string]map[string]edit{}
 	seen := map[[2]string]bool{}
@@ -541,12 +670,12 @@ func ValidateScheduleCells(c ScheduleUploadContext, cells []ScheduleCellInput) S
 			ed.clear = true
 		case isOffCode(code):
 		default:
-			s, msg := shiftByCode(c, raw)
+			s, s2, msg := shiftsByCode(c, raw)
 			if msg != "" {
 				fail(col, e.Name, msg)
 				continue
 			}
-			ed.shift = s
+			ed.shift, ed.shift2 = s, s2
 		}
 		if edits[e.ID] == nil {
 			edits[e.ID] = map[string]edit{}
@@ -566,7 +695,8 @@ func ValidateScheduleCells(c ScheduleUploadContext, cells []ScheduleCellInput) S
 		sort.Strings(dates)
 		for _, d := range dates {
 			ed := mine[d]
-			res.Assignments = append(res.Assignments, ScheduleAssignment{EmployeeID: id, Date: d, ShiftID: shiftIDOf(ed.shift), Clear: ed.clear})
+			res.Assignments = append(res.Assignments, ScheduleAssignment{EmployeeID: id, Date: d,
+				ShiftID: shiftIDOf(ed.shift), Shift2ID: shiftIDOf(ed.shift2), Clear: ed.clear})
 			if d == c.Today && c.ClockedIn[id][d] {
 				clocked++
 			}
@@ -577,15 +707,12 @@ func ValidateScheduleCells(c ScheduleUploadContext, cells []ScheduleCellInput) S
 		var days []plannedDay
 		for _, d := range ScheduleCellWindow(dates) {
 			if ed, ok := mine[d]; ok {
-				days = append(days, plannedDay{Date: d, Shift: ed.shift, Edited: true, Off: ed.shift == nil && !ed.clear})
+				days = append(days, plannedDay{Date: d, Shift: ed.shift, Shift2: ed.shift2, Edited: true, Off: ed.shift == nil && !ed.clear})
 				continue
 			}
-			var s *UploadShift
 			cur := strings.ToUpper(c.Current[id][d])
-			if sh, ok := c.Shifts[cur]; ok {
-				s = &sh
-			}
-			days = append(days, plannedDay{Date: d, Shift: s, Off: s == nil && isOffCode(cur)})
+			s, s2 := currentShifts(c, cur)
+			days = append(days, plannedDay{Date: d, Shift: s, Shift2: s2, Off: s == nil && isOffCode(cur)})
 		}
 		sequenceWarnings(c, e, 0, days, warn)
 	}

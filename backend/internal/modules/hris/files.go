@@ -37,7 +37,8 @@ type CompanyProfile interface {
 type FileRepo interface {
 	// AttendanceIDOn is the employee's attendance row of date, nil when none.
 	AttendanceIDOn(ctx context.Context, employeeID, date string) (*string, error)
-	// ShiftPattern is the employee's shift pattern with each shift's times.
+	// ShiftPattern is the employee's shift pattern with each shift's times,
+	// plus the second shift (shift2_*) of a two-shift day (EPIC-080).
 	ShiftPattern(ctx context.Context, employeeID string) ([]*Row, error)
 	InsertAttendance(ctx context.Context, f fields) (*Row, error)
 	// AttendanceRecord is `SELECT *` of one attendance row, nil when none.
@@ -66,9 +67,13 @@ func (s *store) ShiftPattern(ctx context.Context, employeeID string) ([]*Row, er
 	return queryRows(ctx, s.db, `SELECT es.day_of_week, es.shift_id,
 		es.effective_from::text, es.effective_to::text,
 		s.name, s.start_time::text, s.end_time::text,
-		s.late_tolerance_minutes, s.is_overnight
+		s.late_tolerance_minutes, s.is_overnight,
+		es.shift2_id, s2.code AS shift2_code, s2.name AS shift2_name,
+		s2.start_time::text AS shift2_start_time, s2.end_time::text AS shift2_end_time,
+		s2.break_minutes AS shift2_break_minutes, s2.is_overnight AS shift2_is_overnight
 		FROM hris.v_employee_schedule es
 		LEFT JOIN hris.shifts s ON s.id = es.shift_id
+		LEFT JOIN hris.shifts s2 ON s2.id = es.shift2_id
 		WHERE es.employee_id = $1
 		ORDER BY es.priority`, employeeID)
 }
