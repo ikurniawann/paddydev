@@ -160,3 +160,9 @@ it("total belum tampil sebelum semua hari dipilih", () => {
   choose("Senin", "P");
   expect(screen.queryByText(/jam kerja\/minggu/)).toBeNull();
 });
+
+it("total disembunyikan bila ada hari dikosongkan", () => {
+  renderDialog();
+  DAYS.forEach((d, i) => choose(d, i < 6 ? "P" : "__clear"));
+  expect(screen.queryByText(/jam kerja\/minggu/)).toBeNull();
+});

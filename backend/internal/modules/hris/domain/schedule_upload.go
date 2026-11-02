@@ -304,7 +304,7 @@ func ValidateScheduleUpload(c ScheduleUploadContext, f ScheduleFile) ScheduleUpl
 		res.EmployeeIDs = append(res.EmployeeIDs, p.emp.ID)
 		days := make([]plannedDay, len(c.Dates))
 		for i, d := range c.Dates {
-			days[i] = plannedDay{Date: d, Shift: p.cells[i], Edited: p.set[i]}
+			days[i] = plannedDay{Date: d, Shift: p.cells[i], Edited: p.set[i], Off: p.set[i] && p.cells[i] == nil}
 			if p.set[i] {
 				res.Assignments = append(res.Assignments, ScheduleAssignment{EmployeeID: p.emp.ID, Date: d, ShiftID: shiftIDOf(p.cells[i])})
 			}
@@ -393,6 +393,9 @@ type plannedDay struct {
 	Date   string
 	Shift  *UploadShift // nil = libur / tidak dijadwalkan
 	Edited bool
+	// Off marks an explicit libur ("L"). A nil Shift without Off is unknown
+	// (empty, not placed, cleared): it is not a day off for the 40-hour rule.
+	Off bool
 }
 
 // sequenceWarnings checks consecutive days: leave on an edited working day,
@@ -408,6 +411,11 @@ func sequenceWarnings(c ScheduleUploadContext, e UploadEmployee, line int, days 
 	for i, d := range days {
 		s := d.Shift
 		if s == nil {
+			if !d.Off {
+				prevOff = ""
+				run, edited, streakMin = 0, false, 0
+				continue
+			}
 			if prevOff != "" && run > 0 && streakMin < minHoursBeforeDayOff*60 && (edited || d.Edited) {
 				warn(line, ScheduleDateHeader(d.Date), e.Name, fmt.Sprintf("%s libur %s sebelum %d jam kerja (baru %d jam sejak libur %s)",
 					e.Name, FormatDateID(d.Date), minHoursBeforeDayOff, streakMin/60, FormatDateID(prevOff)))
@@ -569,14 +577,15 @@ func ValidateScheduleCells(c ScheduleUploadContext, cells []ScheduleCellInput) S
 		var days []plannedDay
 		for _, d := range ScheduleCellWindow(dates) {
 			if ed, ok := mine[d]; ok {
-				days = append(days, plannedDay{Date: d, Shift: ed.shift, Edited: true})
+				days = append(days, plannedDay{Date: d, Shift: ed.shift, Edited: true, Off: ed.shift == nil && !ed.clear})
 				continue
 			}
 			var s *UploadShift
-			if sh, ok := c.Shifts[strings.ToUpper(c.Current[id][d])]; ok {
+			cur := strings.ToUpper(c.Current[id][d])
+			if sh, ok := c.Shifts[cur]; ok {
 				s = &sh
 			}
-			days = append(days, plannedDay{Date: d, Shift: s})
+			days = append(days, plannedDay{Date: d, Shift: s, Off: s == nil && isOffCode(cur)})
 		}
 		sequenceWarnings(c, e, 0, days, warn)
 	}

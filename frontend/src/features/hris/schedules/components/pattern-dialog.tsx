@@ -79,6 +79,7 @@ export function PatternDialog({ open, onOpenChange, branchId, employees, shifts,
   // Dialog ini hanya dibuka dari grid, yang hanya memuat staf shift.
   const byCode = new Map(shifts.map((s) => [s.code, s]));
   const complete = pattern.every(Boolean);
+  const hasClear = pattern.includes(CLEAR); // hari ikut pola mingguan: jamnya tidak diketahui
   const weekMinutes = pattern.reduce((sum, v) => sum + (byCode.has(v) ? netMinutes(byCode.get(v)!) : 0), 0);
   const noDayOff = complete && pattern.every((v) => byCode.has(v));
   const names = employees.slice(0, 5).map((e) => e.name).join(", ") + (employees.length > 5 ? `, dan ${employees.length - 5} lainnya` : "");
@@ -174,7 +175,7 @@ export function PatternDialog({ open, onOpenChange, branchId, employees, shifts,
                 />
               </label>
             </div>
-            {complete ? (
+            {complete && !hasClear ? (
               <p className="text-xs text-gray-600">{`Total ±${Math.round(weekMinutes / 60)} jam kerja/minggu`}</p>
             ) : null}
             {noDayOff ? (
