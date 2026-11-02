@@ -245,14 +245,14 @@ func employeeWorkbook(rows [][]any, l *employeeLists) ([]byte, error) {
 		{"3. Tanggal ditulis DD/MM/YYYY, mis. 21/10/2026. NIK, NPWP, No. HP, No. Rekening, No. BPJS ditulis sebagai teks (jangan diubah ke angka)."},
 		{"4. Simpan lalu unggah di halaman Karyawan → Import. Periksa hasil pengecekan sebelum menyimpan."},
 		{""},
-		{"Mode Tambah: hanya karyawan baru; NIP yang sudah ada ditolak. NIP kosong = dibuat otomatis."},
+		{"Mode Tambah: hanya karyawan baru; NIP yang sudah ada ditolak. NIP wajib diisi (tidak dibuat otomatis)."},
 		{"Mode Timpa: NIP yang ada diperbarui sesuai file; sel kosong TIDAK mengubah data; NIP baru ditambahkan."},
 		{"Kolom abu-abu di paling kanan (Nama Atasan, Status Aktif, Tanggal Keluar, Terakhir Diubah) hanya informasi, tidak dibaca saat import."},
 		{""},
 		{"Kolom", "Wajib", "Isi"},
 	}
 	hints := map[string]string{
-		"nip": "Teks. Kosong di mode Tambah = dibuat otomatis; wajib di mode Timpa", "phone": "Diawali 08 / 62 / +62",
+		"nip": "Teks. Wajib diisi, tidak dibuat otomatis", "phone": "Diawali 08 / 62 / +62",
 		"join_date": "DD/MM/YYYY", "birth_date": "DD/MM/YYYY", "ktp": "16 angka", "npwp": "15–16 angka",
 		"manager_nip": "NIP atasan langsung", "email": "Alamat email aktif",
 	}
@@ -605,12 +605,9 @@ func (s *Service) applyImportRow(ctx context.Context, r Repository, actor *auth.
 	}
 	scheduleTo, _ := set["schedule_type"].(string)
 	if row.Action == "create" {
-		if _, ok := set["nip"]; !ok {
-			nip, err := nextEmployeeNIP(ctx, q, today[:4])
-			if err != nil {
-				return err
-			}
-			set["nip"] = nip
+		// EPIC-081: validation already refused a new row without NIP; never make one up.
+		if nip, _ := set["nip"].(string); nip == "" {
+			return httpx.BadRequest(fmt.Sprintf("Baris %d: NIP wajib diisi", row.Line))
 		}
 		if _, ok := set["phone"]; !ok {
 			set["phone"] = ""
@@ -708,14 +705,6 @@ func guardSystemReactivation(ctx context.Context, q database.Querier, userID, re
 
 // msgSystemReactivation is the refusal for a system-role account (R6).
 const msgSystemReactivation = "Akun Super Admin/Admin hanya bisa diaktifkan kembali oleh Super Admin"
-
-// nextEmployeeNIP is the first free EMP-<year>-<seq> (same scheme as /api/users).
-func nextEmployeeNIP(ctx context.Context, q database.Querier, year string) (string, error) {
-	var n int
-	err := q.QueryRow(ctx, `SELECT coalesce(max(substring(nip from '^EMP-'||$1||'-(\d+)$')::int), 0) + 1
-		FROM hris.employees WHERE nip LIKE 'EMP-'||$1||'-%'`, year).Scan(&n)
-	return fmt.Sprintf("EMP-%s-%05d", year, n), err
-}
 
 // archiveEmail mirrors the accounts rule (Spec §1.2).
 func archiveEmail(nip string) string {

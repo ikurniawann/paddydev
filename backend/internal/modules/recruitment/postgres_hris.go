@@ -100,12 +100,12 @@ func (Postgres) PromotionCandidate(ctx context.Context, db database.Querier, id 
 }
 
 // PromoteCandidate calls public.promote_candidate_to_employee: one
-// transaction that allocates the NIP, inserts the employee and links the
-// candidate. It raises 23505 when the candidate was already promoted.
-func (Postgres) PromoteCandidate(ctx context.Context, db database.Querier, candidateID, joinDate, employmentStatus string, departmentID, reportingTo *string) (*string, error) {
+// transaction that inserts the employee with the NIP HR typed (EPIC-081) and
+// links the candidate. It raises 23505 when the candidate was already promoted.
+func (Postgres) PromoteCandidate(ctx context.Context, db database.Querier, candidateID, joinDate, employmentStatus string, departmentID, reportingTo *string, nip string) (*string, error) {
 	var id *string
-	err := db.QueryRow(ctx, "SELECT public.promote_candidate_to_employee($1, $2::date, $3, $4, $5)::text AS id",
-		candidateID, joinDate, employmentStatus, departmentID, reportingTo).Scan(&id)
+	err := db.QueryRow(ctx, "SELECT public.promote_candidate_to_employee($1, $2::date, $3, $4, $5, $6)::text AS id",
+		candidateID, joinDate, employmentStatus, departmentID, reportingTo, nip).Scan(&id)
 	return id, err
 }
 

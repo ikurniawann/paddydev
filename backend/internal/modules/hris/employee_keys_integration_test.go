@@ -17,7 +17,7 @@ func TestEmployeeKeyConflicts(t *testing.T) {
 	b := h.employee(emp{name: "Budi Uji"})
 	ownerSuffix := " (NIP " + aNIP + ", nonaktif)" + rehireHint
 	newBody := func(extra map[string]any) map[string]any {
-		m := map[string]any{"full_name": "Calon Baru", "email": "calon." + a[:6] + "@hris.test", "join_date": "2026-03-01", "employment_status": "probation"}
+		m := map[string]any{"full_name": "Calon Baru", "email": "calon." + a[:6] + "@hris.test", "join_date": "2026-03-01", "employment_status": "probation", "nip": "KEY" + a[:6]}
 		for k, v := range extra {
 			m[k] = v
 		}

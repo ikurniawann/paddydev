@@ -1,25 +1,8 @@
 package domain
 
 import (
-	"fmt"
 	"strings"
 )
-
-// NextAutoNip is the smallest free "EMP-<year>-<5 digits>"; "" when all
-// 99999 numbers are taken.
-func NextAutoNip(year int, taken []string) string {
-	used := make(map[string]bool, len(taken))
-	for _, t := range taken {
-		used[t] = true
-	}
-	for seq := 1; seq <= 99999; seq++ {
-		nip := fmt.Sprintf("EMP-%d-%05d", year, seq)
-		if !used[nip] {
-			return nip
-		}
-	}
-	return ""
-}
 
 // EmployeeUniqueMessage maps an email unique-violation message to a friendly
 // one. NIP, KTP and NPWP are named by employeekeys (pre-check and constraint).

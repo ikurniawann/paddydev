@@ -724,6 +724,8 @@ type promotionInput struct {
 	EmploymentStatus *string
 	DepartmentID     *string
 	ReportingTo      *string
+	// NIP is typed by HR (EPIC-081); the service refuses a blank one.
+	NIP *string
 }
 
 const uuidRegexMessage = "Invalid string: must match pattern /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i"
@@ -739,6 +741,7 @@ func parsePromotion(f *validate.Form) promotionInput {
 	uuidRe := check(domain.IsUUID, "invalid_format", uuidRegexMessage)
 	in.DepartmentID = f.Str("department_id", nullish, validate.StrOpts{Check: uuidRe})
 	in.ReportingTo = f.Str("reporting_to", nullish, validate.StrOpts{Check: uuidRe})
+	in.NIP = f.Str("nip", nullish, validate.StrOpts{})
 	msgs{"candidate_id": "candidate_id wajib diisi"}.apply(f)
 	return in
 }

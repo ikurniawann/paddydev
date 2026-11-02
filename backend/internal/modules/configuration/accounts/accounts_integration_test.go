@@ -61,6 +61,7 @@ func uniqueEmail() string { return "go-acc-" + testutil.RandomHex(5) + "@test.lo
 func employeeBody(email string) map[string]any {
 	return map[string]any{
 		"full_name": "Budi Santoso", "email": email, "join_date": "2026-01-01", "employment_status": "permanent",
+		"nip": "T" + testutil.RandomHex(6),
 	}
 }
 
@@ -235,7 +236,7 @@ func TestCreateAndGetUser(t *testing.T) {
 		t.Fatalf("keys %s", got)
 	}
 	data := body["data"].(map[string]any)
-	if !regexp.MustCompile(`^EMP-\d{4}-\d{5}$`).MatchString(data["nip"].(string)) || data["phone"] != "" ||
+	if !regexp.MustCompile(`^T[0-9a-f]{12}$`).MatchString(data["nip"].(string)) || data["phone"] != "" ||
 		data["joinDate"] != "2026-01-01T00:00:00.000Z" || data["appAccount"] != nil || data["isAccessApp"] != false {
 		t.Fatalf("data %v", data)
 	}
@@ -736,6 +737,64 @@ func TestEmployeeKeyConflictMessages(t *testing.T) {
 	// The owner keeping its own key is not a conflict.
 	if code, body, _ = e.do("PUT", "/api/users/"+id, map[string]any{"ktp": "3273010199000011"}); code != 200 {
 		t.Fatalf("own key: %d %v", code, body)
+	}
+}
+
+// EPIC-081: NIP is typed by HR and required; nothing generates it any more.
+func TestEmployeeNIPManualRequired(t *testing.T) {
+	e := settingsUsers(t)
+	without := employeeBody(uniqueEmail())
+	delete(without, "nip")
+	code, body, _ := e.do("POST", "/api/users", without)
+	wantError(t, code, body, 400, "NIP wajib diisi")
+	for _, blank := range []any{nil, "", "   "} {
+		b := employeeBody(uniqueEmail())
+		b["nip"] = blank
+		code, body, _ = e.do("POST", "/api/users", b)
+		wantError(t, code, body, 400, "NIP wajib diisi")
+	}
+	tooLong := employeeBody(uniqueEmail())
+	tooLong["nip"] = " " + strings.Repeat("9", 51) + " "
+	code, body, _ = e.do("POST", "/api/users", tooLong)
+	wantError(t, code, body, 400, "NIP maksimal 50 karakter")
+	if n := e.scalar(`SELECT count(*) FROM hris.employees WHERE email = $1`, without["email"]); n != int64(0) {
+		t.Fatalf("refused create left a row: %v", n)
+	}
+
+	padded := employeeBody(uniqueEmail())
+	nip := "N" + testutil.RandomHex(6)
+	padded["nip"] = "  " + nip + " "
+	code, body, raw := e.do("POST", "/api/users", padded)
+	if code != 201 || body["data"].(map[string]any)["nip"] != nip {
+		t.Fatalf("manual NIP must be stored trimmed: %d %s", code, raw)
+	}
+	id := body["data"].(map[string]any)["id"].(string)
+
+	dup := employeeBody(uniqueEmail())
+	dup["nip"] = nip
+	code, body, _ = e.do("POST", "/api/users", dup)
+	wantError(t, code, body, 400, "NIP sudah dipakai karyawan Budi Santoso (NIP "+nip+", aktif)")
+
+	// Update: change is saved trimmed, blank is refused, an untouched NIP stays.
+	newNIP := "M" + testutil.RandomHex(6)
+	code, body, raw = e.do("PUT", "/api/users/"+id, map[string]any{"nip": " " + newNIP + " "})
+	if code != 200 || body["data"].(map[string]any)["nip"] != newNIP {
+		t.Fatalf("update NIP: %d %s", code, raw)
+	}
+	// Re-sending the employee's own NIP is not a conflict.
+	code, body, raw = e.do("PUT", "/api/users/"+id, map[string]any{"nip": newNIP, "phone": "08122"})
+	if code != 200 || body["data"].(map[string]any)["nip"] != newNIP {
+		t.Fatalf("own NIP: %d %s", code, raw)
+	}
+	code, body, _ = e.do("PUT", "/api/users/"+id, map[string]any{"nip": strings.Repeat("9", 51)})
+	wantError(t, code, body, 400, "NIP maksimal 50 karakter")
+	for _, blank := range []any{nil, "", "  "} {
+		code, body, _ = e.do("PUT", "/api/users/"+id, map[string]any{"nip": blank})
+		wantError(t, code, body, 400, "NIP wajib diisi")
+	}
+	code, body, _ = e.do("PUT", "/api/users/"+id, map[string]any{"phone": "08123"})
+	if code != 200 || body["data"].(map[string]any)["nip"] != newNIP {
+		t.Fatalf("unrelated update changed the NIP: %d %v", code, body)
 	}
 }
 

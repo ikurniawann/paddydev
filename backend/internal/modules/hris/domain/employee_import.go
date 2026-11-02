@@ -18,7 +18,7 @@ type EmployeeColumn struct {
 }
 
 var EmployeeColumns = []EmployeeColumn{
-	{Key: "nip", Header: "NIP", Kind: "text", Width: 16},
+	{Key: "nip", Header: "NIP", Required: true, Kind: "text", Width: 16},
 	{Key: "full_name", Header: "Nama Lengkap", Required: true, Kind: "text", Width: 28},
 	{Key: "email", Header: "Email", Required: true, Kind: "text", Width: 28},
 	{Key: "phone", Header: "No. HP", Kind: "text", Width: 16},
@@ -205,6 +205,9 @@ func ValidateEmployeeImport(mode string, header []string, rows [][]string, first
 			errs = append(errs, UploadIssue{Line: line, Message: "NIP " + nip + " sudah ada (mode Tambah hanya untuk karyawan baru)"})
 		case mode == "replace" && nip == "" && msg == "":
 			fail("nip", "wajib diisi di mode Timpa")
+		case mode == "add" && nip == "" && msg == "":
+			// EPIC-081: NIP is typed in the file, never generated.
+			fail("nip", "NIP wajib diisi")
 		}
 		if nip != "" {
 			seen[nip] = line

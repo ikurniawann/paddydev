@@ -6,8 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jackc/pgx/v5"
-
 	"nuhabit/backend/internal/modules/hris/domain"
 	"nuhabit/backend/internal/platform/database"
 	"nuhabit/backend/internal/platform/employeekeys"
@@ -81,14 +79,6 @@ func (s *store) EmployeeExists(ctx context.Context, column, value string, exclud
 
 func (s *store) EmployeeKeyConflict(ctx context.Context, k employeekeys.Keys, excludeID string) (*employeekeys.Conflict, error) {
 	return employeekeys.Find(ctx, s.db, k, excludeID)
-}
-
-func (s *store) AutoNipsTaken(ctx context.Context, year int) ([]string, error) {
-	rows, err := s.db.Query(ctx, `SELECT nip FROM hris.employees WHERE nip LIKE $1`, fmt.Sprintf("EMP-%d-%%", year))
-	if err != nil {
-		return nil, err
-	}
-	return pgx.CollectRows(rows, pgx.RowTo[string])
 }
 
 func (s *store) InsertEmployee(ctx context.Context, f fields) (*Row, error) {

@@ -21,6 +21,7 @@ import { IAM } from "@/lib/iam/prefixes";
 import {
   buildUserPayload,
   userFormFromItem,
+  validateNip,
   validateUserForm,
   type UserEmployeeFormValues,
 } from "@/lib/hris/users-form";
@@ -90,6 +91,8 @@ function UserEmployeeForm({
   });
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const [releasePrompt, setReleasePrompt] = useState<string | null>(null);
+  // Galat kolom NIP: dari validasi lokal atau bentrok dari server (EPIC-081).
+  const [nipError, setNipError] = useState<string | null>(null);
 
   const hasExistingAppAccount = Boolean(detail?.userId);
   // Akun login ber-role sistem: hanya Super Admin yang bisa menyimpan (temuan EPIC-061).
@@ -99,12 +102,14 @@ function UserEmployeeForm({
   const backHref = editId ? EMPLOYEES_ROUTES.detail(editId) : EMPLOYEES_ROUTES.list;
 
   function setField(patch: Partial<UserEmployeeFormValues>) {
+    if ("nip" in patch) setNipError(null);
     setForm((prev) => ({ ...prev, ...patch }));
   }
 
   async function handleSubmit(releaseEmail = false) {
     const values = canManageAccounts ? form : { ...form, is_access_app: false };
     const invalid = validateUserForm(values, { isEdit, hasExistingAppAccount });
+    setNipError(validateNip(values.nip));
     if (invalid) {
       toast.error(invalid);
       return;
@@ -146,7 +151,9 @@ function UserEmployeeForm({
         router.push(EMPLOYEES_ROUTES.detail(res.data.id));
       }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to save data");
+      const message = error instanceof Error ? error.message : "Failed to save data";
+      if (/^NIP /.test(message)) setNipError(message);
+      toast.error(message);
     }
   }
 
@@ -180,7 +187,14 @@ function UserEmployeeForm({
           </div>
         ) : null}
         <PersonalSection form={form} onChange={setField} emailLocked={!canManageAccounts && hasExistingAppAccount} />
-        <EmploymentSection form={form} lookups={lookups} onChange={setField} isEdit={isEdit} employeeId={editId} />
+        <EmploymentSection
+          form={form}
+          lookups={lookups}
+          onChange={setField}
+          isEdit={isEdit}
+          employeeId={editId}
+          nipError={nipError}
+        />
         <ContactSections form={form} onChange={setField} />
 
         {canManageAccounts ? (

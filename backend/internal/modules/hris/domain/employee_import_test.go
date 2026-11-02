@@ -48,12 +48,14 @@ var hdr = []string{"NIP", "Nama Lengkap *", "Email *", "No. HP", "Tanggal Masuk 
 
 func TestValidateEmployeeImportAdd(t *testing.T) {
 	rows := [][]string{
-		{"", "Baru Satu", "baru@x.id", "0812-3456-7890", "21/10/2026", "Kontrak (PKWT)", "Shift", "PPLN", "Perempuan", "3273012345678901", "Aktif"},
+		{"202611001", "Baru Satu", "baru@x.id", "0812-3456-7890", "21/10/2026", "Kontrak (PKWT)", "Shift", "PPLN", "Perempuan", "3273012345678901", "Aktif"},
 		{"202505272", "Feti", "feti@x.id", "", "01/06/2025", "Kontrak (PKWT)", "Shift", "PPLN", "", "", ""},
-		{"", "Tanpa Email", "", "", "21/10/2026", "Kontrak (PKWT)", "Shift", "PPLN", "", "", ""},
-		{"", "Status Salah", "s@x.id", "", "21/10/2026", "Karyawan Tetap", "Shift", "PPLN", "", "", ""},
-		{"", "NIK Pendek", "n@x.id", "", "2026-10-21", "Kontrak (PKWT)", "shift", "ppln", "", "3273", ""},
-		{"", "Email Lama", "lama@x.id", "", "21/10/2026", "Kontrak (PKWT)", "Shift", "PPLN", "", "", ""},
+		{"202611002", "Tanpa Email", "", "", "21/10/2026", "Kontrak (PKWT)", "Shift", "PPLN", "", "", ""},
+		{"202611003", "Status Salah", "s@x.id", "", "21/10/2026", "Karyawan Tetap", "Shift", "PPLN", "", "", ""},
+		{"202611004", "NIK Pendek", "n@x.id", "", "2026-10-21", "Kontrak (PKWT)", "shift", "ppln", "", "3273", ""},
+		{"202611005", "Email Lama", "lama@x.id", "", "21/10/2026", "Kontrak (PKWT)", "Shift", "PPLN", "", "", ""},
+		{"", "Tanpa NIP", "tanpa@x.id", "", "21/10/2026", "Kontrak (PKWT)", "Shift", "PPLN", "", "", ""},
+		{"   ", "NIP Spasi", "spasi@x.id", "", "21/10/2026", "Kontrak (PKWT)", "Shift", "PPLN", "", "", ""},
 	}
 	out, errs, warns := ValidateEmployeeImport("add", hdr, rows, 2, lk())
 	wantErr := []string{
@@ -61,6 +63,9 @@ func TestValidateEmployeeImportAdd(t *testing.T) {
 		"Baris 4, kolom Email: wajib diisi untuk karyawan baru",
 		"Baris 5, kolom Status Kepegawaian: 'Karyawan Tetap' tidak ada di daftar pilihan",
 		"Baris 6, kolom NIK (KTP): harus 16 angka",
+		// EPIC-081: a new employee needs a NIP typed in the file.
+		"Baris 8, kolom NIP: NIP wajib diisi",
+		"Baris 9, kolom NIP: NIP wajib diisi",
 	}
 	for _, w := range wantErr {
 		if !issueText(errs, w) {
@@ -77,8 +82,20 @@ func TestValidateEmployeeImportAdd(t *testing.T) {
 	if _, ok := out[0].Set["active"]; ok {
 		t.Fatal("export-only column must be ignored")
 	}
+	if len(errs) != len(wantErr) {
+		t.Errorf("unexpected extra errors: %+v", errs)
+	}
 	if out[5].ReleaseEmailFrom != "e9" {
 		t.Fatalf("release = %q", out[5].ReleaseEmailFrom)
+	}
+}
+
+func TestValidateEmployeeImportNIPTooLong(t *testing.T) {
+	long := "1234567890123456789012345678901234567890123456789012" // 52
+	rows := [][]string{{long, "Panjang", "p@x.id", "", "21/10/2026", "Kontrak (PKWT)", "Shift", "PPLN", "", "", ""}}
+	_, errs, _ := ValidateEmployeeImport("add", hdr, rows, 2, lk())
+	if !issueText(errs, "Baris 2, kolom NIP: NIP maksimal 50 karakter") || len(errs) != 1 {
+		t.Fatalf("errors %+v", errs)
 	}
 }
 

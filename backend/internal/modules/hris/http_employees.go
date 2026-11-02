@@ -61,7 +61,8 @@ func parseEmployee(f *validate.Form, create bool) employeeInput {
 		return opt[string]{Val: reqStr(f, key, employeeRequired, o), Sent: true}
 	}
 	var in employeeInput
-	in.nip = text("nip", 50)
+	// The 50-character limit is checked after the trim, by employeekeys.CleanNIP.
+	in.nip = text("nip", 0)
 	if create {
 		in.fullName = required("full_name", validate.StrOpts{Trim: true, Max: 255, Check: minLen(1, employeeRequired)})
 		in.email = required("email", validate.StrOpts{Max: 255, Check: both(minLen(1, employeeRequired), emailCheck)})

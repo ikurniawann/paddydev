@@ -16,9 +16,11 @@ interface EmploymentSectionProps {
   isEdit?: boolean;
   /** Edit: id karyawan, supaya ia tidak bisa memilih dirinya sendiri sebagai atasan (EPIC-063). */
   employeeId?: string | null;
+  /** Galat kolom NIP (kosong/bentrok), dihapus pemanggil saat NIP diketik ulang. */
+  nipError?: string | null;
 }
 
-export function EmploymentSection({ form, lookups, onChange, isEdit = false, employeeId = null }: EmploymentSectionProps) {
+export function EmploymentSection({ form, lookups, onChange, isEdit = false, employeeId = null, nipError = null }: EmploymentSectionProps) {
   const departments = lookups?.departments ?? [];
   const selectedDeptName = departments.find((d) => d.id === form.department_id)?.name;
   // posisi hanya dari departemen terpilih
@@ -39,6 +41,15 @@ export function EmploymentSection({ form, lookups, onChange, isEdit = false, emp
       description="Internal organization placement and employment status."
     >
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <TextField
+          label="NIP"
+          required
+          value={form.nip}
+          onChange={(nip) => onChange({ nip })}
+          placeholder="mis. 202511001"
+          maxLength={50}
+          error={nipError}
+        />
         <TextField
           label="Join Date"
           type="date"

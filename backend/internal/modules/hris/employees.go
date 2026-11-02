@@ -22,7 +22,6 @@ type EmployeeRepo interface {
 	EmployeeExists(ctx context.Context, column, value string, excludeID *string) (bool, error)
 	// EmployeeKeyConflict is the employee (active or not) already holding one of the keys, nil when free.
 	EmployeeKeyConflict(ctx context.Context, k employeekeys.Keys, excludeID string) (*employeekeys.Conflict, error)
-	AutoNipsTaken(ctx context.Context, year int) ([]string, error)
 	InsertEmployee(ctx context.Context, f fields) (*Row, error)
 	EmployeeDetail(ctx context.Context, id string) (*Row, error)
 	EmployeeBrief(ctx context.Context, id string) (*Row, error)
@@ -52,12 +51,12 @@ func (s *Service) EmployeeDirectory(ctx context.Context, p domain.DirectoryParam
 	return s.repo.DirectoryPage(ctx, p)
 }
 
-// CreateEmployee is createEmployee: a given NIP must be unique, an empty one
-// becomes the next EMP-<year>-NNNNN; the email must be unique.
+// CreateEmployee is createEmployee: the NIP is required and must be unique,
+// the email must be unique.
 func (s *Service) CreateEmployee(ctx context.Context, in employeeInput) (*Row, error) {
-	nip := ""
-	if in.nip.Val != nil {
-		nip = domain.JSTrim(*in.nip.Val)
+	nip, err := employeekeys.CleanNIP(in.nip.Val)
+	if err != nil {
+		return nil, err
 	}
 	keys := in.keys()
 	keys.NIP = &nip
@@ -65,16 +64,6 @@ func (s *Service) CreateEmployee(ctx context.Context, in employeeInput) (*Row, e
 		return nil, err
 	} else if conflict != nil {
 		return nil, httpx.BadRequest(conflict.Message())
-	}
-	if nip == "" {
-		year := domain.NowWIB(s.now()).Year()
-		taken, err := s.repo.AutoNipsTaken(ctx, year)
-		if err != nil {
-			return nil, err
-		}
-		if nip = domain.NextAutoNip(year, taken); nip == "" {
-			return nil, httpx.Status(500, "Tidak dapat generate NIP unik")
-		}
 	}
 	exists, err := s.repo.EmployeeExists(ctx, "email", strOr(in.email.Val), nil)
 	if err != nil {
@@ -159,13 +148,25 @@ func (s *Service) UpdateEmployee(ctx context.Context, id string, in employeeInpu
 			return nil, errOr(err, httpx.BadRequest("Email sudah digunakan"))
 		}
 	}
-	if conflict, err := s.repo.EmployeeKeyConflict(ctx, in.keys(), id); err != nil {
+	// NIP can be changed but never blanked (EPIC-081 R2).
+	keys := in.keys()
+	var nip string
+	if in.nip.Sent {
+		if nip, err = employeekeys.CleanNIP(in.nip.Val); err != nil {
+			return nil, err
+		}
+		keys.NIP = &nip
+	}
+	if conflict, err := s.repo.EmployeeKeyConflict(ctx, keys, id); err != nil {
 		return nil, err
 	} else if conflict != nil {
 		return nil, httpx.BadRequest(conflict.Message())
 	}
 
 	f := in.columns()
+	if in.nip.Sent {
+		f.set("nip", nip)
+	}
 	if in.phone.Sent {
 		f.set("phone", strOr(nilIfEmpty(in.phone.Val))) // phone is NOT NULL
 	}

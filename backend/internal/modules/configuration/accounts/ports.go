@@ -70,8 +70,6 @@ type Employees interface {
 	// ReleaseEmail sets the row's email to archive and unlinks its login
 	// account; it returns the user_id it had.
 	ReleaseEmail(ctx context.Context, q database.Querier, id, archive string) (*string, error)
-	// NIPTaken reports a row with nip.
-	NIPTaken(ctx context.Context, q database.Querier, nip string) (bool, error)
 	// Insert adds a row with the given columns and returns its id.
 	Insert(ctx context.Context, q database.Querier, cols []Column) (string, error)
 	// Update sets the given columns on the row.

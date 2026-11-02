@@ -3,11 +3,13 @@ package hris
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/xuri/excelize/v2"
 
@@ -136,16 +138,20 @@ func TestEmployeeImportAddAndReplace(t *testing.T) {
 		SELECT id, 'Cabang Import', 'CI'||substr(md5(random()::text),1,4) FROM configuration.companies LIMIT 1 RETURNING id::text`)
 	h.exec(`INSERT INTO hris.employment_statuses (code, name, is_active) VALUES ('contract', 'Kontrak (PKWT)', true) ON CONFLICT (code) DO NOTHING`)
 	header := []string{"NIP", "Nama Lengkap *", "Email *", "Tanggal Masuk *", "Status Kepegawaian *", "Tipe Jadwal *", "Cabang Utama *", "Jenis Kelamin"}
-	add := employeeFile(t, header, []string{"", "Baru Import", "baru.import@test.id", "21/10/2026", "Kontrak (PKWT)", "Shift", "Cabang Import", "Perempuan"})
+	// Deliberately looks like scientific notation ("2026111E…") but is a text NIP
+	// that must be kept exactly; the digits keep it unique per run (no random hex,
+	// whose "12e456"-style prefixes made this test flaky: EPIC-081 review).
+	newNIP := fmt.Sprintf("2026111E%05d", time.Now().UnixNano()/1000%100000)
+	add := employeeFile(t, header, []string{newNIP, "Baru Import", "baru.import@test.id", "21/10/2026", "Kontrak (PKWT)", "Shift", "Cabang Import", "Perempuan"})
 	pre := uploadEmployees(t, h, &hr, map[string]string{"mode": "add", "step": "preview"}, add)
 	expect(t, pre, http.StatusOK, "")
-	if pre.data()["summary"].(map[string]any)["create"] != float64(1) {
+	if pre.data()["summary"].(map[string]any)["create"] != float64(1) || len(pre.data()["errors"].([]any)) != 0 {
 		t.Fatalf("preview = %v", pre.data())
 	}
 	commit := uploadEmployees(t, h, &hr, map[string]string{"mode": "add", "step": "commit"}, add)
 	expect(t, commit, http.StatusOK, "")
 	id := h.scalar(`SELECT id::text FROM hris.employees WHERE email = 'baru.import@test.id'`)
-	if got := h.scalar(`SELECT nip || '|' || gender::text || '|' || schedule_type || '|' || phone FROM hris.employees WHERE id = $1`, id); !strings.HasPrefix(got, "EMP-") || !strings.HasSuffix(got, "|female|shift|") {
+	if got := h.scalar(`SELECT nip || '|' || gender::text || '|' || schedule_type || '|' || phone FROM hris.employees WHERE id = $1`, id); !strings.HasPrefix(got, newNIP+"|") || !strings.HasSuffix(got, "|female|shift|") {
 		t.Fatalf("created = %s", got)
 	}
 	if h.scalar(`SELECT branch_id::text FROM hris.employee_placements WHERE employee_id = $1 AND is_primary`, id) != branch {
@@ -171,4 +177,25 @@ func TestEmployeeImportAddAndReplace(t *testing.T) {
 	dup := uploadEmployees(t, h, &hr, map[string]string{"mode": "add", "step": "commit"}, employeeFile(t, header,
 		[]string{nip, "X", "x.import@test.id", "21/10/2026", "Kontrak (PKWT)", "Shift", "Cabang Import", ""}))
 	expect(t, dup, http.StatusBadRequest, "File masih punya error — perbaiki lalu unggah ulang")
+
+	// EPIC-081: a new employee row without NIP is an error ("NIP wajib diisi"),
+	// nothing is saved and no EMP- number is made up.
+	noNIP := employeeFile(t, header, []string{"", "Tanpa NIP", "tanpa.nip@test.id", "21/10/2026", "Kontrak (PKWT)", "Shift", "Cabang Import", ""})
+	for _, mode := range []string{"add", "replace"} {
+		pre := uploadEmployees(t, h, &hr, map[string]string{"mode": mode, "step": "preview"}, noNIP)
+		expect(t, pre, http.StatusOK, "")
+		errs := pre.data()["errors"].([]any)
+		if len(errs) != 1 || errs[0].(map[string]any)["column"] != "NIP" {
+			t.Fatalf("%s preview errors = %v", mode, errs)
+		}
+		expect(t, uploadEmployees(t, h, &hr, map[string]string{"mode": mode, "step": "commit"}, noNIP),
+			http.StatusBadRequest, "File masih punya error — perbaiki lalu unggah ulang")
+	}
+	if h.scalar(`SELECT count(*)::text FROM hris.employees WHERE email = 'tanpa.nip@test.id'`) != "0" {
+		t.Fatal("a row without NIP must not be saved")
+	}
+	preAdd := uploadEmployees(t, h, &hr, map[string]string{"mode": "add", "step": "preview"}, noNIP)
+	if msg := preAdd.data()["errors"].([]any)[0].(map[string]any)["message"]; msg != "NIP wajib diisi" {
+		t.Fatalf("add message = %v", msg)
+	}
 }

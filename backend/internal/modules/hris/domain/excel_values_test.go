@@ -33,6 +33,18 @@ func TestCleanNIP(t *testing.T) {
 	if nip, _ := CleanNIP("EMP-2026-00004"); nip != "EMP-2026-00004" {
 		t.Fatalf("got %q", nip)
 	}
+	// A real text NIP that merely contains an "e" between digits is kept exactly
+	// (the old pattern rejected these, which made the import flaky).
+	for _, keep := range []string{"2026111E05", "20261112e456", "2026111e5", "202611123456"} {
+		if nip, msg := CleanNIP(keep); nip != keep || msg != "" {
+			t.Fatalf("%s must be kept as text, got %q %q", keep, nip, msg)
+		}
+	}
+	for _, mangled := range []string{"2.02505E+08", "2,02505E+08", "2.02505e-08", "2E+08"} {
+		if _, msg := CleanNIP(mangled); msg == "" {
+			t.Fatalf("%s is Excel scientific notation and must be rejected", mangled)
+		}
+	}
 	if _, msg := CleanNIP("2.02505E+08"); msg == "" {
 		t.Fatal("scientific notation must be rejected")
 	}

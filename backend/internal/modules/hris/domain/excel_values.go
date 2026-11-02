@@ -4,6 +4,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"nuhabit/backend/internal/platform/validate"
 )
 
 // Values of the HR-facing Excel files (Spec 2026-10-19 §3): labels people
@@ -85,7 +87,10 @@ var digitNoise = strings.NewReplacer(" ", "", ".", "", "-", "", "/", "", "'", ""
 
 func CleanDigits(s string) string { return digitNoise.Replace(strings.TrimSpace(s)) }
 
-var scientific = regexp.MustCompile(`(?i)^\d+(\.\d+)?e\+?\d+$`)
+// scientific is what Excel's General format shows for a long number typed as
+// a number: always a signed exponent (2.02E+08, 2,02E+08). An unsigned "e"
+// between digits (2026111E05) is an ordinary text NIP and stays untouched.
+var scientific = regexp.MustCompile(`(?i)^\d+([.,]\d+)?e[+-]\d+$`)
 
 // CleanNIP trims a NIP; a NIP Excel turned into scientific notation is an
 // error the person can fix (format the column as text and retype it).
@@ -93,6 +98,9 @@ func CleanNIP(s string) (string, string) {
 	s = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(s), "'"))
 	if scientific.MatchString(s) {
 		return "", "NIP berubah jadi format angka Excel (mis. 2,02E+08). Ubah kolom NIP ke format Teks lalu ketik ulang."
+	}
+	if validate.UTF16Len(s) > 50 {
+		return "", validate.NIPTooLong
 	}
 	return s, ""
 }

@@ -5,8 +5,11 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/jackc/pgx/v5/pgconn"
+
 	"nuhabit/backend/internal/modules/recruitment/domain"
 	"nuhabit/backend/internal/platform/database"
+	"nuhabit/backend/internal/platform/employeekeys"
 	"nuhabit/backend/internal/platform/httpx"
 )
 
@@ -76,8 +79,27 @@ func (s *Service) Promote(ctx context.Context, in promotionInput) (*promotion, e
 	if in.EmploymentStatus != nil && *in.EmploymentStatus != "" {
 		status = *in.EmploymentStatus
 	}
-	employeeID, err := s.repo.PromoteCandidate(ctx, s.db, c.ID, joinDate, status, emptyToNil(in.DepartmentID), emptyToNil(in.ReportingTo))
+	// The NIP is never made up (EPIC-081): required, trimmed, unique.
+	nip, err := employeekeys.CleanNIP(in.NIP)
 	if err != nil {
+		return nil, err
+	}
+	conflict, err := employeekeys.Find(ctx, s.db, employeekeys.Keys{NIP: &nip}, "")
+	if err != nil {
+		return nil, err
+	}
+	if conflict != nil {
+		return nil, httpx.BadRequest(conflict.Message())
+	}
+	employeeID, err := s.repo.PromoteCandidate(ctx, s.db, c.ID, joinDate, status, emptyToNil(in.DepartmentID), emptyToNil(in.ReportingTo), nip)
+	if err != nil {
+		// A concurrent write won the race past the NIP pre-check.
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			if friendly, ok := employeekeys.ConstraintMessage(pgErr.ConstraintName); ok {
+				return nil, httpx.BadRequest(friendly)
+			}
+		}
 		// a concurrent promotion of the same candidate loses with 409
 		if database.IsUniqueViolation(err) {
 			return nil, httpx.Conflict("Kandidat sudah dipromosikan menjadi employee")

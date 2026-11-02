@@ -243,6 +243,25 @@ func JSTrim(s string) string {
 	return strings.TrimFunc(s, func(r rune) bool { return unicode.IsSpace(r) || r == '\uFEFF' })
 }
 
+// NIP messages (EPIC-081): the employee number is typed by HR, never made up.
+const (
+	NIPRequired = "NIP wajib diisi"
+	NIPTooLong  = "NIP maksimal 50 karakter"
+)
+
+// CleanNIP trims a typed NIP and returns the message that refuses it: blank
+// is NIPRequired and more than 50 UTF-16 units (after the trim) is NIPTooLong.
+func CleanNIP(raw string) (nip, problem string) {
+	nip = JSTrim(raw)
+	switch {
+	case nip == "":
+		return "", NIPRequired
+	case UTF16Len(nip) > 50:
+		return "", NIPTooLong
+	}
+	return nip, ""
+}
+
 // CheckString validates v as a string at key (a map key or array index).
 func (f *Form) CheckString(key any, v any, o StrOpts) (string, bool) {
 	s, ok := v.(string)
