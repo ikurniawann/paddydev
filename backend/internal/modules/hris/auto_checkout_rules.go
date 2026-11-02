@@ -8,11 +8,9 @@ import (
 	"nuhabit/backend/internal/platform/auth"
 	"nuhabit/backend/internal/platform/database"
 	"nuhabit/backend/internal/platform/httpx"
+	"nuhabit/backend/internal/platform/iam"
 	"nuhabit/backend/internal/platform/validate"
 )
-
-// ruleRequired is a field that must be sent and not null.
-var ruleRequired = validate.Rule{}
 
 // EPIC-080 R1/R2: aturan checkout otomatis per jabatan dan lokasi. HR
 // (Kepegawaian) mengatur semuanya; pengatur jadwal toko hanya membuat,
@@ -61,8 +59,8 @@ func autoCheckoutRuleAudit(row *Row) map[string]any {
 
 // writeAutoCheckoutRuleAudit records action ("create", "update", "delete") on
 // q, so it commits with the change. before/after are nil when absent.
-func writeAutoCheckoutRuleAudit(ctx context.Context, q database.Querier, u *auth.User, action, id string, label *Row, before, after *Row) error {
-	e := audit.Entry{ActorID: u.ID, Action: "attendance.auto_checkout_rule." + action, Entity: autoCheckoutRuleEntity, EntityID: &id}
+func writeAutoCheckoutRuleAudit(ctx context.Context, q database.Querier, r *http.Request, u *auth.User, action, id string, label *Row, before, after *Row) error {
+	e := audit.Entry{ActorID: u.ID, Action: "attendance.auto_checkout_rule." + action, Entity: autoCheckoutRuleEntity, EntityID: &id}.WithRequest(r)
 	name := u.FullName
 	e.ActorName = &name
 	title, where := label.Str("position_title"), "Semua lokasi"
@@ -141,7 +139,7 @@ func (h handlers) createAutoCheckoutRule(w http.ResponseWriter, r *http.Request,
 	if err != nil {
 		return err
 	}
-	positionID := f.UUID("position_id", ruleRequired)
+	positionID := f.UUID("position_id", validate.Rule{})
 	branchID := f.UUID("branch_id", nullish)
 	if err := formErr(f, ""); err != nil {
 		return err
@@ -180,7 +178,7 @@ func (h handlers) createAutoCheckoutRule(w http.ResponseWriter, r *http.Request,
 		if created, err = loadAutoCheckoutRule(ctx, q, id); err != nil {
 			return err
 		}
-		return writeAutoCheckoutRuleAudit(ctx, q, u, "create", id, created, nil, created)
+		return writeAutoCheckoutRuleAudit(ctx, q, r, u, "create", id, created, nil, created)
 	})
 	if err != nil {
 		return err
@@ -198,7 +196,7 @@ func (h handlers) patchAutoCheckoutRule(w http.ResponseWriter, r *http.Request, 
 	if err != nil {
 		return err
 	}
-	active := f.Bool("is_active", ruleRequired)
+	active := f.Bool("is_active", validate.Rule{})
 	if err := formErr(f, ""); err != nil {
 		return err
 	}
@@ -220,7 +218,7 @@ func (h handlers) patchAutoCheckoutRule(w http.ResponseWriter, r *http.Request, 
 		if after, err = loadAutoCheckoutRule(ctx, q, id); err != nil {
 			return err
 		}
-		return writeAutoCheckoutRuleAudit(ctx, q, u, "update", id, after, before, after)
+		return writeAutoCheckoutRuleAudit(ctx, q, r, u, "update", id, after, before, after)
 	})
 	if err != nil {
 		return err
@@ -235,6 +233,18 @@ func (h handlers) deleteAutoCheckoutRule(w http.ResponseWriter, r *http.Request,
 		return err
 	}
 	ctx := r.Context()
+	// HR needs the "delete" action like every sibling kepegawaian delete
+	// (hrisdel.Guard), but no reason: rules are config, audited with before.
+	// A delegate is held to their stores instead (R2).
+	if sc.Delegate == nil {
+		can, err := h.auth.HasMenuAction(ctx, u, "delete", iam.HrisKepegawaian...)
+		if err != nil {
+			return err
+		}
+		if !can {
+			return httpx.Forbidden("Insufficient permissions")
+		}
+	}
 	err = h.svc.repo.InTx(ctx, func(repo Repository) error {
 		q := repo.querier()
 		before, err := lockAutoCheckoutRule(ctx, q, id)
@@ -247,7 +257,7 @@ func (h handlers) deleteAutoCheckoutRule(w http.ResponseWriter, r *http.Request,
 		if _, err := q.Exec(ctx, `DELETE FROM hris.auto_checkout_rules WHERE id = $1`, id); err != nil {
 			return err
 		}
-		return writeAutoCheckoutRuleAudit(ctx, q, u, "delete", id, before, before, nil)
+		return writeAutoCheckoutRuleAudit(ctx, q, r, u, "delete", id, before, before, nil)
 	})
 	if err != nil {
 		return err

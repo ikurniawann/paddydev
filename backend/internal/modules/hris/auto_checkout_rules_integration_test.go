@@ -104,6 +104,15 @@ func TestAutoCheckoutRulesHR(t *testing.T) {
 	}
 	expect(t, h.do(&hr, "DELETE", rulesURL+"/"+id, nil), 404, "Aturan tidak ditemukan")
 
+	// HR with only read/update on Kepegawaian may not delete; with "delete" may.
+	viewer := h.staffActions("hrd", map[string][]string{"hris.kepegawaian.shifts": {"read", "create", "update"}})
+	expect(t, h.do(&viewer, "DELETE", rulesURL+"/"+allID, nil), 403, "Insufficient permissions")
+	expect(t, h.do(&viewer, "PATCH", rulesURL+"/"+allID, map[string]any{"is_active": false}), 200, "")
+	if h.scalar(`SELECT count(*)::text FROM hris.auto_checkout_rules WHERE id = $1`, allID) != "1" {
+		t.Fatal("a refused DELETE must keep the rule")
+	}
+	expect(t, h.do(&hr, "DELETE", rulesURL+"/"+allID, nil), 200, "")
+
 	// outsiders
 	nobody, _ := h.staff("pos", nil, true)
 	expect(t, h.do(&nobody, "GET", rulesURL, nil), 403, "Insufficient permissions")
