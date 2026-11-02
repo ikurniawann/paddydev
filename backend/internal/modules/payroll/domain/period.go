@@ -58,7 +58,8 @@ func EachDate(start, end string) []string {
 // ShiftRow is a hris.v_employee_schedule row: day_of_week 1=Monday … 7=Sunday,
 // ShiftID nil = day off. A per-date roster row (hris.employee_shift_days) is
 // a one-day pattern (EffectiveFrom = EffectiveTo = the date) with Priority 0;
-// a weekly pattern (hris.employee_shifts) has Priority 1 (EPIC-079 R7).
+// a weekly pattern (hris.employee_shifts) must carry Priority 1, or a one-day
+// weekly pattern would be taken for a roster row (EPIC-079 R7).
 type ShiftRow struct {
 	DayOfWeek     int
 	ShiftID       *string

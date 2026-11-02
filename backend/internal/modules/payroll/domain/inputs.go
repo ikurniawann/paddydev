@@ -175,6 +175,15 @@ func BuildInputRange(emp Employee, salary Salary, rec WorkforceRecords, loans []
 	partial := hasContract && !(len(merged) == 1 && merged[0].Start == start && merged[0].End == end)
 
 	scheduled, hasSchedule := ScheduledDays(periodSchedule, start, end)
+	// Jadwal periode harus lengkap: setiap tanggal punya baris yang berlaku
+	// (pola mingguan atau roster per tanggal). Roster per tanggal tidak
+	// diperpanjang, jadi roster yang baru mulai (karyawan baru, roster pertama)
+	// atau yang dihapus sesudah end_date (resign) menyisakan tanggal tanpa
+	// jadwal; hari ber-shift periode tidak diketahui, sehingga pembagi, hari
+	// kerja, dan faktor cakupan mengikuti kasus tanpa jadwal (EPIC-079). Per
+	// tanggal (cuti di hari kerja, hari istirahat lembur) roster tetap dipakai.
+	useSchedule := hasSchedule && scheduled > 0 &&
+		!slices.ContainsFunc(EachDate(start, end), func(d string) bool { return !ScheduleInForce(periodSchedule, d) })
 	coveredScheduled, coveredCalendar := 0, 0
 	for _, r := range merged {
 		n, _ := ScheduledDays(periodSchedule, r.Start, r.End)
@@ -203,19 +212,11 @@ func BuildInputRange(emp Employee, salary Salary, rec WorkforceRecords, loans []
 	var workingDays float64
 	factor := 1.0
 	switch {
-	case hasSchedule && scheduled > 0:
+	case useSchedule:
 		workingDays = float64(scheduled)
 		if partial {
 			workingDays = float64(coveredScheduled)
 			factor = float64(coveredScheduled) / float64(scheduled)
-			// Roster per tanggal tidak diperpanjang: bila sebagian periode tanpa
-			// jadwal sama sekali (roster karyawan baru baru mulai, atau roster
-			// resign dihapus sesudah end_date), hari ber-shift periode tidak
-			// diketahui, jadi faktor memakai hari kalender seperti tanpa jadwal
-			// (EPIC-079). Pembagi dan hari kerja tetap dari roster.
-			if slices.ContainsFunc(EachDate(start, end), func(d string) bool { return !ScheduleInForce(periodSchedule, d) }) {
-				factor = float64(coveredCalendar) / float64(totalCalendar)
-			}
 		}
 	case attendanceDays > 0:
 		workingDays = float64(attendanceDays)
@@ -306,7 +307,7 @@ func BuildInputRange(emp Employee, salary Salary, rec WorkforceRecords, loans []
 		}
 	}
 	paidDays := float64(attendanceDays + paidLeave)
-	if hasSchedule && scheduled > 0 && paidDays > workingDays {
+	if useSchedule && paidDays > workingDays {
 		paidDays = workingDays
 	}
 	// Tanpa jadwal tidak ada batas hari dibayar: pekerja 6 hari (pembagi struktur
@@ -317,7 +318,7 @@ func BuildInputRange(emp Employee, salary Salary, rec WorkforceRecords, loans []
 	// tidak berubah (struktur kosong = aturan per hari tidak berlaku).
 	isDaily := salary.PayBasis != nil && *salary.PayBasis == "daily"
 	divisor := 0.0
-	if !isDaily && hasSchedule && scheduled > 0 {
+	if !isDaily && useSchedule {
 		divisor = float64(scheduled)
 	}
 	if divisor <= 0 {

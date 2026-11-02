@@ -48,26 +48,31 @@ func TestScheduledDaysCountsRoster(t *testing.T) {
 	}
 }
 
-// Pembagi staf toko = hari ber-shift di roster. Roster yang baru dimulai di
-// tengah periode tidak diperpanjang ke awal periode: hanya pola mingguan yang
-// diukur seolah berlaku sejak awal periode (perbaikan pembagi 22-10).
+// Roster yang baru dimulai di tengah periode tidak diperpanjang ke awal
+// periode (hanya pola mingguan yang diperpanjang, perbaikan pembagi 22-10).
+// Jadwal periode itu tidak lengkap (1–15 Nov tanpa jadwal sama sekali), jadi
+// pembagi, hari kerja, dan faktor mengikuti kasus tanpa jadwal: hari hadir.
+// Tanpa ini pembagi = 13 hari roster sementara tunjangan per hari dikali 26
+// hari hadir (transport 2× nominal bulanan).
 func TestBuildInputRosterNotExtendedToPeriodStart(t *testing.T) {
 	emp := Employee{ID: "e", JoinDate: "2020-01-01", EmploymentStatus: "permanent", IsActive: true, ScheduleType: "shift"}
-	var roster []ShiftRow
-	for _, r := range novemberRoster() {
-		if r.EffectiveFrom >= "2026-11-16" { // roster baru dibuat mulai 16/11
-			roster = append(roster, r)
-		}
+	roster := rosterBetween("2026-11-16", "2026-11-30")
+	if n, _ := ScheduledDays(roster, "2026-11-01", "2026-11-30"); n != 13 { // 16–30 Nov tanpa 17 & 24
+		t.Fatalf("fixture: %d rostered days, want 13", n)
 	}
-	want, _ := ScheduledDays(roster, "2026-11-01", "2026-11-30") // 16–30 Nov tanpa 17 & 24 = 13
-	if want != 13 {
-		t.Fatalf("fixture: %d rostered days, want 13", want)
+	sal := Salary{BaseSalary: "2600000.00", TransportAllowance: "260000.00", TransportMode: ptr("per_day")}
+	rec := WorkforceRecords{Schedule: roster, Attendance: attendRoster(novemberRoster())} // hadir 26 hari
+	in := BuildInputRange(emp, sal, rec, nil, nil, 11, 2026, "2026-11-01", "2026-11-30", false)
+	if in.DivisorDays != 26 || in.WorkingDays != 26 || in.AllowanceDays != 26 {
+		t.Fatalf("pembagi = %v, hari kerja = %v, hari tunjangan = %v, want 26 (hari hadir, seperti tanpa jadwal)",
+			in.DivisorDays, in.WorkingDays, in.AllowanceDays)
 	}
-	in := BuildInputRange(emp, Salary{BaseSalary: "2600000.00"}, WorkforceRecords{Schedule: roster}, nil, nil,
-		11, 2026, "2026-11-01", "2026-11-30", false)
-	if in.WorkingDays != 13 || in.DivisorDays != 13 {
-		t.Fatalf("hari kerja = %v, pembagi = %v, want 13 (hari ber-shift di roster)", in.WorkingDays, in.DivisorDays)
+	noSchedule := BuildInputRange(emp, sal, WorkforceRecords{Attendance: rec.Attendance}, nil, nil, 11, 2026, "2026-11-01", "2026-11-30", false)
+	if noSchedule.DivisorDays != in.DivisorDays || noSchedule.WorkingDays != in.WorkingDays {
+		t.Fatalf("tanpa jadwal: pembagi = %v, hari kerja = %v; dengan roster sebagian: %v, %v",
+			noSchedule.DivisorDays, noSchedule.WorkingDays, in.DivisorDays, in.WorkingDays)
 	}
+	eq(t, "transport per hari 260 rb × 26/26", Calculate(in, DefaultConfig()).TransportAllowance, 260_000)
 
 	// Pola mingguan yang dimulai di tengah periode tetap diperpanjang, dan roster
 	// per tanggal di tanggal awalnya tetap tidak.
@@ -86,21 +91,30 @@ func TestBuildInputRosterNotExtendedToPeriodStart(t *testing.T) {
 
 // Resign: baris yang berakhir tepat pada end_date dianggap berlaku sampai akhir
 // periode. Roster per tanggal pada end_date tidak boleh ikut terbuka (menjadi
-// pola mingguan tanpa akhir).
+// pola mingguan tanpa akhir): 13–30 Nov tetap tanpa jadwal, jadi pembagi =
+// hari hadir (10), bukan 12 hari roster (Kamis 19 & 26 ikut terhitung).
 func TestBuildInputLeaverRosterOnEndDateStaysOneDay(t *testing.T) {
 	end := "2026-11-12" // Kamis
 	emp := Employee{ID: "e", JoinDate: "2020-01-01", EmploymentStatus: "resigned", EndDate: &end, ScheduleType: "shift"}
-	var roster []ShiftRow
-	for _, r := range novemberRoster() {
-		if r.EffectiveFrom <= end {
-			roster = append(roster, r)
-		}
-	}
-	in := BuildInputRange(emp, Salary{BaseSalary: "2600000.00"}, WorkforceRecords{Schedule: roster}, nil, nil,
-		11, 2026, "2026-11-01", "2026-11-30", false)
-	// 1–12 Nov tanpa 3 & 10 = 10 hari ber-shift; 13–30 Nov tanpa roster.
+	roster := rosterBetween("2026-11-01", end)
+	in := BuildInputRange(emp, Salary{BaseSalary: "2600000.00"}, WorkforceRecords{Schedule: roster, Attendance: attendRoster(roster)},
+		nil, nil, 11, 2026, "2026-11-01", "2026-11-30", false)
 	if in.DivisorDays != 10 {
 		t.Fatalf("pembagi = %v, want 10 (Kamis 12/11 tidak menjadi pola mingguan)", in.DivisorDays)
+	}
+}
+
+// Roster lengkap: setiap tanggal periode punya baris per tanggal (termasuk
+// libur roster), jadi pembagi = hari ber-shift di roster, bukan hari hadir.
+func TestFullPeriodRosterUsesRosterDivisor(t *testing.T) {
+	emp := Employee{ID: "e", JoinDate: "2020-01-01", EmploymentStatus: "permanent", IsActive: true, ScheduleType: "shift"}
+	rec := WorkforceRecords{Schedule: novemberRoster(), Attendance: attendRoster(rosterBetween("2026-11-01", "2026-11-20"))}
+	in := BuildInputRange(emp, Salary{BaseSalary: "2600000.00"}, rec, nil, nil, 11, 2026, "2026-11-01", "2026-11-30", false)
+	if in.DivisorDays != 26 || in.WorkingDays != 26 {
+		t.Fatalf("pembagi = %v, hari kerja = %v, want 26 (hari ber-shift roster)", in.DivisorDays, in.WorkingDays)
+	}
+	if in.AttendanceDays == 26 {
+		t.Fatal("fixture: attendance must differ from the roster")
 	}
 }
 

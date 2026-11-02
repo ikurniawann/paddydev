@@ -40,7 +40,7 @@ func TestPayrollScheduleReadsRoster(t *testing.T) {
 	ports := payrollPorts()
 	rec, err := ports.Workforce.PeriodRecords(ctx, tx, store, "2097-11-01", "2097-11-30")
 	must(err)
-	if len(rec.Schedule) != 30 || !rec.Schedule[0].PerDate() {
+	if len(rec.Schedule) != 30 || slices.ContainsFunc(rec.Schedule, func(r domain.ShiftRow) bool { return !r.PerDate() }) {
 		t.Fatalf("schedule rows = %d (%+v), want 30 per-date rows", len(rec.Schedule), rec.Schedule)
 	}
 	if days, has := domain.ScheduledDays(rec.Schedule, "2097-11-01", "2097-11-30"); !has || days != 26 {
