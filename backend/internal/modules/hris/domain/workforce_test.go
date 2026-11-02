@@ -27,13 +27,41 @@ func TestDefaultAnnualLeave(t *testing.T) {
 		{"join 31-12-Y", sp("2026-12-31"), 2026, 0},
 		{"kabisat 29-02: A klem ke 28-02", sp("2024-02-29"), 2025, 10},
 		{"kabisat 29-02: tahun berikutnya penuh", sp("2024-02-29"), 2026, 12},
-		{"tahun kabisat 366 hari", sp("2027-07-01"), 2028, 6},
+		{"2028 memakai prorata bulan (EPIC-084): Agu-Des", sp("2027-07-01"), 2028, 5},
 		{"tahun sebelum join", sp("2026-03-01"), 2025, 0},
 		{"timestamp penuh", sp("2025-03-10T00:00:00Z"), 2026, 9.5},
 	}
 	for _, c := range cases {
-		if got := DefaultAnnualLeave(c.join, c.year); got != c.want {
+		if got := DefaultAnnualLeave(c.join, c.year, nil); got != c.want {
 			t.Errorf("%s: DefaultAnnualLeave(%v, %d) = %v, want %v", c.name, c.join, c.year, got, c.want)
+		}
+	}
+}
+
+// EPIC-084 R7: mulai 2027 prorata = bulan sesudah bulan genap 1 tahun,
+// dikurangi cuti bersama di bulan-bulan itu; genap 1 tahun di Januari = 12.
+func TestDefaultAnnualLeaveMonthly2027(t *testing.T) {
+	cases := []struct {
+		name string
+		join *string
+		year int
+		cb   []string
+		want float64
+	}{
+		{"contoh user: join 10-05-2026", sp("2026-05-10"), 2027, nil, 7},
+		{"cuti bersama di bulan genap tidak dihitung", sp("2026-05-10"), 2027, []string{"2027-05-20", "2027-06-15"}, 6},
+		{"cuti bersama tahun lain tidak dihitung", sp("2026-05-10"), 2027, []string{"2026-06-15", "2028-06-15"}, 7},
+		{"genap di Januari penuh", sp("2026-01-15"), 2027, []string{"2027-04-10"}, 12},
+		{"genap di Desember", sp("2026-12-01"), 2027, nil, 0},
+		{"sudah lewat 1 tahun", sp("2025-03-01"), 2027, []string{"2027-04-10"}, 12},
+		{"lantai 0", sp("2026-11-10"), 2027, []string{"2027-12-24", "2027-12-25", "2027-12-26"}, 0},
+		{"belum genap di 2027", sp("2027-02-01"), 2027, nil, 0},
+		{"2026 tetap rumus lama", sp("2025-05-10"), 2026, []string{"2026-06-15"}, 7.5},
+		{"join kosong", nil, 2027, []string{"2027-06-15"}, 12},
+	}
+	for _, c := range cases {
+		if got := DefaultAnnualLeave(c.join, c.year, c.cb); got != c.want {
+			t.Errorf("%s: got %v, want %v", c.name, got, c.want)
 		}
 	}
 }
