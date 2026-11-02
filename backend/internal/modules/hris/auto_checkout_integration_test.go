@@ -434,6 +434,42 @@ func TestAutoCheckoutMarkerFollowsClockOutCorrection(t *testing.T) {
 	}
 }
 
+// EPIC-080 R4, the edges of the marker rule above: HR clearing clock_out takes
+// the time away from the system (no time left to mark), while an approved
+// request that only touches clock_in leaves clock_out, and so the marker, alone.
+func TestAutoCheckoutMarkerClearedOrKept(t *testing.T) {
+	h := newHarness(t)
+	h.exec(`UPDATE hris.attendance_settings SET cutoff_day = 0, closing_offset_days = 3`)
+	hr, _ := h.staff("hrd", []string{"hris.workforce.attendance"}, true, emp{name: "HR Penanda Tepi"})
+	crew, crewID := h.staff("pos", nil, true, emp{name: "Crew Penanda Tepi"})
+	h.setNow("2026-10-06 09:00")
+
+	autoRow := func(date string) string {
+		return h.scalar(`INSERT INTO hris.attendance (employee_id, date, clock_in, clock_out, clock_out_auto, status)
+			VALUES ($1, $2::date, ($2::text || ' 08:00:00+07')::timestamptz, ($2::text || ' 16:00:00+07')::timestamptz, true, 'present') RETURNING id::text`, crewID, date)
+	}
+	state := func(id string) string {
+		return h.scalar(`SELECT coalesce(to_char(clock_out AT TIME ZONE 'Asia/Jakarta', 'HH24:MI'), 'null') || '|' || clock_out_auto::text
+			FROM hris.attendance WHERE id = $1`, id)
+	}
+
+	// HR clears clock_out (out == nil): the marker goes with it.
+	cleared := autoRow("2026-10-05")
+	expect(t, h.do(&hr, "PUT", "/api/hris/attendance/"+cleared, map[string]any{"clock_out": nil, "reason": "Jam pulang dikosongkan"}), 200, "")
+	if got := state(cleared); got != "null|false" {
+		t.Fatalf("after HR cleared clock_out = %s, want null|false", got)
+	}
+
+	// An approved request that changes clock_in only leaves clock_out and the marker.
+	kept := autoRow("2026-10-04")
+	c := h.do(&crew, "POST", "/api/hris/attendance-requests", attReqBody("2026-10-04", "08:30", "", "Salah jam masuk"))
+	expect(t, c, 201, "")
+	expect(t, h.do(&hr, "POST", "/api/hris/attendance-requests/"+c.data()["id"].(string)+"/decide", map[string]any{"action": "approve"}), 200, "")
+	if got := state(kept); got != "16:00|true" {
+		t.Fatalf("after approved clock_in-only request = %s, want 16:00|true", got)
+	}
+}
+
 // EPIC-080 R4: the list behind the calendar and Rekap, and the HR roster
 // behind Monitoring, both carry the "Checkout otomatis" marker.
 func TestAutoCheckoutMarkerInListAndRoster(t *testing.T) {

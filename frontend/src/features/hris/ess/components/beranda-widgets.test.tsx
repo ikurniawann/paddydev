@@ -22,7 +22,8 @@ it("jadwal minggu: satu shift tetap menampilkan jam mulai; dua shift menampilkan
       ]}
     />
   );
-  expect(screen.getByText("08:00")).toBeTruthy();
+  // Satu format di kedua sel: "08:00" (sel dua shift menyumbang satu 08:00 juga).
+  expect(screen.getAllByText("08:00")).toHaveLength(2);
   const two = screen.getByTitle("PAGI4 + SORE4 · 08.00–12.00, 17.00–21.00");
-  expect(two.textContent).toBe("08.0017.00");
+  expect(two.textContent).toBe("08:0017:00");
 });

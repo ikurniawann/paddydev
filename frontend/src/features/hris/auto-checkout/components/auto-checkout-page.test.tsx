@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { toast } from "sonner";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "@/lib/api-client";
 import type { AutoCheckoutRule } from "../types";
@@ -117,6 +118,15 @@ describe("AutoCheckoutPage", () => {
     fireEvent.click(within(table).getByRole("button", { name: /Hapus aturan Shopkeeper/ }));
     fireEvent.click(await screen.findByRole("button", { name: "Ya, hapus" }));
     await waitFor(() => expect(api.deleteAutoCheckoutRule).toHaveBeenCalledWith("r1"));
+  });
+
+  it("hapus ditolak 403 (HR tanpa aksi hapus): toast Indonesia, bukan teks server", async () => {
+    api.deleteAutoCheckoutRule.mockRejectedValue(new ApiError("Insufficient permissions", 403, null));
+    renderPage();
+    const table = await screen.findByTestId("rules-table");
+    fireEvent.click(within(table).getByRole("button", { name: /Hapus aturan Shopkeeper/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Ya, hapus" }));
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Anda tidak punya hak menghapus aturan ini"));
   });
 
   it("Tambah aturan: pilih jabatan dan lokasi, simpan mengirim payload", async () => {

@@ -87,7 +87,7 @@ export function WeekScheduleCard({ days }: { days: EssBeranda["week_schedule"] }
                   // Dua shift (EPIC-080): jam mulai tiap shift di baris sendiri; kolom 1/7 lebar sempit, rentang penuh ada di title.
                   d.time_label.split(", ").map((range) => (
                     <span key={range} className="block">
-                      {range.split("–")[0]}
+                      {range.split("–")[0].replace(".", ":")}
                     </span>
                   ))
                 ) : (

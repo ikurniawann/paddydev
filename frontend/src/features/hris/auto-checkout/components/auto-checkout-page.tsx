@@ -8,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { PageHeader } from "@/components/ui/page-header";
 import { Switch } from "@/components/ui/switch";
+import { ApiError } from "@/lib/api-client";
 import { useStoreErrorText } from "@/features/hris/schedule-access/access-guard";
 import { useDeleteAutoCheckoutRule, useToggleAutoCheckoutRule } from "../mutations";
 import { useAutoCheckoutRules } from "../queries";
@@ -17,6 +18,10 @@ import { AddRuleDialog } from "./add-rule-dialog";
 export const AUTO_CHECKOUT_NOTE = "Absen karyawan yang belum clock-out ditutup otomatis di jam selesai shift.";
 
 const ALL_LOCATIONS = "Semua lokasi";
+const NO_DELETE_RIGHT = "Anda tidak punya hak menghapus aturan ini";
+
+/** 403 "Insufficient permissions" dari DELETE: akun HR tanpa aksi hapus (pengatur toko tidak pernah kena). */
+const isDeleteForbidden = (e: unknown) => e instanceof ApiError && e.status === 403 && e.message === "Insufficient permissions";
 
 /**
  * Aturan checkout otomatis per jabatan dan lokasi (EPIC-080 R1/R2). HR
@@ -54,7 +59,9 @@ export function AutoCheckoutPage({ embedded = false }: { embedded?: boolean }) {
         setDeleting(null);
       },
       onError: (e: Error) => {
-        toast.error(errorText.fail(e, "Gagal menghapus aturan"));
+        // HR tanpa aksi "delete" di Shift Kerja: 403 server (Inggris) jadi teks
+        // sendiri, dan tidak dilaporkan sebagai "bukan pengatur" ke Jadwal Toko.
+        toast.error(isDeleteForbidden(e) ? NO_DELETE_RIGHT : errorText.fail(e, "Gagal menghapus aturan"));
         setDeleting(null);
       },
     });

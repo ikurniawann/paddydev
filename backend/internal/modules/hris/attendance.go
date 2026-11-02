@@ -292,7 +292,9 @@ func (s *Service) ScheduleRows(ctx context.Context, employeeID string) ([]*Row, 
 		}
 		d := domain.DisplayShifts(first, second)
 		r.Set("shift_name", d.Name)
-		r.Set("end_time", *d.EndTime)
+		if d.EndTime != nil {
+			r.Set("end_time", *d.EndTime)
+		}
 		r.Set("time_label", d.TimeLabel)
 	}
 	return rows, nil

@@ -149,7 +149,7 @@ export function PatternDialog({ open, onOpenChange, branchId, employees, shifts,
                           const keep = byCode.get(value) && byCode.get(pattern2[i]) && canFollow(byCode.get(value)!, byCode.get(pattern2[i])!);
                           if (!keep) setPattern2((prev) => prev.map((v, idx) => (idx === i ? "" : v)));
                         }}
-                        className="h-9 rounded-lg border border-input bg-transparent px-2 text-sm"
+                        className="h-9 w-full min-w-0 rounded-lg border border-input bg-transparent px-2 text-sm"
                       >
                         <option value="">Pilih…</option>
                         {shifts.map((s) => (
@@ -171,7 +171,7 @@ export function PatternDialog({ open, onOpenChange, branchId, employees, shifts,
                           const value = e.target.value;
                           setPattern2((prev) => prev.map((v, idx) => (idx === i ? value : v)));
                         }}
-                        className="h-9 rounded-lg border border-input bg-transparent px-2 text-sm disabled:opacity-50"
+                        className="h-9 w-full min-w-0 rounded-lg border border-input bg-transparent px-2 text-sm disabled:opacity-50"
                       >
                         <option value="">Tanpa shift kedua</option>
                         {first

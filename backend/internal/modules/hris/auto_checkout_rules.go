@@ -233,11 +233,11 @@ func (h handlers) deleteAutoCheckoutRule(w http.ResponseWriter, r *http.Request,
 		return err
 	}
 	ctx := r.Context()
-	// HR needs the "delete" action like every sibling kepegawaian delete
-	// (hrisdel.Guard), but no reason: rules are config, audited with before.
-	// A delegate is held to their stores instead (R2).
+	// HR needs the "delete" action on the Shift Kerja leaf (the page's home,
+	// like hrisdel.Guard for shifts), but no reason: rules are config, audited
+	// with before. A delegate is held to their stores instead (R2).
 	if sc.Delegate == nil {
-		can, err := h.auth.HasMenuAction(ctx, u, "delete", iam.HrisKepegawaian...)
+		can, err := h.auth.HasMenuAction(ctx, u, "delete", iam.LeafShift)
 		if err != nil {
 			return err
 		}
