@@ -1,6 +1,6 @@
 # EPIC-082: Saklar Nonaktif PPh 21 & BPJS di Pengaturan Gaji (`MODULE-PAYROLL`)
 
-status: backlog
+status: review
 environment: dev
 retries: 0
 
@@ -62,3 +62,4 @@ Jawaban user 02-11:
 
 ## Automation Log
 - 2026-11-02 — Analisis acuan dan kode; data staging dicek (263 struktur aktif semuanya kena pajak dan BPJS). Jawaban user untuk 4 keputusan dicatat. Rencana: `docs/superpowers/plans/2026-11-02-pph21-bpjs-nonaktif.md`.
+- 2026-11-02 — Kode selesai di branch `feat/epic082-pph21-bpjs-nonaktif`: saklar di kalkulator (`domain.Config.Pph21Enabled/BpjsTkEnabled/BpjsKesEnabled`), API + audit Pengaturan Payroll, UI saklar, slip tanpa baris nonaktif, migrasi `20261106090000` (ketiganya false). Regresi nol saat saklar menyala dibuktikan tes (`pph21_bpjs_toggle_test.go`, `pph21_bpjs_toggle_integration_test.go`). Acuan diperbarui (aturan-payroll, status-requirement PY-06, pertanyaan PPH-BPJS, skill paddy-hris-acuan). Keputusan: laporan biaya toko dan CSV run tetap punya kolom BPJS/PPh bernilai 0 (hanya slip yang menyembunyikan baris). Konsekuensi R2 yang diterima: bila HR menyalakan PPh 21 lagi di tengah tahun, Pasal 17 Desember menyusul PPh setahun penuh sekaligus (satu potongan besar di Desember). Sisa: staging (backup, deploy, simulasi run November sebelum/sesudah), PR, produksi hanya dengan persetujuan user.

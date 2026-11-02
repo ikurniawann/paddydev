@@ -29,7 +29,7 @@
 | Pinjaman Karyawan / Kasbon | Deduction | Sesuai jadwal cicilan & sisa pinjaman; **maks. ½ THP**; default maks. 2 cicilan 50%/50%; **Probation, Freelance, Intern tidak bisa mengajukan** | Cicilan rata mulai bulan setelah approve. Kasbon (EPIC-060): pokok ≤ 50% THP (Gaji Pokok + Transport + Makan + Jabatan), tenor 1 atau 2 (default 2, 50/50), Probation/Freelance/Intern/Magang diblokir. Jenis `loan` tetap batas lama (cicilan ≤ `loan_max_installment_percent` × gaji pokok, tenor 1–60) menunggu TnC | ✅ |
 | Potongan Izin Sakit | Deduction | (Tunj. Transport + Tunj. Makan) / Total Hari Kerja Bulan Berjalan × Hari Sakit | PIS = (Transport `flat` + Makan `flat`) / pembagi × (hari sakit + hari Cuti Melahirkan); setting `sick_leave_deduction` (live: on). Mode `per_day` tidak dipotong lagi (sudah hilang lewat hari hadir), jadi tanpa potong ganda; slip berlabel "Potongan Sakit & Cuti Melahirkan" (EPIC-059) | ✅ |
 | Denda | Deduction | Nominal input HR manual; default Rp0 | Kode manual `PENALTY`, digabung ke "Potongan Lain" | 🟡 butuh baris sendiri |
-| PPh Pasal 21 | Deduction | TER per masa pajak; Pasal 17 tahunan di masa pajak terakhir | `pph21_method = ter` (live: ter); Pasal 17 tahunan **hanya bulan Desember** (hard-code), tidak untuk karyawan yang keluar di tengah tahun | 🟡 masa pajak terakhir karyawan keluar |
+| PPh Pasal 21 | Deduction | TER per masa pajak; Pasal 17 tahunan di masa pajak terakhir | `pph21_method = ter` (live: ter); Pasal 17 tahunan **hanya bulan Desember** (hard-code), tidak untuk karyawan yang keluar di tengah tahun ; saklar `pph21_enabled` (EPIC-082, `Config.Pph21Enabled`): bila false PPh 21 = 0 (TER/annualized dan Pasal 17 Desember dilewati), DPP/TER/PTKP di hasil 0, metode tercatat `nonaktif` (live: false sejak migrasi `20261106090000`, baris slip PPh disembunyikan). Bila dinyalakan lagi di tengah tahun, Pasal 17 Desember menyusul seluruh PPh setahun sekaligus (satu potongan besar di Desember) | 🟡 masa pajak terakhir karyawan keluar |
 | Other Deduction | Deduction | (nominal input) | `OTHER_DEDUCTION`, `ABSENCE`, `UNION` | ✅ |
 | Total Potongan | Computation | Pinjaman + Izin Pribadi + Izin Sakit + Denda (+ PPh, Other) | BPJS karyawan + PPh + unpaid + telat + pinjaman + PIP + PIS + potongan manual | ✅ (lebih luas; BPJS & telat ikut) |
 | Take Home Pay | Computation | Total Pendapatan − Total Potongan | net = gross + nontax − total | ✅ |
@@ -55,6 +55,9 @@ Catatan acuan: rumus "Total Potongan" di tabel Paddy tertulis "Pinjaman Karyawan
 | `personal_leave_deduction` | on | on |
 | `sick_leave_deduction` | on | on |
 | `pph21_method` | ter | ter |
+| `pph21_enabled` (EPIC-082, `Config.Pph21Enabled`) | false (migrasi `20261106090000` mematikan baris setting yang ada; keputusan user 02-11 "tidak dipakai dulu") | true bila PPh 21 dipakai |
+| `bpjs_tk_enabled` (EPIC-082, `Config.BpjsTkEnabled`) | false (migrasi yang sama) | true bila BPJS Ketenagakerjaan dipakai. false = JHT/JP karyawan dan JHT/JP/JKK/JKM perusahaan = 0 |
+| `bpjs_kes_enabled` (EPIC-082, `Config.BpjsKesEnabled`) | false (migrasi yang sama) | true bila BPJS Kesehatan dipakai. false = potongan karyawan dan iuran perusahaan = 0. **Subsidi BPJS Kes** (`bpjs_kes_subsidy_amount`) tidak terpengaruh |
 | `loan_max_installment_percent` | 30 | hanya berlaku untuk jenis `loan`; kasbon memakai plafon 50% THP |
 | `overtime_multiplier` / `_holiday` / `_hourly_divisor` | 1,5 / 2 / 173 | 1,5 / 2 / 173 ✅ |
 | Struktur gaji aktif `pay_basis` (karyawan aktif) | 240 `monthly`, 32 `monthly_prorated`, 18 `daily` | `monthly_prorated` untuk karyawan bulanan |
