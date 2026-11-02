@@ -96,4 +96,14 @@ describe("PayrollSettingsPage saklar PPh 21 / BPJS (EPIC-082)", () => {
     expect(field("ptkp_tk_0").disabled).toBe(false);
     expect((document.getElementById("pph21_method") as HTMLSelectElement).disabled).toBe(false);
   });
+
+  it("header menumpuk di HP dan tombol simpan tidak terpotong", () => {
+    render(<PayrollSettingsPage />);
+    const header = screen.getByTestId("settings-header");
+    expect(header.className).toContain("flex-col");
+    expect(header.className).toContain("sm:flex-row");
+    const saveBtn = screen.getByRole("button", { name: "Simpan Pengaturan" });
+    expect(saveBtn.className).toContain("w-full");
+    expect(saveBtn.className).toContain("sm:w-auto");
+  });
 });

@@ -193,17 +193,21 @@ export function PayrollSettingsPage() {
 
   return (
     <div className="space-y-6 p-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
+      <div
+        data-testid="settings-header"
+        className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+      >
+        <div className="flex min-w-0 items-center gap-3">
           <Button
             variant="outline"
             size="sm"
+            className="shrink-0"
             onClick={() => router.push("/dashboard/hris/payroll")}
           >
             <ArrowLeftIcon className="mr-1 h-4 w-4" />
             Kembali
           </Button>
-          <div>
+          <div className="min-w-0">
             <h1 className="flex items-center gap-2 text-2xl font-bold">
               <Cog6ToothIcon className="h-6 w-6 text-pink-600" />
               Pengaturan Payroll
@@ -218,7 +222,7 @@ export function PayrollSettingsPage() {
         <Button
           onClick={handleSave}
           disabled={saveMutation.isPending || isLoading}
-          className="bg-pink-600 hover:bg-pink-700"
+          className="w-full bg-pink-600 hover:bg-pink-700 sm:w-auto"
         >
           {saveMutation.isPending ? "Menyimpan..." : "Simpan Pengaturan"}
         </Button>
