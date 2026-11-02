@@ -21,8 +21,8 @@ func uctx() ScheduleUploadContext {
 			"555": {ID: "e5", NIP: "555", Name: "Eka", ScheduleType: "shift", Active: true, Placed: map[string]bool{"2026-11-02": true}},
 		},
 		Shifts: map[string]UploadShift{
-			"SPG1":  {ID: "s1", Code: "SPG1", Start: "08:00:00", End: "16:00:00", Active: true},
-			"MALAM": {ID: "s2", Code: "MALAM", Start: "22:00:00", End: "06:00:00", Overnight: true, Active: true},
+			"SPG1":  {ID: "s1", Code: "SPG1", Start: "08:00:00", End: "16:00:00", Active: true, BreakMinutes: 60},
+			"MALAM": {ID: "s2", Code: "MALAM", Start: "22:00:00", End: "06:00:00", Overnight: true, Active: true, BreakMinutes: 60},
 			"OLD":   {ID: "s3", Code: "OLD", Start: "08:00:00", End: "16:00:00", Active: false},
 		},
 		ClosedDates: map[string]bool{}, Holidays: map[string]string{},
@@ -207,5 +207,60 @@ func TestReadScheduleFile(t *testing.T) {
 	}
 	if _, msg := ReadScheduleFile([][]string{{"Nama"}}, info); msg != "Judul kolom NIP tidak ditemukan — pakai template dari halaman Jadwal Kerja" {
 		t.Fatalf("msg %q", msg)
+	}
+}
+
+func TestFortyHourDayOffWarning(t *testing.T) {
+	const msg = "sebelum 40 jam kerja"
+	// Sen..Min: the window is 7 days, so a previous day off must be in it.
+	cases := []struct {
+		name  string
+		cells []string
+		want  string // "" = no 40-hour warning
+	}{
+		{"4 hari sebelum libur", []string{"L", "SPG1", "SPG1", "SPG1", "SPG1", "L", "SPG1"}, "Ana libur 07/11/2026 sebelum 40 jam kerja (baru 28 jam sejak libur 02/11/2026)"},
+		{"6 hari cukup", []string{"L", "SPG1", "SPG1", "SPG1", "SPG1", "SPG1", "SPG1"}, ""},
+		{"6 shift malam 7 jam", []string{"L", "MALAM", "MALAM", "MALAM", "MALAM", "MALAM", "MALAM"}, ""},
+		{"tanpa libur sebelumnya", []string{"SPG1", "SPG1", "SPG1", "SPG1", "L", "SPG1", "SPG1"}, ""},
+		{"libur berurutan", []string{"SPG1", "L", "L", "SPG1", "SPG1", "SPG1", "SPG1"}, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := uctx()
+			res := ValidateScheduleUpload(c, sfile(c, row(4, "111", tc.cells...)))
+			if len(res.Errors) != 0 {
+				t.Fatalf("errors %v", res.Errors)
+			}
+			n := 0
+			for _, w := range res.Warnings {
+				if strings.Contains(w.Message, msg) {
+					n++
+					if w.Message != tc.want || w.Column != "Sab 07/11" {
+						t.Fatalf("warning %+v, want %q at Sab 07/11", w, tc.want)
+					}
+				}
+			}
+			if (tc.want == "") != (n == 0) || n > 1 {
+				t.Fatalf("want %q, got %d matching warnings: %+v", tc.want, n, res.Warnings)
+			}
+		})
+	}
+}
+
+func TestFortyHourDayOffWarningNeedsAnEdit(t *testing.T) {
+	// Per-cell save: an existing short streak (10-12/11 between days off) is
+	// not warned about while untouched, but is once one of its days is edited.
+	c := uctx()
+	c.EmployeesByID = map[string]UploadEmployee{"e1": c.Employees["111"]}
+	c.Current = map[string]map[string]string{"e1": {"2026-11-10": "SPG1", "2026-11-11": "SPG1", "2026-11-12": "SPG1"}}
+	c.Employees["111"].Placed["2026-11-07"] = true
+	c.Employees["111"].Placed["2026-11-11"] = true
+	res := ValidateScheduleCells(c, []ScheduleCellInput{{EmployeeID: "e1", Date: "2026-11-07", Code: "L"}})
+	if hasIssue(res.Warnings, "sebelum 40 jam kerja") {
+		t.Fatalf("unedited streak warned: %+v", res.Warnings)
+	}
+	res = ValidateScheduleCells(c, []ScheduleCellInput{{EmployeeID: "e1", Date: "2026-11-11", Code: "SPG1"}})
+	if !hasIssue(res.Warnings, "libur 13/11/2026 sebelum 40 jam kerja (baru 21 jam sejak libur 09/11/2026)") {
+		t.Fatalf("edited streak should warn: %+v", res.Warnings)
 	}
 }

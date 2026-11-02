@@ -18,6 +18,9 @@ const (
 	maxScheduleDays   = 45
 	minShiftGapMin    = 8 * 60
 	maxStreak         = 6
+	// minHoursBeforeDayOff: a day off is given only after this many net
+	// working hours since the previous one (EPIC-079 R5).
+	minHoursBeforeDayOff = 40
 )
 
 type UploadEmployee struct {
@@ -29,6 +32,17 @@ type UploadEmployee struct {
 type UploadShift struct {
 	ID, Code, Name, Start, End string
 	Overnight, Active          bool
+	BreakMinutes               int
+}
+
+// shiftNetMinutes is the shift's working time: end minus start (across
+// midnight for an overnight shift) minus the unpaid break.
+func shiftNetMinutes(s UploadShift) int {
+	start, end := clockMinutes(s.Start), clockMinutes(s.End)
+	if s.Overnight || end <= start {
+		end += 24 * 60
+	}
+	return end - start - s.BreakMinutes
 }
 
 type ScheduleUploadContext struct {
@@ -383,16 +397,27 @@ type plannedDay struct {
 
 // sequenceWarnings checks consecutive days: leave on an edited working day,
 // a gap under minShiftGapMin next to an edited day, and one warning per
-// streak longer than maxStreak that contains an edited day.
+// streak longer than maxStreak that contains an edited day, and a day off
+// that follows another day off inside days after fewer than
+// minHoursBeforeDayOff net working hours when the streak or that day off is
+// edited.
 func sequenceWarnings(c ScheduleUploadContext, e UploadEmployee, line int, days []plannedDay, warn func(line int, col, name, msg string)) {
 	run, edited := 0, false // working days in the current streak
+	streakMin := 0          // net working minutes of the streak
+	prevOff := ""           // previous day off inside days
 	for i, d := range days {
 		s := d.Shift
 		if s == nil {
-			run, edited = 0, false
+			if prevOff != "" && run > 0 && streakMin < minHoursBeforeDayOff*60 && (edited || d.Edited) {
+				warn(line, ScheduleDateHeader(d.Date), e.Name, fmt.Sprintf("%s libur %s sebelum %d jam kerja (baru %d jam sejak libur %s)",
+					e.Name, FormatDateID(d.Date), minHoursBeforeDayOff, streakMin/60, FormatDateID(prevOff)))
+			}
+			prevOff = d.Date
+			run, edited, streakMin = 0, false, 0
 			continue
 		}
 		run++
+		streakMin += shiftNetMinutes(*s)
 		edited = edited || d.Edited
 		if d.Edited && c.OnLeave[e.ID][d.Date] {
 			warn(line, ScheduleDateHeader(d.Date), e.Name, fmt.Sprintf("%s cuti %s tapi diberi %s", e.Name, FormatDateID(d.Date), s.Code))

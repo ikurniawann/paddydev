@@ -144,9 +144,13 @@ func TestValidateScheduleCellsAssignments(t *testing.T) {
 			t.Fatalf("assignment %d = %+v (shift %q), want %+v", i, a, got, w)
 		}
 	}
-	// A cleared or libur cell is not a working day: no gap/streak noise.
-	if len(res.Warnings) != 0 {
-		t.Fatalf("warnings %+v", res.Warnings)
+	// A cleared or libur cell is not a working day: no gap/streak noise. The
+	// 40-hour warning for e2's lone shift between two empty days is covered
+	// by TestFortyHourDayOffWarning*.
+	for _, w := range res.Warnings {
+		if !strings.Contains(w.Message, "sebelum 40 jam kerja") {
+			t.Fatalf("warnings %+v", res.Warnings)
+		}
 	}
 }
 

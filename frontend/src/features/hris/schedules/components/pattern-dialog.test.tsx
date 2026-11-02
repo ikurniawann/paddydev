@@ -18,7 +18,7 @@ beforeEach(() => {
 });
 
 const shifts = [
-  { code: "P", name: "Pagi", start_time: "08:00:00", end_time: "16:00:00" },
+  { code: "P", name: "Pagi", start_time: "08:00:00", end_time: "16:00:00", break_minutes: 60 },
   { code: "S", name: "Siang", start_time: "13:00:00", end_time: "21:00:00" },
 ];
 const DAYS = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"];
@@ -138,4 +138,25 @@ it("lebih dari 6000 kotak ditolak sebelum Terapkan", () => {
   expect(screen.queryByText(/kotak, maksimal 6000/)).toBeNull();
   expect(apply.disabled).toBe(false);
   expect(api.fetchScheduleGrid).not.toHaveBeenCalled();
+});
+
+it("7 hari terisi shift: peringatan belum ada libur", () => {
+  renderDialog();
+  DAYS.forEach((d) => choose(d, "P"));
+  expect(screen.getByText("Belum ada hari libur — sistem shift wajib libur 1 hari setiap minggu")).toBeTruthy();
+  expect(screen.getByText("Total ±49 jam kerja/minggu")).toBeTruthy();
+  expect((screen.getByRole("button", { name: "Terapkan" }) as HTMLButtonElement).disabled).toBe(false); // tidak memblokir
+});
+
+it("6 hari kerja + libur: tanpa peringatan, total 42 jam bersih", () => {
+  renderDialog();
+  DAYS.forEach((d, i) => choose(d, i < 6 ? "P" : "L"));
+  expect(screen.queryByText(/Belum ada hari libur/)).toBeNull();
+  expect(screen.getByText("Total ±42 jam kerja/minggu")).toBeTruthy();
+});
+
+it("total belum tampil sebelum semua hari dipilih", () => {
+  renderDialog();
+  choose("Senin", "P");
+  expect(screen.queryByText(/jam kerja\/minggu/)).toBeNull();
 });

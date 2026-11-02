@@ -496,7 +496,7 @@ func uploadContext(ctx context.Context, q database.Querier, rng *scheduleRange, 
 	}
 	for _, sh := range shifts {
 		c.Shifts[strings.ToUpper(sh.Code)] = domain.UploadShift{ID: sh.ID, Code: sh.Code, Name: sh.Name,
-			Start: sh.StartTime, End: sh.EndTime, Overnight: sh.Overnight, Active: sh.Active}
+			Start: sh.StartTime, End: sh.EndTime, Overnight: sh.Overnight, Active: sh.Active, BreakMinutes: sh.Break}
 	}
 	for _, d := range rng.Dates {
 		p, err := periodContaining(ctx, q, d, today)
