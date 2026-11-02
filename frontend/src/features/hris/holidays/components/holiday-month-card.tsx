@@ -37,6 +37,7 @@ export function HolidayMonthCard({ month, holidays, onEdit, onDelete }: HolidayM
                 <HolidayBadges
                   type={holiday.type}
                   deductsLeave={holiday.deducts_leave}
+                  isDayOff={holiday.is_day_off}
                   status={holiday.status}
                 />
                 {holiday.note && (

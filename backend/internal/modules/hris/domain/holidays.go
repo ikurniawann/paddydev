@@ -14,6 +14,33 @@ type Holiday struct {
 	Name         string
 	Type         string
 	DeductsLeave bool
+	// IsDayOff: cuti bersama yang ditetapkan libur oleh perusahaan (EPIC-079 R2).
+	IsDayOff bool
+}
+
+// HolidayDayOff reports whether h is a day off for an employee of the given
+// schedule type (EPIC-079 R1-R3). Shift staff ("shift") ignore every red date:
+// their roster decides. Non-Shift staff rest on nasional and perusahaan days,
+// and on cuti bersama only when the company set it as a day off.
+func HolidayDayOff(h Holiday, scheduleType string) bool {
+	if scheduleType == "shift" {
+		return false
+	}
+	if h.Type == "cuti_bersama" {
+		return h.IsDayOff
+	}
+	return true
+}
+
+// DayOffDates is the set of dates that are a day off for scheduleType.
+func DayOffDates(rows []Holiday, scheduleType string) map[string]bool {
+	out := map[string]bool{}
+	for _, h := range rows {
+		if HolidayDayOff(h, scheduleType) {
+			out[h.Date] = true
+		}
+	}
+	return out
 }
 
 // HolidayIndex groups holidays by date.
@@ -90,6 +117,7 @@ type HolidayInput struct {
 	Name         *string
 	Type         *string
 	DeductsLeave *bool
+	IsDayOff     *bool
 	Status       *string
 	Note         *string
 	NoteSent     bool
@@ -105,9 +133,15 @@ func isHolidayType(t string) bool {
 	return false
 }
 
+// ErrDayOffType is the 400 for is_day_off on a type other than cuti bersama.
+const ErrDayOffType = "Hanya cuti bersama yang bisa ditetapkan libur"
+
 func typeOrStatusError(in HolidayInput) string {
 	if in.Type != nil && !isHolidayType(*in.Type) {
 		return "Tipe libur tidak valid"
+	}
+	if in.IsDayOff != nil && *in.IsDayOff && in.Type != nil && *in.Type != "cuti_bersama" {
+		return ErrDayOffType
 	}
 	if in.Status != nil && *in.Status != "draft" && *in.Status != "aktif" {
 		return "Status tidak valid"
@@ -136,6 +170,16 @@ func ValidateHolidayBody(in HolidayInput) string {
 	if blank(in.Name) {
 		return "Nama libur wajib diisi"
 	}
+	return typeOrStatusErrorDefaulted(in)
+}
+
+// typeOrStatusErrorDefaulted is typeOrStatusError for a body that creates a
+// row, where a missing type means "nasional".
+func typeOrStatusErrorDefaulted(in HolidayInput) string {
+	if in.Type == nil {
+		nasional := "nasional"
+		in.Type = &nasional
+	}
 	return typeOrStatusError(in)
 }
 
@@ -161,7 +205,7 @@ func ValidateImportItem(in HolidayInput) string {
 	if blank(in.Name) {
 		return "Nama libur wajib diisi"
 	}
-	return typeOrStatusError(in)
+	return typeOrStatusErrorDefaulted(in)
 }
 
 // HolidayTypeOrDefault: unknown or missing types are "nasional".

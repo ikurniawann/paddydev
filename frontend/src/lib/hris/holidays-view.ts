@@ -14,6 +14,8 @@ interface HolidayForm {
   name: string;
   type: HolidayType;
   deducts_leave: boolean;
+  /** Hanya bermakna untuk cuti bersama (EPIC-079): ditetapkan libur oleh perusahaan. */
+  is_day_off: boolean;
   status: HolidayStatus;
   note: string;
 }
@@ -24,25 +26,34 @@ export function emptyHolidayForm(year: number): HolidayForm {
     name: "",
     type: "nasional",
     deducts_leave: false,
+    is_day_off: false,
     status: "aktif",
     note: "",
   };
 }
 
-export function holidayFormFrom(row: Omit<HolidayForm, "note"> & { note: string | null }): HolidayForm {
+export function holidayFormFrom(
+  row: Omit<HolidayForm, "note" | "is_day_off"> & { note: string | null; is_day_off?: boolean }
+): HolidayForm {
   return {
     holiday_date: row.holiday_date,
     name: row.name,
     type: row.type,
     deducts_leave: row.deducts_leave,
+    is_day_off: row.type === "cuti_bersama" && (row.is_day_off ?? false),
     status: row.status,
     note: row.note ?? "",
   };
 }
 
-/** Ganti tipe sekaligus default potong cuti mengikuti SKB. */
+/** Ganti tipe sekaligus default potong cuti mengikuti SKB; penetapan libur hanya milik cuti bersama. */
 export function withHolidayType(form: HolidayForm, type: HolidayType): HolidayForm {
-  return { ...form, type, deducts_leave: defaultDeductsLeave(type) };
+  return {
+    ...form,
+    type,
+    deducts_leave: defaultDeductsLeave(type),
+    is_day_off: type === "cuti_bersama" && form.is_day_off,
+  };
 }
 
 export function holidayPayload(form: HolidayForm) {
@@ -51,6 +62,7 @@ export function holidayPayload(form: HolidayForm) {
     name: form.name.trim(),
     type: form.type,
     deducts_leave: form.deducts_leave,
+    is_day_off: form.type === "cuti_bersama" && form.is_day_off,
     status: form.status,
     note: form.note.trim() || null,
   };

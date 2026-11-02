@@ -17,6 +17,7 @@ describe("form hari libur", () => {
       name: "",
       type: "nasional",
       deducts_leave: false,
+      is_day_off: false,
       status: "aktif",
       note: "",
     });

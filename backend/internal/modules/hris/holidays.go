@@ -21,7 +21,7 @@ type HolidayRepo interface {
 	ImportHoliday(ctx context.Context, in domain.HolidayInput, userID string) (created bool, err error)
 }
 
-const holidayColumns = `id, holiday_date::text AS holiday_date, name, type, deducts_leave, status, source, note`
+const holidayColumns = `id, holiday_date::text AS holiday_date, name, type, deducts_leave, is_day_off, status, source, note`
 
 // duplicateHoliday turns the (date, name) unique violation into a 409.
 func duplicateHoliday(row *Row, err error) (*Row, error) {
@@ -120,6 +120,9 @@ func trimmed(p *string) *string {
 	return &t
 }
 
+// dayOff is the requested is_day_off; unset means false.
+func dayOff(in domain.HolidayInput) bool { return in.IsDayOff != nil && *in.IsDayOff }
+
 func (s *store) CreateHoliday(ctx context.Context, in domain.HolidayInput, userID string) (*Row, error) {
 	typ := domain.HolidayTypeOrDefault(in.Type)
 	deducts := domain.DefaultDeductsLeave(typ)
@@ -131,10 +134,10 @@ func (s *store) CreateHoliday(ctx context.Context, in domain.HolidayInput, userI
 		status = *in.Status
 	}
 	return queryRow(ctx, s.db, `INSERT INTO hris.public_holidays
-		(holiday_date, name, type, deducts_leave, status, source, note, created_by, updated_by)
-		VALUES ($1::date, $2, $3, $4, $5, 'manual', $6, $7, $7)
+		(holiday_date, name, type, deducts_leave, is_day_off, status, source, note, created_by, updated_by)
+		VALUES ($1::date, $2, $3, $4, $8, $5, 'manual', $6, $7, $7)
 		RETURNING `+holidayColumns,
-		in.HolidayDate, trimmed(in.Name), typ, deducts, status, nilIfEmpty(trimmed(in.Note)), userID)
+		in.HolidayDate, trimmed(in.Name), typ, deducts, status, nilIfEmpty(trimmed(in.Note)), userID, dayOff(in))
 }
 
 func (s *store) UpdateHoliday(ctx context.Context, id string, in domain.HolidayInput, userID string) (*Row, error) {
@@ -144,18 +147,28 @@ func (s *store) UpdateHoliday(ctx context.Context, id string, in domain.HolidayI
 		v := *in.Type == "cuti_bersama"
 		deducts = &v
 	}
+	// is_day_off is for cuti bersama only: a PATCH that leaves the type alone
+	// is checked against the stored type.
+	if dayOff(in) && in.Type == nil {
+		var typ string
+		err := s.db.QueryRow(ctx, `SELECT type FROM hris.public_holidays WHERE id = $1 AND deleted_at IS NULL`, id).Scan(&typ)
+		if err == nil && typ != "cuti_bersama" {
+			return nil, httpx.BadRequest(domain.ErrDayOffType)
+		}
+	}
 	return queryRow(ctx, s.db, `UPDATE hris.public_holidays SET
 		holiday_date  = COALESCE($2::date, holiday_date),
 		name          = COALESCE($3, name),
 		type          = COALESCE($4, type),
 		deducts_leave = COALESCE($5, deducts_leave),
+		is_day_off    = CASE WHEN COALESCE($4, type) <> 'cuti_bersama' THEN false ELSE COALESCE($10::boolean, is_day_off) END,
 		status        = COALESCE($6, status),
 		note          = CASE WHEN $8::boolean THEN $7 ELSE note END,
 		updated_by    = $9,
 		updated_at    = now()
 		WHERE id = $1 AND deleted_at IS NULL
 		RETURNING id, name`,
-		id, in.HolidayDate, trimmed(in.Name), in.Type, deducts, in.Status, nilIfEmpty(trimmed(in.Note)), in.NoteSent, userID)
+		id, in.HolidayDate, trimmed(in.Name), in.Type, deducts, in.Status, nilIfEmpty(trimmed(in.Note)), in.NoteSent, userID, in.IsDayOff)
 }
 
 func (s *store) SoftDeleteHoliday(ctx context.Context, id, userID string) (*Row, error) {
@@ -201,11 +214,12 @@ func (s *store) ImportHoliday(ctx context.Context, in domain.HolidayInput, userI
 	if in.Status != nil {
 		status = *in.Status
 	}
-	args := []any{in.HolidayDate, trimmed(in.Name), typ, deducts, status, in.SourceRef, userID}
+	args := []any{in.HolidayDate, trimmed(in.Name), typ, deducts, status, in.SourceRef, userID, in.IsDayOff}
 	if in.SourceRef != nil && *in.SourceRef != "" {
 		tag, err := s.db.Exec(ctx, `UPDATE hris.public_holidays SET
 			holiday_date = $1::date, name = $2, type = $3,
 			deducts_leave = $4, status = $5,
+			is_day_off = CASE WHEN $3 <> 'cuti_bersama' THEN false ELSE COALESCE($8::boolean, is_day_off) END,
 			updated_by = $7, updated_at = now()
 			WHERE source_ref = $6 AND deleted_at IS NULL`, args...)
 		if err != nil {
@@ -217,12 +231,14 @@ func (s *store) ImportHoliday(ctx context.Context, in domain.HolidayInput, userI
 	}
 	var inserted bool
 	err := s.db.QueryRow(ctx, `INSERT INTO hris.public_holidays
-		(holiday_date, name, type, deducts_leave, status, source, source_ref, created_by, updated_by)
-		VALUES ($1::date, $2, $3, $4, $5, 'impor', $6, $7, $7)
+		(holiday_date, name, type, deducts_leave, is_day_off, status, source, source_ref, created_by, updated_by)
+		VALUES ($1::date, $2, $3, $4, COALESCE($8::boolean, false), $5, 'impor', $6, $7, $7)
 		ON CONFLICT (holiday_date, name) WHERE deleted_at IS NULL
 		DO UPDATE SET
 		  type = EXCLUDED.type,
 		  deducts_leave = EXCLUDED.deducts_leave,
+		  is_day_off = CASE WHEN EXCLUDED.type <> 'cuti_bersama' THEN false
+		    WHEN $8::boolean IS NULL THEN hris.public_holidays.is_day_off ELSE EXCLUDED.is_day_off END,
 		  status = EXCLUDED.status,
 		  source_ref = COALESCE(EXCLUDED.source_ref, hris.public_holidays.source_ref),
 		  updated_by = EXCLUDED.updated_by,
