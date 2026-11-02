@@ -87,6 +87,9 @@ export function PayrollDetailPage({ params }: PayrollPageProps) {
     );
   }
 
+  const showBpjsTotals =
+    Number(payrollRun.total_bjtk_employer) > 0 || Number(payrollRun.total_bjtk_employee) > 0;
+
   return (
     <div className="space-y-6 pb-12">
       {/* Header */}
@@ -147,7 +150,7 @@ export function PayrollDetailPage({ params }: PayrollPageProps) {
       )}
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className={`grid grid-cols-1 gap-4 ${showBpjsTotals ? "md:grid-cols-4" : "md:grid-cols-3"}`}>
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-medium text-gray-500">Total Gross</CardTitle>
@@ -166,9 +169,11 @@ export function PayrollDetailPage({ params }: PayrollPageProps) {
             <div className="text-2xl font-bold text-red-600">
               {formatRupiah(payrollRun.total_deductions)}
             </div>
-            <div className="text-xs text-gray-500 mt-1">
-              PPh 21: {formatRupiah(payrollRun.total_pph21)}
-            </div>
+            {Number(payrollRun.total_pph21) > 0 && (
+              <div className="text-xs text-gray-500 mt-1">
+                PPh 21: {formatRupiah(payrollRun.total_pph21)}
+              </div>
+            )}
           </CardContent>
         </Card>
         <Card>
@@ -181,19 +186,22 @@ export function PayrollDetailPage({ params }: PayrollPageProps) {
             </div>
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium text-gray-500">Employer BPJS</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-xl font-bold text-blue-600">
-              {formatRupiah(payrollRun.total_bjtk_employer)}
-            </div>
-            <div className="text-xs text-gray-500 mt-1">
-              Employee: {formatRupiah(payrollRun.total_bjtk_employee)}
-            </div>
-          </CardContent>
-        </Card>
+        {/* EPIC-082: iuran BPJS yang dinonaktifkan bernilai 0 dan disembunyikan. */}
+        {showBpjsTotals && (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium text-gray-500">Employer BPJS</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-xl font-bold text-blue-600">
+                {formatRupiah(payrollRun.total_bjtk_employer)}
+              </div>
+              <div className="text-xs text-gray-500 mt-1">
+                Employee: {formatRupiah(payrollRun.total_bjtk_employee)}
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {payrollRun.status === "draft" &&

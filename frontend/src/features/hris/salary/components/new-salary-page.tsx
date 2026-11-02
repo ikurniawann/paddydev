@@ -16,11 +16,13 @@ import { useSalaryEmployees } from "../queries";
 import { useCreateSalary } from "../mutations";
 import { SalaryAmountFields } from "./salary-amount-fields";
 import { SalaryRuleFields } from "./salary-rule-fields";
+import { PayrollSwitchNote, usePayrollSwitches } from "./payroll-switch-note";
 
 export function NewSalaryPage() {
   const router = useRouter();
   const params = useSearchParams();
   const entitiesQuery = usePayrollEntities();
+  const switches = usePayrollSwitches();
 
   const employeesQuery = useSalaryEmployees();
   const employees = employeesQuery.data ?? [];
@@ -161,7 +163,7 @@ export function NewSalaryPage() {
                 </select>
               </div>
 
-              <div className="flex items-center space-x-2">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                 <input
                   type="checkbox"
                   id="is_taxable"
@@ -172,9 +174,10 @@ export function NewSalaryPage() {
                 <Label htmlFor="is_taxable" className="text-sm font-medium text-gray-700 cursor-pointer">
                   Subjek Pajak (Kena PPh 21)
                 </Label>
+                <PayrollSwitchNote show={switches.pph21Off} />
               </div>
 
-              <div className="flex items-center space-x-2">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                 <input
                   type="checkbox"
                   id="bpjs_tk"
@@ -185,9 +188,10 @@ export function NewSalaryPage() {
                 <Label htmlFor="bpjs_tk" className="text-sm font-medium text-gray-700 cursor-pointer">
                   BPJS Ketenagakerjaan (JHT, JP, JKK, JKM)
                 </Label>
+                <PayrollSwitchNote show={switches.bpjsTkOff} />
               </div>
 
-              <div className="flex items-center space-x-2">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                 <input
                   type="checkbox"
                   id="bpjs_kes"
@@ -198,6 +202,7 @@ export function NewSalaryPage() {
                 <Label htmlFor="bpjs_kes" className="text-sm font-medium text-gray-700 cursor-pointer">
                   BPJS Kesehatan
                 </Label>
+                <PayrollSwitchNote show={switches.bpjsKesOff} />
               </div>
 
               <div className="flex items-center space-x-2">

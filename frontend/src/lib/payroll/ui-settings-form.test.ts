@@ -4,6 +4,7 @@ import {
   SETTINGS_KEYS,
   TAX_KEYS,
   formStateToPayload,
+  isSwitchOn,
   parseLateTiers,
   rowToFormState,
 } from "./ui-settings-form";
@@ -33,6 +34,27 @@ describe("formStateToPayload", () => {
         payroll_day: "abc",
       })
     ).toEqual({ bpjs_kes_employee: 1.5, late_deduction_mode: "per_minute" });
+  });
+});
+
+describe("saklar komponen (EPIC-082)", () => {
+  it("mengirim false (tidak dilewati) dan true sebagai boolean", () => {
+    expect(
+      formStateToPayload({ pph21_enabled: "false", bpjs_tk_enabled: "true", bpjs_kes_enabled: "" })
+    ).toEqual({ pph21_enabled: false, bpjs_tk_enabled: true });
+  });
+
+  it("memuat nilai false dari baris server", () => {
+    const state = rowToFormState({ pph21_enabled: false, bpjs_kes_enabled: true }, SETTINGS_KEYS);
+    expect(state.pph21_enabled).toBe("false");
+    expect(state.bpjs_kes_enabled).toBe("true");
+    expect(state.bpjs_tk_enabled).toBe("");
+  });
+
+  it("isSwitchOn: kosong dianggap menyala, hanya 'false' yang mati", () => {
+    expect(isSwitchOn({}, "pph21_enabled")).toBe(true);
+    expect(isSwitchOn({ pph21_enabled: "" }, "pph21_enabled")).toBe(true);
+    expect(isSwitchOn({ pph21_enabled: "false" }, "pph21_enabled")).toBe(false);
   });
 });
 

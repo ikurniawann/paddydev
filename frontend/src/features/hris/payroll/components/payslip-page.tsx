@@ -186,11 +186,20 @@ export function PayslipPage() {
           <div>
             <h3 className="font-semibold text-lg mb-3 text-red-700">Potongan</h3>
             <div className="space-y-2">
-              <DeductionRow label="BPJS TK (JHT)" amount={detail.bpjs_tk_jht_deduction} share={bagian(detail.bpjs_tk_jht_deduction)} />
-              <DeductionRow label="BPJS TK (JP)" amount={detail.bpjs_tk_jp_deduction} share={bagian(detail.bpjs_tk_jp_deduction)} />
-              <DeductionRow label="BPJS Kesehatan" amount={detail.bpjs_kes_deduction} share={bagian(detail.bpjs_kes_deduction)} />
+              {Number(detail.bpjs_tk_jht_deduction) > 0 && (
+                <DeductionRow label="BPJS TK (JHT)" amount={detail.bpjs_tk_jht_deduction} share={bagian(detail.bpjs_tk_jht_deduction)} />
+              )}
+              {Number(detail.bpjs_tk_jp_deduction) > 0 && (
+                <DeductionRow label="BPJS TK (JP)" amount={detail.bpjs_tk_jp_deduction} share={bagian(detail.bpjs_tk_jp_deduction)} />
+              )}
+              {Number(detail.bpjs_kes_deduction) > 0 && (
+                <DeductionRow label="BPJS Kesehatan" amount={detail.bpjs_kes_deduction} share={bagian(detail.bpjs_kes_deduction)} />
+              )}
               <DeductionRow label="Tapera" amount={detail.tapera_deduction} share={bagian(detail.tapera_deduction)} />
-              <DeductionRow label="PPh 21" amount={detail.pph21_deduction} share={bagian(detail.pph21_deduction)} />
+              {/* EPIC-082: komponen yang dinonaktifkan di Pengaturan Payroll bernilai 0 dan disembunyikan. */}
+              {Number(detail.pph21_deduction) > 0 && (
+                <DeductionRow label="PPh 21" amount={detail.pph21_deduction} share={bagian(detail.pph21_deduction)} />
+              )}
               {detail.pph21_method === "ter" && (
                 <p className="-mt-1 text-xs text-gray-500">
                   {detail.ter_rate !== null && detail.ter_rate !== undefined

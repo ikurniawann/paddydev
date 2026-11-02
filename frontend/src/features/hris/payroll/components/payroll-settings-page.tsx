@@ -18,6 +18,7 @@ import {
   BPJS_KES_FIELDS,
   BPJS_TK_FIELDS,
   BRACKET_FIELDS,
+  COMPONENT_SWITCHES,
   LAINNYA_FIELDS,
   LATE_MODE_OPTIONS,
   LOAN_FIELDS,
@@ -29,6 +30,7 @@ import {
   TAX_KEYS,
   TOGGLE_FIELDS,
   formStateToPayload,
+  isSwitchOn,
   parseLateTiers,
   rowToFormState,
   type FieldDef,
@@ -43,22 +45,28 @@ interface FieldGridProps {
   fields: FieldDef[];
   state: FormState;
   onChange: (key: string, value: string) => void;
+  /** Bagian dimatikan lewat saklar: input redup, nilai tetap tersimpan. */
+  disabled?: boolean;
+  /** Kunci yang tetap aktif walau bagian dimatikan. */
+  alwaysEnabled?: string[];
 }
 
-function FieldGrid({ fields, state, onChange }: FieldGridProps) {
+function FieldGrid({ fields, state, onChange, disabled = false, alwaysEnabled = [] }: FieldGridProps) {
   return (
     <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
       {fields.map((field) => (
         <div key={field.key}>
-          <label className="mb-1 block text-xs font-medium text-gray-600">
+          <label htmlFor={field.key} className="mb-1 block text-xs font-medium text-gray-600">
             {field.label}
             {field.suffix ? (
               <span className="ml-1 text-gray-400">({field.suffix})</span>
             ) : null}
           </label>
           <Input
+            id={field.key}
             type="number"
             step="any"
+            disabled={disabled && !alwaysEnabled.includes(field.key)}
             value={state[field.key] ?? ""}
             onChange={(e) => onChange(field.key, e.target.value)}
           />
@@ -144,6 +152,10 @@ export function PayrollSettingsPage() {
     ...taxEdits,
   };
 
+  const pphOn = isSwitchOn(settingsForm, "pph21_enabled");
+  const bpjsTkOn = isSwitchOn(settingsForm, "bpjs_tk_enabled");
+  const bpjsKesOn = isSwitchOn(settingsForm, "bpjs_kes_enabled");
+
   const handleSettingsChange = (key: string, value: string) =>
     setSettingsEdits((prev) => ({ ...prev, [key]: value }));
 
@@ -225,6 +237,37 @@ export function PayrollSettingsPage() {
         <>
           <Card>
             <CardHeader>
+              <CardTitle className="text-base">Komponen yang Dihitung</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {COMPONENT_SWITCHES.map((sw) => (
+                <div key={sw.key}>
+                  <label className="flex cursor-pointer items-start gap-2">
+                    <input
+                      type="checkbox"
+                      className="mt-1 h-4 w-4 shrink-0 rounded border-gray-300"
+                      checked={isSwitchOn(settingsForm, sw.key)}
+                      onChange={(e) => handleSettingsChange(sw.key, e.target.checked ? "true" : "false")}
+                    />
+                    <span className="min-w-0 text-sm font-medium text-gray-700">{sw.label}</span>
+                  </label>
+                  {sw.key === "pph21_enabled" && (
+                    <p className="ml-6 mt-1 text-xs text-gray-500">
+                      Bila PPh 21 dinyalakan kembali di tengah tahun, perhitungan Desember (Pasal 17) menyesuaikan
+                      pajak setahun penuh.
+                    </p>
+                  )}
+                </div>
+              ))}
+              <p className="text-xs text-gray-500">
+                Nonaktif: tidak dipotong dari gaji dan tidak ada iuran perusahaan. Berlaku untuk payroll yang dihitung
+                setelah disimpan.
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
               <CardTitle className="text-base">
                 BPJS Ketenagakerjaan
               </CardTitle>
@@ -234,6 +277,7 @@ export function PayrollSettingsPage() {
                 fields={BPJS_TK_FIELDS}
                 state={settingsForm}
                 onChange={handleSettingsChange}
+                disabled={!bpjsTkOn}
               />
             </CardContent>
           </Card>
@@ -247,6 +291,8 @@ export function PayrollSettingsPage() {
                 fields={BPJS_KES_FIELDS}
                 state={settingsForm}
                 onChange={handleSettingsChange}
+                disabled={!bpjsKesOn}
+                alwaysEnabled={["bpjs_kes_subsidy_amount"]}
               />
             </CardContent>
           </Card>
@@ -376,11 +422,13 @@ export function PayrollSettingsPage() {
             <CardContent>
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-gray-600">Metode pemotongan</label>
+                  <label htmlFor="pph21_method" className="mb-1 block text-xs font-medium text-gray-600">Metode pemotongan</label>
                   <select
+                    id="pph21_method"
+                    disabled={!pphOn}
                     value={settingsForm.pph21_method || "annualized"}
                     onChange={(e) => handleSettingsChange("pph21_method", e.target.value)}
-                    className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm"
+                    className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm disabled:bg-gray-50 disabled:opacity-50"
                   >
                     {PPH21_METHOD_OPTIONS.map((o) => (
                       <option key={o.value} value={o.value}>
@@ -390,12 +438,13 @@ export function PayrollSettingsPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-gray-600">BPJS yang ditambahkan ke dasar TER</label>
+                  <label htmlFor="pph21_bpjs_basis" className="mb-1 block text-xs font-medium text-gray-600">BPJS yang ditambahkan ke dasar TER</label>
                   <select
+                    id="pph21_bpjs_basis"
                     value={settingsForm.pph21_bpjs_basis || "both"}
                     onChange={(e) => handleSettingsChange("pph21_bpjs_basis", e.target.value)}
-                    className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm"
-                    disabled={(settingsForm.pph21_method || "annualized") !== "ter"}
+                    className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm disabled:bg-gray-50 disabled:opacity-50"
+                    disabled={!pphOn || (settingsForm.pph21_method || "annualized") !== "ter"}
                   >
                     {PPH21_BPJS_BASIS_OPTIONS.map((o) => (
                       <option key={o.value} value={o.value}>
@@ -470,6 +519,7 @@ export function PayrollSettingsPage() {
                   fields={PTKP_FIELDS}
                   state={taxForm}
                   onChange={handleTaxChange}
+                  disabled={!pphOn}
                 />
               </div>
               <div>
@@ -480,6 +530,7 @@ export function PayrollSettingsPage() {
                   fields={BRACKET_FIELDS}
                   state={taxForm}
                   onChange={handleTaxChange}
+                  disabled={!pphOn}
                 />
               </div>
             </CardContent>
