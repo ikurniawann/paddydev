@@ -6,13 +6,17 @@
 -- terbaru lalu prioritas terkecil; pola mingguan yang berakhir tepat pada
 -- end_date karyawan resign dianggap terus berlaku; bila jadwal baru mulai di
 -- tengah periode, pola pertamanya dianggap berlaku sejak awal periode (roster
--- per tanggal tidak diperpanjang). Pembagi dari jadwal hanya bila setiap
--- tanggal periode punya baris yang berlaku. hari_* NULL = tanpa jadwal atau
--- jadwal tidak lengkap: payroll memakai fallback (pembagi struktur / hari
--- hadir / 20).
+-- per tanggal tidak diperpanjang). Kolom sebelum meniru kode lama: pola
+-- mingguan saja, jalur jadwal setiap kali ada hari ber-shift (tanpa syarat
+-- kelengkapan). Kolom sesudah: pembagi dari jadwal hanya bila ada hari
+-- ber-shift dan setiap tanggal periode punya baris yang berlaku. hari_* NULL =
+-- tanpa hari ber-shift (sebelum) atau tanpa jadwal / jadwal tidak lengkap
+-- (sesudah): payroll memakai fallback (pembagi struktur / hari hadir / 20).
 --
 -- Pakai: psql "$DATABASE_URL" -v start=2026-10-21 -v end=2026-11-20 -f payroll_divisor.sql
--- Hanya menampilkan karyawan yang pembaginya berubah, dengan jumlah per departemen.
+-- Query 1 menampilkan karyawan yang pembaginya berubah, dengan jumlah per departemen.
+-- Query 2 (R1) daftar staf shift di luar toko yang kehilangan tanggal merah.
+-- Query 3 daftar sasaran aturan jabatan sistem shift dan penempatan utamanya.
 BEGIN READ ONLY;
 
 WITH params AS (
@@ -57,9 +61,9 @@ WITH params AS (
   WHERE n = (SELECT count(*) FROM days)
 ), counted AS (
   SELECT e.*,
-         CASE WHEN EXISTS (SELECT 1 FROM complete c WHERE c.k = 'sebelum' AND c.employee_id = e.id)
-              THEN NULLIF((SELECT count(*) FROM resolved r WHERE r.k = 'sebelum' AND r.employee_id = e.id AND r.shift_id IS NOT NULL), 0)
-         END AS hari_sebelum,
+         -- Kode lama: pola mingguan saja, jalur jadwal setiap kali ada hari
+         -- ber-shift (scheduled > 0), tanpa syarat jadwal lengkap.
+         NULLIF((SELECT count(*) FROM resolved r WHERE r.k = 'sebelum' AND r.employee_id = e.id AND r.shift_id IS NOT NULL), 0) AS hari_sebelum,
          CASE WHEN EXISTS (SELECT 1 FROM complete c WHERE c.k = 'sesudah' AND c.employee_id = e.id)
               THEN NULLIF((SELECT count(*) FROM resolved r WHERE r.k = 'sesudah' AND r.employee_id = e.id AND r.shift_id IS NOT NULL), 0)
          END AS hari_sesudah,
@@ -77,5 +81,38 @@ SELECT department, berubah_di_departemen, karyawan_di_departemen, nip, full_name
 FROM summary
 WHERE berubah
 ORDER BY department, full_name;
+
+-- Query 2 — R1 blast radius: karyawan aktif bertipe Shift di luar departemen
+-- Retail Operational (atau tanpa departemen) dengan jabatan di luar daftar
+-- sistem shift. Mereka tidak lagi libur di tanggal merah (R1); HR perlu
+-- konfirmasi sebelum 24/25-12. Kolom jadwal: pola mingguan / sel per tanggal
+-- yang berlaku mulai :start.
+SELECT COALESCE(d.name, '(tanpa departemen)') AS department, COALESCE(p.title, '(tanpa jabatan)') AS jabatan,
+       e.nip, e.full_name,
+       EXISTS (SELECT 1 FROM hris.employee_shifts es
+               WHERE es.employee_id = e.id AND (es.effective_to IS NULL OR es.effective_to >= :'start'::date)) AS punya_pola_mingguan,
+       EXISTS (SELECT 1 FROM hris.employee_shift_days sd
+               WHERE sd.employee_id = e.id AND sd.work_date >= :'start'::date) AS punya_sel_per_tanggal
+FROM hris.employees e
+LEFT JOIN hris.departments d ON d.id = e.department_id
+LEFT JOIN hris.positions p ON p.id = e.job_title_id
+WHERE e.is_active AND e.schedule_type = 'shift'
+  AND lower(btrim(COALESCE(d.name, ''))) <> 'retail operational'
+  AND COALESCE(p.title, '') !~* '(host live|production|crm|shopkeeper|pasaraya|crew experience|store supervisor|retail operation manager|event|customer service)'
+ORDER BY 1, 2, e.full_name;
+
+-- Query 3 — sasaran aturan jabatan sistem shift (host live, production, crm):
+-- tipe jadwal sekarang dan penempatan utama yang berlaku pada :start
+-- (penempatan NULL = tidak bisa ditempatkan di grid jadwal toko).
+SELECT COALESCE(d.name, '(tanpa departemen)') AS department, p.title AS jabatan, e.nip, e.full_name, e.schedule_type,
+       (SELECT b.name FROM hris.employee_placements pl JOIN configuration.branches b ON b.id = pl.branch_id
+        WHERE pl.employee_id = e.id AND pl.is_primary
+          AND pl.start_date <= :'start'::date AND (pl.end_date IS NULL OR pl.end_date >= :'start'::date)
+        LIMIT 1) AS penempatan_utama
+FROM hris.employees e
+LEFT JOIN hris.departments d ON d.id = e.department_id
+JOIN hris.positions p ON p.id = e.job_title_id
+WHERE e.is_active AND p.title ~* '(host live|production|crm)'
+ORDER BY 1, 2, e.full_name;
 
 ROLLBACK;

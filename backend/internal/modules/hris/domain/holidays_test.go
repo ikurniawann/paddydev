@@ -58,10 +58,14 @@ func TestDescribeRosterLeaveDays(t *testing.T) {
 	rows := []ScheduleRow{work("2026-12-21"), work("2026-12-22"), off("2026-12-23"), work("2026-12-24"), work("2026-12-25")}
 	eq(t, DescribeRosterLeaveDays("2026-12-21", "2026-12-25", rows), 4)
 
-	// R4: tanggal tanpa roster sama sekali tetap dihitung.
+	// R4: tanggal tanpa jadwal sama sekali dihitung bila Senin-Jumat (sama
+	// dengan IsWorkDate payroll); tanpa pengecualian tanggal merah.
 	eq(t, DescribeRosterLeaveDays("2026-12-21", "2026-12-25", nil), 5)
+	// Jumat-Senin tanpa roster: hanya Jumat dan Senin.
+	eq(t, DescribeRosterLeaveDays("2026-12-25", "2026-12-28", nil), 2)
+	eq(t, DescribeRosterLeaveDays("2026-12-26", "2026-12-27", nil), 0)
 
-	// Akhir pekan ber-shift dihitung; akhir pekan tanpa roster juga (tidak ada pengecualian).
+	// Akhir pekan ber-shift dihitung; sel libur tidak.
 	eq(t, DescribeRosterLeaveDays("2026-12-26", "2026-12-27", []ScheduleRow{work("2026-12-26"), work("2026-12-27")}), 2)
 	eq(t, DescribeRosterLeaveDays("2026-12-26", "2026-12-27", []ScheduleRow{off("2026-12-26"), work("2026-12-27")}), 1)
 
@@ -70,4 +74,11 @@ func TestDescribeRosterLeaveDays(t *testing.T) {
 	weekly := ScheduleRow{DayOfWeek: 1, ShiftID: &spg, EffectiveFrom: "2026-01-01"}
 	eq(t, DescribeRosterLeaveDays("2026-12-21", "2026-12-21", []ScheduleRow{off("2026-12-21"), weekly}), 0)
 	eq(t, DescribeRosterLeaveDays("2026-12-21", "2026-12-21", []ScheduleRow{weekly}), 1)
+
+	// Ada jadwal berlaku (pola mingguan Senin saja) tetapi tanpa baris untuk
+	// Sabtu: bukan hari kerja, sama seperti payroll; Jumat tanpa baris juga.
+	eq(t, DescribeRosterLeaveDays("2026-12-25", "2026-12-26", []ScheduleRow{weekly}), 0)
+	// Jadwal baru berlaku sejak 28/12: sebelumnya tidak ada jadwal -> Senin-Jumat.
+	later := ScheduleRow{DayOfWeek: 1, ShiftID: &spg, EffectiveFrom: "2026-12-28"}
+	eq(t, DescribeRosterLeaveDays("2026-12-25", "2026-12-28", []ScheduleRow{later}), 2)
 }

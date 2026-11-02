@@ -63,8 +63,9 @@ Jawaban user 02-11:
 - **R4 Hitung hari cuti staf shift** memakai roster, bukan Senin–Jumat:
   - tanggal dengan shift dihitung 1 hari;
   - tanggal libur roster (sel kosong/libur) tidak dihitung;
-  - tanggal tanpa roster sama sekali dihitung (roster belum dibuat; my call);
-  - nol hari ditolak dengan pesan yang sudah ada.
+  - tanggal tanpa jadwal berlaku sama sekali (roster belum dibuat) dihitung **hanya bila Senin–Jumat**, tanpa melewati tanggal merah untuk staf shift. Ini sama dengan `IsWorkDate` payroll (peta libur kosong untuk staf shift), sehingga hari yang mengurangi kuota sama dengan hari yang dipotong payroll. (Keputusan controller, review akhir: sebelumnya semua tanggal tanpa roster dihitung, termasuk Sabtu–Minggu.) Jadwal "berlaku" bila ada baris pola mingguan atau sel per tanggal yang berlaku pada tanggal itu, hari apa pun; bila berlaku, barisnya untuk hari itu yang menentukan;
+  - nol hari ditolak; staf shift mendapat pesan sendiri ("Rentang tanggal ini jatuh pada hari libur di jadwal kerja Anda — tidak ada hari yang dipotong dari jatah cuti"), bukan "akhir pekan";
+  - rentang pengajuan dan pratinjau dibatasi 366 hari ("Rentang cuti maksimal 366 hari").
 
   Non-Shift tetap memakai aturan lama, ditambah R2 untuk cuti bersama.
 - **R5 Peringatan 40 jam** (roster upload dan simpan sel; bisa dilewati dengan `ack_warnings`):

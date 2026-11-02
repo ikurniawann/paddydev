@@ -136,6 +136,20 @@ type leaveRequest struct {
 	AttachmentURL                         *string
 }
 
+// maxLeaveSpanDays bounds one leave request (and its preview) so a hostile
+// range cannot make the day-by-day count run over millions of dates.
+const maxLeaveSpanDays = 366
+
+// leaveSpanTooLong: [start, end] (end >= start) covers more than
+// maxLeaveSpanDays calendar days.
+func leaveSpanTooLong(start, end string) bool {
+	s, ok1 := domain.ParseDate(start)
+	e, ok2 := domain.ParseDate(end)
+	return ok1 && ok2 && e.Sub(s).Hours()/24 >= maxLeaveSpanDays
+}
+
+const errLeaveSpan = "Rentang cuti maksimal 366 hari"
+
 // leaveDays is the number of days a leave over [start, end] consumes, and the
 // holidays that were skipped (EPIC-079 R4). Shift staff count from their
 // roster and never skip a red date; Non-Shift staff skip weekends and the
@@ -176,6 +190,9 @@ func (s *Service) MyLeaveDays(ctx context.Context, a *Actor, start, end string) 
 	if end < start {
 		return nil, httpx.BadRequest("Tanggal selesai tidak boleh sebelum tanggal mulai")
 	}
+	if leaveSpanTooLong(start, end) {
+		return nil, httpx.BadRequest(errLeaveSpan)
+	}
 	emp, err := s.repo.LeaveEmployee(ctx, *a.EmployeeID)
 	if err != nil {
 		return nil, err
@@ -215,6 +232,9 @@ func (s *Service) CreateLeave(ctx context.Context, a *Actor, in leaveRequest) (*
 	if in.EndDate < in.StartDate {
 		return nil, httpx.BadRequest("Tanggal selesai tidak boleh sebelum tanggal mulai")
 	}
+	if leaveSpanTooLong(in.StartDate, in.EndDate) {
+		return nil, httpx.BadRequest(errLeaveSpan)
+	}
 	if lt.SingleDay && in.StartDate != in.EndDate {
 		return nil, httpx.BadRequest(lt.Label + " diajukan per satu hari — tanggal mulai dan selesai harus sama")
 	}
@@ -232,7 +252,7 @@ func (s *Service) CreateLeave(ctx context.Context, a *Actor, in leaveRequest) (*
 		return nil, err
 	}
 	if totalDays == 0 {
-		return nil, httpx.BadRequest(domain.NoWorkingDayMessage(excluded))
+		return nil, httpx.BadRequest(domain.NoWorkingDayMessage(excluded, emp.Str("schedule_type")))
 	}
 	if in.LeaveType == "annual" {
 		// R6: the year's row is created from the default rule when missing,

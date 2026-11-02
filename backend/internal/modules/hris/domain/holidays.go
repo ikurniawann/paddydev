@@ -91,26 +91,50 @@ func DescribeLeaveDays(startISO, endISO string, idx HolidayIndex) (int, []Exclud
 	return total, excluded
 }
 
+// scheduleInForce: some schedule row (weekly pattern or per-date cell) is in
+// force on dateISO whatever its weekday; otherwise the roster says nothing
+// about the date (not made yet, or none any more).
+func scheduleInForce(schedule []ScheduleRow, dateISO string) bool {
+	for _, r := range schedule {
+		if r.EffectiveFrom <= dateISO && (r.EffectiveTo == nil || *r.EffectiveTo >= dateISO) {
+			return true
+		}
+	}
+	return false
+}
+
 // DescribeRosterLeaveDays counts the leave days of a shift employee from the
-// roster (EPIC-079 R4), not Monday-Friday: a date with a shift counts, a
-// roster day off (empty cell) does not, and a date the roster does not cover
-// at all counts, because the roster simply is not made yet. schedule is the
+// roster (EPIC-079 R4), the same dates payroll treats as work dates
+// (payroll IsWorkDate): with a schedule in force a date counts only when its
+// row carries a shift (a roster day off does not); with no schedule in force
+// it counts when it is Monday-Friday, red dates are not skipped for shift
+// staff. So the quota days equal the days payroll deducts. schedule is the
 // employee's hris.v_employee_schedule rows in view order (ORDER BY priority:
 // a per-date cell precedes the weekly pattern), which ResolveScheduleRow
 // relies on to let the per-date cell win on a tied effective_from.
 func DescribeRosterLeaveDays(startISO, endISO string, schedule []ScheduleRow) int {
 	total := 0
 	for _, d := range EachDateISO(startISO, endISO) {
-		if i := ResolveScheduleRow(schedule, d); i >= 0 && schedule[i].ShiftID == nil {
+		if scheduleInForce(schedule, d) {
+			if i := ResolveScheduleRow(schedule, d); i >= 0 && schedule[i].ShiftID != nil {
+				total++
+			}
 			continue
 		}
-		total++
+		if !IsWeekend(d) {
+			total++
+		}
 	}
 	return total
 }
 
 // NoWorkingDayMessage explains a leave range with zero working days.
-func NoWorkingDayMessage(excluded []ExcludedHoliday) string {
+// scheduleType "shift" gets its own wording: shift staff are not bound to the
+// weekend, their roster decides.
+func NoWorkingDayMessage(excluded []ExcludedHoliday, scheduleType string) string {
+	if scheduleType == "shift" {
+		return "Rentang tanggal ini jatuh pada hari libur di jadwal kerja Anda — tidak ada hari yang dipotong dari jatah cuti"
+	}
 	alasan := "jatuh pada akhir pekan"
 	if len(excluded) > 0 {
 		names := make([]string, len(excluded))

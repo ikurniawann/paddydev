@@ -191,7 +191,7 @@ func TestJoinerRosterOnlyProratesOnCalendar(t *testing.T) {
 		t.Fatalf("factor = %v, want 0.5 (15/30 hari kalender)", f)
 	}
 	if in.DivisorDays != 13 || in.WorkingDays != 13 {
-		t.Fatalf("pembagi = %v, hari kerja = %v, want 13 (roster)", in.DivisorDays, in.WorkingDays)
+		t.Fatalf("pembagi = %v, hari kerja = %v, want 13 (hari ber-shift di roster; tanggal tanpa jadwal tidak menambah pembagi)", in.DivisorDays, in.WorkingDays)
 	}
 	eq(t, "pokok 2,6 jt × 15/30", Calculate(in, DefaultConfig()).BaseSalary, 1_300_000)
 }

@@ -131,7 +131,8 @@ func TestLeaveDays(t *testing.T) {
 	})
 	n, _ = DescribeLeaveDays("2026-09-01", "2026-09-01", clash)
 	eq(t, n, 0)
-	eq(t, NoWorkingDayMessage(nil), "Rentang tanggal ini jatuh pada akhir pekan — tidak perlu mengajukan cuti")
+	eq(t, NoWorkingDayMessage(nil, "non_shift"), "Rentang tanggal ini jatuh pada akhir pekan — tidak perlu mengajukan cuti")
+	eq(t, NoWorkingDayMessage(nil, "shift"), "Rentang tanggal ini jatuh pada hari libur di jadwal kerja Anda — tidak ada hari yang dipotong dari jatah cuti")
 }
 
 func TestHolidayInput(t *testing.T) {
