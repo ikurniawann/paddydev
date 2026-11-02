@@ -1,6 +1,6 @@
 # EPIC-084: Ketentuan Cuti & Izin + SLA Pengajuan terhadap Payroll (`MODULE-HRIS`)
 
-status: backlog
+status: review
 environment: dev
 retries: 0
 
@@ -130,6 +130,8 @@ Acuan:
   - jenis lain → full paid.
 
   "≥ 1 tahun" berarti join + 1 tahun ≤ tanggal mulai cuti. Join kosong atau tak terbaca dianggap ≥ 1 tahun (tidak memotong). Maternity keluar dari PIS.
+
+  **Tanggal berlaku (review akhir):** aturan < 1 tahun hanya untuk cuti yang **mulai ≥ 03-11-2026** (`LeaveTnCEffective`). Cuti yang mulai lebih awal tetap aturan lama: melahirkan < 1 tahun → PIS, haji → full paid. Dengan begitu cuti yang disetujui dengan syarat lama tidak dipotong mundur. Join 29 Feb genap 1 tahun pada 28 Feb.
 - **R9 Aktivasi periode 21–20 (ops, digerbang).** Kode R3 generik. Aktivasi = `PUT attendance-settings {cutoff_day: 20, closing_offset_days: 3}` setelah periode Oktober tertutup. Akibatnya: Nov menjadi periode transisi 1–20 Nov, Des = 21 Nov–20 Des.
   - Dampak transisi pada `monthly_prorated` (simulasi 21-10: bisa ±65% pokok) harus diputuskan HR sebelum aktivasi di production.
   - Di staging diaktifkan untuk QA.
@@ -143,12 +145,66 @@ Acuan:
 Rencana: `docs/superpowers/plans/2026-11-03-ketentuan-cuti-izin.md` (Task 1–7).
 
 ## Acceptance Criteria
-- [ ] Form ESS & HR menampilkan 14 jenis aktif sesuai R1; jenis baru tersimpan dan terbaca di daftar, detail, notifikasi, export, dan board desktop.
-- [ ] Pengajuan milik sendiri ditolak sesuai R2/R3/R5/R6 dengan pesan di atas; HR untuk karyawan lain tidak terkena R2/R5/R6.
-- [ ] Birthday Leave hanya lolos sesuai R4 dan wajib attachment; Cuti Keguguran wajib attachment.
-- [ ] Saldo 2027 karyawan join 10-05-2026 = 7 (tanpa cuti bersama); saldo ≤ 2026 tidak berubah (checksum sebelum/sesudah migrasi sama).
-- [ ] Payroll: melahirkan ≥ 1 tahun tanpa potongan; < 1 tahun dipotong PIP; haji < 1 tahun dipotong PIP mulai hari ke-15.
-- [ ] Gates: `go test ./...`, vitest, typecheck, build hijau; migrasi apply + verify di staging.
+- [x] Form ESS & HR menampilkan 14 jenis aktif (13 untuk non-SPV: Izin Leader tersembunyi) sesuai R1; jenis baru tersimpan dan terbaca di daftar, detail, notifikasi, export, dan board desktop.
+- [x] Pengajuan milik sendiri ditolak sesuai R2/R3/R5/R6 dengan pesan di atas; HR untuk karyawan lain tidak terkena R2/R5/R6.
+- [x] Birthday Leave hanya lolos sesuai R4 dan wajib attachment; Cuti Keguguran wajib attachment.
+- [x] Saldo 2027 karyawan join 10-05-2026 = 7 (tanpa cuti bersama); saldo ≤ 2026 tidak berubah (checksum sebelum/sesudah migrasi sama).
+- [x] Payroll: melahirkan ≥ 1 tahun tanpa potongan; < 1 tahun dipotong PIP; haji < 1 tahun dipotong PIP mulai hari ke-15.
+- [x] Gates: `go test ./...`, vitest, typecheck, build hijau; migrasi apply + verify di staging.
 
 ## Automation Log
 - 2026-11-03 — Epic + rencana ditulis (writing-plans) setelah 4 jawaban user. Worktree `.worktrees/epic084`, branch `feat/epic084-ketentuan-cuti`, dari main `57aa4cf4`.
+- 2026-11-03 — Implementasi native (executing-plans), 6 task + perbaikan review akhir, branch `feat/epic084-ketentuan-cuti`:
+  - Commit:
+    - `ae3195fa` katalog + enum + label;
+    - aturan domain;
+    - SLA + kunci cut off;
+    - prorata 2027;
+    - payroll;
+    - form;
+    - `e7f58eda` perbaikan review.
+  - Gates:
+    - `go vet` + `gofmt` bersih;
+    - `go test -p 1 ./...` hijau;
+    - vitest 6459 lulus;
+    - `tsc` + eslint bersih.
+  - Tes fixture lama yang terkena aturan baru disesuaikan tanpa melonggarkan aturan:
+    - lembur memakai jam H+1;
+    - kuota Izin Pribadi memakai saldo tahunan 0.
+- 2026-11-03 — Review akhir (reviewer terpisah): 0 Critical, 1 Important, 10 Minor.
+  - **Important (R8 berlaku mundur)**: diputuskan aturan < 1 tahun hanya untuk cuti mulai ≥ 03-11-2026 (`LeaveTnCEffective`).
+  - Diperbaiki:
+    - label slip "Potongan Sakit";
+    - cuti bersama ganda dihitung sekali (`count(DISTINCT holiday_date)`);
+    - hint form HR tanpa H-n;
+    - angka desimal pakai koma;
+    - join 29 Feb genap 1 tahun pada 28 Feb.
+  - Ditunda (minor):
+    - Izin Pribadi belum memperhitungkan cuti tahunan yang masih pending;
+    - kepemilikan path lampiran belum dicek (ES-11);
+    - route fallback Next tanpa R2–R6 (tidak dipakai production);
+    - tes integrasi untuk syarat gender belum ada.
+- 2026-11-03 — **Staging** `local-20261103-062547` (commit `e7f58eda`):
+  - Backup `~/Desktop/paddydev-backups/staging-db-before-epic084-20261103-062529.dump`.
+  - Migrasi: 2 diterapkan; verify 10762 objek, 0 berbeda.
+  - `hris.leave_balances` md5 sebelum = sesudah (`264767ee…`, 386 baris).
+  - QA browser (akun demo qa084, sudah dihapus; baris audit append-only tetap ada):
+    - form ESS menampilkan 13 jenis (Izin Leader tersembunyi untuk non-SPV), hint "Diajukan paling lambat H-3", dan tanggal minimal 06-11;
+    - API menolak pengajuan yang melanggar aturan:
+      - H-1 tahunan;
+      - sakit kemarin;
+      - Birthday tanpa lampiran;
+      - Birthday di luar bulan lahir;
+      - Izin Pribadi saat saldo 11,5;
+      - Menikah 4 hari;
+      - cuti 30-10 → 409 cut off;
+      - lembur 01-11 → H+1;
+      - koreksi absen 30-10 → 409;
+    - sakit hari ini dan Birthday dengan lampiran (lewat UI) tersimpan;
+    - form HR tanpa H-3 dan menampilkan "Maksimal 3 hari kerja".
+  - **Cutoff 20 diaktifkan di staging saja** (R9). Periode staging sekarang:
+    - Okt transisi 1–20 Okt (closing 23-10, tertutup otomatis saat dibaca);
+    - Nov 21 Okt–20 Nov;
+    - Des 21 Nov–20 Des.
+  - Production tetap cutoff 0 sampai HR memutuskan periode transisi.
+
