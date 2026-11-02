@@ -158,6 +158,11 @@ func (s *Service) applyClockAndLateness(ctx context.Context, f *fields, in adjus
 		if err != nil {
 			return err
 		}
+		// The tolerance stored at clock-in wins over the shift's current one
+		// (EPIC-078: NS went from 15 to 0 minutes).
+		if t != nil && current.Get("late_tolerance_minutes") != nil {
+			t.LateToleranceMinutes = int(current.Num("late_tolerance_minutes"))
+		}
 		times = t
 	}
 	if times == nil {
@@ -169,6 +174,7 @@ func (s *Service) applyClockAndLateness(ctx context.Context, f *fields, in adjus
 			times = &snap.times
 			start, end := domain.ScheduledWindow(date, snap.times)
 			f.set("shift_id", snap.shiftID)
+			f.set("late_tolerance_minutes", snap.times.LateToleranceMinutes)
 			f.set("scheduled_start", start)
 			f.set("scheduled_end", end)
 		}

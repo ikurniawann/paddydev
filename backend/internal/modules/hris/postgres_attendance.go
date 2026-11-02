@@ -9,7 +9,7 @@ import (
 var attendanceListColumns = `id, employee_id, date, clock_in, clock_out,
   clock_in_location, clock_out_location, clock_in_photo_url, clock_out_photo_url,
   shift_id, scheduled_start, scheduled_end, work_hours, break_minutes,
-  status, is_late, late_minutes, notes, created_at, updated_at, branch_id,
+  status, is_late, late_minutes, late_tolerance_minutes, notes, created_at, updated_at, branch_id,
   is_overtime, overtime_hours, validated_at, is_manual, adjusted_at, adjusted_by_name, adjustment_count,
   clock_in_geofence, clock_in_distance_m, clock_out_geofence, clock_out_distance_m,
   min_work_hours, is_short_hours, ` +

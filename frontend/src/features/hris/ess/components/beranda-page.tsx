@@ -19,6 +19,7 @@ import { todayWib } from "@/lib/dates";
 import { useEssBeranda } from "../queries";
 import { EssClockPanel } from "./ess-clock-panel";
 import { JadwalTokoShortcut } from "./jadwal-toko-shortcut";
+import { LatenessBerandaCard } from "@/features/hris/lateness";
 import { TeamAttendanceCard } from "./team-attendance-card";
 import { balanceSubtitle } from "./leave-balance-summary";
 import {
@@ -77,14 +78,15 @@ export function EssBerandaPage() {
           <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white/20 text-lg font-bold ring-2 ring-white/40 backdrop-blur-sm">
             {initials(emp.full_name)}
           </div>
-          <div className="min-w-0 flex-1">
+          <div className="min-w-0 flex-1 basis-40">
             <p className="text-sm text-white/80">{greeting()},</p>
             <h1 className="truncate text-xl font-bold sm:text-2xl">{emp.full_name}</h1>
             <p className="mt-0.5 truncate text-sm text-white/85">
               {[emp.position_title, emp.department_name].filter(Boolean).join(" · ") || "Karyawan"}
             </p>
           </div>
-          <div className="flex flex-col items-end gap-1 text-right">
+          {/* HP: badge + NIP turun ke baris sendiri supaya nama tidak terjepit. */}
+          <div className="flex w-full flex-wrap items-center gap-x-2 gap-y-1 sm:w-auto sm:flex-col sm:items-end sm:text-right">
             <span className="rounded-full bg-white/20 px-2.5 py-1 text-xs font-semibold capitalize backdrop-blur-sm">
               {emp.employment_status?.replace(/_/g, " ") || "-"}
             </span>
@@ -125,6 +127,9 @@ export function EssBerandaPage() {
 
       {/* ── Atasan: ringkasan Absensi Tim hari ini (EPIC-074) ── */}
       <TeamAttendanceCard />
+
+      {/* ── Keterlambatan periode ini (EPIC-077) ── */}
+      <LatenessBerandaCard />
 
       {/* ── Terapis spa: booking berikutnya & komisi (hanya akun terapis) ── */}
       <TherapistBerandaCard />

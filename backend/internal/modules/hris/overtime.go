@@ -534,8 +534,8 @@ func (s *Service) UpdateShift(ctx context.Context, id string, in shiftInput) err
 	if in.Code != nil {
 		var cur string
 		if err := s.repo.querier().QueryRow(ctx, `SELECT code FROM hris.shifts WHERE id = $1`, id).Scan(&cur); err == nil &&
-			(cur == "DEF" || cur == "NS") && *in.Code != cur {
-			return httpx.BadRequest("Kode shift bawaan DEF/NS tidak bisa diubah")
+			builtinShift(cur) && *in.Code != cur {
+			return httpx.BadRequest("Kode shift bawaan DEF/NS/OPS/OPSSAT tidak bisa diubah")
 		}
 	}
 	if in.IsActive != nil && !*in.IsActive {
@@ -659,8 +659,18 @@ func (s *store) DecideOvertime(ctx context.Context, id string, f fields) (*Row, 
 
 const (
 	shiftCodeInvalid  = "Kode shift 1–12 huruf/angka tanpa spasi"
-	shiftBuiltinFixed = "Shift bawaan DEF/NS tidak bisa dihapus atau dinonaktifkan"
+	shiftBuiltinFixed = "Shift bawaan DEF/NS/OPS/OPSSAT tidak bisa dihapus atau dinonaktifkan"
 )
+
+// builtinShift: DEF, NS and the Operations OPS/OPSSAT (EPIC-078) back the
+// fixed schedules — their code is fixed and they stay active.
+func builtinShift(code string) bool {
+	switch code {
+	case "DEF", "NS", "OPS", "OPSSAT":
+		return true
+	}
+	return false
+}
 
 var shiftCodeRe = regexp.MustCompile(`^[A-Z0-9]{1,12}$`)
 
@@ -684,7 +694,7 @@ func shiftCodeConflict(err error, code string) error {
 	return err
 }
 
-// guardShiftDeactivate blocks turning off DEF/NS or a shift still on a
+// guardShiftDeactivate blocks turning off a builtin shift or a shift still on a
 // schedule from today on (per-date or a running weekly pattern).
 func guardShiftDeactivate(ctx context.Context, q database.Querier, id, today string) error {
 	var code string
@@ -699,7 +709,7 @@ func guardShiftDeactivate(ctx context.Context, q database.Querier, id, today str
 		}
 		return err
 	}
-	if code == "DEF" || code == "NS" {
+	if builtinShift(code) {
 		return httpx.BadRequest(shiftBuiltinFixed)
 	}
 	if used > 0 {

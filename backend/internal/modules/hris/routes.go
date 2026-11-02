@@ -147,6 +147,9 @@ func (h handlers) routes() []module.Route {
 		r("GET /api/hris/me/team-approvals", h.withActor(h.teamApprovals)),
 		r("GET /api/hris/me/attendance-requests", h.withActor(h.myAttendanceRequests)),
 		r("GET /api/hris/me/attendance-gaps", h.withActor(h.myAttendanceGaps)),
+		// Jumlah & tingkat keterlambatan per periode (EPIC-077).
+		r("GET /api/hris/me/lateness", h.withActor(h.myLateness)),
+		r("GET /api/hris/me/team-lateness", h.withActor(h.teamLateness)),
 		// Keputusan HR yang boleh diambil akun (EPIC-067 R14).
 		r("GET /api/hris/me/approve-access", h.withActor(h.myApproveAccess)),
 		r("GET /api/hris/me/leave-balance-access", h.withActor(h.myLeaveBalanceAccess)),

@@ -16,6 +16,7 @@ import {
   type ShiftPatternDraft,
 } from "@/lib/hris/employee-profile-shifts";
 import type { ScheduleType } from "@/lib/hris/schedule-type";
+import { FIXED_SCHEDULE_SUMMARY } from "@/lib/hris/work-hours";
 import { applyFixedSchedule } from "../api";
 import { useSaveEmployeeShiftPattern } from "../mutations";
 import { useActiveShiftOptions, useEmployeeShiftSchedule } from "../queries";
@@ -97,7 +98,7 @@ export function EmployeeShiftsTab({
         </h3>
         {locked ? (
           <p className="text-xs text-gray-500">
-            Senin–Jumat 09.00–18.00, Sabtu–Minggu libur. Ubah tipe jadwal ke Shift untuk mengatur shift.
+            Sesuai departemen — {FIXED_SCHEDULE_SUMMARY}. Hari lain libur. Ubah tipe jadwal ke Shift untuk mengatur shift.
           </p>
         ) : (
           <p className="text-xs text-gray-500">

@@ -29,9 +29,9 @@ func TestShiftCodes(t *testing.T) {
 	expect(t, h.do(&hr, http.MethodDelete, "/api/hris/shifts/"+def+"?reason=Hapus%20shift%20bawaan", nil), http.StatusForbidden, "Insufficient permissions")
 	h.grantDelete(hr, iam.LeafShift)
 	del := h.do(&hr, http.MethodDelete, "/api/hris/shifts/"+def+"?reason=Hapus%20shift%20bawaan", nil)
-	expect(t, del, http.StatusBadRequest, "Shift bawaan DEF/NS tidak bisa dihapus atau dinonaktifkan")
+	expect(t, del, http.StatusBadRequest, "Shift bawaan DEF/NS/OPS/OPSSAT tidak bisa dihapus atau dinonaktifkan")
 	off := h.do(&hr, http.MethodPatch, "/api/hris/shifts/"+def, map[string]any{"is_active": false})
-	expect(t, off, http.StatusBadRequest, "Shift bawaan DEF/NS tidak bisa dihapus atau dinonaktifkan")
+	expect(t, off, http.StatusBadRequest, "Shift bawaan DEF/NS/OPS/OPSSAT tidak bisa dihapus atau dinonaktifkan")
 	// Shift dipakai jadwal per tanggal ke depan tidak bisa dinonaktifkan.
 	id := c.data()["id"].(string)
 	e := h.employee(emp{})
@@ -45,7 +45,7 @@ func TestBuiltinShiftCodeIsFixed(t *testing.T) {
 	hr, _ := h.staff("hrd", iam.HrisKepegawaian, false)
 	ns := h.scalar(`SELECT id::text FROM hris.shifts WHERE code = 'NS'`)
 	c := h.do(&hr, http.MethodPatch, "/api/hris/shifts/"+ns, map[string]any{"code": "KANTOR"})
-	expect(t, c, http.StatusBadRequest, "Kode shift bawaan DEF/NS tidak bisa diubah")
+	expect(t, c, http.StatusBadRequest, "Kode shift bawaan DEF/NS/OPS/OPSSAT tidak bisa diubah")
 	ok := h.do(&hr, http.MethodPatch, "/api/hris/shifts/"+ns, map[string]any{"code": "ns", "name": "Non-Shift Kantor"})
 	expect(t, ok, http.StatusOK, "")
 }

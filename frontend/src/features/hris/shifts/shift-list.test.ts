@@ -8,6 +8,8 @@ describe("shiftGroupName", () => {
     ["SPG13", "SPG"],
     ["DEF", "Bawaan"],
     ["NS", "Bawaan"],
+    ["OPS", "Bawaan"],
+    ["OPSSAT", "Bawaan"],
     ["OFF", "OFF"],
     ["7A", "Lainnya"],
   ])("%s → %s", (code, group) => expect(shiftGroupName(code)).toBe(group));

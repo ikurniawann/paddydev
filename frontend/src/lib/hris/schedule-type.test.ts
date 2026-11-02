@@ -8,10 +8,10 @@ describe("schedule type", () => {
   });
   it("teks konfirmasi ke Non-Shift menyebut jadwal yang dihapus", () => {
     expect(scheduleTypeConfirmText("non_shift", "2026-10-21", 3)).toBe(
-      "3 jadwal per tanggal mulai 21/10/2026 akan dihapus dan diganti jadwal tetap Senin–Jumat 09.00–18.00."
+      "3 jadwal per tanggal mulai 21/10/2026 akan dihapus dan diganti jadwal tetap sesuai departemen (HQ: Senin–Jumat, masuk 08.00–09.00; Warehouse: Senin–Jumat 08.00–16.00, Sabtu 08.00–14.00)."
     );
     expect(scheduleTypeConfirmText("non_shift", "2026-10-21", 0)).toBe(
-      "Jadwal tetap Senin–Jumat 09.00–18.00 berlaku mulai 21/10/2026."
+      "Jadwal tetap sesuai departemen (HQ: Senin–Jumat, masuk 08.00–09.00; Warehouse: Senin–Jumat 08.00–16.00, Sabtu 08.00–14.00) berlaku mulai 21/10/2026."
     );
   });
   it("teks konfirmasi ke Shift mengingatkan penugasan", () => {

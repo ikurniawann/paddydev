@@ -148,6 +148,15 @@ describe("goBackendTarget", () => {
       );
     },
   );
+
+  it.each([
+    ["GET", "/api/hris/me/lateness"],
+    ["GET", "/api/hris/me/team-lateness"],
+  ])("forwards the EPIC-077 endpoint %s %s to Go", (method, pathname) => {
+    expect(goBackendTarget(pathname, method, { env })).toBe(
+      `http://go-api:8080${pathname}`,
+    );
+  });
 });
 
 describe("Go route manifest", () => {
@@ -247,7 +256,9 @@ describe("Go route manifest", () => {
       // Pengatur jadwal toko (EPIC-071): hanya di Go, tanpa fallback Next.
       "/api/hris/me/schedule-access", "/api/hris/schedule-delegates",
       // Absensi Tim atasan (EPIC-074): hanya di Go, tanpa fallback Next.
-      "/api/hris/me/team-attendance"];
+      "/api/hris/me/team-attendance",
+      // Info keterlambatan karyawan & tim (EPIC-077): hanya di Go, tanpa fallback Next.
+      "/api/hris/me/lateness", "/api/hris/me/team-lateness"];
     const goNative = (p: string) =>
       goNativePrefixes.some((n) => p === n || p.startsWith(`${n}/`));
     const missing = switched

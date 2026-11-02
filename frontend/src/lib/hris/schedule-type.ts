@@ -1,3 +1,5 @@
+import { FIXED_SCHEDULE_SUMMARY } from "./work-hours";
+
 /** Tipe jadwal karyawan (Spec 2026-10-19 §2.2). */
 export type ScheduleType = "shift" | "non_shift";
 
@@ -19,8 +21,8 @@ export function dmy(iso: string): string {
 export function scheduleTypeConfirmText(to: ScheduleType, from: string, futureDays: number): string {
   if (to === "non_shift") {
     return futureDays > 0
-      ? `${futureDays} jadwal per tanggal mulai ${dmy(from)} akan dihapus dan diganti jadwal tetap Senin–Jumat 09.00–18.00.`
-      : `Jadwal tetap Senin–Jumat 09.00–18.00 berlaku mulai ${dmy(from)}.`;
+      ? `${futureDays} jadwal per tanggal mulai ${dmy(from)} akan dihapus dan diganti jadwal tetap sesuai departemen (${FIXED_SCHEDULE_SUMMARY}).`
+      : `Jadwal tetap sesuai departemen (${FIXED_SCHEDULE_SUMMARY}) berlaku mulai ${dmy(from)}.`;
   }
   return `Jadwal tetap berhenti mulai ${dmy(from)}. Karyawan perlu ditugaskan di Jadwal Kerja.`;
 }

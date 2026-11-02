@@ -2472,6 +2472,11 @@
   {
     "module": "hris",
     "method": "GET",
+    "path": "/api/hris/me/lateness"
+  },
+  {
+    "module": "hris",
+    "method": "GET",
     "path": "/api/hris/me/leave-balance-access"
   },
   {
@@ -2498,6 +2503,11 @@
     "module": "hris",
     "method": "GET",
     "path": "/api/hris/me/team-attendance"
+  },
+  {
+    "module": "hris",
+    "method": "GET",
+    "path": "/api/hris/me/team-lateness"
   },
   {
     "module": "hris",
