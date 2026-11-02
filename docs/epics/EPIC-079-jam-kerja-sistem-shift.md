@@ -104,3 +104,30 @@ Lihat `docs/superpowers/plans/2026-11-02-jam-kerja-sistem-shift.md`.
 ## Automation Log
 - 2026-11-02 — Analisis kode dan data staging. Jawaban user untuk 4 keputusan dicatat di atas. Rencana disusun.
 - 2026-11-02 — Review akhir seluruh branch, perbaikan: (1) dialog sukses Ajukan Cuti HR memakai `total_days` dari server, angka sebelum kirim berlabel perkiraan; (2) simulasi `payroll_divisor.sql`: kolom `sebelum` meniru kode lama (tanpa syarat kelengkapan), ditambah daftar R1 (staf shift di luar toko yang kehilangan tanggal merah, perlu konfirmasi HR sebelum 24/25-12) dan daftar sasaran jabatan sistem shift dengan penempatan utamanya; (3) **R4 berubah (keputusan controller)**: tanggal tanpa jadwal berlaku dihitung hanya bila Senin–Jumat, sama dengan `IsWorkDate` payroll, sehingga hari kuota = hari dipotong payroll (`TestShiftLeaveQuotaDaysEqualPayrollWorkDates`); (4) kalender absen ESS/HR mengikuti tipe jadwal (`GET /api/hris/attendance/schedule` menambah `meta.schedule_type`); (5) pesan nol hari khusus staf shift; (6) rentang cuti dan pratinjau maksimal 366 hari; (9) perubahan `is_day_off` diaudit (`holiday.day_off`, `TestHolidayDayOffAudit`).
+- 2026-11-02 — **Implementasi subagent-driven (T1–T7)**, masing-masing direview spec + kualitas:
+  - T1 `beede705`: kolom `is_day_off` + aturan `HolidayDayOff` + tombol HR.
+  - T2 `aa0dd772`: kalender, absen terlewat, dan jenis hari lembur per tipe jadwal; peringatan "libur nasional diberi shift" dihapus.
+  - T3 `682b0b65`: cuti staf shift dari roster, endpoint `GET /api/hris/me/leave-days`, migrasi `20261103100000` (trigger `total_days` tidak lagi menimpa nilai aplikasi Senin–Jumat).
+  - T4 `28640772`→`e1cc042f`: peringatan 40 jam, hanya untuk libur eksplisit.
+  - T5 `3386d166`→`40470190`: payroll membaca `v_employee_schedule`. Pembagi roster hanya bila seluruh periode terjadwal; selain itu memakai jalur lama tanpa jadwal, sehingga tunjangan per hari tidak berlipat.
+  - T6 `ef2c9e01`: migrasi `20261103090100`, Host Live/Produksi/CRM menjadi Shift.
+  - T7 `3f76faf1`→`177b5dff`: ESS jam kerja sistem shift + acuan.
+- 2026-11-02 — **Review akhir seluruh branch** (Opus): siap merge dengan perbaikan. Gelombang perbaikan `5cd3cb00` + `b744cabe`:
+  - Dialog sukses Ajukan Cuti HR memakai `total_days` server.
+  - Simulasi "sebelum" meniru kode lama, ditambah daftar R1 (staf bertipe Shift di luar toko) dan daftar jabatan shift + penempatan.
+  - Tanggal tanpa roster bagi staf shift dihitung Senin–Jumat, selaras dengan payroll (`IsWorkDate`).
+  - Kalender absen hanya memerahkan tanggal yang benar libur bagi karyawan itu.
+  - Pesan nol hari khusus staf shift.
+  - Batas rentang cuti 366 hari.
+  - Audit `holiday.day_off`.
+  - Re-review: 9/9 addressed.
+- 2026-11-02 — **Gates**:
+  - Go: gofmt 0, `go vet ./...` bersih, seluruh `./internal/...` lulus.
+  - Frontend: tsc 0, eslint bersih, vitest 879 file / 6377 tes lulus.
+- Ruling tambahan (2026-11-02): **R4 diubah.** Tanggal tanpa roster bagi staf shift dihitung hanya Senin–Jumat, supaya potongan jatah cuti = potongan payroll.
+- **Gerbang deploy production** (gladi di salinan prod): jalankan `backend/database/sql/sim-epic079/payroll_divisor.sql` (3 kueri baca-saja).
+  - Karyawan yang pembaginya berubah.
+  - Staf bertipe Shift di luar toko (R1, perlu konfirmasi HR sebelum 24/25-12).
+  - Jabatan Host Live/Produksi/CRM beserta penempatannya; perkiraan ±7/7/1.
+- Staging belum dideploy: disk host tinggal ±5 GB, sedangkan build butuh ±6 GB (menunggu keputusan user soal pembersihan image Docker project lain).
+
