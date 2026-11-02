@@ -13,6 +13,18 @@ type Employee struct {
 	EndDate          *string // YYYY-MM-DD; resign/akhir kerja (EPIC-059 PY-04)
 	// IsActive: end_date memotong cakupan hanya untuk karyawan nonaktif (R11).
 	IsActive bool
+	// ScheduleType is hris.employees.schedule_type: shift | non_shift (EPIC-079 R1).
+	ScheduleType string
+}
+
+// DayOffHolidays is the holiday map that applies to the employee (EPIC-079
+// R2/R3): none for shift staff, whose roster decides; holidays (the
+// Non-Shift day-off dates) otherwise.
+func (e Employee) DayOffHolidays(holidays map[string]bool) map[string]bool {
+	if e.ScheduleType == "shift" {
+		return nil
+	}
+	return holidays
 }
 
 // Salary is the active employee_salary row. Amounts are numeric text.
@@ -121,7 +133,8 @@ func BuildInputRange(emp Employee, salary Salary, rec WorkforceRecords, loans []
 	if ed := DateText(emp.EndDate); !emp.IsActive && ed != nil && *ed < end && *ed >= start {
 		periodSchedule = make([]ShiftRow, len(schedule))
 		for i, r := range schedule {
-			if r.EffectiveTo != nil && *r.EffectiveTo == *ed {
+			// Roster per tanggal pada end_date tetap satu hari (EPIC-079).
+			if !r.PerDate() && r.EffectiveTo != nil && *r.EffectiveTo == *ed {
 				r.EffectiveTo = nil
 			}
 			periodSchedule[i] = r
@@ -142,11 +155,13 @@ func BuildInputRange(emp Employee, salary Salary, rec WorkforceRecords, loans []
 	// atau jadwal karyawan baru sejak tanggal masuk) diukur seolah pola pertamanya
 	// berlaku sejak awal periode: tanggal sebelumnya bukan hari libur, hanya belum
 	// berjadwal. Tanpa ini pembagi hanya menghitung hari sejak jadwal mulai,
-	// padahal hari hadir sebelumnya ikut dikali tunjangan per hari.
+	// padahal hari hadir sebelumnya ikut dikali tunjangan per hari. Hanya pola
+	// mingguan yang diperpanjang: roster per tanggal berlaku pada tanggalnya
+	// saja, jadi pembagi staf toko = hari ber-shift di roster (EPIC-079 R7).
 	if first := earliestScheduleFrom(periodSchedule); first > start {
 		extended := make([]ShiftRow, len(periodSchedule))
 		for i, r := range periodSchedule {
-			if r.EffectiveFrom == first {
+			if r.EffectiveFrom == first && !r.PerDate() {
 				r.EffectiveFrom = start
 			}
 			extended[i] = r

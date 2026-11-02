@@ -151,14 +151,15 @@ func (payrollEmployees) Active(ctx context.Context, q database.Querier) ([]payro
 // in [start, end], so a leaver is still paid pro-rata for the days worked.
 func (payrollEmployees) PayrollEmployees(ctx context.Context, q database.Querier, start, end string) ([]payroll.EmployeeBrief, error) {
 	rows, err := q.Query(ctx, `SELECT id::text, full_name, nip, is_active, employment_status, join_date::text,
-		department_id::text, end_date::text FROM hris.employees
+		department_id::text, end_date::text, schedule_type FROM hris.employees
 		WHERE is_active = true OR (end_date BETWEEN $1::date AND $2::date)`, start, end)
 	if err != nil {
 		return nil, err
 	}
 	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (payroll.EmployeeBrief, error) {
 		var b payroll.EmployeeBrief
-		err := r.Scan(&b.ID, &b.FullName, &b.NIP, &b.IsActive, &b.EmploymentStatus, &b.JoinDate, &b.DepartmentID, &b.EndDate)
+		err := r.Scan(&b.ID, &b.FullName, &b.NIP, &b.IsActive, &b.EmploymentStatus, &b.JoinDate, &b.DepartmentID, &b.EndDate,
+			&b.ScheduleType)
 		return b, err
 	})
 }
@@ -282,15 +283,17 @@ func (payrollWorkforceSQL) PeriodRecords(ctx context.Context, q database.Querier
 		return rec, err
 	}
 
-	rows, err = q.Query(ctx, `SELECT day_of_week, shift_id::text, effective_from::text, effective_to::text
-		FROM hris.employee_shifts WHERE employee_id = $1 AND effective_from <= $2`, employeeID, end)
+	// Roster per tanggal (prioritas 0) dan pola mingguan (prioritas 1), EPIC-079 R7.
+	rows, err = q.Query(ctx, `SELECT day_of_week, shift_id::text, effective_from::text, effective_to::text, priority
+		FROM hris.v_employee_schedule WHERE employee_id = $1 AND effective_from <= $2
+		AND (effective_to IS NULL OR effective_to >= $3)`, employeeID, end, start)
 	if err != nil {
 		return rec, err
 	}
 	if rec.Schedule, err = pgx.CollectRows(rows, func(r pgx.CollectableRow) (domain.ShiftRow, error) {
 		var s domain.ShiftRow
 		var from *string
-		err := r.Scan(&s.DayOfWeek, &s.ShiftID, &from, &s.EffectiveTo)
+		err := r.Scan(&s.DayOfWeek, &s.ShiftID, &from, &s.EffectiveTo, &s.Priority)
 		if d := domain.DateText(from); d != nil {
 			s.EffectiveFrom = *d
 		}
@@ -356,9 +359,13 @@ func (payrollWorkforceSQL) PeriodRecords(ctx context.Context, q database.Querier
 	return rec, err
 }
 
+// Holidays are the Non-Shift day-off dates (EPIC-079 R2, the hris
+// domain.HolidayDayOff rule): nasional and perusahaan, cuti bersama only
+// when set as a day off.
 func (payrollWorkforceSQL) Holidays(ctx context.Context, q database.Querier, start, end string) (map[string]bool, error) {
 	rows, err := q.Query(ctx, `SELECT holiday_date::text FROM hris.public_holidays
-		WHERE deleted_at IS NULL AND status = 'aktif' AND holiday_date BETWEEN $1::date AND $2::date`, start, end)
+		WHERE deleted_at IS NULL AND status = 'aktif' AND holiday_date BETWEEN $1::date AND $2::date
+		AND (type <> 'cuti_bersama' OR is_day_off)`, start, end)
 	if err != nil {
 		return nil, err
 	}

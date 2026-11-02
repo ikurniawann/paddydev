@@ -55,12 +55,16 @@ func EachDate(start, end string) []string {
 	return out
 }
 
-// ShiftRow is EmployeeShiftRow: day_of_week 1=Monday … 7=Sunday, ShiftID nil = day off.
+// ShiftRow is a hris.v_employee_schedule row: day_of_week 1=Monday … 7=Sunday,
+// ShiftID nil = day off. A per-date roster row (hris.employee_shift_days) is
+// a one-day pattern (EffectiveFrom = EffectiveTo = the date) with Priority 0;
+// a weekly pattern (hris.employee_shifts) has Priority 1 (EPIC-079 R7).
 type ShiftRow struct {
 	DayOfWeek     int
 	ShiftID       *string
 	EffectiveFrom string
 	EffectiveTo   *string
+	Priority      int
 }
 
 // ISODayOfWeek is isoDayOfWeek.
@@ -72,8 +76,15 @@ func ISODayOfWeek(date string) int {
 	return d
 }
 
+// PerDate: a per-date roster row of hris.v_employee_schedule (a one-day
+// pattern with priority 0), not a weekly pattern.
+func (r ShiftRow) PerDate() bool {
+	return r.Priority == 0 && r.EffectiveTo != nil && *r.EffectiveTo == r.EffectiveFrom
+}
+
 // ResolveScheduleRow is resolveScheduleRowForDate: the matching row with the
-// latest effective_from, day-off rows included.
+// latest effective_from, then the lowest priority (a per-date roster row beats
+// a weekly pattern starting the same day), day-off rows included.
 func ResolveScheduleRow(rows []ShiftRow, date string) *ShiftRow {
 	dow := ISODayOfWeek(date)
 	var best *ShiftRow
@@ -82,7 +93,8 @@ func ResolveScheduleRow(rows []ShiftRow, date string) *ShiftRow {
 		if r.DayOfWeek != dow || r.EffectiveFrom > date || (r.EffectiveTo != nil && *r.EffectiveTo < date) {
 			continue
 		}
-		if best == nil || r.EffectiveFrom > best.EffectiveFrom {
+		if best == nil || r.EffectiveFrom > best.EffectiveFrom ||
+			(r.EffectiveFrom == best.EffectiveFrom && r.Priority < best.Priority) {
 			best = r
 		}
 	}

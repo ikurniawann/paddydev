@@ -26,7 +26,8 @@ import (
 type KPISources interface {
 	// Employees are the active employees with their account's role.
 	Employees(ctx context.Context, q database.Querier) ([]domain.KPIEmployee, error)
-	// ShiftPatterns are the hris.employee_shifts rows overlapping the period.
+	// ShiftPatterns are the hris.v_employee_schedule rows (roster per tanggal
+	// and weekly patterns) overlapping the period.
 	ShiftPatterns(ctx context.Context, q database.Querier, start, end string) (map[string][]domain.ShiftRow, error)
 	// PresentDays are the present attendance rows of the period.
 	PresentDays(ctx context.Context, q database.Querier, start, end string) (map[string][]domain.PresentDay, error)
