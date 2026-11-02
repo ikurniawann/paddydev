@@ -129,9 +129,13 @@ func TestToggleOffDecemberPphZero(t *testing.T) {
 		if r.Pph21Method != "nonaktif" {
 			t.Errorf("%s Pph21Method = %q, want nonaktif", method, r.Pph21Method)
 		}
-		on := Calculate(in, func() Config { c := c; c.Pph21Enabled = true; return c }())
-		if method == "ter" && on.Pph21Deduction <= 0 {
-			t.Errorf("kontrol: PPh Desember saat aktif harus > 0, got %v", on.Pph21Deduction)
+		// Kontrol: input yang sama dengan PPh 21 menyala menghasilkan PPh > 0,
+		// jadi nol di atas memang berasal dari saklar.
+		onCfg := c
+		onCfg.Pph21Enabled = true
+		on := Calculate(in, onCfg)
+		if on.Pph21Deduction <= 0 || on.Pph21Method != method {
+			t.Errorf("%s kontrol: PPh Desember saat aktif harus > 0 (method %s), got %v (method %s)", method, method, on.Pph21Deduction, on.Pph21Method)
 		}
 	}
 }
@@ -148,8 +152,10 @@ func TestToggleNotEnrolledStaysZero(t *testing.T) {
 	eq(t, "PPh", r.Pph21Deduction, 0)
 }
 
-// R3: semua saklar menyala = hasil persis seperti sebelum EPIC ini.
-func TestToggleOnMatchesDefault(t *testing.T) {
+// R3: Config dengan ketiga saklar menyala sama persis dengan DefaultConfig()
+// (yang saklarnya menyala) untuk berbagai bentuk input. Angka mutlak sebelum
+// EPIC ini dijaga oleh TestToggleOnGoldenPreEpic.
+func TestToggleAllOnEqualsDefaultConfig(t *testing.T) {
 	inputs := map[string]Input{
 		"gaji kecil": toggleInput(nil),
 		"gaji besar": toggleInput(func(in *Input) { in.BaseSalary = 40_000_000 }),
@@ -179,6 +185,46 @@ func TestToggleOnMatchesDefault(t *testing.T) {
 	d := DefaultConfig()
 	if !d.Pph21Enabled || !d.BpjsTkEnabled || !d.BpjsKesEnabled {
 		t.Errorf("DefaultConfig: semua saklar harus true: %+v", d)
+	}
+}
+
+// R3: angka emas dihitung dengan calculator.go commit bba2b166 (sebelum EPIC-082,
+// belum punya saklar) pada input yang sama; saklar menyala harus menghasilkan
+// angka yang sama persis.
+func TestToggleOnGoldenPreEpic(t *testing.T) {
+	in := Input{
+		EmployeeID: "emp-1", PeriodMonth: 9, PeriodYear: 2026,
+		BaseSalary: 15_000_000, FixedAllowance: 1_000_000, WorkingDays: 26, JoinDate: "2024-01-15",
+		EmploymentStatus: "contract", PTKPStatus: "K/1", IsTaxable: true,
+		BpjsTkEnrolled: true, BpjsKesEnrolled: true,
+		PayBasis: "monthly", OvertimeScheme: "standard",
+	}
+	cases := []struct {
+		method                     string
+		pph, taxable, terRate, net float64
+		category                   string
+	}{
+		{"ter", 1_229_358, 17_562_254, 0.07, 14_338_222, "B"},
+		{"annualized", 972_625, 180_810_960, 0, 14_594_955, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.method, func(t *testing.T) {
+			c := allToggles(true, true, true)
+			c.Pph21Method = tc.method
+			r := Calculate(in, c)
+			eq(t, "PPh 21", r.Pph21Deduction, tc.pph)
+			eq(t, "taxable", r.TaxableIncome, tc.taxable)
+			eq(t, "TER rate", r.TERRate, tc.terRate)
+			eq(t, "JHT", r.BpjsTkJhtDeduction, 208_280)
+			eq(t, "JP", r.BpjsTkJpDeduction, 104_140)
+			eq(t, "Kes", r.BpjsKesDeduction, 120_000)
+			eq(t, "iuran perusahaan", r.TotalEmployerContribution, 1_129_834)
+			eq(t, "bruto", r.GrossSalary, 16_000_000)
+			eq(t, "THP", r.NetSalary, tc.net)
+			if r.TERCategory != tc.category || r.Pph21Method != tc.method {
+				t.Errorf("category/method = %q/%q, want %q/%q", r.TERCategory, r.Pph21Method, tc.category, tc.method)
+			}
+		})
 	}
 }
 

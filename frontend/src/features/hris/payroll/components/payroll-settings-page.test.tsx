@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { toast } from "sonner";
 import { PayrollSettingsPage } from "./payroll-settings-page";
 
 const save = vi.fn();
@@ -55,7 +56,7 @@ describe("PayrollSettingsPage saklar PPh 21 / BPJS (EPIC-082)", () => {
     expect((screen.getByLabelText("BPJS Ketenagakerjaan dihitung") as HTMLInputElement).checked).toBe(false);
     expect((screen.getByLabelText("BPJS Kesehatan dihitung") as HTMLInputElement).checked).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: "Simpan Pengaturan" }));
-    await Promise.resolve();
+    await vi.waitFor(() => expect(toast.error).toHaveBeenCalledWith("Tidak ada perubahan untuk disimpan"));
     expect(save).not.toHaveBeenCalled();
   });
 

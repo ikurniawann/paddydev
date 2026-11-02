@@ -16,7 +16,7 @@ export function usePayrollSwitches() {
 }
 
 /** Catatan kecil di samping kepesertaan yang dimatikan secara global. */
-export function PayrollSwitchNote({ show }: { show: boolean }) {
+export function PayrollSwitchNote({ show, block = false }: { show: boolean; block?: boolean }) {
   if (!show) return null;
-  return <span className="text-xs text-gray-500">Dinonaktifkan di Pengaturan Payroll</span>;
+  return <span className={`${block ? "block " : ""}text-xs text-gray-500`}>Dinonaktifkan di Pengaturan Payroll</span>;
 }

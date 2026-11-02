@@ -200,7 +200,7 @@ export function PayslipPage() {
               {Number(detail.pph21_deduction) > 0 && (
                 <DeductionRow label="PPh 21" amount={detail.pph21_deduction} share={bagian(detail.pph21_deduction)} />
               )}
-              {detail.pph21_method === "ter" && (
+              {detail.pph21_method === "ter" && Number(detail.pph21_deduction) > 0 && (
                 <p className="-mt-1 text-xs text-gray-500">
                   {detail.ter_rate !== null && detail.ter_rate !== undefined
                     ? `TER kategori ${detail.ter_category} ${(Number(detail.ter_rate ?? 0) * 100).toLocaleString("id-ID")}% × DPP ${formatRupiah(Number(detail.pph21_dpp ?? 0))}`

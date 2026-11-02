@@ -138,3 +138,44 @@ func TestPayrollToggleSettingsAndRun(t *testing.T) {
 		t.Errorf("PUT tanpa perubahan menulis audit: %d -> %d", n, n2)
 	}
 }
+
+// storedToggles reads the three switches straight from the settings row.
+func (e *env) storedToggles() [3]bool {
+	e.t.Helper()
+	var v [3]bool
+	e.scalar(&v[0], `SELECT pph21_enabled FROM hris.payroll_settings LIMIT 1`)
+	e.scalar(&v[1], `SELECT bpjs_tk_enabled FROM hris.payroll_settings LIMIT 1`)
+	e.scalar(&v[2], `SELECT bpjs_kes_enabled FROM hris.payroll_settings LIMIT 1`)
+	return v
+}
+
+func TestPayrollToggleSettingsValidation(t *testing.T) {
+	e := setup(t)
+	e.employee("HR Payroll", e.hr.UserID, true)
+	e.putToggles(false, true, false)
+	want := [3]bool{false, true, false}
+	if got := e.storedToggles(); got != want {
+		t.Fatalf("stored toggles = %v, want %v", got, want)
+	}
+
+	// Nilai bukan boolean (string "true"/"false") ditolak dan tidak mengubah apa pun.
+	for _, key := range []string{"pph21_enabled", "bpjs_tk_enabled", "bpjs_kes_enabled"} {
+		for _, bad := range []any{"true", "false", 1, nil} {
+			e.call(&e.hr, "PUT", "/api/hris/payroll-settings", map[string]any{"settings": map[string]any{key: bad}}, 400)
+			if got := e.storedToggles(); got != want {
+				t.Fatalf("%s=%v: stored toggles = %v, want unchanged %v", key, bad, got, want)
+			}
+		}
+	}
+
+	// Mengubah field lain tanpa menyebut saklar membiarkan ketiganya.
+	e.call(&e.hr, "PUT", "/api/hris/payroll-settings", map[string]any{"settings": map[string]any{"payroll_day": 27}}, 200)
+	var day int
+	e.scalar(&day, `SELECT payroll_day FROM hris.payroll_settings LIMIT 1`)
+	if day != 27 {
+		t.Fatalf("payroll_day = %d, want 27", day)
+	}
+	if got := e.storedToggles(); got != want {
+		t.Errorf("PUT tanpa saklar mengubahnya: %v, want %v", got, want)
+	}
+}

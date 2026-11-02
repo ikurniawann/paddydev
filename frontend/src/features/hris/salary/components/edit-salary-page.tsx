@@ -183,7 +183,7 @@ function EditSalaryForm({ salary }: { salary: EmployeeSalary }) {
                 <div>
                   <Label htmlFor="is_taxable">Subjek Pajak</Label>
                   <p className="text-xs text-gray-500">Kena PPh 21</p>
-                  <PayrollSwitchNote show={switches.pph21Off} />
+                  <PayrollSwitchNote show={switches.pph21Off} block />
                 </div>
                 <input
                   type="checkbox"
@@ -198,7 +198,7 @@ function EditSalaryForm({ salary }: { salary: EmployeeSalary }) {
                 <div>
                   <Label htmlFor="bpjs_tk">BPJS Ketenagakerjaan</Label>
                   <p className="text-xs text-gray-500">JHT, JP, JKK, JKM</p>
-                  <PayrollSwitchNote show={switches.bpjsTkOff} />
+                  <PayrollSwitchNote show={switches.bpjsTkOff} block />
                 </div>
                 <input
                   type="checkbox"
@@ -212,7 +212,7 @@ function EditSalaryForm({ salary }: { salary: EmployeeSalary }) {
               <div className="flex items-center justify-between">
                 <div>
                   <Label htmlFor="bpjs_kes">BPJS Kesehatan</Label>
-                  <PayrollSwitchNote show={switches.bpjsKesOff} />
+                  <PayrollSwitchNote show={switches.bpjsKesOff} block />
                 </div>
                 <input
                   type="checkbox"

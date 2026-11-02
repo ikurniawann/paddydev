@@ -94,6 +94,19 @@ describe("PayslipPage baris potongan nonaktif (EPIC-082 R5)", () => {
     expect(screen.getByText(/TER kategori A/)).toBeTruthy();
   });
 
+  it("catatan TER disembunyikan saat metode ter tetapi PPh 21 = 0", () => {
+    detail = slip({
+      pph21_deduction: 0,
+      pph21_method: "ter",
+      ter_rate: 0,
+      ter_category: "A",
+      pph21_dpp: 1_000_000,
+    });
+    render(<PayslipPage />);
+    expect(screen.queryByText(/TER kategori/)).toBeNull();
+    expect(screen.queryByText(/PPh 21/)).toBeNull();
+  });
+
   it("run dengan metode nonaktif tidak menampilkan catatan PPh 21 sama sekali", () => {
     detail = slip({ pph21_method: "nonaktif", pph21_dpp: 0, ter_rate: null });
     render(<PayslipPage />);
