@@ -1,6 +1,6 @@
 # EPIC-079: Jam Kerja Sistem Shift, Libur Nasional & Cuti Bersama (`MODULE-HRIS`)
 
-status: backlog
+status: review
 environment: dev
 retries: 0
 

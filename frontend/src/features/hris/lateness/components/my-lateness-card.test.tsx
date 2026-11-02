@@ -91,6 +91,17 @@ describe("MyLatenessCard (EPIC-077 R8)", () => {
     const ops = screen.getByRole("region", { name: "Karyawan Operations" });
     expect(ops.textContent).toContain("Seluruh staff Warehouse.");
     expect(ops.textContent).toMatch(/Sabtu\s*08\.00 – 14\.00 WIB/);
+    // EPIC-079: sistem shift (Shift 1–3) dan aturan hari libur tampil apa adanya.
+    const shift = screen.getByRole("region", { name: "Karyawan Sistem Shift" });
+    expect(shift.textContent).toContain("Retail Operasional, Host Live, CRM dan Produksi.");
+    expect(shift.textContent).toContain("Senin – Minggu (libur 1 hari setiap minggu)");
+    expect(shift.textContent).toMatch(/Shift 1\s*08\.00 – 16\.00 WIB/);
+    expect(shift.textContent).toMatch(/Shift 2\s*11\.00 – 19\.00 WIB/);
+    expect(shift.textContent).toContain("13.30 – 21.30 WIB");
+    expect(screen.getByText(/tidak mengikuti hari libur nasional/)).toBeTruthy();
+    expect(screen.getByText(/Hari cuti bersama tidak secara otomatis menjadi hari libur/)).toBeTruthy();
+    expect(screen.getByText(/Karyawan wajib menaati ketentuan jam kerja/)).toBeTruthy();
+    expect(screen.getByText(/jam mulai dan berakhirnya shift dapat berbeda/)).toBeTruthy();
   });
 
   it("ganti periode meminta back = 1", () => {
