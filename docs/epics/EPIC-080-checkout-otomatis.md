@@ -1,6 +1,6 @@
 # EPIC-080: Checkout Otomatis per Jabatan & 2 Shift dalam Sehari (`MODULE-HRIS`)
 
-status: review
+status: ready-for-qa
 environment: dev
 retries: 0
 
@@ -89,3 +89,40 @@ Lihat `docs/superpowers/plans/2026-11-02-checkout-otomatis.md`.
 ## Automation Log
 - 2026-11-02 — Analisis kode (scheduler, unik per hari, alur clock-out, pola setting, trigger notifikasi). Jawaban user untuk 3 keputusan dicatat di atas. Rencana disusun. Branch ditumpuk di atas EPIC-079 (`docs/epic079-jam-kerja-shift`).
 - 2026-11-02 — Acuan diperbarui (status-requirement AB-08/AB-09, pertanyaan-rekomendasi CO-OTOMATIS, skill paddy-hris-acuan); status `review`. Temuan minor dirapikan (guard `EndTime` nil, hapus aturan dicek di leaf Shift Kerja, toast 403 hapus, format jam Beranda). Staging/QA dan PR menyusul.
+- 2026-11-02 — **Implementasi subagent-driven T1–T7**, masing-masing direview spec + kualitas:
+  - T1 `b4f82cf8`: skema.
+  - T2 `faf646a9`: jadwal `A+B`.
+  - T3 `8c57e505` + `4f935537`: shift kedua tetap terhitung terpakai; clock-in 2 shift.
+  - T4 `2fa4d193` + `26330766`: job checkout otomatis; clock-out manual bersyarat (`clock_out IS NULL`) menutup race dengan job.
+  - T5 `1d74075e` + `0d0b8f01`: API dan halaman aturan; hapus oleh HR butuh aksi delete `LeafShift`.
+  - T6 `4bcc80ff`: UI 2 shift dan penanda; koreksi HR/pengajuan menghapus penanda.
+  - T7 `5e9a9ac9` + `3057fd3d`: acuan AB-08/AB-09.
+- 2026-11-02 — **Review akhir** (Opus): siap merge dengan perbaikan. Perbaikan `a558a7ea`:
+  - Urutan 2 shift terbalik ditolak server, sama seperti UI (R6 diperjelas).
+  - Pesan clock-out pada absen yang sudah ditutup otomatis.
+  - Penanda dihapus saat jam pulang dikoreksi, termasuk saat race.
+  - Job melewati absen yang dibuka ulang HR.
+  - Istirahat master pada absen buatan HR.
+  - Label audit.
+  - Catatan "2 hari terakhir".
+  - Shift 2 nonaktif ditolak di pola mingguan.
+
+  Re-review 8/8 addressed.
+- Gates:
+  - Go: gofmt 0, vet, seluruh `./internal/...` lulus.
+  - Frontend: tsc 0, eslint, vitest 882 file / 6417 tes.
+- 2026-11-02 14.13 — **Staging** (`a558a7ea`, image `local-20261102-141258`; backup `staging-db-before-epic080-20261102-141257.dump`): 1 migrasi, skema 10.758 objek 0 selisih. Aturan awal: Host Live Staff, Host Live Coordinator, CRM Supervisor (semua lokasi).
+- 2026-11-02 — **QA staging 6/6 lulus** (HP 360 px + laptop; data demo QA080 dibersihkan), 0 error console, 0 API ≥ 400 tak terduga:
+  - halaman aturan untuk HR dan pengatur toko (403 untuk toko lain);
+  - jadwal `QPAGI4+QSORE4` tersimpan dan urutan terbalik ditolak;
+  - loop menutup Host Live dan Shopkeeper toko A pukul 16.00 dengan penanda, catatan, dan audit, tanpa notifikasi; toko B dan clock-out manual tidak disentuh;
+  - badge di kalender ESS, Monitoring, dan Rekap;
+  - pesan clock-out pada absen yang sudah ditutup otomatis.
+  - Clock-in nyata hari 2 shift hanya diuji di integrasi Go (agar tidak memicu notifikasi HR asli).
+  - Tangkapan layar di `.share/qa-epic080/`.
+- **Gerbang production** (gladi di salinan prod, baca-saja):
+  - `SELECT title FROM hris.positions WHERE is_active AND title ~* '(host live|crm)'`;
+  - daftar absen terbuka yang akan ditutup pada run pertama (kueri di review akhir).
+
+  Merge EPIC-079 (#63) dulu.
+
