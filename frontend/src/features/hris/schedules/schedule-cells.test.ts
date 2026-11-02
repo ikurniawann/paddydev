@@ -10,6 +10,10 @@ import {
   mergeGrids,
   rowRange,
   shiftTone,
+  canFollow,
+  describeShiftCode,
+  joinShiftCodes,
+  splitShiftCode,
 } from "./schedule-cells";
 import type { ScheduleGrid } from "./types";
 
@@ -144,5 +148,40 @@ describe("rowRange dan shiftTone", () => {
     expect(shiftTone("P")).toBe(shiftTone("P"));
     expect(shiftTone("L")).toContain("gray");
     expect(shiftTone("")).toContain("amber");
+  });
+});
+
+describe("kode dua shift (EPIC-080)", () => {
+  const pagi = { code: "PAGI4", name: "Pagi 4", start_time: "08:00:00", end_time: "12:00:00" };
+  const sore = { code: "SORE4", name: "Sore 4", start_time: "17:00:00", end_time: "21:00:00" };
+  const malam = { code: "NS", name: "Malam", start_time: "22:00:00", end_time: "06:00:00" };
+  const byCode = new Map([pagi, sore, malam].map((s) => [s.code, s]));
+
+  it("gabung dan pisah kode", () => {
+    expect(joinShiftCodes("PAGI4", "SORE4")).toBe("PAGI4+SORE4");
+    expect(joinShiftCodes("PAGI4", "")).toBe("PAGI4");
+    expect(joinShiftCodes("PAGI4", null)).toBe("PAGI4");
+    expect(splitShiftCode("PAGI4+SORE4")).toEqual(["PAGI4", "SORE4"]);
+    expect(splitShiftCode("L")).toEqual(["L"]);
+  });
+
+  it("keterangan dua shift memakai format spesifikasi", () => {
+    expect(describeShiftCode("PAGI4+SORE4", byCode)).toBe("PAGI4 + SORE4 · 08.00–12.00, 17.00–21.00");
+    expect(describeShiftCode("PAGI4", byCode)).toBe("Pagi 4 08:00–12:00");
+    expect(describeShiftCode("PAGI4+XX", byCode)).toBeNull();
+  });
+
+  it("shift kedua harus mulai setelah shift pertama selesai", () => {
+    expect(canFollow(pagi, sore)).toBe(true);
+    expect(canFollow(sore, pagi)).toBe(false);
+    expect(canFollow(pagi, { start_time: "12:00:00" })).toBe(true);
+    expect(canFollow(malam, pagi)).toBe(false);
+  });
+
+  it("pola dan isi kotak membawa kode gabungan apa adanya", () => {
+    const g = grid("2026-11-02", 7, { e1: {} });
+    const out = expandPattern(["e1"], ["PAGI4+SORE4", "L", "L", "L", "L", "L", "L"], "2026-11-02", "2026-11-02", g);
+    expect(out).toEqual([{ employee_id: "e1", date: "2026-11-02", code: "PAGI4+SORE4" }]);
+    expect(fillCells([cellKey("e1", "2026-11-02")], "PAGI4+SORE4")).toEqual([{ employee_id: "e1", date: "2026-11-02", code: "PAGI4+SORE4" }]);
   });
 });

@@ -111,16 +111,20 @@ func branchEmployees(ctx context.Context, q database.Querier, branchID string, d
 
 type resolvedCell struct {
 	Date   string `json:"date"`
-	Code   string `json:"code"`   // kode shift, "L", "-" atau ""
+	Code   string `json:"code"`   // kode shift, KODE1+KODE2 (EPIC-080), "L", "-" atau ""
 	Source string `json:"source"` // day | weekly | none
 }
 
 // resolveCells resolves each date through hris.v_employee_schedule with the
-// same rule as clock-in (domain.ResolveScheduleRow).
+// same rule as clock-in (domain.ResolveScheduleRow). A two-shift day is
+// coded KODE1+KODE2.
 func resolveCells(ctx context.Context, q database.Querier, e gridEmployee, dates []string) ([]resolvedCell, error) {
 	rows, err := q.Query(ctx, `SELECT es.day_of_week, es.shift_id::text, es.effective_from::text, es.effective_to::text,
-		es.priority, coalesce(s.code, '') FROM hris.v_employee_schedule es
-		LEFT JOIN hris.shifts s ON s.id = es.shift_id WHERE es.employee_id = $1 ORDER BY es.priority`, e.ID)
+		es.priority, coalesce(s.code, '') || coalesce('`+domain.ScheduleTwoShiftSep+`' || s2.code, ''), es.shift2_id::text
+		FROM hris.v_employee_schedule es
+		LEFT JOIN hris.shifts s ON s.id = es.shift_id
+		LEFT JOIN hris.shifts s2 ON s2.id = es.shift2_id
+		WHERE es.employee_id = $1 ORDER BY es.priority`, e.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -132,7 +136,7 @@ func resolveCells(ctx context.Context, q database.Querier, e gridEmployee, dates
 		var r domain.ScheduleRow
 		var p int
 		var code string
-		if err := rows.Scan(&r.DayOfWeek, &r.ShiftID, &r.EffectiveFrom, &r.EffectiveTo, &p, &code); err != nil {
+		if err := rows.Scan(&r.DayOfWeek, &r.ShiftID, &r.EffectiveFrom, &r.EffectiveTo, &p, &code, &r.Shift2ID); err != nil {
 			return nil, err
 		}
 		pattern, codes, prio = append(pattern, r), append(codes, code), append(prio, p)
@@ -329,7 +333,8 @@ func (s *Service) ScheduleTemplate(ctx context.Context, branchID, from, to strin
 		{Header: "Jabatan", ReadOnly: true, Width: 20},
 	}
 	for _, d := range rng.Dates {
-		c := xlsx.TemplateColumn{Header: domain.ScheduleDateHeader(d), Kind: xlsx.KindList, Options: options, Width: 10}
+		c := xlsx.TemplateColumn{Header: domain.ScheduleDateHeader(d), Kind: xlsx.KindList, Options: options, Width: 10,
+			OtherNote: "Dua shift sehari: tulis KODE1+KODE2, contoh PAGI4+SORE4."}
 		if _, holiday := hol[d]; holiday || isSunday(d) {
 			c.Fill = "#FDECEC"
 		}
@@ -366,7 +371,7 @@ func (s *Service) ScheduleTemplate(ctx context.Context, branchID, from, to strin
 	title := fmt.Sprintf("Jadwal Kerja — %s — %s s/d %s", rng.Branch.Name, domain.FormatDateID(rng.from()), domain.FormatDateID(rng.to()))
 	jadwal := xlsx.TemplateSheet{
 		Name:       scheduleSheet,
-		TitleLines: []string{title, "Isi dengan kode shift (lihat sheet Kode Shift). L = Libur. Tanda - = tidak ditempatkan di cabang ini (biarkan)."},
+		TitleLines: []string{title, "Isi dengan kode shift (lihat sheet Kode Shift). Dua shift sehari: KODE1+KODE2. L = Libur. Tanda - = tidak ditempatkan di cabang ini (biarkan)."},
 		Columns:    cols,
 		Rows:       rows,
 		FreezeCols: 3,
@@ -392,6 +397,7 @@ func (s *Service) ScheduleTemplate(ctx context.Context, branchID, from, to strin
 		{"Cara mengisi jadwal kerja"},
 		{"1. Buka sheet \"Jadwal\". Setiap baris = satu karyawan Shift di cabang ini, setiap kolom = satu tanggal."},
 		{"2. Isi sel tanggal dengan kode shift dari sheet \"Kode Shift\" (bisa dipilih dari daftar), atau L untuk libur."},
+		{"   Dua shift dalam sehari: ketik KODE1+KODE2, misalnya PAGI4+SORE4. Shift kedua harus mulai setelah shift pertama selesai."},
 		{"3. Jangan ubah NIP, nama, jabatan, atau judul tanggal. Tanda - berarti karyawan tidak ditempatkan di cabang ini pada tanggal itu."},
 		{"4. Simpan file, lalu unggah di halaman Jadwal Kerja. Periksa hasil pengecekan sebelum menyimpan."},
 		{""},
@@ -400,6 +406,7 @@ func (s *Service) ScheduleTemplate(ctx context.Context, branchID, from, to strin
 		{"- tanggal sudah lewat atau periode absensinya sudah closing"},
 		{"- NIP tidak dikenal, sudah resign, tidak ditempatkan di cabang ini, ganda, atau karyawan Non-Shift"},
 		{"- kode shift salah ketik / sudah nonaktif, atau sel dikosongkan"},
+		{"- dua shift sehari yang tumpang tindih, atau L digabung dengan shift (misalnya L+SPG1)"},
 		{""},
 		{"Peringatan (boleh lanjut setelah diperiksa):"},
 		{"- masuk lebih dari 6 hari berturut-turut, jeda antar shift kurang dari 8 jam"},
@@ -555,10 +562,31 @@ func assignmentKeys(as []domain.ScheduleAssignment) ([]string, []string) {
 	return ids, dates
 }
 
+// insertScheduleDay writes one per-date row (shift, second shift or libur).
+func insertScheduleDay(ctx context.Context, q database.Querier, a domain.ScheduleAssignment, branchID, batch, actorName string) error {
+	_, err := q.Exec(ctx, `INSERT INTO hris.employee_shift_days
+		(employee_id, work_date, shift_id, shift2_id, branch_id, batch_id, created_by_name)
+		VALUES ($1, $2::date, $3, $4, $5, $6, $7)`, a.EmployeeID, a.Date, a.ShiftID, a.Shift2ID, branchID, batch, actorName)
+	return err
+}
+
+// assignmentCode is the code an assignment writes: KODE1(+KODE2) or "L".
+func assignmentCode(a domain.ScheduleAssignment, codeOf map[string]string) string {
+	if a.ShiftID == nil {
+		return domain.ScheduleOff
+	}
+	code := codeOf[*a.ShiftID]
+	if a.Shift2ID != nil {
+		code += domain.ScheduleTwoShiftSep + codeOf[*a.Shift2ID]
+	}
+	return code
+}
+
 func scheduleFingerprint(ctx context.Context, q database.Querier, as []domain.ScheduleAssignment) (string, error) {
 	ids, dates := assignmentKeys(as)
 	var fp string
-	err := q.QueryRow(ctx, `SELECT coalesce(md5(string_agg(d.employee_id::text || d.work_date::text || coalesce(d.shift_id::text, 'L'), ','
+	err := q.QueryRow(ctx, `SELECT coalesce(md5(string_agg(d.employee_id::text || d.work_date::text || coalesce(d.shift_id::text, 'L')
+		  || coalesce('+' || d.shift2_id::text, ''), ','
 		ORDER BY d.employee_id, d.work_date)), '')
 		FROM hris.employee_shift_days d
 		JOIN unnest($1::uuid[], $2::date[]) AS k(employee_id, work_date)
@@ -684,9 +712,7 @@ func (s *Service) ImportSchedule(ctx context.Context, actor *auth.User, in sched
 		}
 		days := map[string]int{}
 		for _, a := range res.Assignments {
-			if _, err := q.Exec(ctx, `INSERT INTO hris.employee_shift_days
-				(employee_id, work_date, shift_id, branch_id, batch_id, created_by_name)
-				VALUES ($1, $2::date, $3, $4, $5, $6)`, a.EmployeeID, a.Date, a.ShiftID, rng.Branch.ID, batch, actor.FullName); err != nil {
+			if err := insertScheduleDay(ctx, q, a, rng.Branch.ID, batch, actor.FullName); err != nil {
 				return err
 			}
 			days[a.EmployeeID]++
@@ -733,10 +759,7 @@ func scheduleDiff(ctx context.Context, q database.Querier, c domain.ScheduleUplo
 		}
 	}
 	for _, a := range res.Assignments {
-		after := domain.ScheduleOff
-		if a.ShiftID != nil {
-			after = codeOf[*a.ShiftID]
-		}
+		after := assignmentCode(a, codeOf)
 		before := current[a.EmployeeID][a.Date]
 		switch {
 		case before == "":
@@ -836,6 +859,9 @@ func (h handlers) importSchedules(w http.ResponseWriter, r *http.Request, u *aut
 const (
 	maxScheduleCells    = 6000
 	maxScheduleCellDays = 62
+	// maxScheduleCodeLen fits KODE1+KODE2 (shift codes are 1–12 characters)
+	// with spaces around the "+".
+	maxScheduleCodeLen = 30
 )
 
 type scheduleCellsInput struct {
@@ -1006,9 +1032,7 @@ func (s *Service) SaveScheduleCells(ctx context.Context, actor *auth.User, in sc
 			clearedOf[a.EmployeeID]++
 		}
 		for _, a := range sets {
-			if _, err := q.Exec(ctx, `INSERT INTO hris.employee_shift_days
-				(employee_id, work_date, shift_id, branch_id, batch_id, created_by_name)
-				VALUES ($1, $2::date, $3, $4, $5, $6)`, a.EmployeeID, a.Date, a.ShiftID, rng.Branch.ID, batch, actor.FullName); err != nil {
+			if err := insertScheduleDay(ctx, q, a, rng.Branch.ID, batch, actor.FullName); err != nil {
 				return err
 			}
 			days[a.EmployeeID]++
@@ -1052,10 +1076,7 @@ func cellsDiff(c domain.ScheduleUploadContext, names map[string]string, res doma
 			}
 			sum.Cleared++
 		default:
-			after = domain.ScheduleOff
-			if a.ShiftID != nil {
-				after = codeOf[*a.ShiftID]
-			}
+			after = assignmentCode(a, codeOf)
 			switch before.Code {
 			case "":
 				sum.New++
@@ -1092,7 +1113,7 @@ func (h handlers) saveScheduleCells(w http.ResponseWriter, r *http.Request, u *a
 		}
 		id := item.Str("employee_id", validate.Rule{}, validate.StrOpts{Check: validate.UUIDCheck})
 		date := item.Str("date", validate.Rule{}, dateOpts)
-		code := item.Str("code", nullish, validate.StrOpts{Max: 20})
+		code := item.Str("code", nullish, validate.StrOpts{Max: maxScheduleCodeLen})
 		cells = append(cells, domain.ScheduleCellInput{EmployeeID: strOr(id), Date: strOr(date), Code: strOr(code)})
 	})
 	if err := formErr(f, ""); err != nil {

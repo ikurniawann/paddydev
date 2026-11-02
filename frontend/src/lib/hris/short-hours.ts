@@ -37,3 +37,7 @@ export function validateMinWorkHours(input: string): string {
 export function toMinWorkHoursPayload(input: string): { min_work_hours: number | null } {
   return { min_work_hours: input.trim() === "" ? null : parseHours(input) };
 }
+
+/** Penanda baris yang ditutup sistem di jam selesai shift (EPIC-080 R4). */
+export const AUTO_CHECKOUT_LABEL = "Checkout otomatis";
+export const AUTO_CHECKOUT_DETAIL = "Jam pulang diisi sistem sesuai jam selesai shift; ajukan koreksi bila tidak sesuai";

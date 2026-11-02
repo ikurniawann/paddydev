@@ -425,7 +425,7 @@ func (s *store) ListShifts(ctx context.Context) ([]*Row, error) {
 }
 
 // ListShiftsWithUsage is ListShifts plus employees_using: the distinct
-// employees holding the shift on a per-date row from today on, or in a weekly
+// employees holding the shift (as first or second shift of the day) on a per-date row from today on, or in a weekly
 // pattern still running (or starting later). It mirrors guardShiftDeactivate
 // (inactive employees included), so employees_using > 0 exactly when the
 // server refuses to deactivate or delete the shift. One aggregate query, no N+1.
@@ -434,9 +434,11 @@ func (s *store) ListShiftsWithUsage(ctx context.Context, today string) ([]*Row, 
 		FROM hris.shifts
 		LEFT JOIN (
 		  SELECT shift_id, count(DISTINCT employee_id) AS n FROM (
-		    SELECT d.shift_id, d.employee_id FROM hris.employee_shift_days d WHERE d.work_date >= $1::date
+		    SELECT x.shift_id, d.employee_id FROM hris.employee_shift_days d
+		      CROSS JOIN LATERAL (VALUES (d.shift_id), (d.shift2_id)) x(shift_id) WHERE d.work_date >= $1::date
 		    UNION ALL
-		    SELECT w.shift_id, w.employee_id FROM hris.employee_shifts w WHERE w.effective_to IS NULL OR w.effective_to >= $1::date
+		    SELECT x.shift_id, w.employee_id FROM hris.employee_shifts w
+		      CROSS JOIN LATERAL (VALUES (w.shift_id), (w.shift2_id)) x(shift_id) WHERE w.effective_to IS NULL OR w.effective_to >= $1::date
 		  ) src
 		  WHERE shift_id IS NOT NULL
 		  GROUP BY shift_id
@@ -485,7 +487,9 @@ func (s *store) UpdateShift(ctx context.Context, id string, in shiftInput) (bool
 func (s *store) DeleteShift(ctx context.Context, id string) (string, error) {
 	var used bool
 	if err := s.db.QueryRow(ctx, `SELECT EXISTS (
-		SELECT 1 FROM hris.employee_shifts WHERE shift_id = $1
+		SELECT 1 FROM hris.employee_shifts WHERE shift_id = $1 OR shift2_id = $1
+		UNION ALL
+		SELECT 1 FROM hris.employee_shift_days WHERE shift_id = $1 OR shift2_id = $1
 		UNION ALL
 		SELECT 1 FROM hris.attendance WHERE shift_id = $1) AS used`, id).Scan(&used); err != nil {
 		return "", err
@@ -700,9 +704,9 @@ func guardShiftDeactivate(ctx context.Context, q database.Querier, id, today str
 	var code string
 	var used int
 	if err := q.QueryRow(ctx, `SELECT s.code,
-		(SELECT count(*) FROM hris.employee_shift_days d WHERE d.shift_id = s.id AND d.work_date >= $2::date)
+		(SELECT count(*) FROM hris.employee_shift_days d WHERE (d.shift_id = s.id OR d.shift2_id = s.id) AND d.work_date >= $2::date)
 		+ (SELECT count(DISTINCT es.employee_id) FROM hris.employee_shifts es
-		   WHERE es.shift_id = s.id AND (es.effective_to IS NULL OR es.effective_to >= $2::date))
+		   WHERE (es.shift_id = s.id OR es.shift2_id = s.id) AND (es.effective_to IS NULL OR es.effective_to >= $2::date))
 		FROM hris.shifts s WHERE s.id = $1`, id, today).Scan(&code, &used); err != nil {
 		if database.IsNoRows(err) {
 			return httpx.NotFound("Shift tidak ditemukan")

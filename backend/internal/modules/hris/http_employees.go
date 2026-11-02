@@ -533,6 +533,7 @@ func (h handlers) saveEmployeeShifts(w http.ResponseWriter, r *http.Request) err
 			}
 			d.DayOfWeek = int(n)
 			d.ShiftID = item.Str("shift_id", nullish, validate.StrOpts{Check: matches(domain.UUIDRe, "ID shift tidak valid")})
+			d.Shift2ID = item.Str("shift2_id", nullish, validate.StrOpts{Check: matches(domain.UUIDRe, "ID shift tidak valid")})
 			days = append(days, d)
 		})
 		if len(items) != 7 {

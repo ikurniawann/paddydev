@@ -5,7 +5,7 @@ import { isHolidayDayOff, type HolidayRow } from "@/lib/hris/holidays";
 import type { ScheduleType } from "@/lib/hris/schedule-type";
 import { shiftClock } from "@/lib/hris/attendance-calendar";
 import { formatDateLong, formatTime } from "@/lib/format";
-import { SHORT_HOURS_LABEL, shortHoursDetail } from "@/lib/hris/short-hours";
+import { AUTO_CHECKOUT_DETAIL, AUTO_CHECKOUT_LABEL, SHORT_HOURS_LABEL, shortHoursDetail } from "@/lib/hris/short-hours";
 import type { CalendarAttendance, CalendarScheduleRow } from "@/features/hris/attendance/types";
 
 export interface AttendanceDayInfo {
@@ -80,8 +80,9 @@ export function AttendanceDayDialog({ info, hasSchedule, onClose }: AttendanceDa
               </p>
               {info.scheduledShift ? (
                 <p className="mt-1 text-sm font-semibold text-indigo-800">
-                  {info.scheduledShift.shift_name} · {shiftClock(info.scheduledShift.start_time)}–
-                  {shiftClock(info.scheduledShift.end_time)}
+                  {info.scheduledShift.shift_name} ·{" "}
+                  {info.scheduledShift.time_label ??
+                    `${shiftClock(info.scheduledShift.start_time)}–${shiftClock(info.scheduledShift.end_time)}`}
                   {info.scheduledShift.is_overnight ? " (+1 hari)" : ""}
                 </p>
               ) : info.isDayOff ? (
@@ -119,6 +120,11 @@ export function AttendanceDayDialog({ info, hasSchedule, onClose }: AttendanceDa
                   {attendance.is_short_hours && (
                     <p className="text-orange-600">
                       {SHORT_HOURS_LABEL} · {shortHoursDetail(attendance.min_work_hours)}
+                    </p>
+                  )}
+                  {attendance.clock_out_auto && (
+                    <p className="text-sky-600">
+                      {AUTO_CHECKOUT_LABEL} · {AUTO_CHECKOUT_DETAIL}
                     </p>
                   )}
                 </div>

@@ -437,10 +437,11 @@ func TestESS(t *testing.T) {
 	tol := int64(10)
 	var rows []ESSScheduleRow
 	for d := 1; d <= 5; d++ {
-		rows = append(rows, ESSScheduleRow{ScheduleRow{d, &pagi, "2026-01-01", nil}, &name, &start, &end, &tol})
+		rows = append(rows, ESSScheduleRow{ScheduleRow: ScheduleRow{DayOfWeek: d, ShiftID: &pagi, EffectiveFrom: "2026-01-01"},
+			ShiftName: &name, StartTime: &start, EndTime: &end, LateToleranceMinutes: &tol})
 	}
-	rows = append(rows, ESSScheduleRow{ScheduleRow: ScheduleRow{6, nil, "2026-01-01", nil}})
-	eq(t, *TodayShiftOf(rows, "2026-10-05"), TodayShift{"Pagi", &start, &end, 10})
+	rows = append(rows, ESSScheduleRow{ScheduleRow: ScheduleRow{DayOfWeek: 6, EffectiveFrom: "2026-01-01"}})
+	eq(t, *TodayShiftOf(rows, "2026-10-05"), TodayShift{Name: "Pagi", StartTime: &start, EndTime: &end, LateToleranceMinutes: 10, TimeLabel: "08.00–16.00"})
 	eq(t, TodayShiftOf(rows, "2026-10-10") == nil, true)
 	eq(t, TodayShiftOf(rows, "2026-10-11") == nil, true)
 	week := WeekScheduleOf(rows, "2026-10-07")

@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { useStoreErrorText } from "@/features/hris/schedule-access/access-guard";
 import { fetchScheduleGrid } from "../api";
 import { CELLS_EMPLOYEE_LIMIT, CELLS_EMPLOYEE_LIMIT_MESSAGE, CELLS_LIMIT, useScheduleCellsSave } from "../mutations";
-import { coverChunks, expandPattern, mergeGrids } from "../schedule-cells";
+import { canFollow, coverChunks, expandPattern, joinShiftCodes, mergeGrids } from "../schedule-cells";
 import { addDays, dayDiff } from "../schedule-range";
 import type { ScheduleShift } from "../types";
 import { CellsReviewPanel } from "./cells-confirm-dialog";
@@ -61,6 +61,8 @@ function rangeProblem(from: string, to: string, today: string): string | null {
 export function PatternDialog({ open, onOpenChange, branchId, employees, shifts, defaultFrom, today, onSaved }: Props) {
   const errorText = useStoreErrorText();
   const [pattern, setPattern] = useState<string[]>(() => DAYS.map(() => ""));
+  /** Shift kedua opsional per hari ("" = tidak ada); hanya berlaku bila shift pertama berupa kode shift. */
+  const [pattern2, setPattern2] = useState<string[]>(() => DAYS.map(() => ""));
   const [from, setFrom] = useState(defaultFrom);
   const [to, setTo] = useState(() => addDays(defaultFrom, 27));
   const [loading, setLoading] = useState(false);
@@ -80,7 +82,10 @@ export function PatternDialog({ open, onOpenChange, branchId, employees, shifts,
   const byCode = new Map(shifts.map((s) => [s.code, s]));
   const complete = pattern.every(Boolean);
   const hasClear = pattern.includes(CLEAR); // hari ikut pola mingguan: jamnya tidak diketahui
-  const weekMinutes = pattern.reduce((sum, v) => sum + (byCode.has(v) ? netMinutes(byCode.get(v)!) : 0), 0);
+  const weekMinutes = pattern.reduce(
+    (sum, v, i) => sum + (byCode.has(v) ? netMinutes(byCode.get(v)!) + (pattern2[i] && byCode.has(pattern2[i]) ? netMinutes(byCode.get(pattern2[i])!) : 0) : 0),
+    0
+  );
   const noDayOff = complete && pattern.every((v) => byCode.has(v));
   const names = employees.slice(0, 5).map((e) => e.name).join(", ") + (employees.length > 5 ? `, dan ${employees.length - 5} lainnya` : "");
 
@@ -91,7 +96,7 @@ export function PatternDialog({ open, onOpenChange, branchId, employees, shifts,
       const grids = await Promise.all(
         coverChunks(from, to).map((c) => fetchScheduleGrid({ branch_id: branchId, ...c }).then((res) => res.data))
       );
-      const codes = pattern.map((v) => (v === CLEAR ? "" : v));
+      const codes = pattern.map((v, i) => (v === CLEAR ? "" : byCode.has(v) ? joinShiftCodes(v, pattern2[i]) : v));
       const cells = expandPattern(
         employees.map((e) => e.id),
         codes,
@@ -128,27 +133,61 @@ export function PatternDialog({ open, onOpenChange, branchId, employees, shifts,
         ) : (
           <div className="space-y-4 text-sm">
             {tooMany ? <p className="font-medium text-danger">{CELLS_EMPLOYEE_LIMIT_MESSAGE}</p> : null}
-            <div className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-[auto_1fr]">
-              {DAYS.map((day, i) => (
-                <label key={day} className="contents">
-                  <span className="self-center text-gray-700">{day}</span>
-                  <select
-                    aria-label={day}
-                    value={pattern[i]}
-                    onChange={(e) => setPattern((prev) => prev.map((v, idx) => (idx === i ? e.target.value : v)))}
-                    className="h-9 rounded-lg border border-input bg-transparent px-2 text-sm"
-                  >
-                    <option value="">Pilih…</option>
-                    {shifts.map((s) => (
-                      <option key={s.code} value={s.code}>
-                        {`${s.code} · ${s.name} ${hhmm(s.start_time)}–${hhmm(s.end_time)}`}
-                      </option>
-                    ))}
-                    <option value="L">L · Libur</option>
-                    <option value={CLEAR}>Kosongkan (ikut pola mingguan)</option>
-                  </select>
-                </label>
-              ))}
+            <div className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-[auto_1fr_auto_1fr]">
+              {DAYS.map((day, i) => {
+                const first = byCode.get(pattern[i]);
+                return (
+                  <div key={day} className="contents">
+                    <label className="contents">
+                      <span className="self-center text-gray-700">{day}</span>
+                      <select
+                        aria-label={day}
+                        value={pattern[i]}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          setPattern((prev) => prev.map((v, idx) => (idx === i ? value : v)));
+                          const keep = byCode.get(value) && byCode.get(pattern2[i]) && canFollow(byCode.get(value)!, byCode.get(pattern2[i])!);
+                          if (!keep) setPattern2((prev) => prev.map((v, idx) => (idx === i ? "" : v)));
+                        }}
+                        className="h-9 w-full min-w-0 rounded-lg border border-input bg-transparent px-2 text-sm"
+                      >
+                        <option value="">Pilih…</option>
+                        {shifts.map((s) => (
+                          <option key={s.code} value={s.code}>
+                            {`${s.code} · ${s.name} ${hhmm(s.start_time)}–${hhmm(s.end_time)}`}
+                          </option>
+                        ))}
+                        <option value="L">L · Libur</option>
+                        <option value={CLEAR}>Kosongkan (ikut pola mingguan)</option>
+                      </select>
+                    </label>
+                    <label className="contents">
+                      <span className="self-center text-xs text-gray-500 sm:text-right">Shift kedua</span>
+                      <select
+                        aria-label={`${day} shift kedua`}
+                        value={pattern2[i]}
+                        disabled={!first}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          setPattern2((prev) => prev.map((v, idx) => (idx === i ? value : v)));
+                        }}
+                        className="h-9 w-full min-w-0 rounded-lg border border-input bg-transparent px-2 text-sm disabled:opacity-50"
+                      >
+                        <option value="">Tanpa shift kedua</option>
+                        {first
+                          ? shifts
+                              .filter((s) => canFollow(first, s))
+                              .map((s) => (
+                                <option key={s.code} value={s.code}>
+                                  {`${s.code} · ${s.name} ${hhmm(s.start_time)}–${hhmm(s.end_time)}`}
+                                </option>
+                              ))
+                          : null}
+                      </select>
+                    </label>
+                  </div>
+                );
+              })}
             </div>
             <div className="flex flex-wrap gap-3">
               <label className="text-xs font-medium text-gray-600">

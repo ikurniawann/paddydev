@@ -8,7 +8,7 @@ describe("isDelegateAccessLost", () => {
   it("403 umum = penunjukan dicabut", () => {
     expect(isDelegateAccessLost(forbidden("Insufficient permissions"))).toBe(true);
   });
-  it.each(["Toko di luar wilayah Anda", "2 karyawan di luar wilayah Anda", "Anda tidak punya hak mengatur penempatan"])(
+  it.each(["Toko di luar wilayah Anda", "2 karyawan di luar wilayah Anda", "Anda tidak punya hak mengatur penempatan", "Hanya untuk toko yang Anda atur"])(
     "403 %s bukan akses hilang",
     (message) => expect(isDelegateAccessLost(forbidden(message))).toBe(false)
   );

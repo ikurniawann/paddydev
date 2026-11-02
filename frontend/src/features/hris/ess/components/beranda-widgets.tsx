@@ -79,8 +79,20 @@ export function WeekScheduleCard({ days }: { days: EssBeranda["week_schedule"] }
             </span>
             <span className="text-sm font-bold text-gray-700">{d.date.slice(8, 10)}</span>
             {d.status === "shift" ? (
-              <span className="text-[9px] font-medium leading-tight text-gray-500">
-                {d.start_time?.slice(0, 5)}
+              <span
+                className="text-[9px] font-medium leading-tight text-gray-500"
+                title={d.time_label ? `${d.shift_name ?? ""} · ${d.time_label}` : undefined}
+              >
+                {d.time_label && d.time_label.includes(", ") ? (
+                  // Dua shift (EPIC-080): jam mulai tiap shift di baris sendiri; kolom 1/7 lebar sempit, rentang penuh ada di title.
+                  d.time_label.split(", ").map((range) => (
+                    <span key={range} className="block">
+                      {range.split("–")[0].replace(".", ":")}
+                    </span>
+                  ))
+                ) : (
+                  d.start_time?.slice(0, 5)
+                )}
               </span>
             ) : (
               <span className="text-[9px] font-medium leading-tight text-gray-300">

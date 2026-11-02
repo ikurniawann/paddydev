@@ -359,4 +359,42 @@ describe("ScheduleGrid", () => {
       expect(screen.getByText("Ana", { selector: "span.font-medium" }).getAttribute("title")).toBe("Ana");
     });
   });
+
+  describe("dua shift sehari (EPIC-080)", () => {
+    const withSecond: Grid = {
+      ...makeGrid("2026-11-02", [{ id: "e1", name: "Ana", codes: { "2026-11-04": "P+PM" } }]),
+      shifts: [...shifts, { code: "PM", name: "Sore", start_time: "17:00:00", end_time: "21:00:00", break_minutes: 0 }],
+    };
+
+    it("kotak dua shift menampilkan kode gabungan dan keterangan jam", () => {
+      renderGrid({ grid: withSecond });
+      const cell = screen.getByRole("button", { name: "Ana 04/11" });
+      expect(cell.textContent).toBe("P+PM");
+      expect(cell.getAttribute("title")).toBe("P + PM · 08.00–16.00, 17.00–21.00");
+    });
+
+    it("Tambah shift kedua → pilih shift kedua → kirim kode KODE1+KODE2", async () => {
+      api.saveScheduleCells.mockResolvedValueOnce(preview()).mockResolvedValueOnce({ data: preview().data, message: "ok" });
+      renderGrid({ grid: withSecond });
+      fireEvent.click(screen.getByRole("button", { name: "Ana 03/11" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Tambah shift kedua setelah P" }));
+      // S mulai 13:00 sebelum P selesai 16:00: tidak bisa dipilih sebagai shift kedua.
+      expect((screen.getByRole("button", { name: /^S · Siang/ }) as HTMLButtonElement).disabled).toBe(true);
+      fireEvent.click(screen.getByRole("button", { name: /^PM · Sore/ }));
+      await waitFor(() => expect(api.saveScheduleCells).toHaveBeenCalledTimes(2));
+      expect(previewCall()).toEqual({
+        branch_id: "b1",
+        step: "preview",
+        cells: [{ employee_id: "e1", date: "2026-11-03", code: "P+PM" }],
+      });
+    });
+
+    it("memilih shift biasa tetap langsung menyimpan satu shift", async () => {
+      api.saveScheduleCells.mockResolvedValueOnce(preview()).mockResolvedValueOnce({ data: preview().data, message: "ok" });
+      renderGrid({ grid: withSecond });
+      fireEvent.click(screen.getByRole("button", { name: "Ana 03/11" }));
+      fireEvent.click(await screen.findByRole("button", { name: /^PM · Sore/ }));
+      await waitFor(() => expect(previewCall()?.cells).toEqual([{ employee_id: "e1", date: "2026-11-03", code: "PM" }]));
+    });
+  });
 });

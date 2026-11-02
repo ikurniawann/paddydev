@@ -33,8 +33,10 @@ export function EssAbsensiPage() {
             <CalendarDaysIcon className="h-4 w-4 text-green-600" />
             {shift ? (
               <>
-                Shift hari ini: <b>{shift.name}</b> · {shift.start_time?.slice(0, 5)}–
-                {shift.end_time?.slice(0, 5)} · toleransi {shift.late_tolerance_minutes} mnt
+                Shift hari ini: <b>{shift.name}</b> ·{" "}
+                {shift.time_label ??
+                  `${shift.start_time?.slice(0, 5)}–${shift.end_time?.slice(0, 5)}`}{" "}
+                · toleransi {shift.late_tolerance_minutes} mnt
               </>
             ) : me.has_schedule ? (
               <>Hari ini jadwal Anda <b>libur</b> — absen tetap bisa, tercatat di luar jadwal.</>

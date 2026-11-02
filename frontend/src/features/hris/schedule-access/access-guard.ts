@@ -9,15 +9,18 @@ export const NOT_DELEGATE_MESSAGE = "Anda bukan pengatur jadwal toko. Hubungi HR
 /** 403 hak penempatan: penunjukan masih ada, pesannya sudah untuk pengguna. */
 const NO_PLACE_RIGHT = "Anda tidak punya hak mengatur penempatan";
 
+/** 403 aturan checkout otomatis (EPIC-080): aturan di luar toko yang diatur; penunjukan masih ada. */
+const NOT_YOUR_STORE = "Hanya untuk toko yang Anda atur";
+
 const isForbidden = (error: unknown): error is ApiError => error instanceof ApiError && error.status === 403;
 
 /**
  * 403 lain dari API mode toko = penunjukan dicabut atau karyawannya dinonaktifkan
  * sementara halaman terbuka. Yang dikecualikan: wilayah ("Toko di luar wilayah
- * Anda", "N karyawan di luar wilayah Anda") dan hak penempatan.
+ * Anda", "N karyawan di luar wilayah Anda"), hak penempatan, dan aturan di luar toko ("Hanya untuk toko yang Anda atur").
  */
 export function isDelegateAccessLost(error: unknown): boolean {
-  return isForbidden(error) && error.message !== NO_PLACE_RIGHT && !error.message.endsWith("di luar wilayah Anda");
+  return isForbidden(error) && error.message !== NO_PLACE_RIGHT && error.message !== NOT_YOUR_STORE && !error.message.endsWith("di luar wilayah Anda");
 }
 
 /** `retry` query mode toko: 403 tidak dicoba ulang, galat lain seperti bawaan aplikasi (2x). */

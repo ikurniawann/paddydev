@@ -68,3 +68,8 @@ it("meminta konfirmasi sebelum mengganti jadwal yang sudah ada", async () => {
   fireEvent.click(screen.getByRole("button", { name: "Ya, ganti" }));
   await waitFor(() => expect(api.importScheduleFile).toHaveBeenLastCalledWith(expect.objectContaining({ step: "commit", fingerprint: "fp2" })));
 });
+
+it("petunjuk menyebut format dua shift KODE1+KODE2", () => {
+  render(<ScheduleUploadDialog open onOpenChange={() => {}} range={range} branchName="PPJA" onSaved={() => {}} />);
+  expect(screen.getByText(/KODE1\+KODE2 tanpa spasi, misalnya PAGI4\+SORE4/)).toBeTruthy();
+});

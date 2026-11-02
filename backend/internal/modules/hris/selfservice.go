@@ -345,9 +345,11 @@ func (s *store) EmployeeCard(ctx context.Context, employeeID string) (*Row, erro
 func (s *store) ESSSchedule(ctx context.Context, employeeID string) ([]domain.ESSScheduleRow, error) {
 	rows, err := s.db.Query(ctx, `SELECT es.day_of_week, es.shift_id::text,
 		es.effective_from::text, es.effective_to::text,
-		s.name, s.start_time::text, s.end_time::text, s.late_tolerance_minutes
+		s.name, s.start_time::text, s.end_time::text, s.late_tolerance_minutes,
+		s.code, es.shift2_id::text, s2.code, s2.name, s2.start_time::text, s2.end_time::text
 		FROM hris.v_employee_schedule es
 		LEFT JOIN hris.shifts s ON s.id = es.shift_id
+		LEFT JOIN hris.shifts s2 ON s2.id = es.shift2_id
 		WHERE es.employee_id = $1
 		ORDER BY es.priority`, employeeID)
 	if err != nil {
@@ -359,7 +361,8 @@ func (s *store) ESSSchedule(ctx context.Context, employeeID string) ([]domain.ES
 		var r domain.ESSScheduleRow
 		var tol *int32
 		if err := rows.Scan(&r.DayOfWeek, &r.ShiftID, &r.EffectiveFrom, &r.EffectiveTo,
-			&r.ShiftName, &r.StartTime, &r.EndTime, &tol); err != nil {
+			&r.ShiftName, &r.StartTime, &r.EndTime, &tol,
+			&r.ShiftCode, &r.Shift2ID, &r.Shift2Code, &r.Shift2Name, &r.Shift2Start, &r.Shift2End); err != nil {
 			return nil, err
 		}
 		if tol != nil {
