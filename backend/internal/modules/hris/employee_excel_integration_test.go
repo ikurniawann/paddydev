@@ -3,11 +3,13 @@ package hris
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/xuri/excelize/v2"
 
@@ -136,11 +138,14 @@ func TestEmployeeImportAddAndReplace(t *testing.T) {
 		SELECT id, 'Cabang Import', 'CI'||substr(md5(random()::text),1,4) FROM configuration.companies LIMIT 1 RETURNING id::text`)
 	h.exec(`INSERT INTO hris.employment_statuses (code, name, is_active) VALUES ('contract', 'Kontrak (PKWT)', true) ON CONFLICT (code) DO NOTHING`)
 	header := []string{"NIP", "Nama Lengkap *", "Email *", "Tanggal Masuk *", "Status Kepegawaian *", "Tipe Jadwal *", "Cabang Utama *", "Jenis Kelamin"}
-	newNIP := "202611" + branch[:6]
+	// Deliberately looks like scientific notation ("2026111E…") but is a text NIP
+	// that must be kept exactly; the digits keep it unique per run (no random hex,
+	// whose "12e456"-style prefixes made this test flaky: EPIC-081 review).
+	newNIP := fmt.Sprintf("2026111E%05d", time.Now().UnixNano()/1000%100000)
 	add := employeeFile(t, header, []string{newNIP, "Baru Import", "baru.import@test.id", "21/10/2026", "Kontrak (PKWT)", "Shift", "Cabang Import", "Perempuan"})
 	pre := uploadEmployees(t, h, &hr, map[string]string{"mode": "add", "step": "preview"}, add)
 	expect(t, pre, http.StatusOK, "")
-	if pre.data()["summary"].(map[string]any)["create"] != float64(1) {
+	if pre.data()["summary"].(map[string]any)["create"] != float64(1) || len(pre.data()["errors"].([]any)) != 0 {
 		t.Fatalf("preview = %v", pre.data())
 	}
 	commit := uploadEmployees(t, h, &hr, map[string]string{"mode": "add", "step": "commit"}, add)

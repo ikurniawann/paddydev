@@ -87,7 +87,10 @@ var digitNoise = strings.NewReplacer(" ", "", ".", "", "-", "", "/", "", "'", ""
 
 func CleanDigits(s string) string { return digitNoise.Replace(strings.TrimSpace(s)) }
 
-var scientific = regexp.MustCompile(`(?i)^\d+(\.\d+)?e\+?\d+$`)
+// scientific is what Excel's General format shows for a long number typed as
+// a number: always a signed exponent (2.02E+08, 2,02E+08). An unsigned "e"
+// between digits (2026111E05) is an ordinary text NIP and stays untouched.
+var scientific = regexp.MustCompile(`(?i)^\d+([.,]\d+)?e[+-]\d+$`)
 
 // CleanNIP trims a NIP; a NIP Excel turned into scientific notation is an
 // error the person can fix (format the column as text and retype it).
