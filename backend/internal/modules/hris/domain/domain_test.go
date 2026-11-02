@@ -265,8 +265,6 @@ func TestContractListParams(t *testing.T) {
 }
 
 func TestEmployees(t *testing.T) {
-	eq(t, NextAutoNip(2026, nil), "EMP-2026-00001")
-	eq(t, NextAutoNip(2026, []string{"EMP-2026-00001", "EMP-2026-00002", "EMP-2026-00004"}), "EMP-2026-00003")
 	p := ParseDirectoryParams(query("search=budi,(x)&limit=9999&page=0&sort_by=bank_account&sort_order=desc&is_active=false"))
 	eq(t, *p.Search, "budi  x")
 	eq(t, []any{p.Limit, p.Page, p.SortBy, p.Ascending, *p.IsActive}, []any{500, 1, "full_name", false, false})

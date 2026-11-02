@@ -184,11 +184,25 @@ export function userFormFromItem(detail: UserEmployeeItem): UserEmployeeFormValu
   };
 }
 
+/** NIP diisi manual dan wajib (EPIC-081); server menolak dengan pesan yang sama. */
+export const NIP_REQUIRED_MESSAGE = "NIP wajib diisi";
+export const NIP_TOO_LONG_MESSAGE = "NIP maksimal 50 karakter";
+
+/** Galat kolom NIP; null bila NIP layak dikirim. */
+export function validateNip(nip: string): string | null {
+  const value = nip.trim();
+  if (!value) return NIP_REQUIRED_MESSAGE;
+  if (value.length > 50) return NIP_TOO_LONG_MESSAGE;
+  return null;
+}
+
 /** Pesan galat pertama yang menghalangi simpan; null bila form siap dikirim. */
 export function validateUserForm(
   form: UserEmployeeFormValues,
   opts: { isEdit: boolean; hasExistingAppAccount: boolean }
 ): string | null {
+  const nipError = validateNip(form.nip);
+  if (nipError) return nipError;
   if (!form.full_name || !form.email || !form.join_date || !form.employment_status) {
     return "Full name, email, join date, and employment status are required";
   }
@@ -263,6 +277,9 @@ export function buildUserPayload(
     if (typeof value === "boolean") payload[key] = value;
     else if (typeof value === "string") payload[key] = value === "" ? null : value;
   }
+
+  // NIP diketik manual: dikirim dipangkas, tidak pernah dibuat otomatis (EPIC-081).
+  payload.nip = form.nip.trim();
 
   // Tipe jadwal hanya saat tambah; perubahan lewat dialog "Ubah tipe jadwal".
   if (isEdit) delete payload.schedule_type;

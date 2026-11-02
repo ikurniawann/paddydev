@@ -54,13 +54,13 @@ func emailConflictOr(err error) error {
 }
 
 // keyConflict is a 400 naming the employee (active or not) that already holds
-// the KTP, NPWP or NIP the body sends. createNIP is the trimmed NIP of a
-// create; on update the body's own NIP is used. excludeID is the employee
-// being updated ("" on create).
-func (s *service) keyConflict(ctx context.Context, b *employeeBody, createNIP, excludeID string) error {
-	k := employeekeys.Keys{KTP: b.str("ktp"), NPWP: b.str("npwp"), NIP: b.str("nip")}
-	if excludeID == "" {
-		k.NIP = &createNIP
+// the KTP, NPWP or NIP the body sends. nip is the trimmed NIP being written
+// ("" when an update does not touch it). excludeID is the employee being
+// updated ("" on create).
+func (s *service) keyConflict(ctx context.Context, b *employeeBody, nip, excludeID string) error {
+	k := employeekeys.Keys{KTP: b.str("ktp"), NPWP: b.str("npwp")}
+	if nip != "" {
+		k.NIP = &nip
 	}
 	conflict, err := employeekeys.Find(ctx, s.db, k, excludeID)
 	if err != nil {
@@ -199,20 +199,26 @@ func (s *service) reload(ctx context.Context, id string) (*employeeView, error) 
 
 /* ── create ──────────────────────────────────────────────────────────── */
 
-// generateNIP is generateNip: the first free EMP-<year>-<seq>.
-func (s *service) generateNIP(ctx context.Context) (string, error) {
-	year := s.now().UTC().Year()
-	for seq := 1; seq < 100000; seq++ {
-		nip := fmt.Sprintf("EMP-%d-%05d", year, seq)
-		taken, err := s.ports.Employees.NIPTaken(ctx, s.db, nip)
-		if err != nil {
-			return "", err
-		}
-		if !taken {
-			return nip, nil
-		}
+// errNIPRequired is the 400 for a missing NIP (EPIC-081 R1).
+const (
+	errNIPRequired = "NIP wajib diisi"
+	errNIPTooLong  = "NIP maksimal 50 karakter"
+)
+
+// cleanNIP trims the NIP HR typed. Blank (or absent/null) is refused and so
+// is a value over 50 characters; the application never makes a NIP up.
+func cleanNIP(raw *string) (string, error) {
+	nip := ""
+	if raw != nil {
+		nip = validate.JSTrim(*raw)
 	}
-	return "", errors.New("Unable to generate a unique employee ID")
+	if nip == "" {
+		return "", httpx.BadRequest(errNIPRequired)
+	}
+	if validate.UTF16Len(nip) > 50 {
+		return "", httpx.BadRequest(errNIPTooLong)
+	}
+	return nip, nil
 }
 
 // insertColumns are the hris.employees columns createUserEmployee writes
@@ -254,6 +260,10 @@ func (s *service) createUser(ctx context.Context, actorID string, b *employeeBod
 	if err := checkHrisRole(b, nil); err != nil {
 		return nil, err
 	}
+	nip, err := cleanNIP(b.str("nip"))
+	if err != nil {
+		return nil, err
+	}
 	email := *b.str("email")
 	owner, err := s.ports.Employees.EmailOwner(ctx, s.db, email)
 	if err != nil {
@@ -271,17 +281,8 @@ func (s *service) createUser(ctx context.Context, actorID string, b *employeeBod
 			return nil, err
 		}
 	}
-	nip := ""
-	if n := b.str("nip"); n != nil {
-		nip = validate.JSTrim(*n)
-	}
 	if err := s.keyConflict(ctx, b, nip, ""); err != nil {
 		return nil, err
-	}
-	if nip == "" {
-		if nip, err = s.generateNIP(ctx); err != nil {
-			return nil, err
-		}
 	}
 	cols := []Column{
 		{"nip", nip}, {"full_name", *b.str("full_name")}, {"email", email}, {"phone", orEmpty(b.str("phone"))},
@@ -510,7 +511,14 @@ func (s *service) updateUser(ctx context.Context, actorID, id string, b *employe
 		}
 	}
 
-	if err := s.keyConflict(ctx, b, "", id); err != nil {
+	// NIP can be changed but never blanked (EPIC-081 R2).
+	var newNIP string
+	if b.has("nip") {
+		if newNIP, err = cleanNIP(b.str("nip")); err != nil {
+			return nil, err
+		}
+	}
+	if err := s.keyConflict(ctx, b, newNIP, id); err != nil {
 		return nil, err
 	}
 
@@ -540,6 +548,8 @@ func (s *service) updateUser(ctx context.Context, actorID, id string, b *employe
 			patch = append(patch, Column{f, orEmpty(b.str(f))})
 		case "is_active":
 			patch = append(patch, Column{f, *b.isActive})
+		case "nip":
+			patch = append(patch, Column{f, newNIP})
 		default:
 			patch = append(patch, Column{f, b.str(f)})
 		}

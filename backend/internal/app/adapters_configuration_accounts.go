@@ -264,12 +264,6 @@ func (accountsEmployees) ReleaseEmail(ctx context.Context, q database.Querier, i
 	return userID, err
 }
 
-func (accountsEmployees) NIPTaken(ctx context.Context, q database.Querier, nip string) (bool, error) {
-	var taken bool
-	err := q.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM hris.employees WHERE nip = $1)`, nip).Scan(&taken)
-	return taken, err
-}
-
 // employeeWritable are the columns the account flows write.
 var employeeWritable = map[string]bool{
 	"nip": true, "full_name": true, "email": true, "phone": true, "join_date": true, "end_date": true,

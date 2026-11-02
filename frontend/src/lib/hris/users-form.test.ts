@@ -5,6 +5,8 @@ import {
   emptyUserForm,
   userFormFromItem,
   validateUserForm,
+  NIP_REQUIRED_MESSAGE,
+  NIP_TOO_LONG_MESSAGE,
   type UserEmployeeFormValues,
 } from "./users-form";
 
@@ -19,6 +21,7 @@ const baseForm: UserEmployeeFormValues = {
   email: "budi@example.com",
   join_date: "2026-01-01",
   employment_status: "permanent",
+  nip: "202511001",
 };
 
 const withAccess = (patch: Partial<UserEmployeeFormValues> = {}): UserEmployeeFormValues => ({
@@ -36,6 +39,26 @@ const withAccess = (patch: Partial<UserEmployeeFormValues> = {}): UserEmployeeFo
 
 const create = { isEdit: false, hasExistingAppAccount: false };
 const editWithAccount = { isEdit: true, hasExistingAppAccount: true };
+
+describe("NIP manual wajib (EPIC-081)", () => {
+  it("kosong atau spasi saja ditolak, tambah maupun ubah", () => {
+    expect(validateUserForm({ ...baseForm, nip: "" }, create)).toBe(NIP_REQUIRED_MESSAGE);
+    expect(validateUserForm({ ...baseForm, nip: "   " }, create)).toBe(NIP_REQUIRED_MESSAGE);
+    expect(validateUserForm({ ...baseForm, nip: "" }, editWithAccount)).toBe(NIP_REQUIRED_MESSAGE);
+    expect(NIP_REQUIRED_MESSAGE).toBe("NIP wajib diisi");
+  });
+
+  it("lebih dari 50 karakter ditolak", () => {
+    expect(validateUserForm({ ...baseForm, nip: "9".repeat(51) }, create)).toBe(NIP_TOO_LONG_MESSAGE);
+    expect(validateUserForm({ ...baseForm, nip: "9".repeat(50) }, create)).toBeNull();
+  });
+
+  it("NIP dikirim (dipangkas) saat tambah maupun ubah", () => {
+    const form = { ...baseForm, nip: "  202511001 " };
+    expect(buildUserPayload(form, false)).toHaveProperty("nip", "202511001");
+    expect(buildUserPayload(form, true)).toHaveProperty("nip", "202511001");
+  });
+});
 
 describe("validateUserForm", () => {
   it("field inti wajib", () => {
@@ -265,7 +288,7 @@ describe("atasan = diri sendiri (EPIC-063 P11)", () => {
 describe("tipe jadwal", () => {
   it("default Shift dan wajib dipilih", () => {
     expect(emptyUserForm.schedule_type).toBe("shift");
-    const form = { ...emptyUserForm, full_name: "A", email: "a@b.id", join_date: "2026-10-21", employment_status: "contract" };
+    const form = { ...emptyUserForm, full_name: "A", email: "a@b.id", join_date: "2026-10-21", employment_status: "contract", nip: "202511001" };
     expect(validateUserForm({ ...form, schedule_type: "" as never }, { isEdit: false, hasExistingAppAccount: false })).toBe(
       "Tipe jadwal wajib dipilih"
     );
