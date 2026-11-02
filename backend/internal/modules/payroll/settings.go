@@ -7,7 +7,11 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/jackc/pgx/v5"
+
 	"nuhabit/backend/internal/modules/payroll/domain"
+	"nuhabit/backend/internal/platform/audit"
+	"nuhabit/backend/internal/platform/database"
 	"nuhabit/backend/internal/platform/httpx"
 	"nuhabit/backend/internal/platform/iam"
 	"nuhabit/backend/internal/platform/validate"
@@ -63,6 +67,8 @@ var settingsFields = concat(
 	[]settingField{{key: "late_tier_rules", kind: "tiers"}},
 	nums("int", validate.NumOpts{Min: validate.Bound(0), Max: validate.Bound(600)}, "late_min_minutes"),
 	[]settingField{{key: "pph21_method", kind: "enum"}, {key: "pph21_bpjs_basis", kind: "enum"}},
+	// EPIC-082: saklar kalkulasi PPh 21 dan BPJS.
+	[]settingField{{key: "pph21_enabled", kind: "bool"}, {key: "bpjs_tk_enabled", kind: "bool"}, {key: "bpjs_kes_enabled", kind: "bool"}},
 	nums("num", rupiah(), "overtime_production_rate"),
 	[]settingField{{key: "overtime_requires_clockout", kind: "bool"}, {key: "overtime_rest_from_schedule", kind: "bool"},
 		{key: "personal_leave_deduction", kind: "bool"},
@@ -230,7 +236,7 @@ func (s *service) loadSettings(ctx context.Context, taxYear int) (any, error) {
 }
 
 // upsertSettingsRow updates the existing row or inserts one, returning it.
-func (s *service) upsertSettingsRow(ctx context.Context, table, existingID string, cols []column, defaults []column) (*obj, error) {
+func (s *service) upsertSettingsRow(ctx context.Context, q database.Querier, table, existingID string, cols []column, defaults []column) (*obj, error) {
 	cols = append(cols, column{"updated_at", s.clock()})
 	var sql string
 	var args []any
@@ -262,14 +268,39 @@ func (s *service) upsertSettingsRow(ctx context.Context, table, existingID strin
 		}
 		sql = `INSERT INTO hris.` + table + ` (` + strings.Join(names, ", ") + `) VALUES (` + strings.Join(marks, ", ") + `) RETURNING *`
 	}
-	row, err := queryObj(ctx, s.db, sql, args...)
+	row, err := queryObj(ctx, q, sql, args...)
 	if err != nil {
 		return nil, fmt.Errorf("save %s: %w", table, opaque(err))
 	}
 	return row, nil
 }
 
-func (s *service) saveSettings(ctx context.Context, in *settingsInput) (any, error) {
+// settingsAudit is the payroll_settings.update row: only the keys whose value
+// changed, before and after. before is nil when no settings row existed yet.
+// It returns false when nothing changed.
+func settingsAudit(before, after *obj, cols []column) (b, a map[string]any, changed bool) {
+	a = map[string]any{}
+	if before != nil {
+		b = map[string]any{}
+	}
+	for _, c := range cols {
+		if c.name == "updated_at" || after == nil {
+			continue
+		}
+		next := after.Get(c.name)
+		if before != nil {
+			prev := before.Get(c.name)
+			if fmt.Sprint(prev) == fmt.Sprint(next) {
+				continue
+			}
+			b[c.name] = prev
+		}
+		a[c.name] = next
+	}
+	return b, a, len(a) > 0
+}
+
+func (s *service) saveSettings(ctx context.Context, userID string, in *settingsInput) (any, error) {
 	var savedSettings, savedTax any
 	if in.hasSet {
 		var existing string
@@ -278,16 +309,40 @@ func (s *service) saveSettings(ctx context.Context, in *settingsInput) (any, err
 		if in.compName != nil {
 			name = *in.compName
 		}
-		row, err := s.upsertSettingsRow(ctx, "payroll_settings", existing, in.settings, []column{{"company_name", name}})
+		err := database.WithTx(ctx, s.db, func(tx pgx.Tx) error {
+			var before *obj
+			if existing != "" {
+				before, _ = queryObj(ctx, tx, `SELECT * FROM hris.payroll_settings WHERE id = $1`, existing)
+			}
+			row, err := s.upsertSettingsRow(ctx, tx, "payroll_settings", existing, in.settings, []column{{"company_name", name}})
+			if err != nil {
+				return err
+			}
+			savedSettings = row
+			b, a, changed := settingsAudit(before, row, in.settings)
+			if !changed {
+				return nil
+			}
+			id := row.Str("id")
+			e := audit.Entry{Action: "payroll_settings.update", Entity: "hris.payroll_settings", EntityID: &id,
+				ActorID: userID, After: a}
+			if b != nil {
+				e.Before = b
+			}
+			var actor *string
+			if err := tx.QueryRow(ctx, `SELECT full_name FROM users WHERE id = $1`, userID).Scan(&actor); err == nil {
+				e.ActorName = actor
+			}
+			return audit.Write(ctx, tx, e)
+		})
 		if err != nil {
 			return nil, err
 		}
-		savedSettings = row
 	}
 	if in.hasTax {
 		var existing string
 		_ = s.db.QueryRow(ctx, `SELECT id::text FROM hris.payroll_tax_config WHERE tax_year = $1`, in.taxYear).Scan(&existing)
-		row, err := s.upsertSettingsRow(ctx, "payroll_tax_config", existing, in.tax, []column{{"tax_year", in.taxYear}})
+		row, err := s.upsertSettingsRow(ctx, s.db, "payroll_tax_config", existing, in.tax, []column{{"tax_year", in.taxYear}})
 		if err != nil {
 			return nil, err
 		}
@@ -337,7 +392,7 @@ func (h *handler) putSettings(w http.ResponseWriter, r *http.Request) error {
 	if !in.hasSet && !in.hasTax {
 		return httpx.BadRequest("Tidak ada perubahan yang dikirim")
 	}
-	data, err := h.svc.saveSettings(r.Context(), in)
+	data, err := h.svc.saveSettings(r.Context(), u.ID, in)
 	if err != nil {
 		return err
 	}
