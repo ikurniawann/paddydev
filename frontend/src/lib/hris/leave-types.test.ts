@@ -12,9 +12,10 @@ import {
 describe("katalog jenis cuti (EPIC-058)", () => {
   it("hanya jenis yang berlaku yang bisa diajukan, urut form", () => {
     expect([...SELECTABLE_LEAVE_CODES]).toEqual([
-      "annual", "sick", "personal", "leader", "maternity", "paternity", "pilgrimage", "marriage", "bereavement",
+      "annual", "sick", "personal", "leader", "birthday", "maternity", "miscarriage", "paternity",
+      "wife_miscarriage", "marriage", "child_marriage", "child_ceremony", "pilgrimage", "bereavement",
     ]);
-    expect(LEAVE_TYPES).toHaveLength(12);
+    expect(LEAVE_TYPES).toHaveLength(17);
   });
 
   it("jenis yang dihapus tetap punya label riwayat", () => {
@@ -44,5 +45,15 @@ describe("katalog jenis cuti (EPIC-058)", () => {
     expect(spv).not.toContain("emergency");
     expect(spv).not.toContain("unpaid");
     expect(spv).not.toContain("menstrual");
+  });
+
+  it("aturan TnC 03-11 sama dengan katalog Go (EPIC-084)", () => {
+    expect(leaveTypeInfo("birthday")).toMatchObject({ singleDay: true, leadDays: 3, attachmentRequired: true });
+    expect(leaveTypeInfo("miscarriage")).toMatchObject({ maxSpanDays: 45, gender: "female", attachmentRequired: true });
+    expect(leaveTypeInfo("pilgrimage")).toMatchObject({ maxSpanDays: 40, leadDays: 30 });
+    expect(leaveTypeInfo("sick")?.sameDayOnly).toBe(true);
+    expect(leaveTypeInfo("marriage")?.maxDays).toBe(3);
+    expect(leaveTypeLabel("paternity")).toBe("Cuti Istri Melahirkan");
+    expect(leaveTypeExportLabel("paternity")).toBe("Cuti Ayah");
   });
 });
