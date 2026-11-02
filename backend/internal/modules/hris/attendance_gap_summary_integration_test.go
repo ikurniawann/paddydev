@@ -139,6 +139,9 @@ func TestAttendanceGapSummary(t *testing.T) {
 
 	// Libur nasional: tidak ada yang terlewat, absen pulang tetap.
 	h.exec(`INSERT INTO hris.public_holidays (holiday_date, name) VALUES ($1, 'Libur Uji Ringkasan')`, d)
+	// Staf shift mengikuti roster (EPIC-079): tetap terhitung terlewat.
+	counts("holiday shift", summary(d), 1, 2, 2, false)
+	h.exec(`UPDATE hris.employees SET schedule_type = 'non_shift'`)
 	counts("holiday", summary(d), 0, 2, 2, false)
 
 	// Periode D ditutup: hanya informasi. GET tidak lagi membuat baris periode

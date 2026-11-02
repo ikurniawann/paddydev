@@ -21,6 +21,8 @@ func TestOvertimeDayTypeFollowsSchedule(t *testing.T) {
 	shift := h.scalar(`INSERT INTO hris.shifts (name, start_time, end_time) VALUES ('Pagi Lembur', '08:00', '16:00') RETURNING id::text`)
 	h.exec(`INSERT INTO hris.employee_shifts (employee_id, day_of_week, shift_id, effective_from) VALUES ($1, 1, $2, '2026-01-01')`, own, shift)
 	h.exec(`INSERT INTO hris.public_holidays (holiday_date, name, type) VALUES ('2026-10-19', 'Libur Uji Lembur', 'nasional')`)
+	// Libur nasional hanya meliburkan staf Non-Shift (EPIC-079).
+	h.exec(`UPDATE hris.employees SET schedule_type = 'non_shift' WHERE id = $1`, own)
 
 	hint := func(s *testutil.Staff, date string) map[string]any {
 		t.Helper()

@@ -17,6 +17,8 @@ func TestAttendanceGaps(t *testing.T) {
 			crewID, dow, shift)
 	}
 	h.exec(`INSERT INTO hris.employee_shifts (employee_id, day_of_week, shift_id, effective_from) VALUES ($1, 7, NULL, '2026-01-01')`, crewID)
+	// Libur nasional hanya meliburkan staf Non-Shift (EPIC-079).
+	h.exec(`UPDATE hris.employees SET schedule_type = 'non_shift' WHERE id = $1`, crewID)
 	h.exec(`INSERT INTO hris.public_holidays (holiday_date, name) VALUES ('2026-10-02', 'Libur Uji Terlewat')`)
 	h.exec(`INSERT INTO hris.attendance (employee_id, date, clock_in, status) VALUES ($1, '2026-10-03', '2026-10-03 08:05+07', 'present')`, crewID)
 	h.exec(`INSERT INTO hris.attendance (employee_id, date, clock_in, status) VALUES ($1, '2026-10-01', '2026-10-01 08:00+07', 'present')`, looseID)

@@ -1,6 +1,9 @@
 package domain
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // cctx is uctx with the employees keyed by ID and Ana's current schedule
 // for the week before and the week of the test range (all SPG1 except the
@@ -59,9 +62,6 @@ func TestValidateScheduleCells(t *testing.T) {
 			c.Current["e1"]["2026-11-01"] = "L"
 		}, cells: []ScheduleCellInput{cell("e1", "2026-11-08", "SPG1")},
 			warn: "Ana masuk 7 hari berturut-turut (02/11/2026–08/11/2026)"},
-		{name: "libur nasional", edit: func(c *ScheduleUploadContext) { c.Holidays["2026-11-04"] = "Libur Uji" },
-			cells: []ScheduleCellInput{cell("e1", "2026-11-04", "SPG1"), cell("e2", "2026-11-04", "L")},
-			warn:  "04/11/2026 libur nasional (Libur Uji): 1 karyawan diberi shift"},
 		{name: "cuti", edit: func(c *ScheduleUploadContext) { c.OnLeave["e1"] = map[string]bool{"2026-11-03": true} },
 			cells: []ScheduleCellInput{cell("e1", "2026-11-03", "SPG1")}, warn: "Ana cuti 03/11/2026 tapi diberi SPG1"},
 	}
@@ -96,6 +96,21 @@ func TestValidateScheduleCells(t *testing.T) {
 				t.Fatalf("want warning %q, got %+v", tc.warn, res.Warnings)
 			}
 		})
+	}
+}
+
+// EPIC-079 R3: a shift on a national holiday is no longer warned about.
+func TestValidateScheduleCellsNoHolidayWarning(t *testing.T) {
+	c := cctx()
+	c.Holidays["2026-11-04"] = "Libur Uji"
+	res := ValidateScheduleCells(c, []ScheduleCellInput{cell("e1", "2026-11-04", "SPG1"), cell("e2", "2026-11-04", "L")})
+	if len(res.Errors) != 0 {
+		t.Fatalf("unexpected errors %+v", res.Errors)
+	}
+	for _, w := range res.Warnings {
+		if strings.Contains(w.Message, "libur nasional") {
+			t.Fatalf("holiday warning returned: %+v", w)
+		}
 	}
 }
 

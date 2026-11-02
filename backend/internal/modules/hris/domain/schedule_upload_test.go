@@ -155,7 +155,6 @@ func TestValidateScheduleUploadWarnings(t *testing.T) {
 			f.Rows[0].Cells = []string{"MALAM", "SPG1", "L", "SPG1", "SPG1", "L", "L"}
 		}, "Ana: jeda 2 jam antara 02/11/2026 (MALAM) dan 03/11/2026 (SPG1)"},
 		{"cuti", func(c *ScheduleUploadContext, f *ScheduleFile) { c.OnLeave["e1"] = map[string]bool{"2026-11-03": true} }, "Ana cuti 03/11/2026 tapi diberi SPG1"},
-		{"libur nasional", func(c *ScheduleUploadContext, f *ScheduleFile) { c.Holidays["2026-11-04"] = "Libur Uji" }, "04/11/2026 libur nasional (Libur Uji): 1 karyawan diberi shift"},
 		{"tidak ada yang masuk", func(c *ScheduleUploadContext, f *ScheduleFile) {}, "Tidak ada yang masuk di PPJA 07/11/2026"},
 		{"sudah clock-in", func(c *ScheduleUploadContext, f *ScheduleFile) {
 			c.ClockedIn["e1"] = map[string]bool{"2026-11-02": true}
@@ -174,6 +173,22 @@ func TestValidateScheduleUploadWarnings(t *testing.T) {
 				t.Fatalf("want warning %q, got %+v", tc.want, res.Warnings)
 			}
 		})
+	}
+}
+
+// EPIC-079 R3: the grid only holds shift staff, who ignore red dates; a shift
+// on a national holiday is no longer warned about.
+func TestValidateScheduleUploadNoHolidayWarning(t *testing.T) {
+	c := uctx()
+	c.Holidays["2026-11-04"] = "Libur Uji"
+	res := ValidateScheduleUpload(c, sfile(c, row(4, "111", week("SPG1")...)))
+	if len(res.Errors) != 0 {
+		t.Fatalf("unexpected errors %+v", res.Errors)
+	}
+	for _, w := range res.Warnings {
+		if strings.Contains(w.Message, "libur nasional") {
+			t.Fatalf("holiday warning returned: %+v", w)
+		}
 	}
 }
 

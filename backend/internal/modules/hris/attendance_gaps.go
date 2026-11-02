@@ -23,7 +23,7 @@ type AttendanceGapRepo interface {
 	// ApprovedTripRanges: start_date, end_date of approved Perjalanan Dinas
 	// overlapping [start, end] (EPIC-065 P4).
 	ApprovedTripRanges(ctx context.Context, employeeID, start, end string) ([]*Row, error)
-	// EmploymentSpan: join_date and end_date (nullable) of the employee.
+	// EmploymentSpan: join_date, end_date (nullable) and schedule_type of the employee.
 	EmploymentSpan(ctx context.Context, employeeID string) (*Row, error)
 	PendingAttendanceRequestDates(ctx context.Context, employeeID, start, end string) ([]string, error)
 }
@@ -100,9 +100,13 @@ func (s *Service) MyAttendanceGaps(ctx context.Context, a *Actor) (*Row, error) 
 		in.Schedule = append(in.Schedule, domain.ScheduleRow{DayOfWeek: int(r.Num("day_of_week")), ShiftID: r.StrPtr("shift_id"),
 			EffectiveFrom: r.Str("effective_from"), EffectiveTo: r.StrPtr("effective_to")})
 	}
-	for _, hd := range holidays {
-		in.Holidays[hd.Date] = true
+	// Holidays are a day off per schedule type (EPIC-079): shift staff follow
+	// their roster. A missing employee row reads as Non-Shift.
+	scheduleType := ""
+	if span != nil {
+		scheduleType = span.Str("schedule_type")
 	}
+	in.Holidays = domain.DayOffDates(holidays, scheduleType)
 	for _, r := range rows {
 		rec := domain.RecordedDay{Absent: r.Str("status") == "absent"}
 		if t, found := r.Time("clock_in"); found {
@@ -165,7 +169,8 @@ func (s *store) ApprovedTripRanges(ctx context.Context, employeeID, start, end s
 }
 
 func (s *store) EmploymentSpan(ctx context.Context, employeeID string) (*Row, error) {
-	row, err := queryRow(ctx, s.db, `SELECT join_date::text AS join_date, end_date::text AS end_date
+	row, err := queryRow(ctx, s.db, `SELECT join_date::text AS join_date, end_date::text AS end_date,
+		       schedule_type
 		FROM hris.employees WHERE id = $1`, employeeID)
 	return row, ignoreBadInput(err)
 }

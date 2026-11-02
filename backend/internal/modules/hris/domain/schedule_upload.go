@@ -298,9 +298,6 @@ func ValidateScheduleUpload(c ScheduleUploadContext, f ScheduleFile) ScheduleUpl
 		sequenceWarnings(c, p.emp, p.line, days, warn)
 	}
 	for _, d := range c.Dates {
-		if msg := holidayIssue(c, d, working[d]); msg != "" {
-			warn(f.HeaderLine, ScheduleDateHeader(d), "", msg)
-		}
 		if len(valid) > 0 && working[d] == 0 {
 			warn(f.HeaderLine, ScheduleDateHeader(d), "", fmt.Sprintf("Tidak ada yang masuk di %s %s", c.BranchName, FormatDateID(d)))
 		}
@@ -370,13 +367,6 @@ func shiftByCode(c ScheduleUploadContext, raw string) (*UploadShift, string) {
 		return nil, "Shift " + s.Code + " sudah nonaktif"
 	}
 	return &s, ""
-}
-
-func holidayIssue(c ScheduleUploadContext, d string, working int) string {
-	if name, ok := c.Holidays[d]; ok && working > 0 {
-		return fmt.Sprintf("%s libur nasional (%s): %d karyawan diberi shift", FormatDateID(d), name, working)
-	}
-	return ""
 }
 
 func clockedInIssue(n int, d string) string {
@@ -455,7 +445,7 @@ func ScheduleCellWindow(dates []string) []string {
 
 // ValidateScheduleCells applies the upload rules to edited grid cells.
 // Issues have Line 0, the date header as Column and the employee's name.
-// Leave, gap, streak and holiday warnings read the resulting schedule: the
+// Leave, gap and streak warnings read the resulting schedule: the
 // edited cells over c.Current for the neighbouring dates.
 func ValidateScheduleCells(c ScheduleUploadContext, cells []ScheduleCellInput) ScheduleUploadResult {
 	var res ScheduleUploadResult
@@ -532,8 +522,6 @@ func ValidateScheduleCells(c ScheduleUploadContext, cells []ScheduleCellInput) S
 		edits[e.ID][in.Date] = ed
 	}
 
-	working := map[string]int{} // edited cells given a shift, per date
-	var editedDates []string
 	clocked := 0
 	for _, id := range order {
 		e, mine := c.EmployeesByID[id], edits[id]
@@ -546,12 +534,6 @@ func ValidateScheduleCells(c ScheduleUploadContext, cells []ScheduleCellInput) S
 		for _, d := range dates {
 			ed := mine[d]
 			res.Assignments = append(res.Assignments, ScheduleAssignment{EmployeeID: id, Date: d, ShiftID: shiftIDOf(ed.shift), Clear: ed.clear})
-			if ed.shift != nil {
-				if working[d] == 0 {
-					editedDates = append(editedDates, d)
-				}
-				working[d]++
-			}
 			if d == c.Today && c.ClockedIn[id][d] {
 				clocked++
 			}
@@ -572,12 +554,6 @@ func ValidateScheduleCells(c ScheduleUploadContext, cells []ScheduleCellInput) S
 			days = append(days, plannedDay{Date: d, Shift: s})
 		}
 		sequenceWarnings(c, e, 0, days, warn)
-	}
-	sort.Strings(editedDates)
-	for _, d := range editedDates {
-		if msg := holidayIssue(c, d, working[d]); msg != "" {
-			warn(0, ScheduleDateHeader(d), "", msg)
-		}
 	}
 	if clocked > 0 {
 		warn(0, ScheduleDateHeader(c.Today), "", clockedInIssue(clocked, c.Today))
