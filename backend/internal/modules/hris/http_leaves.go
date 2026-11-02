@@ -188,3 +188,19 @@ func (h handlers) getLeaveQuota(w http.ResponseWriter, r *http.Request, a *Actor
 	}
 	return ok(w, dataOf(row))
 }
+
+// GET /api/hris/me/leave-days?start=&end= is the preview of the days a leave
+// would consume for the signed-in employee (EPIC-079 R4).
+func (h handlers) myLeaveDays(w http.ResponseWriter, r *http.Request, a *Actor) error {
+	f := queryForm(r)
+	start := strOr(f.Str("start", validate.Rule{}, validate.StrOpts{Check: matches(domain.DateRe, "Tanggal mulai harus berformat YYYY-MM-DD")}))
+	end := strOr(f.Str("end", validate.Rule{}, validate.StrOpts{Check: matches(domain.DateRe, "Tanggal selesai harus berformat YYYY-MM-DD")}))
+	if err := formErr(f, ""); err != nil {
+		return err
+	}
+	out, err := h.svc.MyLeaveDays(r.Context(), a, start, end)
+	if err != nil {
+		return err
+	}
+	return ok(w, dataOf(out))
+}

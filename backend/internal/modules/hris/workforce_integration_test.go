@@ -76,7 +76,8 @@ func TestLeaves(t *testing.T) {
 	boss, bossID := h.staff("pos", nil, true, emp{name: "Atasan Cuti", phone: "0812 3456 7890"})
 	staff, own := h.staff("pos", nil, true, emp{name: "Pemohon Cuti"})
 	h.grantDelete(hr, "hris.workforce.leaves")
-	h.exec(`UPDATE hris.employees SET reporting_to = $2 WHERE id = $1`, own, bossID)
+	// Tanggal merah memotong hitungan cuti staf Non-Shift; staf shift memakai roster (EPIC-079 R4).
+	h.exec(`UPDATE hris.employees SET reporting_to = $2, schedule_type = 'non_shift' WHERE id = $1`, own, bossID)
 	h.exec(`INSERT INTO hris.public_holidays (holiday_date, name, type) VALUES ('2031-12-25', 'Natal Test', 'nasional')`)
 
 	expect(t, h.do(&staff, "POST", "/api/hris/leaves", map[string]any{"leave_type": "annual"}), 400, "Validation failed")

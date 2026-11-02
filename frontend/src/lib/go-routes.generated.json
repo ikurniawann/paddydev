@@ -2482,6 +2482,11 @@
   {
     "module": "hris",
     "method": "GET",
+    "path": "/api/hris/me/leave-days"
+  },
+  {
+    "module": "hris",
+    "method": "GET",
     "path": "/api/hris/me/placements"
   },
   {

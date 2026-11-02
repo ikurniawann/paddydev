@@ -87,6 +87,8 @@ func (h handlers) routes() []module.Route {
 		r("GET /api/hris/leave-balances/{employee_id}", h.withActor(h.getLeaveBalance)),
 		r("PUT /api/hris/leave-balances/{employee_id}", h.withLeaveBalanceAction("update", h.putLeaveBalance)),
 		r("GET /api/hris/leave-quota", h.withActor(h.getLeaveQuota)),
+		// Pratinjau potongan jatah cuti dari roster / hari libur (EPIC-079 R4).
+		r("GET /api/hris/me/leave-days", h.withActor(h.myLeaveDays)),
 
 		// shifts and overtime
 		r("GET /api/hris/shifts", h.withActor(h.listShifts)),

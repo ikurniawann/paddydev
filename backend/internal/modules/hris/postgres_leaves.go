@@ -67,7 +67,7 @@ func (s *store) LeavePage(ctx context.Context, f leaveFilter, page, limit int) (
 }
 
 func (s *store) LeaveEmployee(ctx context.Context, id string) (*Row, error) {
-	row, err := queryRow(ctx, s.db, `SELECT id, full_name, employment_status, is_active FROM hris.employees WHERE id = $1`, id)
+	row, err := queryRow(ctx, s.db, `SELECT id, full_name, employment_status, is_active, schedule_type FROM hris.employees WHERE id = $1`, id)
 	return row, ignoreBadInput(err)
 }
 

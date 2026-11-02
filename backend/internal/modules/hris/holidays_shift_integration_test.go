@@ -1,7 +1,9 @@
 package hris
 
 import (
+	"fmt"
 	"net/http"
+	"strconv"
 	"testing"
 
 	"nuhabit/backend/internal/modules/hris/domain"
@@ -206,4 +208,86 @@ func TestHolidayFollowsScheduleType(t *testing.T) {
 	if got := dayType(&bare, "2026-12-25"); got != "rest_day" {
 		t.Fatalf("lembur HQ tanpa jadwal di libur nasional = %v", got)
 	}
+}
+
+// EPIC-079 R4: cuti staf shift dihitung dari roster; Non-Shift memakai
+// Senin-Jumat dikurangi hari libur (cuti bersama biasa dihitung 1 hari).
+func TestShiftLeaveCountsRoster(t *testing.T) {
+	h := newHarness(t)
+	h.setNow("2026-12-01 10:00")
+	store, storeID := h.staff("pos", nil, true, emp{name: "Staf Toko Cuti"})
+	hq, hqID := h.staff("pos", nil, true, emp{name: "Staf HQ Cuti"})
+	cb, cbID := h.staff("pos", nil, true, emp{name: "Staf HQ Cuti Bersama"})
+	h.exec(`UPDATE hris.employees SET schedule_type = 'non_shift' WHERE id = ANY($1::uuid[])`, []string{hqID, cbID})
+
+	pagi := h.scalar(`INSERT INTO hris.shifts (name, start_time, end_time, late_tolerance_minutes)
+		VALUES ('Shift 1 Cuti', '08:00', '16:00', 10) RETURNING id::text`)
+	for _, d := range []string{"2026-12-21", "2026-12-22", "2026-12-24", "2026-12-25"} {
+		h.exec(`INSERT INTO hris.employee_shift_days (employee_id, work_date, shift_id, batch_id) VALUES ($1, $2, $3, gen_random_uuid())`,
+			storeID, d, pagi)
+	}
+	h.exec(`INSERT INTO hris.employee_shift_days (employee_id, work_date, shift_id, batch_id) VALUES ($1, '2026-12-23', NULL, gen_random_uuid())`, storeID)
+	h.exec(`INSERT INTO hris.public_holidays (holiday_date, name, type, deducts_leave, status, is_day_off)
+		VALUES ('2026-12-25', 'Natal Uji', 'nasional', false, 'aktif', false)`)
+	h.exec(`INSERT INTO hris.public_holidays (holiday_date, name, type, deducts_leave, status, is_day_off)
+		VALUES ('2026-12-24', 'Cuti Bersama Uji', 'cuti_bersama', true, 'aktif', false)`)
+
+	days := func(c call) float64 {
+		t.Helper()
+		expect(t, c, 200, "")
+		n, err := strconv.ParseFloat(fmt.Sprint(c.data()["total_days"]), 64)
+		if err != nil {
+			t.Fatalf("total_days %v: %v", c.data()["total_days"], err)
+		}
+		return n
+	}
+	book := func(s *testutil.Staff, start, end string) call {
+		return h.do(s, "POST", "/api/hris/leaves", leaveBody("marriage", start, end))
+	}
+	// Toko: 4 hari ber-shift, 23-12 libur roster; tanggal merah tidak berlaku.
+	if got := days(book(&store, "2026-12-21", "2026-12-25")); got != 4 {
+		t.Fatalf("cuti toko 21-25/12 = %v, want 4", got)
+	}
+	// HQ: Senin-Jumat dikurangi Natal.
+	if got := days(book(&hq, "2026-12-21", "2026-12-25")); got != 4 {
+		t.Fatalf("cuti HQ 21-25/12 = %v, want 4", got)
+	}
+	// Cuti bersama biasa dihitung 1 hari; yang ditetapkan libur tetap memotong (deducts_leave).
+	if got := days(book(&cb, "2026-12-24", "2026-12-24")); got != 1 {
+		t.Fatalf("cuti HQ cuti bersama biasa = %v, want 1", got)
+	}
+	h.exec(`UPDATE hris.public_holidays SET is_day_off = true WHERE holiday_date = '2026-12-24'`)
+	h.exec(`DELETE FROM hris.leaves WHERE employee_id = $1`, cbID)
+	if got := days(book(&cb, "2026-12-24", "2026-12-24")); got != 1 {
+		t.Fatalf("cuti HQ cuti bersama libur = %v, want 1", got)
+	}
+	h.exec(`UPDATE hris.public_holidays SET is_day_off = false WHERE holiday_date = '2026-12-24'`)
+
+	preview := func(s *testutil.Staff, start, end string) (float64, []any) {
+		t.Helper()
+		c := h.do(s, "GET", "/api/hris/me/leave-days?start="+start+"&end="+end, nil)
+		expect(t, c, 200, "")
+		return c.data()["days"].(float64), c.data()["excluded"].([]any)
+	}
+	if n, ex := preview(&store, "2026-12-21", "2026-12-25"); n != 4 || len(ex) != 0 {
+		t.Fatalf("preview toko = %v %v, want 4 []", n, ex)
+	}
+	n, ex := preview(&hq, "2026-12-21", "2026-12-25")
+	if n != 4 || len(ex) != 1 || ex[0].(map[string]any)["date"] != "2026-12-25" {
+		t.Fatalf("preview HQ = %v %v, want 4 [25-12]", n, ex)
+	}
+	if n, _ := preview(&cb, "2026-12-24", "2026-12-24"); n != 1 {
+		t.Fatalf("preview HQ cuti bersama biasa = %v, want 1", n)
+	}
+	// Rentang tanpa hari kerja: pratinjau menampilkan 0 (server menolak saat kirim).
+	if n, ex := preview(&hq, "2026-12-26", "2026-12-27"); n != 0 || len(ex) != 0 {
+		t.Fatalf("preview HQ akhir pekan = %v %v", n, ex)
+	}
+	expect(t, book(&hq, "2026-12-26", "2026-12-27"), 400, "Rentang tanggal ini jatuh pada akhir pekan — tidak perlu mengajukan cuti")
+
+	// Parameter dan akun tanpa data karyawan.
+	expect(t, h.do(&store, "GET", "/api/hris/me/leave-days?start=2026-12-25&end=2026-12-21", nil), 400, "")
+	expect(t, h.do(&store, "GET", "/api/hris/me/leave-days?start=bukan&end=2026-12-21", nil), 400, "")
+	noEmp, _ := h.staff("pos", nil, false)
+	expect(t, h.do(&noEmp, "GET", "/api/hris/me/leave-days?start=2026-12-21&end=2026-12-25", nil), 400, "Akun ini tidak terhubung ke data karyawan")
 }

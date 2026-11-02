@@ -14,14 +14,13 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { formatDate } from "@/lib/format";
-import { describeLeaveDays } from "@/lib/hris/holidays";
 import { todayWib } from "@/lib/dates";
 import { applySingleDay, effectiveLeaveType, leaveFormNote } from "@/lib/hris/leave-form";
 import { leaveTypeInfo, leaveTypeOptions } from "@/lib/hris/leave-types";
-import { useHolidayIndex } from "@/features/hris/attendance/queries";
 import { formatDays, previewBalance } from "@/features/hris/leave-balances/balance-math";
 import { useLeaveQuota } from "@/features/hris/leaves/queries";
 import { useSubmitMyLeave } from "../mutations";
+import { useMyLeaveDays } from "../queries";
 import type { EssLeaveBalance, EssLeaveForm } from "../types";
 
 const EMPTY_LEAVE_FORM: EssLeaveForm = { leave_type: "annual", start_date: "", end_date: "", reason: "" };
@@ -50,14 +49,15 @@ export function CutiRequestDialog({ open, onOpenChange, balance }: CutiRequestDi
   const quotaNote = leaveFormNote(form.leave_type, quota);
 
   /**
-   * Pratinjau potongan jatah cuti (EPIC-036 Fase D). Angka yang mengikat tetap
-   * dihitung ulang server saat disimpan; ini supaya karyawan tahu lebih dulu
-   * kenapa cuti 5 hari kalender bisa hanya memotong 3 hari jatah.
+   * Pratinjau potongan jatah cuti (EPIC-036 Fase D). Dihitung server dengan
+   * aturan yang sama saat disimpan (EPIC-079 R4: staf shift dari roster, bukan
+   * Senin-Jumat), supaya karyawan tahu lebih dulu berapa hari yang dipotong.
    */
   const { start_date: start, end_date: end } = form;
   const validRange = Boolean(start && end && end >= start);
-  const holidayIndex = useHolidayIndex(start, end, validRange).data;
-  const leaveDays = validRange && holidayIndex ? describeLeaveDays(start, end, holidayIndex) : null;
+  const leaveDaysQuery = useMyLeaveDays(start, end, open && validRange);
+  const leaveDays = validRange ? (leaveDaysQuery.data ?? null) : null;
+  const leaveDaysLoading = validRange && leaveDaysQuery.isLoading;
 
   function handleAttachmentChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -161,29 +161,33 @@ export function CutiRequestDialog({ open, onOpenChange, balance }: CutiRequestDi
             <Input type="file" accept="image/*" onChange={handleAttachmentChange} />
             {attachment && <p className="mt-1 text-xs text-gray-500">📎 {attachment.name}</p>}
           </div>
-          {/* Pratinjau potongan jatah (EPIC-036 Fase D): akhir pekan dan
-              tanggal merah tidak memotong, cuti bersama tetap memotong. */}
+          {/* Pratinjau potongan jatah (EPIC-036 Fase D, EPIC-079 R4): dihitung server. */}
+          {leaveDaysLoading && (
+            <p className="rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600">
+              Menghitung potongan jatah…
+            </p>
+          )}
           {leaveDays !== null && (
             <div
               className={`rounded-lg px-3 py-2 text-xs ${
-                leaveDays.totalDays === 0
+                leaveDays.days === 0
                   ? "bg-amber-50 text-amber-800"
                   : "bg-emerald-50 text-emerald-800"
               }`}
             >
-              {leaveDays.totalDays === 0 ? (
+              {leaveDays.days === 0 ? (
                 <p>
                   Rentang ini sudah libur seluruhnya
-                  {leaveDays.excludedHolidays.length > 0 &&
-                    ` (${leaveDays.excludedHolidays.map((h) => h.name).join(", ")})`}
+                  {leaveDays.excluded.length > 0 &&
+                    ` (${leaveDays.excluded.map((h) => h.name).join(", ")})`}
                   {" "}— tidak perlu mengajukan cuti.
                 </p>
               ) : (
                 <>
-                  <p className="font-semibold">Memotong jatah {leaveDays.totalDays} hari</p>
-                  {leaveDays.excludedHolidays.length > 0 && (
+                  <p className="font-semibold">Memotong jatah {leaveDays.days} hari kerja</p>
+                  {leaveDays.excluded.length > 0 && (
                     <p className="mt-0.5">
-                      Tidak dipotong: {leaveDays.excludedHolidays.map((h) => h.name).join(", ")}
+                      Tidak dipotong: {leaveDays.excluded.map((h) => h.name).join(", ")}
                     </p>
                   )}
                 </>

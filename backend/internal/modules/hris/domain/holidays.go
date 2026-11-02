@@ -91,6 +91,24 @@ func DescribeLeaveDays(startISO, endISO string, idx HolidayIndex) (int, []Exclud
 	return total, excluded
 }
 
+// DescribeRosterLeaveDays counts the leave days of a shift employee from the
+// roster (EPIC-079 R4), not Monday-Friday: a date with a shift counts, a
+// roster day off (empty cell) does not, and a date the roster does not cover
+// at all counts, because the roster simply is not made yet. schedule is the
+// employee's hris.v_employee_schedule rows in view order (ORDER BY priority:
+// a per-date cell precedes the weekly pattern), which ResolveScheduleRow
+// relies on to let the per-date cell win on a tied effective_from.
+func DescribeRosterLeaveDays(startISO, endISO string, schedule []ScheduleRow) int {
+	total := 0
+	for _, d := range EachDateISO(startISO, endISO) {
+		if i := ResolveScheduleRow(schedule, d); i >= 0 && schedule[i].ShiftID == nil {
+			continue
+		}
+		total++
+	}
+	return total
+}
+
 // NoWorkingDayMessage explains a leave range with zero working days.
 func NoWorkingDayMessage(excluded []ExcludedHoliday) string {
 	alasan := "jatuh pada akhir pekan"

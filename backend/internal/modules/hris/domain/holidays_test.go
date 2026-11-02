@@ -44,3 +44,30 @@ func TestIsDayOffOnlyForCutiBersama(t *testing.T) {
 	eq(t, ValidateHolidayPatch(HolidayInput{IsDayOff: &yes}), "") // tipe tersimpan dicek di store
 	eq(t, ValidateImportItem(HolidayInput{HolidayDate: sp("2026-12-25"), Name: sp("Natal"), IsDayOff: &yes}), msg)
 }
+
+// EPIC-079 R4: staf shift menghitung cuti dari roster, bukan Senin-Jumat.
+func TestDescribeRosterLeaveDays(t *testing.T) {
+	spg := "spg1"
+	// work: shift pada tanggal itu; off: sel libur per tanggal (ShiftID nil).
+	work := func(d string) ScheduleRow {
+		return ScheduleRow{DayOfWeek: IsoDayOfWeek(d), ShiftID: &spg, EffectiveFrom: d, EffectiveTo: &d}
+	}
+	off := func(d string) ScheduleRow {
+		return ScheduleRow{DayOfWeek: IsoDayOfWeek(d), EffectiveFrom: d, EffectiveTo: &d}
+	}
+	rows := []ScheduleRow{work("2026-12-21"), work("2026-12-22"), off("2026-12-23"), work("2026-12-24"), work("2026-12-25")}
+	eq(t, DescribeRosterLeaveDays("2026-12-21", "2026-12-25", rows), 4)
+
+	// R4: tanggal tanpa roster sama sekali tetap dihitung.
+	eq(t, DescribeRosterLeaveDays("2026-12-21", "2026-12-25", nil), 5)
+
+	// Akhir pekan ber-shift dihitung; akhir pekan tanpa roster juga (tidak ada pengecualian).
+	eq(t, DescribeRosterLeaveDays("2026-12-26", "2026-12-27", []ScheduleRow{work("2026-12-26"), work("2026-12-27")}), 2)
+	eq(t, DescribeRosterLeaveDays("2026-12-26", "2026-12-27", []ScheduleRow{off("2026-12-26"), work("2026-12-27")}), 1)
+
+	// Sel per tanggal mengalahkan pola mingguan pada tanggal yang sama; urutan
+	// baris mengikuti ORDER BY priority view (per tanggal lebih dulu).
+	weekly := ScheduleRow{DayOfWeek: 1, ShiftID: &spg, EffectiveFrom: "2026-01-01"}
+	eq(t, DescribeRosterLeaveDays("2026-12-21", "2026-12-21", []ScheduleRow{off("2026-12-21"), weekly}), 0)
+	eq(t, DescribeRosterLeaveDays("2026-12-21", "2026-12-21", []ScheduleRow{weekly}), 1)
+}

@@ -136,8 +136,63 @@ type leaveRequest struct {
 	AttachmentURL                         *string
 }
 
-// CreateLeave is createLeave: weekends and national holidays do not consume
-// leave (cuti bersama does); a range with no working day is refused.
+// leaveDays is the number of days a leave over [start, end] consumes, and the
+// holidays that were skipped (EPIC-079 R4). Shift staff count from their
+// roster and never skip a red date; Non-Shift staff skip weekends and the
+// holidays that are a day off for them with deducts_leave = false.
+func (s *Service) leaveDays(ctx context.Context, employeeID, scheduleType, start, end string) (int, []domain.ExcludedHoliday, error) {
+	if scheduleType == "shift" {
+		rows, err := s.repo.ShiftPattern(ctx, employeeID)
+		if err != nil {
+			return 0, nil, err
+		}
+		schedule := make([]domain.ScheduleRow, len(rows))
+		for i, r := range rows {
+			schedule[i] = domain.ScheduleRow{DayOfWeek: int(r.Num("day_of_week")), ShiftID: r.StrPtr("shift_id"),
+				EffectiveFrom: r.Str("effective_from"), EffectiveTo: r.StrPtr("effective_to")}
+		}
+		return domain.DescribeRosterLeaveDays(start, end, schedule), []domain.ExcludedHoliday{}, nil
+	}
+	holidays, err := s.repo.ActiveHolidays(ctx, start, end)
+	if err != nil {
+		return 0, nil, err
+	}
+	dayOff := make([]domain.Holiday, 0, len(holidays))
+	for _, h := range holidays {
+		if domain.HolidayDayOff(h, scheduleType) {
+			dayOff = append(dayOff, h)
+		}
+	}
+	days, excluded := domain.DescribeLeaveDays(start, end, domain.IndexHolidays(dayOff))
+	return days, excluded, nil
+}
+
+// MyLeaveDays is the preview of the days a leave over [start, end] consumes
+// for the signed-in employee, by the same rule CreateLeave applies.
+func (s *Service) MyLeaveDays(ctx context.Context, a *Actor, start, end string) (*Row, error) {
+	if a.EmployeeID == nil {
+		return nil, httpx.BadRequest("Akun ini tidak terhubung ke data karyawan")
+	}
+	if end < start {
+		return nil, httpx.BadRequest("Tanggal selesai tidak boleh sebelum tanggal mulai")
+	}
+	emp, err := s.repo.LeaveEmployee(ctx, *a.EmployeeID)
+	if err != nil {
+		return nil, err
+	}
+	if emp == nil {
+		return nil, httpx.NotFound("Employee not found or inactive")
+	}
+	days, excluded, err := s.leaveDays(ctx, *a.EmployeeID, emp.Str("schedule_type"), start, end)
+	if err != nil {
+		return nil, err
+	}
+	return obj("days", days, "excluded", excluded), nil
+}
+
+// CreateLeave is createLeave: days are counted by leaveDays (the roster for
+// shift staff; Non-Shift staff skip weekends and day-off holidays); a range
+// with no working day is refused.
 func (s *Service) CreateLeave(ctx context.Context, a *Actor, in leaveRequest) (*Row, error) {
 	lt, known := domain.LookupLeaveType(in.LeaveType)
 	if !known || !lt.Selectable {
@@ -172,11 +227,10 @@ func (s *Service) CreateLeave(ctx context.Context, a *Actor, in leaveRequest) (*
 			return nil, httpx.BadRequest("Izin Leader hanya untuk jabatan Supervisor ke atas")
 		}
 	}
-	holidays, err := s.repo.ActiveHolidays(ctx, in.StartDate, in.EndDate)
+	totalDays, excluded, err := s.leaveDays(ctx, *employeeID, emp.Str("schedule_type"), in.StartDate, in.EndDate)
 	if err != nil {
 		return nil, err
 	}
-	totalDays, excluded := domain.DescribeLeaveDays(in.StartDate, in.EndDate, domain.IndexHolidays(holidays))
 	if totalDays == 0 {
 		return nil, httpx.BadRequest(domain.NoWorkingDayMessage(excluded))
 	}
