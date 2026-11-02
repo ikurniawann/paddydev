@@ -23,6 +23,21 @@ export interface HolidayRow {
   type: HolidayType;
   /** true = hari ini tetap memotong jatah cuti tahunan (cuti bersama) */
   deducts_leave: boolean;
+  /** Cuti bersama yang ditetapkan libur oleh perusahaan (EPIC-079 R2). */
+  is_day_off?: boolean;
+}
+
+/**
+ * Apakah libur ini hari libur bagi karyawan bertipe jadwal tertentu
+ * (EPIC-079 R1-R3, cermin domain.HolidayDayOff). Staf shift tidak mengikuti
+ * tanggal merah: roster yang menentukan. Non-Shift libur di nasional dan
+ * perusahaan, dan di cuti bersama hanya bila ditetapkan libur. Tipe tidak
+ * diketahui diperlakukan Non-Shift (perilaku sebelum EPIC-079).
+ */
+export function isHolidayDayOff(holiday: HolidayRow, scheduleType: "shift" | "non_shift" | null | undefined): boolean {
+  if (scheduleType === "shift") return false;
+  if (holiday.type === "cuti_bersama") return holiday.is_day_off === true;
+  return true;
 }
 
 /** Peta tanggal → daftar libur pada tanggal itu. */

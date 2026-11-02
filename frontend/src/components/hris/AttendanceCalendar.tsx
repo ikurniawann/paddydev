@@ -4,7 +4,7 @@ import { useMemo, useState, type ComponentType, type ReactNode } from "react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon } from "lucide-react";
-import { holidaysOn } from "@/lib/hris/holidays";
+import { holidaysOn, isHolidayDayOff } from "@/lib/hris/holidays";
 import { monthYearLabel } from "@/lib/hris/month-label";
 import {
   dateKey,
@@ -52,12 +52,19 @@ export function AttendanceCalendar({
   // Hari libur (EPIC-036): gagal memuat tidak memblokir kalender.
   const holidayIndex = useHolidayIndex(start, end).data;
   // Pola jadwal shift: sekali per karyawan (pola mingguan, bukan per bulan).
-  const schedule = useEmployeeSchedule(employeeId).data ?? [];
+  const scheduleData = useEmployeeSchedule(employeeId).data;
+  const schedule = scheduleData?.rows ?? [];
+  const scheduleType = scheduleData?.scheduleType ?? null;
 
   const attendances = useMemo(
     () => indexByWibDate(attendanceQuery.data ?? []),
     [attendanceQuery.data]
   );
+
+  // Legenda merah hanya bila ada tanggal merah yang benar-benar libur bagi karyawan ini.
+  const hasDayOffHoliday = holidayIndex
+    ? [...holidayIndex.values()].some((rows) => rows.some((h) => isHolidayDayOff(h, scheduleType)))
+    : false;
 
   const { daysInMonth, firstWeekday, totalCells } = monthGrid(year, monthIndex);
   const now = new Date();
@@ -76,6 +83,7 @@ export function AttendanceCalendar({
       scheduledShift: scheduled,
       isDayOff,
       holidays: holidayIndex ? holidaysOn(holidayIndex, date) : [],
+      scheduleType,
     };
   };
 
@@ -151,6 +159,7 @@ export function AttendanceCalendar({
                     scheduledShift={info.scheduledShift}
                     isDayOff={info.isDayOff}
                     holidays={info.holidays}
+                    scheduleType={scheduleType}
                     extra={DayExtra ? <DayExtra date={date} start={start} end={end} /> : undefined}
                     onClick={() => setSelectedDate(date)}
                   />
@@ -168,7 +177,7 @@ export function AttendanceCalendar({
           <span className="flex items-center gap-1.5">
             <span className="h-2 w-2 rounded-full bg-amber-500" /> Terlambat
           </span>
-          {holidayIndex && holidayIndex.size > 0 && (
+          {hasDayOffHoliday && (
             <span className="flex items-center gap-1.5">
               <span className="h-2 w-2 rounded-full bg-red-500" /> Hari libur
             </span>

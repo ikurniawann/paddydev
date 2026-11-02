@@ -27,7 +27,17 @@ func (s *Service) suggestOvertimeDayType(ctx context.Context, employeeID, date s
 		pattern[i] = domain.ScheduleRow{DayOfWeek: int(r.Num("day_of_week")), ShiftID: r.StrPtr("shift_id"),
 			EffectiveFrom: r.Str("effective_from"), EffectiveTo: r.StrPtr("effective_to")}
 	}
-	dayType, known := domain.OvertimeDayTypeFor(date, len(holidays) > 0, pattern)
+	// A red date is a day off only for Non-Shift staff (EPIC-079 R3); a
+	// shift employee's roster decides. A missing employee reads as Non-Shift.
+	span, err := s.repo.EmploymentSpan(ctx, employeeID)
+	if err != nil {
+		return "", false, err
+	}
+	scheduleType := ""
+	if span != nil {
+		scheduleType = span.Str("schedule_type")
+	}
+	dayType, known := domain.OvertimeDayTypeFor(date, domain.DayOffDates(holidays, scheduleType)[date], pattern)
 	return dayType, known, nil
 }
 

@@ -201,6 +201,7 @@ func parseHoliday(f *validate.Form, withNote bool) domain.HolidayInput {
 		Name:         s("name", 200),
 		Type:         s("type", 30),
 		DeductsLeave: f.Bool("deducts_leave", optional),
+		IsDayOff:     f.Bool("is_day_off", optional),
 		Status:       s("status", 10),
 	}
 	if withNote {

@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LeaveQuota } from "@/features/hris/leaves/types";
-import type { EssLeaveBalance } from "../types";
+import type { EssLeaveBalance, EssLeaveDays } from "../types";
 import { CutiRequestDialog } from "./cuti-request-dialog";
 
 const mutate = vi.fn();
@@ -13,8 +13,10 @@ vi.mock("@/features/hris/leaves/queries", () => ({
 vi.mock("../mutations", () => ({
   useSubmitMyLeave: () => ({ mutate, isPending: false }),
 }));
-vi.mock("@/features/hris/attendance/queries", () => ({
-  useHolidayIndex: () => ({ data: undefined }),
+let leaveDaysState: { data?: EssLeaveDays; isLoading: boolean } = { data: undefined, isLoading: false };
+vi.mock("../queries", () => ({
+  useMyLeaveDays: (_start: string, _end: string, enabled: boolean) =>
+    enabled ? leaveDaysState : { data: undefined, isLoading: false },
 }));
 vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 
@@ -76,6 +78,7 @@ beforeEach(() => {
   Element.prototype.scrollIntoView = vi.fn();
   mutate.mockReset();
   quotaData = undefined;
+  leaveDaysState = { data: undefined, isLoading: false };
 });
 afterEach(cleanup);
 
@@ -125,6 +128,49 @@ describe("CutiRequestDialog", () => {
 
     expect(mutate).toHaveBeenCalledTimes(1);
     expect(mutate.mock.calls[0][0].form.leave_type).toBe("annual");
+  });
+
+  describe("pratinjau potongan jatah (dari server)", () => {
+    function setRange(start: string, end: string) {
+      fireEvent.change(dateInputs()[0], { target: { value: start } });
+      fireEvent.change(dateInputs()[1], { target: { value: end } });
+    }
+
+    it("shows the day count the endpoint returned", () => {
+      leaveDaysState = { data: { days: 4, excluded: [] }, isLoading: false };
+      render(dialog());
+      setRange("2026-12-21", "2026-12-25");
+      expect(screen.getByText(/4 hari kerja/)).toBeTruthy();
+    });
+
+    it("lists the holidays that did not cut the quota", () => {
+      leaveDaysState = { data: { days: 4, excluded: [{ date: "2026-12-25", name: "Hari Raya Natal" }] }, isLoading: false };
+      render(dialog());
+      setRange("2026-12-21", "2026-12-25");
+      expect(screen.getByText(/Tidak dipotong: Hari Raya Natal/)).toBeTruthy();
+    });
+
+    it("shows a loading state while the endpoint answers", () => {
+      leaveDaysState = { data: undefined, isLoading: true };
+      render(dialog());
+      setRange("2026-12-21", "2026-12-25");
+      expect(screen.getByText(/Menghitung potongan jatah/)).toBeTruthy();
+      expect(screen.queryByText(/hari kerja/)).toBeNull();
+    });
+
+    it("says the range is fully off when the server counts zero days", () => {
+      leaveDaysState = { data: { days: 0, excluded: [] }, isLoading: false };
+      render(dialog());
+      setRange("2026-12-26", "2026-12-27");
+      expect(screen.getByText(/sudah libur seluruhnya/)).toBeTruthy();
+    });
+
+    it("shows nothing before a valid range is picked", () => {
+      leaveDaysState = { data: { days: 4, excluded: [] }, isLoading: true };
+      render(dialog());
+      expect(screen.queryByText(/hari kerja/)).toBeNull();
+      expect(screen.queryByText(/Menghitung potongan jatah/)).toBeNull();
+    });
   });
 
   describe("sisa cuti tahunan", () => {

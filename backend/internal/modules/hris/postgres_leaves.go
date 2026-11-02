@@ -67,13 +67,13 @@ func (s *store) LeavePage(ctx context.Context, f leaveFilter, page, limit int) (
 }
 
 func (s *store) LeaveEmployee(ctx context.Context, id string) (*Row, error) {
-	row, err := queryRow(ctx, s.db, `SELECT id, full_name, employment_status, is_active FROM hris.employees WHERE id = $1`, id)
+	row, err := queryRow(ctx, s.db, `SELECT id, full_name, employment_status, is_active, schedule_type FROM hris.employees WHERE id = $1`, id)
 	return row, ignoreBadInput(err)
 }
 
 // ActiveHolidays is loadHolidayIndex's query: only aktif rows count.
 func (s *store) ActiveHolidays(ctx context.Context, start, end string) ([]domain.Holiday, error) {
-	rows, err := s.db.Query(ctx, `SELECT holiday_date::text, name, type, deducts_leave
+	rows, err := s.db.Query(ctx, `SELECT holiday_date::text, name, type, deducts_leave, is_day_off
 		FROM hris.public_holidays
 		WHERE deleted_at IS NULL AND status = 'aktif'
 		  AND holiday_date BETWEEN $1::date AND $2::date
@@ -83,7 +83,7 @@ func (s *store) ActiveHolidays(ctx context.Context, start, end string) ([]domain
 	}
 	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (domain.Holiday, error) {
 		var h domain.Holiday
-		err := r.Scan(&h.Date, &h.Name, &h.Type, &h.DeductsLeave)
+		err := r.Scan(&h.Date, &h.Name, &h.Type, &h.DeductsLeave, &h.IsDayOff)
 		return h, err
 	})
 }

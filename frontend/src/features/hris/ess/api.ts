@@ -7,6 +7,7 @@ import type {
   EssBeranda,
   EssClockPayload,
   EssClockResponse,
+  EssLeaveDays,
   EssLeaveForm,
   EssLeaveRow,
   EssLoanPayload,
@@ -96,6 +97,11 @@ export const fetchOvertimeDayType = (date: string) =>
   apiGet<{ data: EssOvertimeDayTypeHint }>(`/api/hris/overtime/day-type?date=${encodeURIComponent(date)}`).then(
     (res) => res.data
   );
+
+export const fetchMyLeaveDays = (start: string, end: string) =>
+  apiGet<{ data: EssLeaveDays }>(
+    `/api/hris/me/leave-days?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`
+  ).then((res) => res.data);
 
 export const decideOvertime = (
   id: string,

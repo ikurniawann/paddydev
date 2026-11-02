@@ -111,7 +111,7 @@ function HolidayImportBody({ year, onClose }: { year: number; onClose: () => voi
                     <span className="mr-2 font-mono text-xs text-gray-400">{row.holiday_date}</span>
                     {row.name}
                   </p>
-                  <HolidayBadges type={row.type} deductsLeave={row.deducts_leave} status={row.status}>
+                  <HolidayBadges type={row.type} deductsLeave={row.deducts_leave} isDayOff={false} status={row.status}>
                     {row.already_imported && (
                       <span className="rounded-full bg-sky-100 px-1.5 py-0.5 text-[10px] font-medium text-sky-700">
                         Sudah ada

@@ -92,12 +92,21 @@ func (s *Service) Attendance(ctx context.Context, id string, a *Actor) (*Row, er
 var rosterOrder = []string{"scheduled", domain.RosterHadir, domain.RosterTerlambat, domain.RosterBelumAbsen,
 	domain.RosterAbsen, domain.RosterCuti, domain.RosterLiburNasional, domain.RosterLibur, domain.RosterTanpaJadwal}
 
-// buildRoster turns roster rows into entries and per-status counts.
-func buildRoster(rows []*Row, date, today string, isPublicHoliday bool, now time.Time) (*Row, []*Row) {
+// buildRoster turns roster rows into entries and per-status counts. A
+// holiday only counts for a row when it is a day off for the row's
+// schedule_type (EPIC-079 R3): shift staff follow their roster.
+func buildRoster(rows []*Row, date, today string, holidays []domain.Holiday, now time.Time) (*Row, []*Row) {
 	counts := map[string]int{}
 	isPast := date < today
 	employees := make([]*Row, 0, len(rows))
 	for _, row := range rows {
+		isDayOff := false
+		for _, hd := range holidays {
+			if domain.HolidayDayOff(hd, row.Str("schedule_type")) {
+				isDayOff = true
+				break
+			}
+		}
 		var shift any
 		var times *domain.ShiftTimes
 		if id := row.StrPtr("scheduled_shift_id"); id != nil && *id != "" && row.Str("shift_start") != "" && row.Str("shift_end") != "" {
@@ -114,7 +123,7 @@ func buildRoster(rows []*Row, date, today string, isPublicHoliday bool, now time
 			HasSchedule:     row.Bool("has_schedule"),
 			ShiftID:         row.StrPtr("scheduled_shift_id"),
 			IsPastDate:      isPast,
-			IsPublicHoliday: isPublicHoliday,
+			IsPublicHoliday: isDayOff,
 		})
 		counts[status]++
 		if shift != nil {
@@ -179,7 +188,11 @@ func (s *Service) rosterFor(ctx context.Context, date, today string, employeeIDs
 	if err != nil {
 		return nil, err
 	}
-	summary, employees := buildRoster(rows, date, today, len(holidays) > 0, s.now())
+	active, err := s.repo.ActiveHolidays(ctx, date, date)
+	if err != nil {
+		return nil, err
+	}
+	summary, employees := buildRoster(rows, date, today, active, s.now())
 	return obj("date", date, "day_of_week", dow, "is_today", date == today, "summary", summary,
 		"shifts", shifts, "holidays", holidays, "employees", employees), nil
 }

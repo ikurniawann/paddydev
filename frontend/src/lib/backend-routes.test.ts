@@ -152,7 +152,8 @@ describe("goBackendTarget", () => {
   it.each([
     ["GET", "/api/hris/me/lateness"],
     ["GET", "/api/hris/me/team-lateness"],
-  ])("forwards the EPIC-077 endpoint %s %s to Go", (method, pathname) => {
+    ["GET", "/api/hris/me/leave-days"],
+  ])("forwards the EPIC-077/EPIC-079 endpoint %s %s to Go", (method, pathname) => {
     expect(goBackendTarget(pathname, method, { env })).toBe(
       `http://go-api:8080${pathname}`,
     );
@@ -258,7 +259,9 @@ describe("Go route manifest", () => {
       // Absensi Tim atasan (EPIC-074): hanya di Go, tanpa fallback Next.
       "/api/hris/me/team-attendance",
       // Info keterlambatan karyawan & tim (EPIC-077): hanya di Go, tanpa fallback Next.
-      "/api/hris/me/lateness", "/api/hris/me/team-lateness"];
+      "/api/hris/me/lateness", "/api/hris/me/team-lateness",
+      // Pratinjau hari cuti dari roster (EPIC-079 R4): hanya di Go, tanpa fallback Next.
+      "/api/hris/me/leave-days"];
     const goNative = (p: string) =>
       goNativePrefixes.some((n) => p === n || p.startsWith(`${n}/`));
     const missing = switched

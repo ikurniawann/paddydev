@@ -8,6 +8,8 @@ export interface HolidayRow {
   name: string;
   type: HolidayType;
   deducts_leave: boolean;
+  /** Cuti bersama yang ditetapkan libur oleh perusahaan (EPIC-079). */
+  is_day_off: boolean;
   status: HolidayStatus;
   source: "manual" | "impor";
   note: string | null;

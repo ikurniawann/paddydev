@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { HolidayType } from "@/lib/hris/holidays";
 import { HOLIDAY_TYPES } from "@/lib/hris/holidays-input";
@@ -145,6 +146,22 @@ function HolidayFormBody({ holiday, year, onCancel, onSaved }: HolidayFormBodyPr
             </span>
           </span>
         </label>
+        {form.type === "cuti_bersama" && (
+          <div className="flex items-start gap-3">
+            <Switch
+              aria-label="Ditetapkan libur oleh perusahaan"
+              checked={form.is_day_off}
+              onCheckedChange={(checked) => setForm((f) => ({ ...f, is_day_off: checked }))}
+            />
+            <span className="text-sm text-gray-700">
+              Ditetapkan libur oleh perusahaan
+              <span className="block text-xs text-gray-400">
+                Karyawan HQ/Operations libur di tanggal ini. Bila mati, tanggal ini hari kerja biasa. Karyawan
+                sistem shift mengikuti roster.
+              </span>
+            </span>
+          </div>
+        )}
         <div>
           <label className="mb-1 block text-xs font-medium text-gray-600">Catatan (opsional)</label>
           <Input

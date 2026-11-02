@@ -6,6 +6,7 @@ import {
   holidaysOn,
   indexHolidays,
   isHoliday,
+  isHolidayDayOff,
   isWeekend,
   type HolidayRow,
 } from "./holidays";
@@ -168,5 +169,29 @@ describe("describeLeaveDays", () => {
     const result = describeLeaveDays("2026-08-19", "2026-08-17", index);
     expect(result.totalDays).toBe(0);
     expect(result.excludedHolidays).toEqual([]);
+  });
+});
+
+describe("isHolidayDayOff (EPIC-079 R1-R3)", () => {
+  const row = (type: "nasional" | "cuti_bersama" | "perusahaan", is_day_off?: boolean) => ({
+    holiday_date: "2026-12-24", name: "X", type, deducts_leave: type === "cuti_bersama", is_day_off,
+  });
+
+  test("staf shift tidak libur di tanggal merah apa pun", () => {
+    for (const type of ["nasional", "perusahaan", "cuti_bersama"] as const) {
+      expect(isHolidayDayOff(row(type, true), "shift")).toBe(false);
+    }
+  });
+
+  test("Non-Shift libur di nasional dan perusahaan, cuti bersama hanya bila ditetapkan libur", () => {
+    expect(isHolidayDayOff(row("nasional"), "non_shift")).toBe(true);
+    expect(isHolidayDayOff(row("perusahaan"), "non_shift")).toBe(true);
+    expect(isHolidayDayOff(row("cuti_bersama", false), "non_shift")).toBe(false);
+    expect(isHolidayDayOff(row("cuti_bersama"), "non_shift")).toBe(false);
+    expect(isHolidayDayOff(row("cuti_bersama", true), "non_shift")).toBe(true);
+  });
+
+  test("tipe jadwal tidak diketahui diperlakukan Non-Shift", () => {
+    expect(isHolidayDayOff(row("nasional"), null)).toBe(true);
   });
 });

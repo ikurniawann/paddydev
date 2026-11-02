@@ -35,6 +35,9 @@ type EmployeeBrief struct {
 	ReportingTo   *string
 	// EndDate is employees.end_date (YYYY-MM-DD), set by PayrollEmployees.
 	EndDate *string
+	// ScheduleType is employees.schedule_type (shift | non_shift), set by
+	// PayrollEmployees (EPIC-079 R1).
+	ScheduleType string
 }
 
 // Employees reads hris.employees.
@@ -110,7 +113,8 @@ type Departments interface {
 // Workforce reads the attendance-side records a payroll period needs.
 type Workforce interface {
 	PeriodRecords(ctx context.Context, q database.Querier, employeeID, start, end string) (domain.WorkforceRecords, error)
-	// Holidays are the active public holiday dates in [start, end].
+	// Holidays are the active Non-Shift day-off dates in [start, end]
+	// (EPIC-079 R2); shift staff use none.
 	Holidays(ctx context.Context, q database.Querier, start, end string) (map[string]bool, error)
 	// Placements are the employee's store placements
 	// (hris.employee_placements) running on any day of [start, end].

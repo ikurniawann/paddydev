@@ -32,6 +32,18 @@ interface Props {
   onSaved: () => void;
 }
 
+/** Jam kerja bersih satu shift dalam menit: durasi (lewat tengah malam bila selesai <= mulai) dikurangi istirahat. */
+function netMinutes(s: ScheduleShift): number {
+  const toMin = (t: string) => {
+    const [h, m] = t.split(":").map(Number);
+    return h * 60 + m;
+  };
+  const start = toMin(s.start_time);
+  let end = toMin(s.end_time);
+  if (end <= start) end += 24 * 60;
+  return end - start - (s.break_minutes ?? 0);
+}
+
 function rangeProblem(from: string, to: string, today: string): string | null {
   if (!from || !to) return "Pilih tanggal mulai dan selesai";
   if (from < today) return "Tanggal mulai tidak boleh sebelum hari ini";
@@ -64,6 +76,12 @@ export function PatternDialog({ open, onOpenChange, branchId, employees, shifts,
   const cellCount = problem ? 0 : employees.length * (dayDiff(from, to) + 1);
   const tooManyCells = cellCount > CELLS_LIMIT;
   const ready = !problem && !tooMany && !tooManyCells && pattern.every(Boolean) && !busy;
+  // Dialog ini hanya dibuka dari grid, yang hanya memuat staf shift.
+  const byCode = new Map(shifts.map((s) => [s.code, s]));
+  const complete = pattern.every(Boolean);
+  const hasClear = pattern.includes(CLEAR); // hari ikut pola mingguan: jamnya tidak diketahui
+  const weekMinutes = pattern.reduce((sum, v) => sum + (byCode.has(v) ? netMinutes(byCode.get(v)!) : 0), 0);
+  const noDayOff = complete && pattern.every((v) => byCode.has(v));
   const names = employees.slice(0, 5).map((e) => e.name).join(", ") + (employees.length > 5 ? `, dan ${employees.length - 5} lainnya` : "");
 
   async function apply() {
@@ -157,6 +175,14 @@ export function PatternDialog({ open, onOpenChange, branchId, employees, shifts,
                 />
               </label>
             </div>
+            {complete && !hasClear ? (
+              <p className="text-xs text-gray-600">{`Total ±${Math.round(weekMinutes / 60)} jam kerja/minggu`}</p>
+            ) : null}
+            {noDayOff ? (
+              <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                Belum ada hari libur — sistem shift wajib libur 1 hari setiap minggu
+              </p>
+            ) : null}
             {problem ? <p className="text-sm text-danger">{problem}</p> : null}
             {!tooMany && tooManyCells ? (
               <p className="text-sm text-danger">

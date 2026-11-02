@@ -18,6 +18,9 @@ const (
 	maxScheduleDays   = 45
 	minShiftGapMin    = 8 * 60
 	maxStreak         = 6
+	// minHoursBeforeDayOff: a day off is given only after this many net
+	// working hours since the previous one (EPIC-079 R5).
+	minHoursBeforeDayOff = 40
 )
 
 type UploadEmployee struct {
@@ -29,6 +32,17 @@ type UploadEmployee struct {
 type UploadShift struct {
 	ID, Code, Name, Start, End string
 	Overnight, Active          bool
+	BreakMinutes               int
+}
+
+// shiftNetMinutes is the shift's working time: end minus start (across
+// midnight for an overnight shift) minus the unpaid break.
+func shiftNetMinutes(s UploadShift) int {
+	start, end := clockMinutes(s.Start), clockMinutes(s.End)
+	if s.Overnight || end <= start {
+		end += 24 * 60
+	}
+	return end - start - s.BreakMinutes
 }
 
 type ScheduleUploadContext struct {
@@ -290,7 +304,7 @@ func ValidateScheduleUpload(c ScheduleUploadContext, f ScheduleFile) ScheduleUpl
 		res.EmployeeIDs = append(res.EmployeeIDs, p.emp.ID)
 		days := make([]plannedDay, len(c.Dates))
 		for i, d := range c.Dates {
-			days[i] = plannedDay{Date: d, Shift: p.cells[i], Edited: p.set[i]}
+			days[i] = plannedDay{Date: d, Shift: p.cells[i], Edited: p.set[i], Off: p.set[i] && p.cells[i] == nil}
 			if p.set[i] {
 				res.Assignments = append(res.Assignments, ScheduleAssignment{EmployeeID: p.emp.ID, Date: d, ShiftID: shiftIDOf(p.cells[i])})
 			}
@@ -298,9 +312,6 @@ func ValidateScheduleUpload(c ScheduleUploadContext, f ScheduleFile) ScheduleUpl
 		sequenceWarnings(c, p.emp, p.line, days, warn)
 	}
 	for _, d := range c.Dates {
-		if msg := holidayIssue(c, d, working[d]); msg != "" {
-			warn(f.HeaderLine, ScheduleDateHeader(d), "", msg)
-		}
 		if len(valid) > 0 && working[d] == 0 {
 			warn(f.HeaderLine, ScheduleDateHeader(d), "", fmt.Sprintf("Tidak ada yang masuk di %s %s", c.BranchName, FormatDateID(d)))
 		}
@@ -372,13 +383,6 @@ func shiftByCode(c ScheduleUploadContext, raw string) (*UploadShift, string) {
 	return &s, ""
 }
 
-func holidayIssue(c ScheduleUploadContext, d string, working int) string {
-	if name, ok := c.Holidays[d]; ok && working > 0 {
-		return fmt.Sprintf("%s libur nasional (%s): %d karyawan diberi shift", FormatDateID(d), name, working)
-	}
-	return ""
-}
-
 func clockedInIssue(n int, d string) string {
 	return fmt.Sprintf("%d karyawan sudah clock-in %s; telatnya tidak dihitung ulang", n, FormatDateID(d))
 }
@@ -389,20 +393,39 @@ type plannedDay struct {
 	Date   string
 	Shift  *UploadShift // nil = libur / tidak dijadwalkan
 	Edited bool
+	// Off marks an explicit libur ("L"). A nil Shift without Off is unknown
+	// (empty, not placed, cleared): it is not a day off for the 40-hour rule.
+	Off bool
 }
 
 // sequenceWarnings checks consecutive days: leave on an edited working day,
 // a gap under minShiftGapMin next to an edited day, and one warning per
-// streak longer than maxStreak that contains an edited day.
+// streak longer than maxStreak that contains an edited day, and a day off
+// that follows another day off inside days after fewer than
+// minHoursBeforeDayOff net working hours when the streak or that day off is
+// edited.
 func sequenceWarnings(c ScheduleUploadContext, e UploadEmployee, line int, days []plannedDay, warn func(line int, col, name, msg string)) {
 	run, edited := 0, false // working days in the current streak
+	streakMin := 0          // net working minutes of the streak
+	prevOff := ""           // previous day off inside days
 	for i, d := range days {
 		s := d.Shift
 		if s == nil {
-			run, edited = 0, false
+			if !d.Off {
+				prevOff = ""
+				run, edited, streakMin = 0, false, 0
+				continue
+			}
+			if prevOff != "" && run > 0 && streakMin < minHoursBeforeDayOff*60 && (edited || d.Edited) {
+				warn(line, ScheduleDateHeader(d.Date), e.Name, fmt.Sprintf("%s libur %s sebelum %d jam kerja (baru %d jam sejak libur %s)",
+					e.Name, FormatDateID(d.Date), minHoursBeforeDayOff, streakMin/60, FormatDateID(prevOff)))
+			}
+			prevOff = d.Date
+			run, edited, streakMin = 0, false, 0
 			continue
 		}
 		run++
+		streakMin += shiftNetMinutes(*s)
 		edited = edited || d.Edited
 		if d.Edited && c.OnLeave[e.ID][d.Date] {
 			warn(line, ScheduleDateHeader(d.Date), e.Name, fmt.Sprintf("%s cuti %s tapi diberi %s", e.Name, FormatDateID(d.Date), s.Code))
@@ -455,7 +478,7 @@ func ScheduleCellWindow(dates []string) []string {
 
 // ValidateScheduleCells applies the upload rules to edited grid cells.
 // Issues have Line 0, the date header as Column and the employee's name.
-// Leave, gap, streak and holiday warnings read the resulting schedule: the
+// Leave, gap and streak warnings read the resulting schedule: the
 // edited cells over c.Current for the neighbouring dates.
 func ValidateScheduleCells(c ScheduleUploadContext, cells []ScheduleCellInput) ScheduleUploadResult {
 	var res ScheduleUploadResult
@@ -532,8 +555,6 @@ func ValidateScheduleCells(c ScheduleUploadContext, cells []ScheduleCellInput) S
 		edits[e.ID][in.Date] = ed
 	}
 
-	working := map[string]int{} // edited cells given a shift, per date
-	var editedDates []string
 	clocked := 0
 	for _, id := range order {
 		e, mine := c.EmployeesByID[id], edits[id]
@@ -546,12 +567,6 @@ func ValidateScheduleCells(c ScheduleUploadContext, cells []ScheduleCellInput) S
 		for _, d := range dates {
 			ed := mine[d]
 			res.Assignments = append(res.Assignments, ScheduleAssignment{EmployeeID: id, Date: d, ShiftID: shiftIDOf(ed.shift), Clear: ed.clear})
-			if ed.shift != nil {
-				if working[d] == 0 {
-					editedDates = append(editedDates, d)
-				}
-				working[d]++
-			}
 			if d == c.Today && c.ClockedIn[id][d] {
 				clocked++
 			}
@@ -562,22 +577,17 @@ func ValidateScheduleCells(c ScheduleUploadContext, cells []ScheduleCellInput) S
 		var days []plannedDay
 		for _, d := range ScheduleCellWindow(dates) {
 			if ed, ok := mine[d]; ok {
-				days = append(days, plannedDay{Date: d, Shift: ed.shift, Edited: true})
+				days = append(days, plannedDay{Date: d, Shift: ed.shift, Edited: true, Off: ed.shift == nil && !ed.clear})
 				continue
 			}
 			var s *UploadShift
-			if sh, ok := c.Shifts[strings.ToUpper(c.Current[id][d])]; ok {
+			cur := strings.ToUpper(c.Current[id][d])
+			if sh, ok := c.Shifts[cur]; ok {
 				s = &sh
 			}
-			days = append(days, plannedDay{Date: d, Shift: s})
+			days = append(days, plannedDay{Date: d, Shift: s, Off: s == nil && isOffCode(cur)})
 		}
 		sequenceWarnings(c, e, 0, days, warn)
-	}
-	sort.Strings(editedDates)
-	for _, d := range editedDates {
-		if msg := holidayIssue(c, d, working[d]); msg != "" {
-			warn(0, ScheduleDateHeader(d), "", msg)
-		}
 	}
 	if clocked > 0 {
 		warn(0, ScheduleDateHeader(c.Today), "", clockedInIssue(clocked, c.Today))

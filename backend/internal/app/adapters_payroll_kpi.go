@@ -64,13 +64,13 @@ func (payrollKPISQL) Employees(ctx context.Context, q database.Querier) ([]domai
 }
 
 func (payrollKPISQL) ShiftPatterns(ctx context.Context, q database.Querier, start, end string) (map[string][]domain.ShiftRow, error) {
-	return grouped(ctx, q, `SELECT employee_id::text, day_of_week, shift_id::text, effective_from::text, effective_to::text
-		FROM hris.employee_shifts
+	return grouped(ctx, q, `SELECT employee_id::text, day_of_week, shift_id::text, effective_from::text, effective_to::text, priority
+		FROM hris.v_employee_schedule
 		WHERE effective_from <= $2 AND (effective_to IS NULL OR effective_to >= $1)`,
 		func(r pgx.CollectableRow) (string, domain.ShiftRow, error) {
 			var id string
 			var s domain.ShiftRow
-			return id, s, r.Scan(&id, &s.DayOfWeek, &s.ShiftID, &s.EffectiveFrom, &s.EffectiveTo)
+			return id, s, r.Scan(&id, &s.DayOfWeek, &s.ShiftID, &s.EffectiveFrom, &s.EffectiveTo, &s.Priority)
 		}, start, end)
 }
 

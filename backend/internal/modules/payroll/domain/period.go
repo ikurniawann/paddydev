@@ -55,12 +55,17 @@ func EachDate(start, end string) []string {
 	return out
 }
 
-// ShiftRow is EmployeeShiftRow: day_of_week 1=Monday … 7=Sunday, ShiftID nil = day off.
+// ShiftRow is a hris.v_employee_schedule row: day_of_week 1=Monday … 7=Sunday,
+// ShiftID nil = day off. A per-date roster row (hris.employee_shift_days) is
+// a one-day pattern (EffectiveFrom = EffectiveTo = the date) with Priority 0;
+// a weekly pattern (hris.employee_shifts) must carry Priority 1, or a one-day
+// weekly pattern would be taken for a roster row (EPIC-079 R7).
 type ShiftRow struct {
 	DayOfWeek     int
 	ShiftID       *string
 	EffectiveFrom string
 	EffectiveTo   *string
+	Priority      int
 }
 
 // ISODayOfWeek is isoDayOfWeek.
@@ -72,8 +77,15 @@ func ISODayOfWeek(date string) int {
 	return d
 }
 
+// PerDate: a per-date roster row of hris.v_employee_schedule (a one-day
+// pattern with priority 0), not a weekly pattern.
+func (r ShiftRow) PerDate() bool {
+	return r.Priority == 0 && r.EffectiveTo != nil && *r.EffectiveTo == r.EffectiveFrom
+}
+
 // ResolveScheduleRow is resolveScheduleRowForDate: the matching row with the
-// latest effective_from, day-off rows included.
+// latest effective_from, then the lowest priority (a per-date roster row beats
+// a weekly pattern starting the same day), day-off rows included.
 func ResolveScheduleRow(rows []ShiftRow, date string) *ShiftRow {
 	dow := ISODayOfWeek(date)
 	var best *ShiftRow
@@ -82,11 +94,24 @@ func ResolveScheduleRow(rows []ShiftRow, date string) *ShiftRow {
 		if r.DayOfWeek != dow || r.EffectiveFrom > date || (r.EffectiveTo != nil && *r.EffectiveTo < date) {
 			continue
 		}
-		if best == nil || r.EffectiveFrom > best.EffectiveFrom {
+		if best == nil || r.EffectiveFrom > best.EffectiveFrom ||
+			(r.EffectiveFrom == best.EffectiveFrom && r.Priority < best.Priority) {
 			best = r
 		}
 	}
 	return best
+}
+
+// ScheduleInForce: some row (a weekly pattern or a per-date roster row) is
+// in force on date, whatever its day of week; otherwise nothing is known
+// about the date (no schedule yet, or none any more).
+func ScheduleInForce(rows []ShiftRow, date string) bool {
+	for _, r := range rows {
+		if r.EffectiveFrom <= date && (r.EffectiveTo == nil || *r.EffectiveTo >= date) {
+			return true
+		}
+	}
+	return false
 }
 
 // ScheduledDays is countScheduledDays.
@@ -106,11 +131,9 @@ func ScheduledDays(rows []ShiftRow, start, end string) (days int, hasSchedule bo
 // a schedule in force, Monday–Friday that is not a national holiday (the
 // hris DescribeLeaveDays rule). Payroll counts leave on work dates only.
 func IsWorkDate(date string, schedule []ShiftRow, holidays map[string]bool) bool {
-	for _, r := range schedule {
-		if r.EffectiveFrom <= date && (r.EffectiveTo == nil || *r.EffectiveTo >= date) {
-			row := ResolveScheduleRow(schedule, date)
-			return row != nil && row.ShiftID != nil
-		}
+	if ScheduleInForce(schedule, date) {
+		row := ResolveScheduleRow(schedule, date)
+		return row != nil && row.ShiftID != nil
 	}
 	dow := ISODayOfWeek(date)
 	return dow >= 1 && dow <= 5 && !holidays[date]
@@ -175,14 +198,7 @@ func SplitOvertimeWith(requests []OvertimeRequest, attendance []AttendanceRow, h
 	// A rest day is a weekday without a shift in a schedule that is in force
 	// that date; before the schedule starts (or after it ends) nothing is known.
 	restDay := func(date string) bool {
-		inForce := false
-		for _, r := range schedule {
-			if r.EffectiveFrom <= date && (r.EffectiveTo == nil || *r.EffectiveTo >= date) {
-				inForce = true
-				break
-			}
-		}
-		if !inForce {
+		if !ScheduleInForce(schedule, date) {
 			return false
 		}
 		row := ResolveScheduleRow(schedule, date)

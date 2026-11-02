@@ -7,6 +7,7 @@ import {
   fetchAnnouncementFeed,
   fetchEssBeranda,
   fetchEssMe,
+  fetchMyLeaveDays,
   fetchMyLeaves,
   fetchMyLoans,
   fetchMyOvertime,
@@ -27,6 +28,14 @@ export const useTodayAttendance = () =>
 
 export const useMyLeaves = () =>
   useQuery({ queryKey: essQueryKeys.leaves(), queryFn: fetchMyLeaves });
+
+/** Pratinjau potongan jatah cuti dari server (roster staf shift / hari libur Non-Shift). */
+export const useMyLeaveDays = (start: string, end: string, enabled = true) =>
+  useQuery({
+    queryKey: essQueryKeys.leaveDays(start, end),
+    queryFn: () => fetchMyLeaveDays(start, end),
+    enabled,
+  });
 
 export const useMyOvertime = () =>
   useQuery({ queryKey: essQueryKeys.overtime(), queryFn: fetchMyOvertime });

@@ -22,7 +22,7 @@ import (
 // every employee.
 type AttendanceGapSummaryRepo interface {
 	// GapSummaryEmployees: id, full_name, nip, department_name, join_date,
-	// end_date of the active employees employed on date (R4), super admin
+	// end_date, schedule_type of the active employees employed on date (R4), super admin
 	// account shells excluded.
 	GapSummaryEmployees(ctx context.Context, date string, superAdmins []string) ([]*Row, error)
 	// GapSummarySchedules: employee_id, day_of_week, shift_id,
@@ -124,13 +124,17 @@ func (s *Service) AttendanceGapSummary(ctx context.Context, r Repository, date s
 	}
 	onLeave := idSet(excused)
 	waiting := idSet(pending)
-	isHoliday := len(holidays) > 0
+	// Per schedule type (EPIC-079): shift staff ignore red dates.
+	dayOff := map[string]map[string]bool{
+		"shift":     domain.DayOffDates(holidays, "shift"),
+		"non_shift": domain.DayOffDates(holidays, "non_shift"),
+	}
 
 	out := &GapSummary{Date: date, PeriodClosed: closed, Employees: []GapSummaryEmployee{}}
 	for _, e := range employees {
 		id := e.Str("id")
 		in := domain.GapInput{Start: date, End: date, Schedule: schedules[id],
-			Holidays: map[string]bool{date: isHoliday}, OnLeave: map[string]bool{date: onLeave[id]},
+			Holidays: map[string]bool{date: holidayFor(dayOff, e.Str("schedule_type"), date)}, OnLeave: map[string]bool{date: onLeave[id]},
 			Recorded: map[string]domain.RecordedDay{}, Pending: map[string]bool{date: waiting[id]}}
 		if rec, found := recorded[id]; found {
 			in.Recorded[date] = rec
@@ -158,6 +162,15 @@ func (s *Service) AttendanceGapSummary(ctx context.Context, r Repository, date s
 		return a.Name < b.Name
 	})
 	return out, nil
+}
+
+// holidayFor reads the per schedule type day-off sets built for the summary
+// date; any type but "shift" is Non-Shift.
+func holidayFor(dayOff map[string]map[string]bool, scheduleType, date string) bool {
+	if scheduleType == "shift" {
+		return dayOff["shift"][date]
+	}
+	return dayOff["non_shift"][date]
 }
 
 // periodClosedOn reports, read-only, whether an existing attendance period
@@ -188,7 +201,7 @@ func idSet(ids []string) map[string]bool {
 
 func (s *store) GapSummaryEmployees(ctx context.Context, date string, superAdmins []string) ([]*Row, error) {
 	return queryRows(ctx, s.db, `SELECT e.id::text AS id, e.full_name, e.nip, d.name AS department_name,
-		       e.join_date::text AS join_date, e.end_date::text AS end_date
+		       e.join_date::text AS join_date, e.end_date::text AS end_date, e.schedule_type
 		FROM hris.employees e
 		LEFT JOIN hris.departments d ON d.id = e.department_id
 		WHERE e.is_active

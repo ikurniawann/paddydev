@@ -1,4 +1,5 @@
 import { apiDelete, apiGet, apiPatch, apiPost, apiPut, buildListUrl } from "@/lib/api-client";
+import type { ScheduleType } from "@/lib/hris/schedule-type";
 import type {
   AttendanceAdjustment,
   AttendanceAdjustPayload,
@@ -162,11 +163,17 @@ export function fetchCalendarAttendances(params: {
   ).then((res) => res.data ?? []);
 }
 
-/** Pola jadwal shift karyawan; kosong bila gagal (kalender tetap tampil). */
-export function fetchEmployeeSchedule(employeeId: string) {
-  return apiGet<{ data?: CalendarScheduleRow[] }>(
+export interface EmployeeSchedule {
+  rows: CalendarScheduleRow[];
+  /** Tipe jadwal karyawan; menentukan tanggal merah mana yang libur baginya. */
+  scheduleType: ScheduleType | null;
+}
+
+/** Pola jadwal shift + tipe jadwal karyawan; kosong bila gagal (kalender tetap tampil). */
+export function fetchEmployeeSchedule(employeeId: string): Promise<EmployeeSchedule> {
+  return apiGet<{ data?: CalendarScheduleRow[]; meta?: { schedule_type?: ScheduleType | null } }>(
     buildListUrl("/api/hris/attendance/schedule", { employee_id: employeeId })
   )
-    .then((res) => res.data ?? [])
-    .catch(() => [] as CalendarScheduleRow[]);
+    .then((res) => ({ rows: res.data ?? [], scheduleType: res.meta?.schedule_type ?? null }))
+    .catch(() => ({ rows: [], scheduleType: null }));
 }

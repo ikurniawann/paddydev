@@ -135,6 +135,13 @@ export interface EssOvertimeDayTypeHint {
   label: string | null;
 }
 
+/** GET /api/hris/me/leave-days (EPIC-079 R4): hari yang dipotong cuti, dihitung server dari roster / hari libur. */
+export interface EssLeaveDays {
+  days: number;
+  /** Libur yang tidak memotong jatah; kosong untuk staf shift. */
+  excluded: { date: string; name: string }[];
+}
+
 export type EssOvertimeDecision = "approve" | "reject" | "cancel";
 
 export interface EssLoanRow {

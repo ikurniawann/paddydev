@@ -1,7 +1,8 @@
 "use client";
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import type { HolidayRow } from "@/lib/hris/holidays";
+import { isHolidayDayOff, type HolidayRow } from "@/lib/hris/holidays";
+import type { ScheduleType } from "@/lib/hris/schedule-type";
 import { shiftClock } from "@/lib/hris/attendance-calendar";
 import { formatDateLong, formatTime } from "@/lib/format";
 import { SHORT_HOURS_LABEL, shortHoursDetail } from "@/lib/hris/short-hours";
@@ -13,6 +14,8 @@ export interface AttendanceDayInfo {
   scheduledShift: CalendarScheduleRow | null;
   isDayOff: boolean;
   holidays: HolidayRow[];
+  /** Tipe jadwal karyawan: staf shift tidak libur di tanggal merah (EPIC-079). */
+  scheduleType?: ScheduleType | null;
 }
 
 interface AttendanceDayDialogProps {
@@ -24,6 +27,9 @@ interface AttendanceDayDialogProps {
 /** Popup detail hari, dipakai terutama di mobile (detail sel disembunyikan). */
 export function AttendanceDayDialog({ info, hasSchedule, onClose }: AttendanceDayDialogProps) {
   const attendance = info?.attendance;
+  const scheduleType = info?.scheduleType ?? null;
+  const dayOffHolidays = info?.holidays.filter((holiday) => isHolidayDayOff(holiday, scheduleType)) ?? [];
+  const labelHolidays = info?.holidays.filter((holiday) => !isHolidayDayOff(holiday, scheduleType)) ?? [];
 
   return (
     <Dialog open={info !== null} onOpenChange={(open) => !open && onClose()}>
@@ -33,21 +39,38 @@ export function AttendanceDayDialog({ info, hasSchedule, onClose }: AttendanceDa
         </DialogHeader>
         {info && (
           <div className="space-y-3">
-            {info.holidays.length > 0 && (
+            {dayOffHolidays.length > 0 && (
               <div className="rounded-lg border border-red-200 bg-red-50/70 p-3">
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-red-400">
                   Hari Libur
                 </p>
-                {info.holidays.map((holiday) => (
+                {dayOffHolidays.map((holiday) => (
                   <p key={holiday.name} className="mt-1 text-sm font-semibold text-red-700">
                     {holiday.name}
-                    {holiday.deducts_leave && (
+                    {holiday.type === "cuti_bersama" && holiday.deducts_leave && (
                       <span className="ml-1 text-xs font-normal text-red-400">
                         (memotong jatah cuti)
                       </span>
                     )}
                   </p>
                 ))}
+              </div>
+            )}
+            {labelHolidays.length > 0 && (
+              <div className="rounded-lg border border-gray-200 bg-gray-50/70 p-3">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+                  Tanggal Merah
+                </p>
+                {labelHolidays.map((holiday) => (
+                  <p key={holiday.name} className="mt-1 text-sm font-medium text-gray-600">
+                    {holiday.name}
+                  </p>
+                ))}
+                <p className="mt-1 text-xs text-gray-400">
+                  {scheduleType === "shift"
+                    ? "Bukan hari libur bagi staf shift; jadwal mengikuti roster."
+                    : "Hari kerja biasa."}
+                </p>
               </div>
             )}
 

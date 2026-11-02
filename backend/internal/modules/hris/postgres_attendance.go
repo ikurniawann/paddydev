@@ -90,7 +90,7 @@ func (s *store) RosterRows(ctx context.Context, date string, dow int, superAdmin
 		    AND (es.effective_to IS NULL OR es.effective_to >= $1::date)
 		  ORDER BY es.employee_id, es.effective_from DESC, es.priority
 		)
-		SELECT e.id AS employee_id, e.full_name, e.nip, e.photo_url,
+		SELECT e.id AS employee_id, e.full_name, e.nip, e.photo_url, e.schedule_type,
 		       d.name AS department_name, p.title AS job_title,
 		       (sc.employee_id IS NOT NULL) AS has_schedule,
 		       sc.shift_id AS scheduled_shift_id,

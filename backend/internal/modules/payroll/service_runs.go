@@ -411,6 +411,7 @@ func (s *service) calculateRun(ctx context.Context, runID string, includeThr boo
 	if len(employees) == 0 {
 		return nil, httpx.BadRequest("Tidak ada karyawan aktif ditemukan")
 	}
+	// Peta libur Non-Shift; payrollInput memberi staf shift peta kosong.
 	holidays, err := s.ports.Workforce.Holidays(ctx, s.db, start, end)
 	if err != nil {
 		return nil, err
@@ -544,7 +545,9 @@ func (s *service) payrollInput(ctx context.Context, e EmployeeBrief, companyID s
 	if err != nil {
 		return nil, records, err
 	}
-	emp := domain.Employee{ID: e.ID, EmploymentStatus: e.EmploymentStatus, JoinDate: e.JoinDate, EndDate: e.EndDate, IsActive: e.IsActive}
-	in := domain.BuildInputRange(emp, *salary, records, loans, holidays, month, year, start, end, includeThr, opts)
+	emp := domain.Employee{ID: e.ID, EmploymentStatus: e.EmploymentStatus, JoinDate: e.JoinDate, EndDate: e.EndDate, IsActive: e.IsActive,
+		ScheduleType: e.ScheduleType}
+	// Staf shift tidak mengenal tanggal merah: tanpa peta libur (EPIC-079 R3).
+	in := domain.BuildInputRange(emp, *salary, records, loans, emp.DayOffHolidays(holidays), month, year, start, end, includeThr, opts)
 	return &in, records, nil
 }

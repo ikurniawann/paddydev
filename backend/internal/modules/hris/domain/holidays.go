@@ -14,6 +14,33 @@ type Holiday struct {
 	Name         string
 	Type         string
 	DeductsLeave bool
+	// IsDayOff: cuti bersama yang ditetapkan libur oleh perusahaan (EPIC-079 R2).
+	IsDayOff bool
+}
+
+// HolidayDayOff reports whether h is a day off for an employee of the given
+// schedule type (EPIC-079 R1-R3). Shift staff ("shift") ignore every red date:
+// their roster decides. Non-Shift staff rest on nasional and perusahaan days,
+// and on cuti bersama only when the company set it as a day off.
+func HolidayDayOff(h Holiday, scheduleType string) bool {
+	if scheduleType == "shift" {
+		return false
+	}
+	if h.Type == "cuti_bersama" {
+		return h.IsDayOff
+	}
+	return true
+}
+
+// DayOffDates is the set of dates that are a day off for scheduleType.
+func DayOffDates(rows []Holiday, scheduleType string) map[string]bool {
+	out := map[string]bool{}
+	for _, h := range rows {
+		if HolidayDayOff(h, scheduleType) {
+			out[h.Date] = true
+		}
+	}
+	return out
 }
 
 // HolidayIndex groups holidays by date.
@@ -64,8 +91,50 @@ func DescribeLeaveDays(startISO, endISO string, idx HolidayIndex) (int, []Exclud
 	return total, excluded
 }
 
+// scheduleInForce: some schedule row (weekly pattern or per-date cell) is in
+// force on dateISO whatever its weekday; otherwise the roster says nothing
+// about the date (not made yet, or none any more).
+func scheduleInForce(schedule []ScheduleRow, dateISO string) bool {
+	for _, r := range schedule {
+		if r.EffectiveFrom <= dateISO && (r.EffectiveTo == nil || *r.EffectiveTo >= dateISO) {
+			return true
+		}
+	}
+	return false
+}
+
+// DescribeRosterLeaveDays counts the leave days of a shift employee from the
+// roster (EPIC-079 R4), the same dates payroll treats as work dates
+// (payroll IsWorkDate): with a schedule in force a date counts only when its
+// row carries a shift (a roster day off does not); with no schedule in force
+// it counts when it is Monday-Friday, red dates are not skipped for shift
+// staff. So the quota days equal the days payroll deducts. schedule is the
+// employee's hris.v_employee_schedule rows in view order (ORDER BY priority:
+// a per-date cell precedes the weekly pattern), which ResolveScheduleRow
+// relies on to let the per-date cell win on a tied effective_from.
+func DescribeRosterLeaveDays(startISO, endISO string, schedule []ScheduleRow) int {
+	total := 0
+	for _, d := range EachDateISO(startISO, endISO) {
+		if scheduleInForce(schedule, d) {
+			if i := ResolveScheduleRow(schedule, d); i >= 0 && schedule[i].ShiftID != nil {
+				total++
+			}
+			continue
+		}
+		if !IsWeekend(d) {
+			total++
+		}
+	}
+	return total
+}
+
 // NoWorkingDayMessage explains a leave range with zero working days.
-func NoWorkingDayMessage(excluded []ExcludedHoliday) string {
+// scheduleType "shift" gets its own wording: shift staff are not bound to the
+// weekend, their roster decides.
+func NoWorkingDayMessage(excluded []ExcludedHoliday, scheduleType string) string {
+	if scheduleType == "shift" {
+		return "Rentang tanggal ini jatuh pada hari libur di jadwal kerja Anda — tidak ada hari yang dipotong dari jatah cuti"
+	}
 	alasan := "jatuh pada akhir pekan"
 	if len(excluded) > 0 {
 		names := make([]string, len(excluded))
@@ -90,6 +159,7 @@ type HolidayInput struct {
 	Name         *string
 	Type         *string
 	DeductsLeave *bool
+	IsDayOff     *bool
 	Status       *string
 	Note         *string
 	NoteSent     bool
@@ -105,9 +175,15 @@ func isHolidayType(t string) bool {
 	return false
 }
 
+// ErrDayOffType is the 400 for is_day_off on a type other than cuti bersama.
+const ErrDayOffType = "Hanya cuti bersama yang bisa ditetapkan libur"
+
 func typeOrStatusError(in HolidayInput) string {
 	if in.Type != nil && !isHolidayType(*in.Type) {
 		return "Tipe libur tidak valid"
+	}
+	if in.IsDayOff != nil && *in.IsDayOff && in.Type != nil && *in.Type != "cuti_bersama" {
+		return ErrDayOffType
 	}
 	if in.Status != nil && *in.Status != "draft" && *in.Status != "aktif" {
 		return "Status tidak valid"
@@ -136,6 +212,16 @@ func ValidateHolidayBody(in HolidayInput) string {
 	if blank(in.Name) {
 		return "Nama libur wajib diisi"
 	}
+	return typeOrStatusErrorDefaulted(in)
+}
+
+// typeOrStatusErrorDefaulted is typeOrStatusError for a body that creates a
+// row, where a missing type means "nasional".
+func typeOrStatusErrorDefaulted(in HolidayInput) string {
+	if in.Type == nil {
+		nasional := "nasional"
+		in.Type = &nasional
+	}
 	return typeOrStatusError(in)
 }
 
@@ -161,7 +247,7 @@ func ValidateImportItem(in HolidayInput) string {
 	if blank(in.Name) {
 		return "Nama libur wajib diisi"
 	}
-	return typeOrStatusError(in)
+	return typeOrStatusErrorDefaulted(in)
 }
 
 // HolidayTypeOrDefault: unknown or missing types are "nasional".

@@ -2,9 +2,13 @@ package hris
 
 import (
 	"context"
+	"errors"
 	"strconv"
 
+	"github.com/jackc/pgx/v5"
+
 	"nuhabit/backend/internal/modules/hris/domain"
+	"nuhabit/backend/internal/platform/audit"
 	"nuhabit/backend/internal/platform/database"
 	"nuhabit/backend/internal/platform/httpx"
 )
@@ -21,7 +25,7 @@ type HolidayRepo interface {
 	ImportHoliday(ctx context.Context, in domain.HolidayInput, userID string) (created bool, err error)
 }
 
-const holidayColumns = `id, holiday_date::text AS holiday_date, name, type, deducts_leave, status, source, note`
+const holidayColumns = `id, holiday_date::text AS holiday_date, name, type, deducts_leave, is_day_off, status, source, note`
 
 // duplicateHoliday turns the (date, name) unique violation into a 409.
 func duplicateHoliday(row *Row, err error) (*Row, error) {
@@ -120,7 +124,26 @@ func trimmed(p *string) *string {
 	return &t
 }
 
-func (s *store) CreateHoliday(ctx context.Context, in domain.HolidayInput, userID string) (*Row, error) {
+// dayOff is the requested is_day_off; unset means false.
+func dayOff(in domain.HolidayInput) bool { return in.IsDayOff != nil && *in.IsDayOff }
+
+// CreateHoliday inserts the holiday; one that is created as a day off writes
+// its holiday.day_off audit row in the same transaction.
+func (s *store) CreateHoliday(ctx context.Context, in domain.HolidayInput, userID string) (row *Row, err error) {
+	err = database.WithTx(ctx, s.db, func(tx pgx.Tx) error {
+		q := &store{db: tx}
+		if row, err = q.insertHoliday(ctx, in, userID); err != nil || row == nil {
+			return err
+		}
+		if row.Bool("is_day_off") {
+			return writeHolidayDayOffAudit(ctx, tx, userID, row.Str("id"), row.Str("name"), nil, true)
+		}
+		return nil
+	})
+	return row, err
+}
+
+func (s *store) insertHoliday(ctx context.Context, in domain.HolidayInput, userID string) (*Row, error) {
 	typ := domain.HolidayTypeOrDefault(in.Type)
 	deducts := domain.DefaultDeductsLeave(typ)
 	if in.DeductsLeave != nil {
@@ -131,31 +154,63 @@ func (s *store) CreateHoliday(ctx context.Context, in domain.HolidayInput, userI
 		status = *in.Status
 	}
 	return queryRow(ctx, s.db, `INSERT INTO hris.public_holidays
-		(holiday_date, name, type, deducts_leave, status, source, note, created_by, updated_by)
-		VALUES ($1::date, $2, $3, $4, $5, 'manual', $6, $7, $7)
+		(holiday_date, name, type, deducts_leave, is_day_off, status, source, note, created_by, updated_by)
+		VALUES ($1::date, $2, $3, $4, $8, $5, 'manual', $6, $7, $7)
 		RETURNING `+holidayColumns,
-		in.HolidayDate, trimmed(in.Name), typ, deducts, status, nilIfEmpty(trimmed(in.Note)), userID)
+		in.HolidayDate, trimmed(in.Name), typ, deducts, status, nilIfEmpty(trimmed(in.Note)), userID, dayOff(in))
 }
 
-func (s *store) UpdateHoliday(ctx context.Context, id string, in domain.HolidayInput, userID string) (*Row, error) {
+// UpdateHoliday patches the holiday; a change of is_day_off (also the reset
+// when the type leaves cuti bersama) writes a holiday.day_off audit row in
+// the same transaction.
+func (s *store) UpdateHoliday(ctx context.Context, id string, in domain.HolidayInput, userID string) (row *Row, err error) {
+	err = database.WithTx(ctx, s.db, func(tx pgx.Tx) error {
+		before, found, err := holidayDayOff(ctx, tx, id, true)
+		if err != nil {
+			return err
+		}
+		q := &store{db: tx}
+		if row, err = q.patchHoliday(ctx, id, in, userID); err != nil || row == nil || !found {
+			return err
+		}
+		after, _, err := holidayDayOff(ctx, tx, id, false)
+		if err != nil || after == before {
+			return err
+		}
+		return writeHolidayDayOffAudit(ctx, tx, userID, id, row.Str("name"), &before, after)
+	})
+	return row, err
+}
+
+func (s *store) patchHoliday(ctx context.Context, id string, in domain.HolidayInput, userID string) (*Row, error) {
 	// Changing the type without deducts_leave takes the type's SKB default.
 	deducts := in.DeductsLeave
 	if deducts == nil && in.Type != nil && *in.Type != "" {
 		v := *in.Type == "cuti_bersama"
 		deducts = &v
 	}
+	// is_day_off is for cuti bersama only: a PATCH that leaves the type alone
+	// is checked against the stored type.
+	if dayOff(in) && in.Type == nil {
+		var typ string
+		err := s.db.QueryRow(ctx, `SELECT type FROM hris.public_holidays WHERE id = $1 AND deleted_at IS NULL`, id).Scan(&typ)
+		if err == nil && typ != "cuti_bersama" {
+			return nil, httpx.BadRequest(domain.ErrDayOffType)
+		}
+	}
 	return queryRow(ctx, s.db, `UPDATE hris.public_holidays SET
 		holiday_date  = COALESCE($2::date, holiday_date),
 		name          = COALESCE($3, name),
 		type          = COALESCE($4, type),
 		deducts_leave = COALESCE($5, deducts_leave),
+		is_day_off    = CASE WHEN COALESCE($4, type) <> 'cuti_bersama' THEN false ELSE COALESCE($10::boolean, is_day_off) END,
 		status        = COALESCE($6, status),
 		note          = CASE WHEN $8::boolean THEN $7 ELSE note END,
 		updated_by    = $9,
 		updated_at    = now()
 		WHERE id = $1 AND deleted_at IS NULL
 		RETURNING id, name`,
-		id, in.HolidayDate, trimmed(in.Name), in.Type, deducts, in.Status, nilIfEmpty(trimmed(in.Note)), in.NoteSent, userID)
+		id, in.HolidayDate, trimmed(in.Name), in.Type, deducts, in.Status, nilIfEmpty(trimmed(in.Note)), in.NoteSent, userID, in.IsDayOff)
 }
 
 func (s *store) SoftDeleteHoliday(ctx context.Context, id, userID string) (*Row, error) {
@@ -191,7 +246,35 @@ func (s *store) HolidayKeys(ctx context.Context, year int) (map[string]bool, map
 
 // ImportHoliday updates the row with the same source_ref, else upserts on
 // (date, name) without touching source and note. created reports an insert.
-func (s *store) ImportHoliday(ctx context.Context, in domain.HolidayInput, userID string) (bool, error) {
+func (s *store) ImportHoliday(ctx context.Context, in domain.HolidayInput, userID string) (created bool, err error) {
+	err = database.WithTx(ctx, s.db, func(tx pgx.Tx) error {
+		// is_day_off of the row the import will touch (same source_ref, else
+		// same date and name) is the audit "before"; none = a new row.
+		var before *bool
+		if in.SourceRef != nil && *in.SourceRef != "" {
+			if before, err = holidayDayOffWhere(ctx, tx, `source_ref = $1`, *in.SourceRef); err != nil {
+				return err
+			}
+		}
+		if before == nil {
+			if before, err = holidayDayOffWhere(ctx, tx, `holiday_date = $1::date AND name = $2`, in.HolidayDate, trimmed(in.Name)); err != nil {
+				return err
+			}
+		}
+		var id, name string
+		var after bool
+		if id, name, after, created, err = (&store{db: tx}).upsertHoliday(ctx, in, userID); err != nil {
+			return err
+		}
+		if (before == nil && !after) || (before != nil && *before == after) {
+			return nil
+		}
+		return writeHolidayDayOffAudit(ctx, tx, userID, id, name, before, after)
+	})
+	return created, err
+}
+
+func (s *store) upsertHoliday(ctx context.Context, in domain.HolidayInput, userID string) (id, name string, isDayOff, created bool, err error) {
 	typ := domain.HolidayTypeOrDefault(in.Type)
 	deducts := typ == "cuti_bersama"
 	if in.DeductsLeave != nil {
@@ -201,32 +284,79 @@ func (s *store) ImportHoliday(ctx context.Context, in domain.HolidayInput, userI
 	if in.Status != nil {
 		status = *in.Status
 	}
-	args := []any{in.HolidayDate, trimmed(in.Name), typ, deducts, status, in.SourceRef, userID}
+	args := []any{in.HolidayDate, trimmed(in.Name), typ, deducts, status, in.SourceRef, userID, in.IsDayOff}
 	if in.SourceRef != nil && *in.SourceRef != "" {
-		tag, err := s.db.Exec(ctx, `UPDATE hris.public_holidays SET
+		err := s.db.QueryRow(ctx, `UPDATE hris.public_holidays SET
 			holiday_date = $1::date, name = $2, type = $3,
 			deducts_leave = $4, status = $5,
+			is_day_off = CASE WHEN $3 <> 'cuti_bersama' THEN false ELSE COALESCE($8::boolean, is_day_off) END,
 			updated_by = $7, updated_at = now()
-			WHERE source_ref = $6 AND deleted_at IS NULL`, args...)
-		if err != nil {
-			return false, err
+			WHERE source_ref = $6 AND deleted_at IS NULL
+			RETURNING id::text, name, is_day_off`, args...).Scan(&id, &name, &isDayOff)
+		if err == nil {
+			return id, name, isDayOff, false, nil
 		}
-		if tag.RowsAffected() > 0 {
-			return false, nil
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return "", "", false, false, err
 		}
 	}
-	var inserted bool
-	err := s.db.QueryRow(ctx, `INSERT INTO hris.public_holidays
-		(holiday_date, name, type, deducts_leave, status, source, source_ref, created_by, updated_by)
-		VALUES ($1::date, $2, $3, $4, $5, 'impor', $6, $7, $7)
+	err = s.db.QueryRow(ctx, `INSERT INTO hris.public_holidays
+		(holiday_date, name, type, deducts_leave, is_day_off, status, source, source_ref, created_by, updated_by)
+		VALUES ($1::date, $2, $3, $4, COALESCE($8::boolean, false), $5, 'impor', $6, $7, $7)
 		ON CONFLICT (holiday_date, name) WHERE deleted_at IS NULL
 		DO UPDATE SET
 		  type = EXCLUDED.type,
 		  deducts_leave = EXCLUDED.deducts_leave,
+		  is_day_off = CASE WHEN EXCLUDED.type <> 'cuti_bersama' THEN false
+		    WHEN $8::boolean IS NULL THEN hris.public_holidays.is_day_off ELSE EXCLUDED.is_day_off END,
 		  status = EXCLUDED.status,
 		  source_ref = COALESCE(EXCLUDED.source_ref, hris.public_holidays.source_ref),
 		  updated_by = EXCLUDED.updated_by,
 		  updated_at = now()
-		RETURNING (xmax = 0) AS inserted`, args...).Scan(&inserted)
-	return inserted, err
+		RETURNING id::text, name, is_day_off, (xmax = 0) AS inserted`, args...).Scan(&id, &name, &isDayOff, &created)
+	return id, name, isDayOff, created, err
+}
+
+// holidayDayOff reads is_day_off of a live holiday by id (FOR UPDATE when
+// lock); found is false when there is none.
+func holidayDayOff(ctx context.Context, q database.Querier, id string, lock bool) (dayOff, found bool, err error) {
+	sql := `SELECT is_day_off FROM hris.public_holidays WHERE id = $1 AND deleted_at IS NULL`
+	if lock {
+		sql += ` FOR UPDATE`
+	}
+	err = q.QueryRow(ctx, sql, id).Scan(&dayOff)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, false, nil
+	}
+	return dayOff, err == nil, err
+}
+
+// holidayDayOffWhere is is_day_off of the first live holiday matching cond
+// (a SQL condition over $1, $2…); nil when none.
+func holidayDayOffWhere(ctx context.Context, q database.Querier, cond string, args ...any) (*bool, error) {
+	var v bool
+	err := q.QueryRow(ctx, `SELECT is_day_off FROM hris.public_holidays WHERE deleted_at IS NULL AND `+cond+` LIMIT 1`, args...).Scan(&v)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &v, nil
+}
+
+// writeHolidayDayOffAudit records a change of a holiday's is_day_off
+// (EPIC-079 R2: it decides who rests on a cuti bersama) on q, so it commits
+// with the change. before nil = the holiday is new.
+func writeHolidayDayOffAudit(ctx context.Context, q database.Querier, userID, holidayID, name string, before *bool, after bool) error {
+	e := audit.Entry{Action: "holiday.day_off", Entity: "hris.public_holidays", EntityID: &holidayID, EntityLabel: &name,
+		ActorID: userID, After: map[string]any{"is_day_off": after}}
+	if before != nil {
+		e.Before = map[string]any{"is_day_off": *before}
+	}
+	var actor *string
+	if err := q.QueryRow(ctx, `SELECT full_name FROM users WHERE id = $1`, userID).Scan(&actor); err == nil {
+		e.ActorName = actor
+	}
+	return audit.Write(ctx, q, e)
 }

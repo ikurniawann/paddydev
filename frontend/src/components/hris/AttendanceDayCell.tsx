@@ -1,7 +1,8 @@
 "use client";
 
 import type { ReactNode } from "react";
-import type { HolidayRow } from "@/lib/hris/holidays";
+import { isHolidayDayOff, type HolidayRow } from "@/lib/hris/holidays";
+import type { ScheduleType } from "@/lib/hris/schedule-type";
 import { shiftClock } from "@/lib/hris/attendance-calendar";
 import { formatTime } from "@/lib/format";
 import { shortHoursDetail } from "@/lib/hris/short-hours";
@@ -15,6 +16,8 @@ interface AttendanceDayCellProps {
   scheduledShift: CalendarScheduleRow | null;
   isDayOff: boolean;
   holidays: HolidayRow[];
+  /** Tipe jadwal karyawan: staf shift tidak libur di tanggal merah (EPIC-079). */
+  scheduleType?: ScheduleType | null;
   /** Isi tambahan di bawah sel (mis. jadwal treatment terapis spa). */
   extra?: ReactNode;
   onClick: () => void;
@@ -29,11 +32,15 @@ export function AttendanceDayCell({
   scheduledShift,
   isDayOff,
   holidays,
+  scheduleType = null,
   extra,
   onClick,
 }: AttendanceDayCellProps) {
   const isLate = attendance?.is_late ?? false;
-  const isPublicHoliday = holidays.length > 0;
+  // Merah hanya bila tanggal itu hari libur bagi karyawan ini; selain itu nama libur hanya label.
+  const dayOffHolidays = holidays.filter((holiday) => isHolidayDayOff(holiday, scheduleType));
+  const labelHolidays = holidays.filter((holiday) => !isHolidayDayOff(holiday, scheduleType));
+  const isPublicHoliday = dayOffHolidays.length > 0;
 
   return (
     <div
@@ -81,11 +88,25 @@ export function AttendanceDayCell({
       {/* hari libur: nama liburnya, bukan sekadar warna merah */}
       {isPublicHoliday && (
         <div className="hidden sm:block rounded-md border-l-2 border-red-400 bg-red-50 px-1.5 py-0.5">
-          {holidays.map((holiday) => (
+          {dayOffHolidays.map((holiday) => (
             <p
               key={holiday.name}
               title={holiday.name}
               className="truncate text-[10px] font-semibold leading-tight text-red-700"
+            >
+              {holiday.name}
+            </p>
+          ))}
+        </div>
+      )}
+      {/* tanggal merah yang bukan libur bagi karyawan ini (staf shift, cuti bersama biasa): label saja */}
+      {labelHolidays.length > 0 && (
+        <div className="hidden sm:block px-0.5">
+          {labelHolidays.map((holiday) => (
+            <p
+              key={holiday.name}
+              title={holiday.name}
+              className="truncate text-[10px] leading-tight text-gray-400"
             >
               {holiday.name}
             </p>

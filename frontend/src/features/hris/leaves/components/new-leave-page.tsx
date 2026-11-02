@@ -28,7 +28,7 @@ import { LeaveSuccessDialog, type LeaveSubmission } from "./leave-success-dialog
 
 const NO_HOLIDAYS = indexHolidays([]);
 
-/** Pratinjau hari kerja (Senin-Jumat, minimal 1); angka final dihitung server. */
+/** Perkiraan hari kerja (Senin-Jumat, minimal 1); jumlah final dihitung server sesuai jadwal. */
 function previewBusinessDays(startDate: string, endDate: string): number {
   if (!startDate || !endDate) return 0;
   return countLeaveDays(startDate, endDate, NO_HOLIDAYS) || 1;
@@ -101,9 +101,9 @@ export function NewLeavePage() {
     try {
       const result = await createMutation.mutateAsync(formData);
       const employee = employees.find((e) => e.id === formData.employee_id);
+      // total_days adalah jumlah tersimpan dari server (jadwal staf shift, hari libur), bukan perkiraan Senin-Jumat.
       setSubmission({
         ...result.data,
-        total_days: totalDays,
         employee_name: employee?.full_name,
       });
     } catch (error) {
@@ -228,11 +228,14 @@ export function NewLeavePage() {
             {totalDays > 0 && (
               <div className="bg-green-50 border border-green-200 rounded-lg p-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-green-800">Total Hari (hari kerja):</span>
+                  <span className="text-sm font-medium text-green-800">Perkiraan hari kerja (Senin–Jumat):</span>
                   <Badge variant="outline" className="bg-green-100 text-green-800">
                     {totalDays} hari
                   </Badge>
                 </div>
+                <p className="mt-1 text-xs text-green-700">
+                  Jumlah final dihitung sistem sesuai jadwal kerja karyawan.
+                </p>
               </div>
             )}
 

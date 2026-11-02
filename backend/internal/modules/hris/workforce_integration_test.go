@@ -59,6 +59,9 @@ func TestAttendance(t *testing.T) {
 	if r := sched.list()[0].(map[string]any); r["effective_from"] != "2026-01-01" || r["start_time"] != "08:00:00" {
 		t.Fatalf("schedule = %s", sched.raw)
 	}
+	if m, _ := sched.body["meta"].(map[string]any); m == nil || m["schedule_type"] != "shift" {
+		t.Fatalf("schedule meta = %s", sched.raw)
+	}
 	stats := h.do(&staff, "GET", "/api/hris/attendance/stats", nil)
 	expect(t, stats, 200, "")
 	if s := stats.data(); s["month"] != 10.0 || s["month_late"] != 1.0 || s["active_employees"] != nil {
@@ -76,7 +79,8 @@ func TestLeaves(t *testing.T) {
 	boss, bossID := h.staff("pos", nil, true, emp{name: "Atasan Cuti", phone: "0812 3456 7890"})
 	staff, own := h.staff("pos", nil, true, emp{name: "Pemohon Cuti"})
 	h.grantDelete(hr, "hris.workforce.leaves")
-	h.exec(`UPDATE hris.employees SET reporting_to = $2 WHERE id = $1`, own, bossID)
+	// Tanggal merah memotong hitungan cuti staf Non-Shift; staf shift memakai roster (EPIC-079 R4).
+	h.exec(`UPDATE hris.employees SET reporting_to = $2, schedule_type = 'non_shift' WHERE id = $1`, own, bossID)
 	h.exec(`INSERT INTO hris.public_holidays (holiday_date, name, type) VALUES ('2031-12-25', 'Natal Test', 'nasional')`)
 
 	expect(t, h.do(&staff, "POST", "/api/hris/leaves", map[string]any{"leave_type": "annual"}), 400, "Validation failed")
