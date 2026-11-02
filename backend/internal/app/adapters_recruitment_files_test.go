@@ -24,7 +24,7 @@ func TestRecruitmentHiredAdapter(t *testing.T) {
 	if row, err := (recruitmentHired{}).Hired(ctx, tx, candidateID); err != nil || row != nil {
 		t.Fatalf("not promoted yet: %v %v", row, err)
 	}
-	if _, err := tx.Exec(ctx, `SELECT public.promote_candidate_to_employee($1, '2026-08-01', 'probation', NULL, NULL)`, candidateID); err != nil {
+	if _, err := tx.Exec(ctx, `SELECT public.promote_candidate_to_employee($1, '2026-08-01', 'probation', NULL, NULL, $2)`, candidateID, "202611"+candidateID[:6]); err != nil {
 		t.Fatal(err)
 	}
 	row, err := recruitmentHired{}.Hired(ctx, tx, candidateID)

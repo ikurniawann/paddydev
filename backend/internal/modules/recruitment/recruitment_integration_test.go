@@ -708,7 +708,7 @@ func TestPromote(t *testing.T) {
 	expect(t, h.as(h.hr, "POST", "/api/hris/promote", map[string]any{"candidate_id": "nope"}), 404, "Kandidat tidak ditemukan")
 
 	applied := h.candidate("applied")
-	c := h.as(h.hr, "POST", "/api/hris/promote", map[string]any{"candidate_id": applied})
+	c := h.as(h.hr, "POST", "/api/hris/promote", map[string]any{"candidate_id": applied, "nip": "202611900"})
 	expect(t, c, 400, `Status kandidat harus "hired" atau "talent_pool" untuk dipromosikan. Status saat ini: applied`)
 	if c.body["details"].(map[string]any)["suggestion"] != `Ubah status kandidat menjadi "hired" terlebih dahulu` {
 		t.Fatal(c.raw)
@@ -718,10 +718,26 @@ func TestPromote(t *testing.T) {
 		VALUES ('Go Promote', 'p' || md5(random()::text) || '@x.id', '0812', 'Jkt', 'walk_in', 'hired') RETURNING id::text`)
 	h.exec(`INSERT INTO recruitment.candidate_offers (candidate_id, version, token, status, position_title, base_salary)
 		VALUES ($1, 1, md5(random()::text), 'accepted', 'Barista', 5000000)`, hired)
-	c = h.as(h.hr, "POST", "/api/hris/promote", map[string]any{"candidate_id": hired, "join_date": "2026-08-01", "employment_status": "contract"})
+	// EPIC-081: NIP is typed by HR and required; nothing is generated.
+	for _, blank := range []map[string]any{{}, {"nip": nil}, {"nip": ""}, {"nip": "   "}} {
+		blank["candidate_id"] = hired
+		expect(t, h.as(h.hr, "POST", "/api/hris/promote", blank), 400, "NIP wajib diisi")
+	}
+	expect(t, h.as(h.hr, "POST", "/api/hris/promote", map[string]any{"candidate_id": hired, "nip": strings.Repeat("9", 51)}), 400, "NIP maksimal 50 karakter")
+	taken := h.scalar(`INSERT INTO hris.employees (full_name, nip, email, phone, join_date, employment_status)
+		VALUES ('Pemilik NIP Promote', 'T' || substr(md5(random()::text), 1, 8), 'o' || md5(random()::text) || '@x.id', '', '2025-01-01', 'permanent') RETURNING nip`)
+	c = h.as(h.hr, "POST", "/api/hris/promote", map[string]any{"candidate_id": hired, "nip": taken})
+	if c.status != 400 || !strings.HasPrefix(c.body["error"].(string), "NIP sudah dipakai karyawan Pemilik NIP Promote") {
+		t.Fatalf("duplicate NIP: %d %s", c.status, c.raw)
+	}
+	if h.scalar(`SELECT promoted_to_employee_id::text FROM recruitment.candidates WHERE id = $1`, hired) != "<nil>" {
+		t.Fatal("refused promotion must not link the candidate")
+	}
+	manualNIP := "202611" + hired[:6]
+	c = h.as(h.hr, "POST", "/api/hris/promote", map[string]any{"candidate_id": hired, "join_date": "2026-08-01", "employment_status": "contract", "nip": "  " + manualNIP + " "})
 	expect(t, c, 200, "")
 	nip, _ := c.body["nip"].(string)
-	if !strings.HasPrefix(nip, "EMP-") || c.body["contract_number"] != "0001/PKWT/X/2026" || c.body["employee_id"] == nil ||
+	if nip != manualNIP || c.body["contract_number"] != "0001/PKWT/X/2026" || c.body["employee_id"] == nil ||
 		!strings.HasSuffix(c.body["message"].(string), "menjadi karyawan — draft kontrak 0001/PKWT/X/2026 dibuat otomatis") {
 		t.Fatal(c.raw)
 	}
@@ -729,12 +745,12 @@ func TestPromote(t *testing.T) {
 	if d.EndDate == nil || *d.EndDate != "2027-08-01" || *d.BaseSalary != "5000000" || d.Notes != "Draft otomatis saat promote kandidat (dari offer v1 yang diterima) — durasi default 12 bulan, sesuaikan sebelum aktivasi." {
 		t.Fatalf("%+v", d)
 	}
-	expect(t, h.as(h.hr, "POST", "/api/hris/promote", map[string]any{"candidate_id": hired}), 400, "Kandidat sudah dipromosikan menjadi employee")
+	expect(t, h.as(h.hr, "POST", "/api/hris/promote", map[string]any{"candidate_id": hired, "nip": "202611901"}), 400, "Kandidat sudah dipromosikan menjadi employee")
 
 	pool := h.scalar(`INSERT INTO recruitment.candidates (full_name, email, phone, domicile, source, status)
 		VALUES ('Go Pool', 'q' || md5(random()::text) || '@x.id', '0812', 'Jkt', 'walk_in', 'talent_pool') RETURNING id::text`)
 	h.ports.rejection = "Karyawan tidak ditemukan"
-	c = h.as(h.hr, "POST", "/api/hris/promote", map[string]any{"candidate_id": pool, "employment_status": "internship"})
+	c = h.as(h.hr, "POST", "/api/hris/promote", map[string]any{"candidate_id": pool, "employment_status": "internship", "nip": "202611" + pool[:6]})
 	if c.body["contract_number"] != nil || !strings.HasSuffix(c.body["message"].(string), "menjadi karyawan") {
 		t.Fatal(c.raw)
 	}
@@ -746,8 +762,8 @@ func TestPromoteConcurrentIs409(t *testing.T) {
 	h := newHarness(t)
 	id := h.candidate("hired")
 	svc := NewService(h.tx, Ports{Employees: h.ports, Contracts: h.ports}, time.Now, nil)
-	h.exec(`SELECT public.promote_candidate_to_employee($1, current_date, 'probation', NULL, NULL)`, id)
-	_, err := svc.repo.PromoteCandidate(context.Background(), h.tx, id, "2026-10-04", "probation", nil, nil)
+	h.exec(`SELECT public.promote_candidate_to_employee($1, current_date, 'probation', NULL, NULL, $2)`, id, "C1"+id[:8])
+	_, err := svc.repo.PromoteCandidate(context.Background(), h.tx, id, "2026-10-04", "probation", nil, nil, "C2"+id[:8])
 	if !database.IsUniqueViolation(err) {
 		t.Fatalf("want 23505, got %v", err)
 	}

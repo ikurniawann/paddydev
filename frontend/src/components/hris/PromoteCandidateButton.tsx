@@ -24,6 +24,7 @@ import {
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { EmploymentStatus } from '@/types/hris';
+import { validateNip } from '@/lib/hris/users-form';
 
 interface PromoteCandidateButtonProps {
   candidate: {
@@ -42,18 +43,25 @@ export function PromoteCandidateButton({ candidate, onSuccess }: PromoteCandidat
   const [open, setOpen] = useState(false);
   const [joinDate, setJoinDate] = useState(todayWib);
   const [employmentStatus, setEmploymentStatus] = useState<EmploymentStatus>('probation');
+  // EPIC-081: NIP diketik HR, wajib, tidak digenerate.
+  const [nip, setNip] = useState('');
+  const [nipError, setNipError] = useState<string | null>(null);
   const promote = useMutation({
     mutationFn: () =>
       apiPost<{ nip?: string; contract_number?: string | null }>('/api/hris/promote', {
         candidate_id: candidate.id,
         join_date: joinDate,
         employment_status: employmentStatus,
+        nip: nip.trim(),
       }),
     retry: false,
   });
   const loading = promote.isPending;
 
   const handlePromote = () => {
+    const invalid = validateNip(nip);
+    setNipError(invalid);
+    if (invalid) return;
     promote.mutate(undefined, {
       onSuccess: (result) => {
         toast.success(`Berhasil mempromosikan ${candidate.full_name} menjadi karyawan!`, {
@@ -66,7 +74,11 @@ export function PromoteCandidateButton({ candidate, onSuccess }: PromoteCandidat
         setOpen(false);
         onSuccess?.();
       },
-      onError: (error) => toast.error(error.message || 'Gagal mempromosikan kandidat'),
+      onError: (error) => {
+        const message = error.message || 'Gagal mempromosikan kandidat';
+        if (/^NIP /.test(message)) setNipError(message);
+        toast.error(message);
+      },
     });
   };
 
@@ -100,7 +112,7 @@ export function PromoteCandidateButton({ candidate, onSuccess }: PromoteCandidat
             <DialogTitle>Promote Kandidat Jadi Karyawan</DialogTitle>
             <DialogDescription>
               Promosikan {candidate.full_name} dari Talent Pool menjadi Employee.
-              Data akan otomatis dipindahkan dan NIP akan digenerate.
+              Data akan otomatis dipindahkan. Isi NIP karyawan secara manual.
             </DialogDescription>
           </DialogHeader>
 
@@ -131,6 +143,30 @@ export function PromoteCandidateButton({ candidate, onSuccess }: PromoteCandidat
             {/* Employment Details */}
             <div className="space-y-3">
               <div className="space-y-2">
+                <Label htmlFor="promoteNip">
+                  NIP <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  id="promoteNip"
+                  value={nip}
+                  required
+                  maxLength={50}
+                  placeholder="mis. 202511001"
+                  aria-invalid={nipError ? true : undefined}
+                  aria-describedby={nipError ? 'promoteNip-error' : undefined}
+                  onChange={(e) => {
+                    setNip(e.target.value);
+                    setNipError(null);
+                  }}
+                />
+                {nipError ? (
+                  <p id="promoteNip-error" role="alert" className="text-xs text-red-600">
+                    {nipError}
+                  </p>
+                ) : null}
+              </div>
+
+              <div className="space-y-2">
                 <Label htmlFor="joinDate">Tanggal Bergabung</Label>
                 <Input
                   id="joinDate"
@@ -159,9 +195,6 @@ export function PromoteCandidateButton({ candidate, onSuccess }: PromoteCandidat
               </div>
             </div>
 
-            <p className="text-sm text-muted-foreground">
-              ℹ️ NIP akan digenerate otomatis (format: EMP-YYYY-XXXXX)
-            </p>
           </div>
 
           <DialogFooter>

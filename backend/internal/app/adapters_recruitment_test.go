@@ -21,7 +21,7 @@ func TestRecruitmentPromotionAdapters(t *testing.T) {
 		VALUES ('Go Adapter', 'go' || md5(random()::text) || '@x.id', '0812', 'Jkt', 'walk_in', 'hired') RETURNING id::text`).Scan(&candidateID); err != nil {
 		t.Fatal(err)
 	}
-	if err := tx.QueryRow(ctx, `SELECT public.promote_candidate_to_employee($1, '2026-08-01', 'contract', NULL, NULL)::text`, candidateID).Scan(&employeeID); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT public.promote_candidate_to_employee($1, '2026-08-01', 'contract', NULL, NULL, $2)::text`, candidateID, "202611"+candidateID[:6]).Scan(&employeeID); err != nil {
 		t.Fatal(err)
 	}
 
@@ -29,7 +29,7 @@ func TestRecruitmentPromotionAdapters(t *testing.T) {
 	if err != nil || row == nil {
 		t.Fatalf("employee: %v", err)
 	}
-	if nip, _ := row.Get("nip").(string); !strings.HasPrefix(nip, "EMP-") || row.Get("department") != nil {
+	if nip, _ := row.Get("nip").(string); nip != "202611"+candidateID[:6] || row.Get("department") != nil {
 		t.Fatalf("nip %v department %v", row.Get("nip"), row.Get("department"))
 	}
 
@@ -74,7 +74,7 @@ func TestRecruitmentDraftSkipsTakenNumber(t *testing.T) {
 		VALUES ('Go Nomor', 'gn' || md5(random()::text) || '@x.id', '0812', 'Jkt', 'walk_in', 'hired') RETURNING id::text`).Scan(&candidateID); err != nil {
 		t.Fatal(err)
 	}
-	if err := tx.QueryRow(ctx, `SELECT public.promote_candidate_to_employee($1, '2026-08-01', 'contract', NULL, NULL)::text`, candidateID).Scan(&employeeID); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT public.promote_candidate_to_employee($1, '2026-08-01', 'contract', NULL, NULL, $2)::text`, candidateID, "202611"+candidateID[:6]).Scan(&employeeID); err != nil {
 		t.Fatal(err)
 	}
 	var count int
