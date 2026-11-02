@@ -113,6 +113,17 @@ export const TOGGLE_FIELDS: { key: string; label: string; help: string }[] = [
   },
 ];
 
+/** Saklar komponen yang dihitung payroll (EPIC-082). Kosong/tidak ada = menyala (default DB). */
+export const COMPONENT_SWITCHES: { key: string; label: string }[] = [
+  { key: "pph21_enabled", label: "PPh 21 dihitung" },
+  { key: "bpjs_tk_enabled", label: "BPJS Ketenagakerjaan dihitung" },
+  { key: "bpjs_kes_enabled", label: "BPJS Kesehatan dihitung" },
+];
+
+/** Saklar menyala kecuali form state-nya eksplisit "false". */
+export const isSwitchOn = (state: Record<string, string | undefined>, key: string): boolean =>
+  state[key] !== "false";
+
 export const PTKP_FIELDS: FieldDef[] = [
   { key: "ptkp_tk_0", label: "TK/0", suffix: "Rp" },
   { key: "ptkp_tk_1", label: "TK/1", suffix: "Rp" },
@@ -153,12 +164,13 @@ export const SETTINGS_KEYS = [
   "pph21_method",
   "pph21_bpjs_basis",
   ...TOGGLE_FIELDS.map((f) => f.key),
+  ...COMPONENT_SWITCHES.map((f) => f.key),
 ];
 
 /** Kolom pengaturan bertipe teks — dikirim apa adanya, bukan angka. */
 const STRING_SETTING_KEYS = new Set(["late_deduction_mode", "pph21_method", "pph21_bpjs_basis"]);
 /** Kolom boolean ("true" / "false" di form state). */
-const BOOLEAN_SETTING_KEYS = new Set(TOGGLE_FIELDS.map((f) => f.key));
+const BOOLEAN_SETTING_KEYS = new Set([...TOGGLE_FIELDS, ...COMPONENT_SWITCHES].map((f) => f.key));
 /** Kolom JSON (teks JSON di form state). */
 const JSON_SETTING_KEYS = new Set(["late_tier_rules"]);
 

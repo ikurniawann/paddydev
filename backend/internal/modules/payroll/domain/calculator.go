@@ -387,7 +387,7 @@ func Calculate(in Input, c Config) Result {
 
 	gross := base + fixed + variable + transport + meal + housing + position + health + overtimePay + thr + bonus + otherEarning
 
-	b := CalculateBPJS(base+fixed, in.BpjsTkEnrolled, in.BpjsKesEnrolled, in.TaperaEnrolled, c)
+	b := CalculateBPJS(base+fixed, in.BpjsTkEnrolled && c.BpjsTkEnabled, in.BpjsKesEnrolled && c.BpjsKesEnabled, in.TaperaEnrolled, c)
 	// daily / monthly_prorated pay only the days attended: an unpaid leave day
 	// is already unpaid (Odoo: unpaid leave just lowers the worked days).
 	unpaid := 0.0
@@ -443,7 +443,10 @@ func Calculate(in Input, c Config) Result {
 	}
 	var taxable, pphAnnual, pph, dpp, terRate float64
 	var category string
-	if method == "ter" { // G5
+	switch {
+	case !c.Pph21Enabled: // EPIC-082: saklar PPh 21 mati, termasuk Pasal 17 Desember
+		method = "nonaktif"
+	case method == "ter": // G5
 		tkEmployee := b.Employee.TkJht + b.Employee.TkJp
 		tkEmployer := b.Employer.TkJht + b.Employer.TkJp + b.Employer.TkJkk + b.Employer.TkJkm
 		var bpjs float64
@@ -463,7 +466,7 @@ func Calculate(in Input, c Config) Result {
 		} else if in.PeriodMonth != 12 {
 			terRate = TERRate(category, dpp)
 		}
-	} else {
+	default:
 		annualGross := gross * 12
 		taxable = math.Max(0, annualGross-b.Employee.Total*12-JabatanExpense(annualGross, c))
 		if in.IsTaxable {

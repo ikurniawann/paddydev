@@ -43,6 +43,7 @@ Detail lengkap ada di `docs/hris/acuan-mom-20261019/`:
 | 2 shift sehari | Kode jadwal `KODE1+KODE2` (mis. `PAGI4+SORE4`) di grid/upload/pola mingguan (`shift2_id`; `domain.ParseScheduleCode`, `TwoShiftIssue`, `TwoShiftWindow`). Shift kedua mulai setelah shift pertama selesai (tumpang tindih = error). 1 absen gabungan: `scheduled_start` shift 1, `scheduled_end` shift 2, terlambat dari shift 1, `break_minutes` = kedua istirahat + jeda sehingga `work_hours` = jam bersih. Berlaku semua staf shift; payroll tetap 1 hari kerja; aturan 40 jam menghitung kedua shift (EPIC-080) |
 | Kasbon & Pinjaman Karyawan | Hanya PKWT/PKWTT (probation dll. tidak bisa). Kasbon: masa kerja ≥ 3 bln, maks. ½ THP, 1–2 kali, wajib dokumen pendukung. Pinjaman Karyawan: masa kerja ≥ 12 bln, maks. 200% THP, 1–6 kali, wajib jaminan. Keduanya: approver Manager Departemen lalu HR (kasbon: HR Penggajian); dipotong payroll periode pengajuan (21–20). Pinjaman Darurat dihapus (EPIC-076) |
 | Subsidi BPJS Kes | Rp100.000 bila masa kerja > 1 tahun pada tanggal cutoff |
+| Saklar PPh 21 & BPJS | `pph21_enabled`, `bpjs_tk_enabled`, `bpjs_kes_enabled` di Pengaturan Payroll (live: false sejak EPIC-082, keputusan user 02-11 "tidak dipakai dulu"). Nonaktif: PPh 21 = 0 (termasuk Pasal 17 Desember), BPJS karyawan **dan** iuran perusahaan = 0, baris disembunyikan di slip; Subsidi BPJS Kes tidak terpengaruh; berlaku untuk run yang dihitung setelah saklar diubah |
 | Time-off | Approver atasan langsung; SPV ke atasannya |
 
 ## Kesalahan umum
