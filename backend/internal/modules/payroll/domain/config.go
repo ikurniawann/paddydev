@@ -72,6 +72,12 @@ type Config struct {
 	LoanMaxActivePerPerson float64
 	BpjsKesSubsidyAmount   float64
 
+	// EPIC-082: saklar global. Mati = komponen tidak dihitung (potongan karyawan
+	// dan iuran perusahaan 0); kepesertaan per struktur gaji dan tarif tetap.
+	Pph21Enabled   bool
+	BpjsTkEnabled  bool
+	BpjsKesEnabled bool
+
 	Pph21Method              string // annualized | ter
 	Pph21BpjsBasis           string // employer | employee | both (BPJS added to the TER DPP)
 	OvertimeProductionRate   float64
@@ -120,6 +126,7 @@ func DefaultConfig() Config {
 	c.LateTiers = DefaultLateTiers()
 	c.LoanMaxInstallmentPct, c.LoanMaxActivePerPerson = 30, 1
 	c.Pph21Method, c.Pph21BpjsBasis = "annualized", "both"
+	c.Pph21Enabled, c.BpjsTkEnabled, c.BpjsKesEnabled = true, true, true
 	c.OvertimeProductionRate, c.OvertimeRequireClockout = 18000, true
 	return c
 }
@@ -260,6 +267,9 @@ func BuildConfig(settings, taxConfig Row) Config {
 	if b, ok := settings["pph21_bpjs_basis"].(string); ok && slices.Contains(Pph21BpjsBases, b) {
 		c.Pph21BpjsBasis = b
 	}
+	c.Pph21Enabled = settings.flag("pph21_enabled", d.Pph21Enabled)
+	c.BpjsTkEnabled = settings.flag("bpjs_tk_enabled", d.BpjsTkEnabled)
+	c.BpjsKesEnabled = settings.flag("bpjs_kes_enabled", d.BpjsKesEnabled)
 	c.OvertimeProductionRate = settings.num("overtime_production_rate", d.OvertimeProductionRate)
 	c.OvertimeRequireClockout = settings.flag("overtime_requires_clockout", d.OvertimeRequireClockout)
 	c.OvertimeRestFromSchedule = settings.flag("overtime_rest_from_schedule", d.OvertimeRestFromSchedule)
