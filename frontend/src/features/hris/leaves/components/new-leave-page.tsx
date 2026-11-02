@@ -20,7 +20,13 @@ import { ArrowLeftIcon, CheckCircle2, Loader2 } from "lucide-react";
 import { countLeaveDays, indexHolidays } from "@/lib/hris/holidays";
 import { todayWib } from "@/lib/dates";
 import { leaveTypeInfo, leaveTypeOptions } from "@/lib/hris/leave-types";
-import { applySingleDay, effectiveLeaveType, leaveFormNote } from "@/lib/hris/leave-form";
+import {
+  applySingleDay,
+  effectiveLeaveType,
+  leaveAttachmentError,
+  leaveFormNote,
+  leaveRuleHint,
+} from "@/lib/hris/leave-form";
 import { useLeaveEmployees, useLeaveQuota } from "../queries";
 import { useCreateLeave } from "../mutations";
 import { LeaveAttachmentField } from "./leave-attachment-field";
@@ -65,8 +71,11 @@ export function NewLeavePage() {
   if (storedType !== formData.leave_type) {
     setFormData((f) => ({ ...f, leave_type: storedType }));
   }
-  const singleDay = Boolean(leaveTypeInfo(formData.leave_type)?.singleDay);
+  const typeInfo = leaveTypeInfo(formData.leave_type);
+  const singleDay = Boolean(typeInfo?.singleDay);
   const quotaNote = leaveFormNote(formData.leave_type, quota);
+  // Aturan TnC (EPIC-084). HR yang mencatat untuk karyawan tidak terkena batas H-n.
+  const ruleHint = typeInfo ? leaveRuleHint(typeInfo) : null;
 
   const totalDays = previewBusinessDays(formData.start_date, formData.end_date);
 
@@ -95,6 +104,12 @@ export function NewLeavePage() {
 
     if (!formData.reason || formData.reason.length < 10) {
       toast.error("Validasi Gagal: Alasan minimal 10 karakter");
+      return;
+    }
+
+    const attachmentError = leaveAttachmentError(formData.leave_type, Boolean(formData.attachment_url));
+    if (attachmentError) {
+      toast.error(`Validasi Gagal: ${attachmentError}`);
       return;
     }
 
@@ -238,6 +253,8 @@ export function NewLeavePage() {
                 </p>
               </div>
             )}
+
+            {ruleHint && <p className="text-xs text-gray-600">{ruleHint}</p>}
 
             {quotaNote && (
               <p className="rounded-lg bg-sky-50 px-3 py-2 text-xs text-sky-700">{quotaNote}</p>

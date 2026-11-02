@@ -15,7 +15,14 @@ import {
 } from "@/components/ui/dialog";
 import { formatDate } from "@/lib/format";
 import { todayWib } from "@/lib/dates";
-import { applySingleDay, effectiveLeaveType, leaveFormNote } from "@/lib/hris/leave-form";
+import {
+  applySingleDay,
+  earliestStartDate,
+  effectiveLeaveType,
+  leaveAttachmentError,
+  leaveFormNote,
+  leaveRuleHint,
+} from "@/lib/hris/leave-form";
 import { leaveTypeInfo, leaveTypeOptions } from "@/lib/hris/leave-types";
 import { formatDays, previewBalance } from "@/features/hris/leave-balances/balance-math";
 import { useLeaveQuota } from "@/features/hris/leaves/queries";
@@ -45,8 +52,13 @@ export function CutiRequestDialog({ open, onOpenChange, balance }: CutiRequestDi
   if (open && storedType !== form.leave_type) {
     setForm((f) => ({ ...f, leave_type: storedType }));
   }
-  const singleDay = Boolean(leaveTypeInfo(form.leave_type)?.singleDay);
+  const typeInfo = leaveTypeInfo(form.leave_type);
+  const singleDay = Boolean(typeInfo?.singleDay);
   const quotaNote = leaveFormNote(form.leave_type, quota);
+  // Aturan TnC 03-11 (EPIC-084): ringkasan + tanggal mulai paling awal; server tetap memutuskan.
+  const ruleHint = typeInfo ? leaveRuleHint(typeInfo) : null;
+  const minStart = typeInfo ? (earliestStartDate(typeInfo, todayWib()) ?? undefined) : undefined;
+  const attachmentRequired = Boolean(typeInfo?.attachmentRequired);
 
   /**
    * Pratinjau potongan jatah cuti (EPIC-036 Fase D). Dihitung server dengan
@@ -85,6 +97,11 @@ export function CutiRequestDialog({ open, onOpenChange, balance }: CutiRequestDi
       toast.error("Alasan minimal 10 karakter");
       return;
     }
+    const attachmentError = leaveAttachmentError(form.leave_type, Boolean(attachment));
+    if (attachmentError) {
+      toast.error(attachmentError);
+      return;
+    }
     submit.mutate(
       { form, attachment: attachment?.dataUrl },
       {
@@ -119,12 +136,14 @@ export function CutiRequestDialog({ open, onOpenChange, balance }: CutiRequestDi
               }
               placeholder="Pilih jenis"
             />
+            {ruleHint && <p className="mt-1 text-xs text-gray-500">{ruleHint}</p>}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="mb-1 block text-xs font-medium text-gray-600">Mulai</label>
               <Input
                 type="date"
+                min={minStart}
                 value={form.start_date}
                 onChange={(e) =>
                   setForm((f) => {
@@ -156,7 +175,7 @@ export function CutiRequestDialog({ open, onOpenChange, balance }: CutiRequestDi
           </div>
           <div>
             <label className="mb-1 block text-xs font-medium text-gray-600">
-              Lampiran (ops. — foto surat dokter dsb., maks 5 MB)
+              Lampiran ({attachmentRequired ? "wajib" : "ops."} — foto surat dokter, KTP dsb., maks 5 MB)
             </label>
             <Input type="file" accept="image/*" onChange={handleAttachmentChange} />
             {attachment && <p className="mt-1 text-xs text-gray-500">📎 {attachment.name}</p>}

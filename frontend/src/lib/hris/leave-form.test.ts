@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { applySingleDay, effectiveLeaveType, leaveFormNote } from "./leave-form";
+import {
+  applySingleDay,
+  earliestStartDate,
+  effectiveLeaveType,
+  leaveAttachmentError,
+  leaveFormNote,
+  leaveRuleHint,
+} from "./leave-form";
+import { leaveTypeInfo } from "./leave-types";
 import type { LeaveQuota } from "@/features/hris/leaves/types";
 
 const quota: LeaveQuota = {
@@ -60,5 +68,39 @@ describe("effectiveLeaveType", () => {
   it("jatuh ke annual bila jenis tidak ada di opsi (Izin Leader hilang)", () => {
     expect(effectiveLeaveType("leader", withoutLeader)).toBe("annual");
     expect(effectiveLeaveType("menstrual", withLeader)).toBe("annual");
+  });
+});
+
+describe("aturan TnC 03-11 di form (EPIC-084)", () => {
+  const info = (code: string) => leaveTypeInfo(code)!;
+
+  it("hint per jenis", () => {
+    expect(leaveRuleHint(info("annual"))).toBe("Diajukan paling lambat H-3");
+    expect(leaveRuleHint(info("pilgrimage"))).toBe(
+      "Diajukan paling lambat H-30 · maksimal 40 hari kalender · lewat 14 hari tidak dibayar bila masa kerja < 1 tahun"
+    );
+    expect(leaveRuleHint(info("sick"))).toBe("Diajukan pada hari sakit");
+    expect(leaveRuleHint(info("leader"))).toBe("1x per bulan, hangus bila tidak dipakai, tanpa potong gaji");
+    expect(leaveRuleHint(info("birthday"))).toBe(
+      "Diajukan paling lambat H-3 · 1 hari dalam bulan ulang tahun · wajib lampiran (mis. foto KTP)"
+    );
+    expect(leaveRuleHint(info("marriage"))).toBe("Diajukan paling lambat H-3 · maksimal 3 hari kerja");
+    expect(leaveRuleHint(info("miscarriage"))).toBe(
+      "Maksimal 45 hari kalender · upah penuh bila masa kerja ≥ 1 tahun · wajib lampiran (surat dokter)"
+    );
+    expect(leaveRuleHint(info("personal"))).toBe("Hanya bila belum punya hak cuti atau cuti tahunan habis");
+  });
+
+  it("tanggal mulai paling awal", () => {
+    expect(earliestStartDate(info("annual"), "2026-11-03")).toBe("2026-11-06");
+    expect(earliestStartDate(info("pilgrimage"), "2026-11-03")).toBe("2026-12-03");
+    expect(earliestStartDate(info("sick"), "2026-11-03")).toBe("2026-11-03");
+    expect(earliestStartDate(info("bereavement"), "2026-11-03")).toBeNull();
+  });
+
+  it("lampiran wajib", () => {
+    expect(leaveAttachmentError("birthday", false)).toBe("Lampiran wajib untuk Birthday Leave (Cuti Ulang Tahun)");
+    expect(leaveAttachmentError("birthday", true)).toBeNull();
+    expect(leaveAttachmentError("annual", false)).toBeNull();
   });
 });
