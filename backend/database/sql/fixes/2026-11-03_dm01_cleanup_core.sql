@@ -13,8 +13,11 @@
 -- pratinjau serta izin user untuk jam eksekusi (R8). File lampiran dihapus terpisah oleh runner
 -- dari daftar FILE pratinjau; skrip ini hanya menyentuh database.
 --
--- Pemakaian (SATU transaksi; tanpa -1 skrip berhenti di pemeriksaan pertama):
---   psql "$DATABASE_URL" -1 -v ON_ERROR_STOP=1 -f backend/database/sql/fixes/2026-11-03_dm01_cleanup_core.sql
+-- Pemakaian: lewat tools/ops/dm01-cleanup.sh execute (runbook docs/hris/runbook-dm01-cleanup.md).
+-- Runner menjalankannya dalam SATU transaksi (psql -1; tanpa -1 skrip berhenti di pemeriksaan
+-- pertama) dan lebih dulu menyetel angka yang disetujui:
+--   psql -1 -v ON_ERROR_STOP=1 -v expect_<tabel>=<n> … -f <pembungkus: set_config('dm01.expect_<tabel>',
+--        :'expect_<tabel>', true) untuk keenam tabel, lalu \i 2026-11-03_dm01_cleanup_core.sql>
 --
 -- Isi (ruling EPIC-083):
 --   R1 batas inklusif 20 Okt: attendance.date, attendance_requests.date, overtime_requests.date;
@@ -31,6 +34,10 @@
 --      supaya FK tetap berjalan (attendance_requests.attendance_id → attendance: ON DELETE SET NULL,
 --      satu-satunya FK yang merujuk enam tabel ini).
 --   R5 satu transaksi; satu baris audit data_cleanup.dm01 berisi jumlah per tabel.
+--   Angka yang disetujui: jumlah terhapus per tabel harus SAMA dengan dm01.expect_<tabel> (angka
+--      HAPUS pratinjau yang disetujui HR, disetel runner tools/ops/dm01-cleanup.sh); beda → RAISE
+--      sebelum COMMIT sehingga tidak ada yang terhapus. Tanpa angka skrip berhenti, kecuali
+--      dm01.expect_skip = 'on' (hanya untuk tes).
 -- Urutan: attendance_requests → attendance → leaves → overtime_requests → business_trips → loans.
 -- ALTER TABLE … DISABLE/ENABLE TRIGGER memegang SHARE ROW EXCLUSIVE atas hris.attendance dan
 -- hris.leaves sampai COMMIT: penulisan (clock-in, pengajuan cuti) tertahan, pembacaan tidak. Jalankan
@@ -62,6 +69,21 @@ BEGIN
   IF n <> 2 THEN
     RAISE EXCEPTION 'DM-01 dibatalkan: trigger trg_notify_attendance_changes (hris.attendance) dan trg_notify_leave_changes (hris.leaves) harus ada dan aktif sebelum cleanup; periksa pg_trigger.tgenabled dan pulihkan dulu';
   END IF;
+END $$;
+
+-- Angka yang disetujui wajib ada (bilangan bulat) untuk keenam tabel.
+DO $$
+DECLARE
+  t text;
+BEGIN
+  IF current_setting('dm01.expect_skip', true) IS NOT DISTINCT FROM 'on' THEN
+    RETURN;
+  END IF;
+  FOREACH t IN ARRAY ARRAY['attendance_requests', 'attendance', 'leaves', 'overtime_requests', 'business_trips', 'loans'] LOOP
+    IF COALESCE(current_setting('dm01.expect_' || t, true), '') !~ '^[0-9]+$' THEN
+      RAISE EXCEPTION 'DM-01 dibatalkan: angka yang disetujui untuk % tidak ada (dm01.expect_%); jalankan lewat tools/ops/dm01-cleanup.sh execute', t, t;
+    END IF;
+  END LOOP;
 END $$;
 
 SET LOCAL hris.allow_closed_period_write = 'on';
@@ -111,6 +133,25 @@ WITH d AS (
   RETURNING 1
 )
 SELECT set_config('dm01.n_loans', count(*)::text, true) AS loans_dihapus FROM d;
+
+-- Jumlah terhapus harus sama dengan angka yang disetujui; beda → seluruh transaksi dibatalkan.
+DO $$
+DECLARE
+  t text;
+  beda text := '';
+BEGIN
+  IF current_setting('dm01.expect_skip', true) IS NOT DISTINCT FROM 'on' THEN
+    RETURN;
+  END IF;
+  FOREACH t IN ARRAY ARRAY['attendance_requests', 'attendance', 'leaves', 'overtime_requests', 'business_trips', 'loans'] LOOP
+    IF current_setting('dm01.n_' || t)::bigint <> current_setting('dm01.expect_' || t)::bigint THEN
+      beda := beda || format(' %s terhapus %s, disetujui %s;', t, current_setting('dm01.n_' || t), current_setting('dm01.expect_' || t));
+    END IF;
+  END LOOP;
+  IF beda <> '' THEN
+    RAISE EXCEPTION 'DM-01 dibatalkan: jumlah terhapus beda dari angka yang disetujui —% tidak ada yang terhapus; ulangi pratinjau dan minta persetujuan lagi', beda;
+  END IF;
+END $$;
 
 ALTER TABLE hris.attendance ENABLE TRIGGER trg_notify_attendance_changes;
 ALTER TABLE hris.leaves ENABLE TRIGGER trg_notify_leave_changes;

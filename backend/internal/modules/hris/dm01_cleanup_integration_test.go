@@ -76,9 +76,25 @@ func dm01Count(lines []string, prefix, key string) string {
 	return ""
 }
 
+// dm01Core runs the core with the approved counts taken from a fresh
+// preview, the way tools/ops/dm01-cleanup.sh passes them (dm01.expect_<table>).
 func (h *harness) dm01Core() {
 	h.t.Helper()
+	h.dm01Expect(h.dm01Preview(), nil)
 	h.exec(dm01Script(h.t, "2026-11-03_dm01_cleanup_core.sql"))
+}
+
+// dm01Expect sets dm01.expect_<table> for the transaction from the preview's
+// HAPUS lines, plus bump[table].
+func (h *harness) dm01Expect(preview []string, bump map[string]int) {
+	h.t.Helper()
+	for _, table := range dm01Tables {
+		n, err := strconv.Atoi(dm01Count(preview, "HAPUS", table))
+		if err != nil {
+			h.t.Fatalf("preview HAPUS %s: %v", table, err)
+		}
+		h.exec(`SELECT set_config('dm01.expect_' || $1, $2, true)`, table, strconv.Itoa(n+bump[table]))
+	}
 }
 
 var dm01Tables = []string{"attendance_requests", "attendance", "leaves", "overtime_requests", "business_trips", "loans"}
@@ -475,5 +491,53 @@ func TestDM01SameCutoff(t *testing.T) {
 		if !slices.Equal(found, []string{"'2026-10-20'"}) {
 			t.Errorf("%s date literals = %v, want exactly one '2026-10-20'", name, found)
 		}
+	}
+}
+
+// TestDM01CoreChecksExpectations: the core deletes exactly the approved counts
+// or nothing. Without counts it stops unless dm01.expect_skip = 'on'; a count
+// that differs from what the DELETEs removed aborts the whole transaction
+// (nothing deleted, the notify triggers left enabled).
+func TestDM01CoreChecksExpectations(t *testing.T) {
+	h := newHarness(t)
+	e := h.employee(emp{name: "DM01 Angka"})
+	h.exec(`INSERT INTO hris.attendance (employee_id, date, status) VALUES ($1, '2026-10-10', 'present')`, e)
+	h.exec(`INSERT INTO hris.leaves (employee_id, leave_type, start_date, end_date, total_days, reason, status)
+		VALUES ($1, 'annual', '2026-10-12', '2026-10-12', 1, 'Cuti uji angka', 'approved')`, e)
+	core := dm01Script(t, "2026-11-03_dm01_cleanup_core.sql")
+	left := func() string {
+		return h.scalar(`SELECT (SELECT count(*) FROM hris.attendance WHERE employee_id = $1)::text || '/' ||
+			(SELECT count(*) FROM hris.leaves WHERE employee_id = $1)::text`, e)
+	}
+	try := func(name string, setup func()) error {
+		h.exec("SAVEPOINT " + name)
+		setup()
+		_, err := h.tx.Exec(context.Background(), core)
+		h.exec("ROLLBACK TO SAVEPOINT " + name)
+		return err
+	}
+
+	err := try("dm01_noexpect", func() {})
+	if err == nil || !strings.Contains(err.Error(), "angka yang disetujui") {
+		t.Fatalf("core without counts = %v, want the missing-counts error", err)
+	}
+	preview := h.dm01Preview()
+	err = try("dm01_mismatch", func() { h.dm01Expect(preview, map[string]int{"attendance": 1}) })
+	if err == nil || !strings.Contains(err.Error(), "beda dari angka yang disetujui") ||
+		!strings.Contains(err.Error(), "attendance") {
+		t.Fatalf("core with a wrong count = %v, want the mismatch error naming attendance", err)
+	}
+	if got := left(); got != "1/1" {
+		t.Errorf("rows after refused runs = %s, want 1/1 (nothing deleted)", got)
+	}
+	if got := h.scalar(`SELECT string_agg(tgenabled::text, ',' ORDER BY tgname) FROM pg_trigger
+		WHERE tgname IN ('trg_notify_attendance_changes', 'trg_notify_leave_changes')`); got != "O,O" {
+		t.Errorf("notify triggers after refused runs = %s, want O,O", got)
+	}
+
+	h.exec(`SELECT set_config('dm01.expect_skip', 'on', true)`)
+	h.exec(core)
+	if got := left(); got != "0/0" {
+		t.Errorf("rows after core with dm01.expect_skip = %s, want 0/0", got)
 	}
 }
