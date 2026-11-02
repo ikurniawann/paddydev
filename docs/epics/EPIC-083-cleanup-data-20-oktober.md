@@ -18,6 +18,9 @@ Jawaban user 02-11 (menjawab K-22):
 - **Pinjaman yang masih berjalan** (disetujui, sisa > 0) **tidak dihapus**.
 - **Saldo cuti tetap**: hanya riwayat pengajuan yang dihapus; `leave_balances` tidak diubah.
 
+Runbook (perintah staging → gladi salinan production → production, kegagalan, pemulihan):
+[`docs/hris/runbook-dm01-cleanup.md`](../hris/runbook-dm01-cleanup.md). Runner: `tools/ops/dm01-cleanup.sh`.
+
 ## Data di staging (salinan struktur production; angka production dilihat saat gladi)
 | Data ≤ 20 Okt | Staging |
 |---|---|
@@ -39,20 +42,40 @@ FK `attendance_requests.attendance_id` → `attendance` (SET NULL).
   - absensi `date`; pengajuan absensi `date`; lembur `date`;
   - cuti/izin dan perjalanan dinas: `end_date ≤ 20 Okt`. Pengajuan yang melintasi 21 Okt tetap ada (my call: sebagian harinya masuk periode berjalan).
   - pinjaman `requested_date`.
-- **R2 Pinjaman**: dihapus bila status `rejected`/`cancelled`/`pending`, atau `approved` dengan `remaining_balance ≤ 0` (lunas). **Disetujui dan sisa > 0 tetap ada.**
+- **R2 Pinjaman**: dihapus bila status `pending`, `manager_approved` (masih menunggu HR), `rejected`, `cancelled`, `paid_off` (lunas lewat payroll), atau `approved` dengan `remaining_balance ≤ 0` (lunas). **Disetujui dan sisa > 0 tetap ada**; status lain dan `requested_date` kosong juga tetap (muncul di PENGECUALIAN).
 - **R3 Saldo cuti**: `hris.leave_balances`, `leave_carry_over_*` dan setting tidak disentuh. Penghapusan langsung SQL (bukan lewat aplikasi), jadi hook penghitung ulang EPIC-068 tidak berjalan.
+  - Efek samping yang diterima: kuota bulanan Izin Pribadi/Izin Leader dihitung dari baris `hris.leaves` (MonthlyLeaveUse, menurut `start_date` dalam bulan kalender). Setelah cuti/izin 1–20 Okt dihapus, kuota **Oktober** yang terpakai oleh pengajuan itu "terbebas": pengajuan baru bertanggal 21–31 Okt tidak lagi terhitung bersama pengajuan 1–20 Okt.
 - **R4 Tanpa notifikasi**: kedua trigger notifikasi dinonaktifkan di dalam transaksi (`ALTER TABLE … DISABLE TRIGGER`), lalu diaktifkan lagi di transaksi yang sama. `SET LOCAL hris.allow_closed_period_write = 'on'` untuk periode tertutup. Tidak memakai `session_replication_role = replica`, supaya FK dan cascade tetap berjalan.
 - **R5 Satu transaksi**: semua DELETE berjalan dalam satu transaksi; gagal → tidak ada yang terhapus. Satu baris audit `data_cleanup.dm01` (aktor "Sistem (cleanup DM-01)") berisi jumlah per tabel.
 - **R6 File lampiran**: lampiran cuti, lembur, pinjaman, pengajuan absensi, dan foto absensi milik baris yang dihapus ikut dihapus dari volume storage. Sebelumnya file di-tar ke backup. My call: data pribadi ikut hilang bersama datanya.
+  - Hanya nilai berbentuk `<folder kolom>/<employee_id baris>/<nama>` (FILE) yang dihapus otomatis, dan hanya bila tidak dirujuk baris yang tetap.
+  - Nilai lain (FILE_LAIN: folder lain, karyawan lain, URL, path absolut) **hanya ditinjau manual**, tidak dihapus runner.
+  - Folder/berkas symlink dilewati.
 - **R7 Yang tidak disentuh**:
   - payroll run/detail dan periode absensi;
   - `audit.audit_log` (append-only);
   - notifikasi lama;
-  - data master (karyawan, jadwal, saldo).
+  - data master (karyawan, jadwal, saldo);
+  - `hris.attendance_adjustments` (log koreksi absensi, sengaja tanpa FK): barisnya tetap ada dan menjadi yatim, karena absensi yang dirujuknya sudah dihapus. Diterima sebagai jejak audit.
 - **R8 Production** hanya dieksekusi setelah:
   - gladi di salinan production (angka per tabel dan daftar file);
   - **persetujuan tertulis HR** (K-22, Mba Risky/Manager HR) atas angka gladi;
   - izin eksplisit user untuk jam eksekusi (jam sepi).
+- **R9 Gerbang payroll/periode** (final review 02-11): `execute` menolak bila:
+  - ada payroll run `draft` yang mencakup ≤ 20 Okt (tidak bisa di-ACK);
+  - ada perusahaan dengan gaji aktif tanpa payroll run selain draft pada periode payroll yang beririsan dengan data yang dihapus;
+  - ada baris `hris.attendance_periods` ≤ 20 Okt yang belum `closed`.
+  
+  Dua butir terakhir bisa dilewati dengan `DM01_PAYROLL_ACK=yes`, hanya dengan pernyataan tertulis HR. Peringatan dicetak dan dicatat (`payroll-ack.txt`). Ketiganya juga tampil di pratinjau.
+- **R10 Angka yang disetujui di dalam transaksi**:
+  - runner meneruskan angka HAPUS pratinjau yang disetujui ke core (`psql -v expect_<tabel>` → `dm01.expect_<tabel>`);
+  - core `RAISE` sebelum COMMIT bila jumlah terhapus berbeda, atau bila angkanya tidak ada (kecuali `dm01.expect_skip = 'on'`, khusus tes);
+  - pratinjau yang disetujui wajib ditunjuk (`DM01_PREVIEW_DIR`), dicetak SHA-256-nya (opsional dicocokkan dengan `DM01_PREVIEW_SHA256`), dan berumur ≤ 36 jam;
+  - sebelum database asli disentuh, core dijalankan dulu pada DB uji restore (gladi); durasinya menjadi perkiraan lama kunci.
+- **R11 Pemulihan**: `tools/ops/dm01-cleanup.sh restore <folder eksekusi>` (`DM01_RESTORE_APPROVED=yes`). Cara kerjanya:
+  - baris berkriteria cleanup dari `db.dump` dikembalikan dalam satu transaksi (`ON CONFLICT (id) DO NOTHING`, trigger dimatikan sementara, tautan pengajuan absensi dipulihkan);
+  - berkas dari `files-*.tgz` dikembalikan tanpa menimpa, dengan pemilik 1001:1001;
+  - baris yang dibuat sesudah cleanup tidak disentuh.
 
 ## Acceptance Criteria
 - [ ] Pratinjau baca-saja menampilkan jumlah per tabel, rincian status, dan daftar file yang akan dihapus.
@@ -66,3 +89,13 @@ FK `attendance_requests.attendance_id` → `attendance` (SET NULL).
 
 ## Automation Log
 - 2026-11-02 — MOM 29 Okt dibaca (DM-01, K-22). Data staging diinventaris. Jawaban user dicatat. Rencana: `docs/superpowers/plans/2026-11-02-cleanup-data-20-oktober.md`.
+- 2026-11-02 — Task 1 (SQL core + pratinjau, tes Go `TestDM01*`) dan Task 2 (runner `tools/ops/dm01-cleanup.sh`, tes `tools/ops/dm01-cleanup.test.sh` di DB uji lokal + volume sementara) selesai. Keputusan review:
+  - pinjaman `manager_approved` dan `paid_off` ikut dihapus (R2);
+  - FILE_LAIN hanya ditinjau manual (R6);
+  - `attendance_adjustments` dibiarkan yatim (R7);
+  - kuota bulanan Izin Pribadi/Leader Oktober terbebas (R3);
+  - gerbang payroll/periode (R9);
+  - angka disetujui dicek di dalam transaksi dan gladi core di DB uji restore (R10);
+  - mode pemulihan (R11).
+  
+  Runbook: `docs/hris/runbook-dm01-cleanup.md`. Belum dijalankan di staging maupun production.
