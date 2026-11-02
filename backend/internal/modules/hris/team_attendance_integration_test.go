@@ -160,9 +160,14 @@ func TestMigrationEssTeamAttendanceMenu(t *testing.T) {
 	}
 	h.exec(`INSERT INTO iam.menus (code, menu_name, menu_type) VALUES ('ess', 'Area Karyawan', 'group') ON CONFLICT (code) DO NOTHING`)
 	h.exec(`INSERT INTO iam.roles (code, name) VALUES ('go_test_role_074', 'go_test_role_074') ON CONFLICT (code) DO NOTHING`)
-	// The roles existing when the migration runs: other packages' tests may
-	// commit new roles concurrently (CI runs packages in parallel).
-	roles := h.scalar(`SELECT string_agg(id::text, ',') FROM iam.roles WHERE deleted_at IS NULL`)
+	// CI runs packages in parallel on one database, and testutil.CreateStaff
+	// commits a role and deletes it on cleanup. The migration grants to every
+	// role with INSERT … SELECT: its snapshot can still see a role another
+	// package deletes before the foreign-key check, which then fails (23503).
+	// Lock the roles seen now against deletion until this test's rollback —
+	// row locks, not a table lock, so other packages can still add roles.
+	roles := h.scalar(`SELECT string_agg(id::text, ',') FROM (
+		SELECT id FROM iam.roles WHERE deleted_at IS NULL FOR KEY SHARE) r`)
 	h.exec(string(body))
 	h.exec(string(body))
 	got := h.scalar(`SELECT m.menu_name || '|' || m.route_path || '|' || m.module || '|' || p.code || '|' || (m.permission_context->'actions')::text

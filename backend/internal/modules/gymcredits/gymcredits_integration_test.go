@@ -409,7 +409,10 @@ func TestCreditDeskRoutes(t *testing.T) {
 func TestRulesRoutes(t *testing.T) {
 	e := setup(t)
 	var branchID string
-	e.scalar(&branchID, `SELECT id FROM configuration.branches WHERE COALESCE(is_active, true) ORDER BY name LIMIT 1`)
+	// FOR KEY SHARE until the rollback: other packages' tests commit branches
+	// and delete them on cleanup (CI runs packages in parallel), and the
+	// branch override below references this one.
+	e.scalar(&branchID, `SELECT id FROM configuration.branches WHERE COALESCE(is_active, true) ORDER BY name LIMIT 1 FOR KEY SHARE`)
 
 	view := e.data(asStaff, "GET", "/api/gym/rules", nil)
 	if view["defaults"].(map[string]any)["qrTtlSec"] != 45.0 {
