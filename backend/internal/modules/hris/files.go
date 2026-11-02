@@ -67,7 +67,7 @@ func (s *store) ShiftPattern(ctx context.Context, employeeID string) ([]*Row, er
 	return queryRows(ctx, s.db, `SELECT es.day_of_week, es.shift_id,
 		es.effective_from::text, es.effective_to::text,
 		s.name, s.start_time::text, s.end_time::text,
-		s.late_tolerance_minutes, s.is_overnight,
+		s.late_tolerance_minutes, s.is_overnight, s.break_minutes,
 		es.shift2_id, s2.code AS shift2_code, s2.name AS shift2_name,
 		s2.start_time::text AS shift2_start_time, s2.end_time::text AS shift2_end_time,
 		s2.break_minutes AS shift2_break_minutes, s2.is_overnight AS shift2_is_overnight

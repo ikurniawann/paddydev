@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"regexp"
+	"time"
 
 	"nuhabit/backend/internal/modules/hris/domain"
 	"nuhabit/backend/internal/platform/httpx"
@@ -154,12 +155,13 @@ func (s *Service) ClockIn(ctx context.Context, a *Actor, in clockInput) (row *Ro
 	f.add("late_minutes", 0)
 	f.add("late_tolerance_minutes", nil)
 	if snap != nil {
-		start, end := domain.ScheduledWindow(date, snap.times)
+		start, end, breakMinutes := snap.window(date)
 		late, minutes := domain.Lateness(clockIn, date, snap.times)
 		f.set("shift_id", snap.shiftID)
 		f.set("late_tolerance_minutes", snap.times.LateToleranceMinutes)
 		f.set("scheduled_start", start)
 		f.set("scheduled_end", end)
+		f.add("break_minutes", breakMinutes) // unscheduled rows keep the table default (60)
 		f.set("is_late", late)
 		f.set("late_minutes", minutes)
 	}
@@ -175,6 +177,29 @@ func (s *Service) ClockIn(ctx context.Context, a *Actor, in clockInput) (row *Ro
 type shiftSnap struct {
 	shiftID string
 	times   domain.ShiftTimes
+	// breakMinutes is the shift master's break (0 for OPSSAT).
+	breakMinutes int
+	// second is the second shift of a two-shift day (EPIC-080), nil otherwise.
+	second *secondShift
+}
+
+type secondShift struct {
+	times        domain.ShiftTimes
+	breakMinutes int
+}
+
+// window is the scheduled start and end of the day and the break to deduct
+// from clock-out minus clock-in. Lateness is judged on the first shift only
+// (snap.times); a two-shift day ends with the second shift, and its break is
+// both shift breaks plus the idle gap between them, so work_hours is the net
+// time worked across both.
+func (sn *shiftSnap) window(date string) (start, end time.Time, breakMinutes int) {
+	if sn.second == nil {
+		start, end = domain.ScheduledWindow(date, sn.times)
+		return start, end, sn.breakMinutes
+	}
+	start, end, gap := domain.TwoShiftWindow(date, sn.times, sn.second.times)
+	return start, end, sn.breakMinutes + sn.second.breakMinutes + gap
 }
 
 // shiftSnapshot is the shift that applies on date with its times, nil
@@ -194,18 +219,19 @@ func (s *Service) shiftSnapshot(ctx context.Context, employeeID, date string) (*
 	if idx < 0 || pattern[idx].ShiftID == nil {
 		return nil, nil
 	}
-	shiftID := *pattern[idx].ShiftID
-	for _, r := range rows {
-		if r.Str("shift_id") != shiftID || r.Str("name") == "" {
-			continue
-		}
-		if r.Str("start_time") == "" || r.Str("end_time") == "" {
-			return nil, nil
-		}
-		return &shiftSnap{shiftID, domain.ShiftTimes{StartTime: r.Str("start_time"), EndTime: r.Str("end_time"),
-			IsOvernight: r.Bool("is_overnight"), LateToleranceMinutes: int(r.Num("late_tolerance_minutes"))}}, nil
+	r := rows[idx]
+	if r.Str("name") == "" || r.Str("start_time") == "" || r.Str("end_time") == "" {
+		return nil, nil
 	}
-	return nil, nil
+	snap := &shiftSnap{shiftID: *pattern[idx].ShiftID, breakMinutes: int(r.Num("break_minutes")),
+		times: domain.ShiftTimes{StartTime: r.Str("start_time"), EndTime: r.Str("end_time"),
+			IsOvernight: r.Bool("is_overnight"), LateToleranceMinutes: int(r.Num("late_tolerance_minutes"))}}
+	if r.Str("shift2_id") != "" && r.Str("shift2_start_time") != "" && r.Str("shift2_end_time") != "" {
+		snap.second = &secondShift{breakMinutes: int(r.Num("shift2_break_minutes")),
+			times: domain.ShiftTimes{StartTime: r.Str("shift2_start_time"), EndTime: r.Str("shift2_end_time"),
+				IsOvernight: r.Bool("shift2_is_overnight")}}
+	}
+	return snap, nil
 }
 
 // ClockOut closes an attendance row; non-HR only their own.

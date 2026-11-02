@@ -3,6 +3,7 @@ package domain
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 // EPIC-080 R6/R7/R9: two shifts in one day, coded KODE1+KODE2.
@@ -163,5 +164,68 @@ func TestTwoShiftCellsReadCurrentTwoShiftDays(t *testing.T) {
 	}
 	if strings.Join(got, ",") != "2026-11-04=s6+,2026-11-05=p4+s4" {
 		t.Fatalf("assignments %v", got)
+	}
+}
+
+func TestTwoShiftWindow(t *testing.T) {
+	pagi := ShiftTimes{StartTime: "08:00:00", EndTime: "12:00:00"}
+	sore := ShiftTimes{StartTime: "17:00:00", EndTime: "21:00:00"}
+	malam := ShiftTimes{StartTime: "22:00:00", EndTime: "06:00:00", IsOvernight: true}
+	dini := ShiftTimes{StartTime: "04:00:00", EndTime: "08:00:00"}
+	cases := []struct {
+		name          string
+		first, second ShiftTimes
+		start, end    string
+		gap           int
+	}{
+		{"same day", pagi, sore, "2026-10-06T01:00:00Z", "2026-10-06T14:00:00Z", 300},
+		{"second overnight", pagi, malam, "2026-10-06T01:00:00Z", "2026-10-06T23:00:00Z", 600},
+		// 04:00 starts before 08:00: the second shift runs the next day.
+		{"second wraps to next day", pagi, dini, "2026-10-06T01:00:00Z", "2026-10-07T01:00:00Z", 960},
+		{"back to back", pagi, ShiftTimes{StartTime: "12:00:00", EndTime: "16:00:00"}, "2026-10-06T01:00:00Z", "2026-10-06T09:00:00Z", 0},
+	}
+	for _, c := range cases {
+		start, end, gap := TwoShiftWindow("2026-10-06", c.first, c.second)
+		if got := start.Format(time.RFC3339); got != c.start {
+			t.Errorf("%s: start = %s, want %s", c.name, got, c.start)
+		}
+		if got := end.Format(time.RFC3339); got != c.end {
+			t.Errorf("%s: end = %s, want %s", c.name, got, c.end)
+		}
+		if gap != c.gap {
+			t.Errorf("%s: gap = %d, want %d", c.name, gap, c.gap)
+		}
+	}
+}
+
+func TestESSTwoShiftDisplay(t *testing.T) {
+	s := func(v string) *string { return &v }
+	tol := int64(3)
+	id1, id2 := "p4", "s4"
+	row := func(dow int, second bool) ESSScheduleRow {
+		r := ESSScheduleRow{ScheduleRow: ScheduleRow{DayOfWeek: dow, ShiftID: &id1, EffectiveFrom: "2026-01-01"},
+			ShiftCode: s("PAGI4"), ShiftName: s("Pagi Empat"), StartTime: s("08:00:00"), EndTime: s("12:00:00"), LateToleranceMinutes: &tol}
+		if second {
+			r.Shift2ID, r.Shift2Code, r.Shift2Name = &id2, s("SORE4"), s("Sore Empat")
+			r.Shift2Start, r.Shift2End = s("17:00:00"), s("21:00:00")
+		}
+		return r
+	}
+	// Monday has two shifts, Tuesday only the first: same first shift, so the
+	// second shift must come from the winning row, not from any row.
+	rows := []ESSScheduleRow{row(1, true), row(2, false)}
+
+	mon := TodayShiftOf(rows, "2026-10-05")
+	if mon.Name != "PAGI4 + SORE4" || *mon.StartTime != "08:00:00" || *mon.EndTime != "21:00:00" ||
+		mon.TimeLabel != "08.00–12.00, 17.00–21.00" || mon.LateToleranceMinutes != 3 {
+		t.Errorf("two-shift today = %+v", mon)
+	}
+	tue := TodayShiftOf(rows, "2026-10-06")
+	if tue.Name != "Pagi Empat" || *tue.EndTime != "12:00:00" || tue.TimeLabel != "08.00–12.00" {
+		t.Errorf("one-shift today = %+v", tue)
+	}
+	week := WeekScheduleOf(rows, "2026-10-07")
+	if *week[0].ShiftName != "PAGI4 + SORE4" || *week[0].TimeLabel != "08.00–12.00, 17.00–21.00" || *week[1].ShiftName != "Pagi Empat" {
+		t.Errorf("week = %+v / %+v", week[0], week[1])
 	}
 }

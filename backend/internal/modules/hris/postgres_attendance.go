@@ -83,7 +83,7 @@ func (s *store) RosterRows(ctx context.Context, date string, dow int, superAdmin
 		only = employeeIDs
 	}
 	return queryRows(ctx, s.db, `WITH scheduled AS (
-		  SELECT DISTINCT ON (es.employee_id) es.employee_id, es.shift_id
+		  SELECT DISTINCT ON (es.employee_id) es.employee_id, es.shift_id, es.shift2_id
 		  FROM hris.v_employee_schedule es
 		  WHERE es.day_of_week = $2
 		    AND es.effective_from <= $1::date
@@ -94,7 +94,9 @@ func (s *store) RosterRows(ctx context.Context, date string, dow int, superAdmin
 		       d.name AS department_name, p.title AS job_title,
 		       (sc.employee_id IS NOT NULL) AS has_schedule,
 		       sc.shift_id AS scheduled_shift_id,
-		       s.name AS shift_name,
+		       s.name AS shift_name, s.code AS shift_code,
+		       sc.shift2_id AS scheduled_shift2_id, s2.code AS shift2_code, s2.name AS shift2_name,
+		       s2.start_time::text AS shift2_start, s2.end_time::text AS shift2_end,
 		       s.start_time::text AS shift_start,
 		       s.end_time::text AS shift_end,
 		       s.late_tolerance_minutes, s.is_overnight,
@@ -108,6 +110,7 @@ func (s *store) RosterRows(ctx context.Context, date string, dow int, superAdmin
 		FROM hris.employees e
 		LEFT JOIN scheduled sc ON sc.employee_id = e.id
 		LEFT JOIN hris.shifts s ON s.id = sc.shift_id
+		LEFT JOIN hris.shifts s2 ON s2.id = sc.shift2_id
 		LEFT JOIN hris.attendance a ON a.employee_id = e.id AND a.date = $1::date
 		LEFT JOIN LATERAL (
 		  SELECT lv.id, lv.leave_type

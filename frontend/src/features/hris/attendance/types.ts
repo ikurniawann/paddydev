@@ -28,6 +28,8 @@ export interface RosterShift {
   end_time: string;
   late_tolerance_minutes: number;
   is_overnight: boolean;
+  /** "08.00–12.00, 17.00–21.00" (EPIC-080). */
+  time_label?: string;
 }
 
 export interface RosterAttendance {

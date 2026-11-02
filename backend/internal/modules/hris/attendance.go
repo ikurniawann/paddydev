@@ -113,8 +113,17 @@ func buildRoster(rows []*Row, date, today string, holidays []domain.Holiday, now
 			tol := int(row.Num("late_tolerance_minutes"))
 			times = &domain.ShiftTimes{StartTime: row.Str("shift_start"), EndTime: row.Str("shift_end"),
 				IsOvernight: row.Bool("is_overnight"), LateToleranceMinutes: tol}
-			shift = obj("id", *id, "name", row.Str("shift_name"), "start_time", times.StartTime, "end_time", times.EndTime,
-				"late_tolerance_minutes", tol, "is_overnight", times.IsOvernight)
+			first := domain.ShiftPart{Code: row.Str("shift_code"), Name: row.Str("shift_name"), Start: times.StartTime, End: times.EndTime}
+			var second *domain.ShiftPart
+			if row.Str("shift2_name") != "" && row.Str("shift2_start") != "" && row.Str("shift2_end") != "" {
+				second = &domain.ShiftPart{Code: row.Str("shift2_code"), Name: row.Str("shift2_name"),
+					Start: row.Str("shift2_start"), End: row.Str("shift2_end")}
+			}
+			disp := domain.DisplayShifts(first, second)
+			// Lateness and overdue stay on the first shift; a two-shift day
+			// shows both names and clocks, ending with the second shift.
+			shift = obj("id", *id, "name", disp.Name, "start_time", times.StartTime, "end_time", disp.EndTime,
+				"late_tolerance_minutes", tol, "is_overnight", times.IsOvernight, "time_label", disp.TimeLabel)
 		}
 		status := domain.DeriveRosterStatus(domain.RosterStatusInput{
 			HasAttendance:   row.Get("attendance_id") != nil,

@@ -172,11 +172,15 @@ func (s *Service) applyClockAndLateness(ctx context.Context, f *fields, in adjus
 		}
 		if snap != nil {
 			times = &snap.times
-			start, end := domain.ScheduledWindow(date, snap.times)
+			start, end, breakMinutes := snap.window(date)
 			f.set("shift_id", snap.shiftID)
 			f.set("late_tolerance_minutes", snap.times.LateToleranceMinutes)
 			f.set("scheduled_start", start)
 			f.set("scheduled_end", end)
+			if snap.second != nil {
+				// Two-shift day: the gap between the shifts is not worked time.
+				f.set("break_minutes", breakMinutes)
+			}
 		}
 	}
 	late, minutes := false, 0
