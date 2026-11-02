@@ -106,9 +106,11 @@ export function EssBerandaPage() {
           {today_shift ? (
             <span className="text-xs text-gray-500">
               Shift <b className="text-gray-700">{today_shift.name}</b>
-              {today_shift.start_time && today_shift.end_time
-                ? ` · ${today_shift.start_time.slice(0, 5)}–${today_shift.end_time.slice(0, 5)}`
-                : ""}
+              {today_shift.time_label
+                ? ` · ${today_shift.time_label}`
+                : today_shift.start_time && today_shift.end_time
+                  ? ` · ${today_shift.start_time.slice(0, 5)}–${today_shift.end_time.slice(0, 5)}`
+                  : ""}
               {today_shift.late_tolerance_minutes
                 ? ` · toleransi ${today_shift.late_tolerance_minutes} mnt`
                 : ""}

@@ -1847,6 +1847,31 @@
   {
     "module": "hris",
     "method": "GET",
+    "path": "/api/hris/auto-checkout-rules"
+  },
+  {
+    "module": "hris",
+    "method": "POST",
+    "path": "/api/hris/auto-checkout-rules"
+  },
+  {
+    "module": "hris",
+    "method": "GET",
+    "path": "/api/hris/auto-checkout-rules/options"
+  },
+  {
+    "module": "hris",
+    "method": "DELETE",
+    "path": "/api/hris/auto-checkout-rules/{id}"
+  },
+  {
+    "module": "hris",
+    "method": "PATCH",
+    "path": "/api/hris/auto-checkout-rules/{id}"
+  },
+  {
+    "module": "hris",
+    "method": "GET",
     "path": "/api/hris/branches"
   },
   {

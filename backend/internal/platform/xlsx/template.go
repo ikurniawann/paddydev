@@ -30,9 +30,12 @@ type TemplateColumn struct {
 	Width    float64
 	Kind     ColumnKind
 	Options  []string
-	ReadOnly bool
-	Fill     string
-	Formula  func(row int) string
+	// OtherNote (KindList) lets a value outside Options in: Excel shows the
+	// note as information instead of rejecting it. Empty = list values only.
+	OtherNote string
+	ReadOnly  bool
+	Fill      string
+	Formula   func(row int) string
 }
 
 type TemplateSheet struct {
@@ -194,6 +197,7 @@ type dropdown struct {
 	sheet         string
 	col, from, to int
 	options       []string
+	otherNote     string
 }
 
 func writeTemplateSheet(f *excelize.File, s TemplateSheet, st *templateStyles, dropdowns *[]dropdown) error {
@@ -241,7 +245,7 @@ func writeTemplateSheet(f *excelize.File, s TemplateSheet, st *templateStyles, d
 			_ = f.SetCellStyle(name, cellName(c, h+1), cellName(c, last), styleID)
 		}
 		if col.Kind == KindList && len(col.Options) > 0 && last > h {
-			*dropdowns = append(*dropdowns, dropdown{name, c, h + 1, last, col.Options})
+			*dropdowns = append(*dropdowns, dropdown{name, c, h + 1, last, col.Options, col.OtherNote})
 		}
 	}
 	for r, row := range s.Rows {
@@ -313,6 +317,10 @@ func addDropdown(f *excelize.File, d dropdown, optCol int) error {
 	dv := excelize.NewDataValidation(true)
 	dv.Sqref = cellName(d.col, d.from) + ":" + cellName(d.col, d.to)
 	dv.SetSqrefDropList(fmt.Sprintf("'%s'!$%s$1:$%s$%d", optionsSheet, letter, letter, len(d.options)))
-	dv.SetError(excelize.DataValidationErrorStyleStop, "Pilihan tidak tersedia", "Pilih salah satu nilai dari daftar.")
+	if d.otherNote != "" {
+		dv.SetError(excelize.DataValidationErrorStyleInformation, "Di luar daftar", d.otherNote)
+	} else {
+		dv.SetError(excelize.DataValidationErrorStyleStop, "Pilihan tidak tersedia", "Pilih salah satu nilai dari daftar.")
+	}
 	return f.AddDataValidation(d.sheet, dv)
 }

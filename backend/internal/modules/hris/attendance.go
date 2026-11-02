@@ -17,6 +17,10 @@ type AttendanceRepo interface {
 	AttendancePage(ctx context.Context, p attendanceListParams) ([]*Row, int64, error)
 	AttendanceDetail(ctx context.Context, id string) (*Row, error)
 	UpdateAttendance(ctx context.Context, id string, f fields) (*Row, error)
+	// CloseAttendance is UpdateAttendance that only applies while clock_out
+	// is still NULL; nil when the row was closed (or removed) meanwhile, so a
+	// manual clock-out never overwrites the automatic one (EPIC-080 R5).
+	CloseAttendance(ctx context.Context, id string, f fields) (*Row, error)
 	DeleteAttendance(ctx context.Context, id string) error
 	// RosterRows: employeeIDs nil = every active employee, else only those.
 	RosterRows(ctx context.Context, date string, dow int, superAdmins, employeeIDs []string) ([]*Row, error)
@@ -113,8 +117,17 @@ func buildRoster(rows []*Row, date, today string, holidays []domain.Holiday, now
 			tol := int(row.Num("late_tolerance_minutes"))
 			times = &domain.ShiftTimes{StartTime: row.Str("shift_start"), EndTime: row.Str("shift_end"),
 				IsOvernight: row.Bool("is_overnight"), LateToleranceMinutes: tol}
-			shift = obj("id", *id, "name", row.Str("shift_name"), "start_time", times.StartTime, "end_time", times.EndTime,
-				"late_tolerance_minutes", tol, "is_overnight", times.IsOvernight)
+			first := domain.ShiftPart{Code: row.Str("shift_code"), Name: row.Str("shift_name"), Start: times.StartTime, End: times.EndTime}
+			var second *domain.ShiftPart
+			if row.Str("shift2_name") != "" && row.Str("shift2_start") != "" && row.Str("shift2_end") != "" {
+				second = &domain.ShiftPart{Code: row.Str("shift2_code"), Name: row.Str("shift2_name"),
+					Start: row.Str("shift2_start"), End: row.Str("shift2_end")}
+			}
+			disp := domain.DisplayShifts(first, second)
+			// Lateness and overdue stay on the first shift; a two-shift day
+			// shows both names and clocks, ending with the second shift.
+			shift = obj("id", *id, "name", disp.Name, "start_time", times.StartTime, "end_time", disp.EndTime,
+				"late_tolerance_minutes", tol, "is_overnight", times.IsOvernight, "time_label", disp.TimeLabel)
 		}
 		status := domain.DeriveRosterStatus(domain.RosterStatusInput{
 			HasAttendance:   row.Get("attendance_id") != nil,
@@ -145,7 +158,8 @@ func buildRoster(rows []*Row, date, today string, holidays []domain.Holiday, now
 				"clock_in_geofence", row.Get("clock_in_geofence"), "clock_in_distance_m", row.Get("clock_in_distance_m"),
 				"clock_out_geofence", row.Get("clock_out_geofence"), "clock_out_distance_m", row.Get("clock_out_distance_m"),
 				"notes", row.Get("attendance_notes"),
-				"is_short_hours", row.Bool("is_short_hours"), "min_work_hours", minHours)
+				"is_short_hours", row.Bool("is_short_hours"), "min_work_hours", minHours,
+				"clock_out_auto", row.Bool("clock_out_auto"))
 		}
 		if row.Get("leave_id") != nil {
 			leave = obj("id", row.Get("leave_id"), "leave_type", row.Get("leave_type"))
@@ -257,6 +271,31 @@ func (s *Service) AttendanceStats(ctx context.Context, a *Actor, month, year flo
 	), nil
 }
 
+// ScheduleRows is the schedule pattern of an employee with its shift display:
+// a two-shift row (EPIC-080) reads "PAGI4 + SORE4", ends with the second
+// shift and carries the clocks of both in time_label.
 func (s *Service) ScheduleRows(ctx context.Context, employeeID string) ([]*Row, error) {
-	return s.repo.ScheduleRows(ctx, employeeID)
+	rows, err := s.repo.ScheduleRows(ctx, employeeID)
+	if err != nil {
+		return nil, err
+	}
+	for _, r := range rows {
+		if r.Str("shift_name") == "" || r.Str("start_time") == "" {
+			continue
+		}
+		first := domain.ShiftPart{Code: r.Str("shift_code"), Name: r.Str("shift_name"), Start: r.Str("start_time"), End: r.Str("end_time")}
+		var second *domain.ShiftPart
+		if r.Str("shift2_id") != "" && r.Str("shift2_name") != "" {
+			second = &domain.ShiftPart{Code: r.Str("shift2_code"), Name: r.Str("shift2_name"),
+				Start: r.Str("shift2_start_time"), End: r.Str("shift2_end_time")}
+			r.Set("is_overnight", r.Bool("shift2_is_overnight"))
+		}
+		d := domain.DisplayShifts(first, second)
+		r.Set("shift_name", d.Name)
+		if d.EndTime != nil {
+			r.Set("end_time", *d.EndTime)
+		}
+		r.Set("time_label", d.TimeLabel)
+	}
+	return rows, nil
 }

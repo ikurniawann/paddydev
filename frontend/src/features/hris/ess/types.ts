@@ -7,6 +7,8 @@ export interface EssTodayShift {
   start_time: string | null;
   end_time: string | null;
   late_tolerance_minutes: number;
+  /** "08.00–12.00, 17.00–21.00" (dua shift) atau "08.00–16.00" (EPIC-080). */
+  time_label?: string;
 }
 
 /** Saldo cuti tahunan (EPIC-068 R12/R13): angka sungguhan, bukan string. */
@@ -229,6 +231,8 @@ export interface EssWeekDay {
   shift_name: string | null;
   start_time: string | null;
   end_time: string | null;
+  /** "08.00–12.00, 17.00–21.00" (EPIC-080) */
+  time_label?: string | null;
 }
 
 export interface EssRecentRequest {

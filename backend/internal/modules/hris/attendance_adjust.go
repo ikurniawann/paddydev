@@ -137,6 +137,15 @@ func (s *Service) applyClockAndLateness(ctx context.Context, f *fields, in adjus
 			return httpx.BadRequest("Jam pulang lebih dari 24 jam setelah jam masuk")
 		}
 		f.set("clock_out", out)
+		// The "Checkout otomatis" marker says who set the time (EPIC-080 R4):
+		// once a correction changes clock_out it is no longer the system's.
+		// Judged on the stored clock_out, not on the marker read earlier: the
+		// job may have closed the row since (stale read).
+		if current != nil {
+			if stored, found := current.Time("clock_out"); !found || out == nil || !out.Equal(stored) {
+				f.set("clock_out_auto", false)
+			}
+		}
 		if out == nil {
 			f.set("work_hours", nil) // the trigger only fills it when both times are set
 		}
@@ -172,11 +181,17 @@ func (s *Service) applyClockAndLateness(ctx context.Context, f *fields, in adjus
 		}
 		if snap != nil {
 			times = &snap.times
-			start, end := domain.ScheduledWindow(date, snap.times)
+			start, end, breakMinutes := snap.window(date)
 			f.set("shift_id", snap.shiftID)
 			f.set("late_tolerance_minutes", snap.times.LateToleranceMinutes)
 			f.set("scheduled_start", start)
 			f.set("scheduled_end", end)
+			if snap.second != nil || current == nil {
+				// Two-shift day: the gap between the shifts is not worked time.
+				// A new row takes the shift master's break like clock-in does
+				// (OPSSAT 0), not the table default.
+				f.set("break_minutes", breakMinutes)
+			}
 		}
 	}
 	late, minutes := false, 0
@@ -265,7 +280,7 @@ func (s *Service) logAdjustment(ctx context.Context, r Repository, a *Actor, act
 		label = *name + " · " + date
 	}
 	meta.ActorID, meta.ActorName = a.UserID, ptr(actorName(a))
-	meta.Action, meta.Entity, meta.EntityID = "attendance."+action, "hris.attendance", &attendanceID
+	meta.Action, meta.Entity, meta.EntityID = "attendance."+action, attendanceEntity, &attendanceID
 	meta.EntityLabel = &label
 	if b != nil {
 		meta.Before = b

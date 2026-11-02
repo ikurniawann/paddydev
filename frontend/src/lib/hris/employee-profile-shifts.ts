@@ -13,6 +13,20 @@ export interface ShiftScheduleRowLike {
   effective_from: string;
   effective_to: string | null;
   shift_name: string | null;
+  /** Shift kedua hari itu (EPIC-080); tidak ada = satu shift. */
+  shift2_id?: string | null;
+  shift2_name?: string | null;
+}
+
+function activeRow(rows: ShiftScheduleRowLike[], day: number, today: string) {
+  return rows
+    .filter(
+      (r) =>
+        r.day_of_week === day &&
+        r.effective_from <= today &&
+        (r.effective_to === null || r.effective_to >= today)
+    )
+    .sort((a, b) => (a.effective_from < b.effective_from ? 1 : -1))[0];
 }
 
 /** Pola berjalan pada `today` (YYYY-MM-DD): baris efektif terbaru per hari. */
@@ -20,26 +34,25 @@ export function currentShiftPattern(
   rows: ShiftScheduleRowLike[],
   today: string
 ): ShiftPatternDraft {
-  return Object.fromEntries(
-    DAYS.map((day) => {
-      const active = rows
-        .filter(
-          (r) =>
-            r.day_of_week === day &&
-            r.effective_from <= today &&
-            (r.effective_to === null || r.effective_to >= today)
-        )
-        .sort((a, b) => (a.effective_from < b.effective_from ? 1 : -1))[0];
-      return [day, active?.shift_id ?? SHIFT_OFF];
-    })
-  );
+  return Object.fromEntries(DAYS.map((day) => [day, activeRow(rows, day, today)?.shift_id ?? SHIFT_OFF]));
 }
 
-export function shiftPatternPayload(pattern: ShiftPatternDraft) {
-  return DAYS.map((day) => ({
-    day_of_week: day,
-    shift_id: pattern[day] === SHIFT_OFF ? null : pattern[day],
-  }));
+/** Shift kedua pola berjalan per hari (SHIFT_OFF = tidak ada shift kedua). */
+export function currentShift2Pattern(rows: ShiftScheduleRowLike[], today: string): ShiftPatternDraft {
+  return Object.fromEntries(DAYS.map((day) => [day, activeRow(rows, day, today)?.shift2_id ?? SHIFT_OFF]));
+}
+
+/** `pattern2` = shift kedua per hari; diabaikan untuk hari libur dan hanya dikirim bila ada. */
+export function shiftPatternPayload(pattern: ShiftPatternDraft, pattern2: ShiftPatternDraft = {}) {
+  return DAYS.map((day) => {
+    const shift_id = pattern[day] === SHIFT_OFF ? null : pattern[day];
+    const second = pattern2[day];
+    return {
+      day_of_week: day,
+      shift_id,
+      ...(shift_id && second && second !== SHIFT_OFF ? { shift2_id: second } : {}),
+    };
+  });
 }
 
 /** Lima pola terakhir, urut seperti dari API: "Sen Pagi, Sel Pagi" atau "libur semua". */
@@ -49,7 +62,7 @@ export function summarizeShiftHistory(rows: ShiftScheduleRowLike[], limit = 5) {
     const group = rows.filter((r) => r.effective_from === from);
     const summary = group
       .filter((r) => r.shift_name)
-      .map((r) => `${SHIFT_DAY_NAMES[r.day_of_week - 1].slice(0, 3)} ${r.shift_name}`)
+      .map((r) => `${SHIFT_DAY_NAMES[r.day_of_week - 1].slice(0, 3)} ${r.shift_name}${r.shift2_name ? ` + ${r.shift2_name}` : ""}`)
       .join(", ");
     return {
       from,

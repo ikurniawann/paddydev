@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"nuhabit/backend/internal/modules/hris/domain"
+	"nuhabit/backend/internal/platform/database"
 	"nuhabit/backend/internal/platform/employeekeys"
 	"nuhabit/backend/internal/platform/httpx"
 )
@@ -376,6 +377,49 @@ func (s *Service) Lifecycle(ctx context.Context, employeeID string) (*Row, error
 type patternDay struct {
 	DayOfWeek int
 	ShiftID   *string
+	Shift2ID  *string // second shift of the day (EPIC-080), nil when none
+}
+
+// isoDayNames: ISO day of week 1 = Senin … 7 = Minggu.
+var isoDayNames = [...]string{1: "Senin", 2: "Selasa", 3: "Rabu", 4: "Kamis", 5: "Jumat", 6: "Sabtu", 7: "Minggu"}
+
+// patternTwoShiftIssue applies the two-shift rule of the Jadwal Kerja grid
+// (EPIC-080 R6) to a weekly pattern: a second shift needs a first one and
+// must start after it ends.
+func patternTwoShiftIssue(ctx context.Context, q database.Querier, days []patternDay) (string, error) {
+	var shifts map[string]domain.UploadShift
+	for _, d := range days {
+		if d.Shift2ID == nil {
+			continue
+		}
+		day := isoDayNames[d.DayOfWeek]
+		if d.ShiftID == nil {
+			return day + ": shift kedua hanya bisa diisi bila shift pertama diisi", nil
+		}
+		if shifts == nil {
+			all, err := loadShifts(ctx, q, false)
+			if err != nil {
+				return "", err
+			}
+			shifts = map[string]domain.UploadShift{}
+			for _, sh := range all {
+				shifts[sh.ID] = domain.UploadShift{ID: sh.ID, Code: sh.Code, Start: sh.StartTime, End: sh.EndTime,
+					Overnight: sh.Overnight, Active: sh.Active, BreakMinutes: sh.Break}
+			}
+		}
+		first, ok1 := shifts[*d.ShiftID]
+		second, ok2 := shifts[*d.Shift2ID]
+		if !ok1 || !ok2 {
+			return day + ": shift tidak ditemukan", nil
+		}
+		if !second.Active {
+			return day + ": Shift " + second.Code + " sudah nonaktif", nil
+		}
+		if msg := domain.TwoShiftIssue(first, second); msg != "" {
+			return day + ": " + msg, nil
+		}
+	}
+	return "", nil
 }
 
 // AuthorizeShiftManager: HR (kepegawaian/workforce) or the direct manager.
@@ -412,6 +456,13 @@ func (s *Service) SaveShiftPattern(ctx context.Context, employeeID, effectiveFro
 		if err := r.querier().QueryRow(ctx, `SELECT full_name, schedule_type FROM hris.employees WHERE id = $1`, employeeID).
 			Scan(&name, &typ); err == nil && typ == scheduleNonShift {
 			return httpx.BadRequest(name + " Non-Shift memakai jadwal tetap — ubah tipe jadwal ke Shift dulu")
+		}
+		msg, err := patternTwoShiftIssue(ctx, r.querier(), days)
+		if err != nil {
+			return err
+		}
+		if msg != "" {
+			return httpx.BadRequest(msg)
 		}
 		return r.SaveShiftPattern(ctx, employeeID, effectiveFrom, days, actorName)
 	})

@@ -122,6 +122,9 @@ export function ScheduleUploadDialog({ open, onOpenChange, range, branchName, on
             <p className="text-gray-600">
               Rentang jadwal: {dayLabel(range.from)} – {dayLabel(range.to, true)}. Unduh template untuk rentang yang sama.
             </p>
+            <p className="rounded-lg bg-info-soft px-3 py-2 text-xs text-info">
+              Dua shift dalam sehari ditulis KODE1+KODE2 tanpa spasi, misalnya PAGI4+SORE4. Shift kedua harus mulai setelah shift pertama selesai.
+            </p>
             <label className="block">
               <span className="mb-1 block text-xs font-medium text-gray-600">File jadwal (.xlsx)</span>
               <Input

@@ -43,6 +43,60 @@ describe("kalender ESS: label kurang jam (AB-05)", () => {
   });
 });
 
+// EPIC-080 R4/R6: penanda checkout otomatis dan jadwal dua shift.
+describe("kalender: checkout otomatis dan dua shift (EPIC-080)", () => {
+  const auto = (v: boolean): CalendarAttendance => ({ ...attendance(false), clock_out_auto: v });
+  const twoShift = {
+    day_of_week: 1, shift_id: "s1", effective_from: "2026-01-01", effective_to: null, shift_name: "PAGI4 + SORE4",
+    start_time: "08:00:00", end_time: "21:00:00", is_overnight: false, time_label: "08.00–12.00, 17.00–21.00",
+  };
+
+  it("sel kalender menandai Checkout otomatis", () => {
+    render(
+      <AttendanceDayCell day={3} isToday={false} isSunday={false} attendance={auto(true)} scheduledShift={null}
+        isDayOff={false} holidays={[]} onClick={() => {}} />
+    );
+    expect(screen.getByText("Checkout otomatis")).toBeTruthy();
+    cleanup();
+    render(
+      <AttendanceDayCell day={3} isToday={false} isSunday={false} attendance={auto(false)} scheduledShift={null}
+        isDayOff={false} holidays={[]} onClick={() => {}} />
+    );
+    expect(screen.queryByText("Checkout otomatis")).toBeNull();
+  });
+
+  it("detail hari menjelaskan Checkout otomatis", () => {
+    render(
+      <AttendanceDayDialog
+        info={{ date: "2026-10-03", attendance: auto(true), scheduledShift: null, isDayOff: false, holidays: [] }}
+        hasSchedule={false}
+        onClose={() => {}}
+      />
+    );
+    expect(screen.getByText(/Checkout otomatis · Jam pulang diisi sistem/)).toBeTruthy();
+  });
+
+  it("sel kalender dua shift menampilkan kedua rentang jam", () => {
+    render(
+      <AttendanceDayCell day={5} isToday={false} isSunday={false} scheduledShift={twoShift}
+        isDayOff={false} holidays={[]} onClick={() => {}} />
+    );
+    expect(screen.getByText("PAGI4 + SORE4")).toBeTruthy();
+    expect(screen.getByText("08.00–12.00, 17.00–21.00")).toBeTruthy();
+  });
+
+  it("detail hari dua shift menulis nama dan kedua rentang jam", () => {
+    render(
+      <AttendanceDayDialog
+        info={{ date: "2026-10-05", scheduledShift: twoShift, isDayOff: false, holidays: [] }}
+        hasSchedule
+        onClose={() => {}}
+      />
+    );
+    expect(screen.getByText("PAGI4 + SORE4 · 08.00–12.00, 17.00–21.00")).toBeTruthy();
+  });
+});
+
 // EPIC-079 R1-R3: tanggal merah hanya meliburkan Non-Shift (cuti bersama hanya bila ditetapkan libur).
 const natal: HolidayRow = { holiday_date: "2026-12-25", name: "Hari Natal", type: "nasional", deducts_leave: false };
 const cutiBersama = (isDayOff: boolean): HolidayRow => ({

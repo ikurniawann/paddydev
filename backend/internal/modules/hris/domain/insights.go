@@ -384,6 +384,80 @@ type ESSScheduleRow struct {
 	StartTime            *string
 	EndTime              *string
 	LateToleranceMinutes *int64
+	ShiftCode            *string
+	// Second shift of a two-shift day (EPIC-080), joined from Shift2ID.
+	Shift2Code  *string
+	Shift2Name  *string
+	Shift2Start *string
+	Shift2End   *string
+}
+
+// ShiftDisplay is how a day's shift(s) read in the UI: one shift keeps its
+// name; two shifts read "PAGI4 + SORE4" with the clocks of both. StartTime is
+// the first shift's start and EndTime the last shift's end, so the pair is
+// the span a worker is on the clock.
+type ShiftDisplay struct {
+	Name      string
+	StartTime *string
+	EndTime   *string
+	// TimeLabel is "08.00–12.00, 17.00–21.00" ("08.00–16.00" for one shift).
+	TimeLabel string
+}
+
+// ShiftPart is one shift's code, name and clock times.
+type ShiftPart struct {
+	Code, Name, Start, End string
+}
+
+func (p ShiftPart) label() string {
+	if p.Code != "" {
+		return p.Code
+	}
+	return p.Name
+}
+
+// DisplayShifts builds the display of one shift (second nil) or two.
+func DisplayShifts(first ShiftPart, second *ShiftPart) ShiftDisplay {
+	start, end := first.Start, first.End
+	name := first.Name
+	label := dotClock(first.Start) + "–" + dotClock(first.End)
+	if second != nil {
+		end = second.End
+		name = first.label() + " + " + second.label()
+		label += ", " + dotClock(second.Start) + "–" + dotClock(second.End)
+	}
+	d := ShiftDisplay{Name: name, TimeLabel: label}
+	if start != "" {
+		d.StartTime = &start
+	}
+	if end != "" {
+		d.EndTime = &end
+	}
+	return d
+}
+
+func deref(p *string) string {
+	if p == nil {
+		return ""
+	}
+	return *p
+}
+
+// displayOf is the display of the winner row: the first shift's details come
+// from the first row naming that shift, the second shift only from the winner
+// itself (the same first shift can pair with different second shifts).
+func displayOf(rows []ESSScheduleRow, winner int) *ShiftDisplay {
+	d := shiftDetail(rows, winner)
+	if d == nil || d.ShiftName == nil || *d.ShiftName == "" {
+		return nil
+	}
+	first := ShiftPart{Code: deref(d.ShiftCode), Name: *d.ShiftName, Start: deref(d.StartTime), End: deref(d.EndTime)}
+	var second *ShiftPart
+	if w := rows[winner]; w.Shift2ID != nil && w.Shift2Name != nil && *w.Shift2Name != "" {
+		second = &ShiftPart{Code: deref(w.Shift2Code), Name: *w.Shift2Name, Start: deref(w.Shift2Start), End: deref(w.Shift2End)}
+	}
+	out := DisplayShifts(first, second)
+	return &out
 }
 
 func rowsOf(rows []ESSScheduleRow) []ScheduleRow {
@@ -409,20 +483,23 @@ func shiftDetail(rows []ESSScheduleRow, winner int) *ESSScheduleRow {
 
 // TodayShift is the shift that applies today.
 type TodayShift struct {
-	Name                 string  `json:"name"`
-	StartTime            *string `json:"start_time"`
-	EndTime              *string `json:"end_time"`
-	LateToleranceMinutes int64   `json:"late_tolerance_minutes"`
+	Name      string  `json:"name"`
+	StartTime *string `json:"start_time"`
+	EndTime   *string `json:"end_time"`
+	// LateToleranceMinutes is the first shift's: lateness is judged on it.
+	LateToleranceMinutes int64  `json:"late_tolerance_minutes"`
+	TimeLabel            string `json:"time_label"`
 }
 
 // TodayShiftOf: the shift on today, nil on a day off or without a pattern.
 func TodayShiftOf(rows []ESSScheduleRow, today string) *TodayShift {
 	winner := ResolveScheduleRow(rowsOf(rows), today)
-	d := shiftDetail(rows, winner)
-	if d == nil || d.ShiftName == nil || *d.ShiftName == "" {
+	disp := displayOf(rows, winner)
+	if disp == nil {
 		return nil
 	}
-	t := &TodayShift{Name: *d.ShiftName, StartTime: d.StartTime, EndTime: d.EndTime}
+	d := shiftDetail(rows, winner)
+	t := &TodayShift{Name: disp.Name, StartTime: disp.StartTime, EndTime: disp.EndTime, TimeLabel: disp.TimeLabel}
 	if d.LateToleranceMinutes != nil {
 		t.LateToleranceMinutes = *d.LateToleranceMinutes
 	}
@@ -438,6 +515,7 @@ type DaySchedule struct {
 	ShiftName *string `json:"shift_name"`
 	StartTime *string `json:"start_time"`
 	EndTime   *string `json:"end_time"`
+	TimeLabel *string `json:"time_label"`
 }
 
 // WeekScheduleOf is Monday–Sunday of the week containing today.
@@ -453,8 +531,8 @@ func WeekScheduleOf(rows []ESSScheduleRow, today string) []DaySchedule {
 			day.Status = "libur"
 			if rows[winner].ShiftID != nil {
 				day.Status = "shift"
-				if d := shiftDetail(rows, winner); d != nil {
-					day.ShiftName, day.StartTime, day.EndTime = d.ShiftName, d.StartTime, d.EndTime
+				if d := displayOf(rows, winner); d != nil {
+					day.ShiftName, day.StartTime, day.EndTime, day.TimeLabel = &d.Name, d.StartTime, d.EndTime, &d.TimeLabel
 				}
 			}
 		}

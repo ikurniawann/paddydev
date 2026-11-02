@@ -100,6 +100,13 @@ func (h handlers) routes() []module.Route {
 		r("GET /api/hris/schedules/template", h.withScheduleScope("", kepegawaian, false, h.getScheduleTemplate)),
 		r("POST /api/hris/schedules/import", h.withScheduleScope("update", scheduleManagers, false, h.importSchedules)),
 		r("POST /api/hris/schedules/cells", h.withScheduleScope("update", scheduleManagers, false, h.saveScheduleCells)),
+		// EPIC-080 R1/R2: checkout otomatis per jabatan dan lokasi; HR (Kepegawaian)
+		// atau pengatur jadwal toko di tokonya sendiri.
+		r("GET /api/hris/auto-checkout-rules", h.withScheduleScope("", kepegawaian, false, h.listAutoCheckoutRules)),
+		r("GET /api/hris/auto-checkout-rules/options", h.withScheduleScope("", kepegawaian, false, h.autoCheckoutRuleOptions)),
+		r("POST /api/hris/auto-checkout-rules", h.withScheduleScope("", kepegawaian, false, h.createAutoCheckoutRule)),
+		r("PATCH /api/hris/auto-checkout-rules/{id}", h.withScheduleScope("", kepegawaian, false, h.patchAutoCheckoutRule)),
+		r("DELETE /api/hris/auto-checkout-rules/{id}", h.withScheduleScope("", kepegawaian, false, h.deleteAutoCheckoutRule)),
 		r("GET /api/hris/overtime", h.withActor(h.listOvertime)),
 		r("POST /api/hris/overtime", h.withActor(h.createOvertime)),
 		r("POST /api/hris/overtime/decide", h.withActor(h.decideOvertime)),

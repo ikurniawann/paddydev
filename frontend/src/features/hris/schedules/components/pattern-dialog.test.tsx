@@ -20,6 +20,8 @@ beforeEach(() => {
 const shifts = [
   { code: "P", name: "Pagi", start_time: "08:00:00", end_time: "16:00:00", break_minutes: 60 },
   { code: "S", name: "Siang", start_time: "13:00:00", end_time: "21:00:00" },
+  { code: "A", name: "Awal", start_time: "08:00:00", end_time: "12:00:00", break_minutes: 0 },
+  { code: "B", name: "Sore", start_time: "17:00:00", end_time: "21:00:00", break_minutes: 30 },
 ];
 const DAYS = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"];
 
@@ -165,4 +167,40 @@ it("total disembunyikan bila ada hari dikosongkan", () => {
   renderDialog();
   DAYS.forEach((d, i) => choose(d, i < 6 ? "P" : "__clear"));
   expect(screen.queryByText(/jam kerja\/minggu/)).toBeNull();
+});
+
+it("shift kedua opsional per hari: kode KODE1+KODE2 dikirim ke server", async () => {
+  api.fetchScheduleGrid.mockResolvedValueOnce(rangeGrid("2026-11-02", "2026-11-29", ["e1", "e2"]));
+  api.saveScheduleCells.mockResolvedValueOnce({
+    data: { summary: { employees: 2, new: 56, changed: 0, same: 0, cleared: 0 }, errors: [], warnings: [], fingerprint: "fp2", changes: [], replaced_days: 0 },
+  });
+  renderDialog();
+  DAYS.forEach((d, i) => choose(d, i === 0 ? "A" : "L"));
+  // Libur tidak bisa diberi shift kedua; Senin (A 08–12) hanya menawarkan shift yang mulai ≥ 12:00.
+  expect((screen.getByLabelText("Selasa shift kedua") as HTMLSelectElement).disabled).toBe(true);
+  const options = Array.from((screen.getByLabelText("Senin shift kedua") as HTMLSelectElement).options).map((o) => o.value);
+  expect(options).toEqual(["", "S", "B"]);
+  choose("Senin shift kedua", "B");
+  fireEvent.click(screen.getByRole("button", { name: "Terapkan" }));
+  await waitFor(() => expect(api.saveScheduleCells).toHaveBeenCalledTimes(1));
+  const sent = api.saveScheduleCells.mock.calls[0][0];
+  expect(sent.cells).toContainEqual({ employee_id: "e1", date: "2026-11-02", code: "A+B" });
+  expect(sent.cells).toContainEqual({ employee_id: "e1", date: "2026-11-09", code: "A+B" });
+  expect(sent.cells).toContainEqual({ employee_id: "e1", date: "2026-11-03", code: "L" });
+});
+
+it("total jam per minggu menjumlahkan jam bersih kedua shift", () => {
+  renderDialog();
+  // Senin A(4 jam) + B(4 jam − 30 menit istirahat = 3,5 jam) = 7,5 jam; Selasa P = 7 jam; sisanya libur.
+  DAYS.forEach((d, i) => choose(d, i === 0 ? "A" : i === 1 ? "P" : "L"));
+  choose("Senin shift kedua", "B");
+  expect(screen.getByText("Total ±15 jam kerja/minggu")).toBeTruthy();
+});
+
+it("mengganti hari menjadi libur membuang shift kedua", () => {
+  renderDialog();
+  choose("Senin", "A");
+  choose("Senin shift kedua", "B");
+  choose("Senin", "L");
+  expect((screen.getByLabelText("Senin shift kedua") as HTMLSelectElement).value).toBe("");
 });

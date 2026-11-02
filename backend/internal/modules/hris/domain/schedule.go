@@ -14,6 +14,7 @@ type ScheduleRow struct {
 	ShiftID       *string
 	EffectiveFrom string
 	EffectiveTo   *string
+	Shift2ID      *string // second shift of a two-shift day (EPIC-080), nil when none
 }
 
 // ResolveScheduleRow is resolveScheduleRowForDate: the index of the row that
@@ -68,6 +69,25 @@ func ScheduledWindow(dateISO string, s ShiftTimes) (start, end time.Time) {
 		add = 1
 	}
 	return wibDateTime(dateISO, s.StartTime, 0), wibDateTime(dateISO, s.EndTime, add)
+}
+
+// TwoShiftWindow is the scheduled window of a two-shift day (EPIC-080 R8):
+// start of the first shift, end of the second, and the idle gap in minutes
+// between the first shift's end and the second's start. A second shift whose
+// clock time starts before the first's runs on the next calendar day (only a
+// first overnight shift passes TwoShiftIssue that way; kept for rows stored
+// before that rule). A
+// second shift that does not start after the first ends has no gap (0).
+func TwoShiftWindow(dateISO string, first, second ShiftTimes) (start, end time.Time, gapMinutes int) {
+	start, firstEnd := ScheduledWindow(dateISO, first)
+	secondStart, secondEnd := ScheduledWindow(dateISO, second)
+	if secondStart.Before(start) {
+		secondStart, secondEnd = secondStart.AddDate(0, 0, 1), secondEnd.AddDate(0, 0, 1)
+	}
+	if gap := secondStart.Sub(firstEnd); gap > 0 {
+		gapMinutes = int(gap / time.Minute)
+	}
+	return start, secondEnd, gapMinutes
 }
 
 // Roster statuses, in summary order.

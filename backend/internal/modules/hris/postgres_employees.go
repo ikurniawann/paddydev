@@ -209,9 +209,11 @@ func (s *store) LatestOffboarding(ctx context.Context, employeeID string) (*Row,
 
 func (s *store) EmployeeShiftHistory(ctx context.Context, employeeID string) ([]*Row, error) {
 	return queryRows(ctx, s.db, `SELECT es.id, es.day_of_week, es.shift_id, es.effective_from, es.effective_to,
-		s.name AS shift_name, s.start_time, s.end_time
+		s.name AS shift_name, s.start_time, s.end_time,
+		es.shift2_id, s2.name AS shift2_name, s2.start_time AS shift2_start_time, s2.end_time AS shift2_end_time
 		FROM hris.employee_shifts es
 		LEFT JOIN hris.shifts s ON s.id = es.shift_id
+		LEFT JOIN hris.shifts s2 ON s2.id = es.shift2_id
 		WHERE es.employee_id = $1
 		ORDER BY es.effective_from DESC, es.day_of_week ASC`, employeeID)
 }
@@ -231,8 +233,8 @@ func (s *store) SaveShiftPattern(ctx context.Context, employeeID, effectiveFrom 
 	}
 	for _, d := range days {
 		if _, err := s.db.Exec(ctx, `INSERT INTO hris.employee_shifts
-			(employee_id, day_of_week, shift_id, effective_from, created_by_name)
-			VALUES ($1, $2, $3, $4, $5)`, employeeID, d.DayOfWeek, d.ShiftID, effectiveFrom, actorName); err != nil {
+			(employee_id, day_of_week, shift_id, shift2_id, effective_from, created_by_name)
+			VALUES ($1, $2, $3, $4, $5, $6)`, employeeID, d.DayOfWeek, d.ShiftID, d.Shift2ID, effectiveFrom, actorName); err != nil {
 			return err
 		}
 	}

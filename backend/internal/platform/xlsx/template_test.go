@@ -104,3 +104,39 @@ func cellLocked(t *testing.T, f *excelize.File, sheet, ref string) bool {
 	}
 	return st.Protection == nil || st.Protection.Locked
 }
+
+// OtherNote keeps the dropdown but lets a value outside the list in, with an
+// information message (EPIC-080: KODE1+KODE2 on Jadwal Kerja).
+func TestBuildTemplateListAllowsOtherWithNote(t *testing.T) {
+	s := TemplateSheet{
+		Name: "Jadwal",
+		Columns: []TemplateColumn{
+			{Header: "Sen 03/11", Kind: KindList, Options: []string{"DEF", "L"}, OtherNote: "Dua shift: KODE1+KODE2"},
+			{Header: "Sel 04/11", Kind: KindList, Options: []string{"DEF", "L"}},
+		},
+		Rows: [][]any{{"PAGI4+SORE4", "DEF"}},
+	}
+	out, err := BuildTemplate([]TemplateSheet{s}, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f, err := excelize.OpenReader(bytesReader(out))
+	if err != nil {
+		t.Fatal(err)
+	}
+	dvs, _ := f.GetDataValidations("Jadwal")
+	styles := map[string]string{}
+	for _, dv := range dvs {
+		style := ""
+		if dv.ErrorStyle != nil {
+			style = *dv.ErrorStyle
+		}
+		styles[dv.Sqref] = style
+		if dv.Sqref == "A2:A2" && (dv.Error == nil || *dv.Error != "Dua shift: KODE1+KODE2") {
+			t.Fatalf("note = %v", dv.Error)
+		}
+	}
+	if styles["A2:A2"] != "information" || styles["B2:B2"] != "stop" {
+		t.Fatalf("error styles = %v", styles)
+	}
+}

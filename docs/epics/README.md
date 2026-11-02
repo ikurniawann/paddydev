@@ -82,6 +82,7 @@ deploying-dev · ready-for-qa · blocked · done).
 | [EPIC-077](./EPIC-077-info-keterlambatan-ess.md) | Info Keterlambatan & Tingkat Teguran/SP di ESS (`MODULE-HRIS`) | ready-for-qa | 2026-11-02 |
 | [EPIC-078](./EPIC-078-jam-kerja-hq-operations.md) | Jam Kerja HQ & Operations untuk Penilaian Terlambat (`MODULE-HRIS`) | ready-for-qa | 2026-11-02 |
 | [EPIC-079](./EPIC-079-jam-kerja-sistem-shift.md) | Jam Kerja Sistem Shift, Libur Nasional & Cuti Bersama (`MODULE-HRIS`) | ready-for-qa | 2026-11-02 |
+| [EPIC-080](./EPIC-080-checkout-otomatis.md) | Checkout Otomatis per Jabatan & 2 Shift dalam Sehari (`MODULE-HRIS`) | ready-for-qa | 2026-11-02 |
 | [EPIC-081](./EPIC-081-nip-manual.md) | NIP Karyawan Diisi Manual, Wajib (`MODULE-HRIS`) | review | 2026-11-02 |
 
 Aturan:

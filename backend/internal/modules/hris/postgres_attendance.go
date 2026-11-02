@@ -12,7 +12,7 @@ var attendanceListColumns = `id, employee_id, date, clock_in, clock_out,
   status, is_late, late_minutes, late_tolerance_minutes, notes, created_at, updated_at, branch_id,
   is_overtime, overtime_hours, validated_at, is_manual, adjusted_at, adjusted_by_name, adjustment_count,
   clock_in_geofence, clock_in_distance_m, clock_out_geofence, clock_out_distance_m,
-  min_work_hours, is_short_hours, ` +
+  min_work_hours, is_short_hours, clock_out_auto, ` +
 	embedOne("shift", "id, name", "hris.shifts", "id = attendance.shift_id") + ", " +
 	embedOne("branch", "id, code, name", "configuration.branches", "id = attendance.branch_id") + ", " +
 	embedOne("employee", "id, full_name, nip, photo_url, department_id, job_title_id", "hris.employees", "id = attendance.employee_id")
@@ -70,6 +70,18 @@ func (s *store) UpdateAttendance(ctx context.Context, id string, f fields) (*Row
 	return updateOne(ctx, s.db, "hris.attendance", f, fields{{"id", id}}, "*")
 }
 
+func (s *store) CloseAttendance(ctx context.Context, id string, f fields) (*Row, error) {
+	set := make([]string, len(f))
+	args := make([]any, 0, len(f)+1)
+	for i, c := range f {
+		args = append(args, c.val)
+		set[i] = fmt.Sprintf("%s = $%d", c.col, len(args))
+	}
+	args = append(args, id)
+	return queryRow(ctx, s.db, fmt.Sprintf(`UPDATE hris.attendance SET %s WHERE id = $%d AND clock_out IS NULL RETURNING *`,
+		strings.Join(set, ", "), len(args)), args...)
+}
+
 func (s *store) DeleteAttendance(ctx context.Context, id string) error {
 	_, err := s.db.Exec(ctx, `DELETE FROM hris.attendance WHERE id = $1`, id)
 	return err
@@ -83,7 +95,7 @@ func (s *store) RosterRows(ctx context.Context, date string, dow int, superAdmin
 		only = employeeIDs
 	}
 	return queryRows(ctx, s.db, `WITH scheduled AS (
-		  SELECT DISTINCT ON (es.employee_id) es.employee_id, es.shift_id
+		  SELECT DISTINCT ON (es.employee_id) es.employee_id, es.shift_id, es.shift2_id
 		  FROM hris.v_employee_schedule es
 		  WHERE es.day_of_week = $2
 		    AND es.effective_from <= $1::date
@@ -94,7 +106,9 @@ func (s *store) RosterRows(ctx context.Context, date string, dow int, superAdmin
 		       d.name AS department_name, p.title AS job_title,
 		       (sc.employee_id IS NOT NULL) AS has_schedule,
 		       sc.shift_id AS scheduled_shift_id,
-		       s.name AS shift_name,
+		       s.name AS shift_name, s.code AS shift_code,
+		       sc.shift2_id AS scheduled_shift2_id, s2.code AS shift2_code, s2.name AS shift2_name,
+		       s2.start_time::text AS shift2_start, s2.end_time::text AS shift2_end,
 		       s.start_time::text AS shift_start,
 		       s.end_time::text AS shift_end,
 		       s.late_tolerance_minutes, s.is_overnight,
@@ -103,11 +117,12 @@ func (s *store) RosterRows(ctx context.Context, date string, dow int, superAdmin
 		       a.clock_in_photo_url, a.clock_out_photo_url,
 		       a.shift_id AS attendance_shift_id,
 		       a.clock_in_geofence, a.clock_in_distance_m, a.clock_out_geofence, a.clock_out_distance_m,
-		       a.notes AS attendance_notes, a.min_work_hours::text AS min_work_hours, a.is_short_hours,
+		       a.notes AS attendance_notes, a.min_work_hours::text AS min_work_hours, a.is_short_hours, a.clock_out_auto,
 		       l.id AS leave_id, l.leave_type::text
 		FROM hris.employees e
 		LEFT JOIN scheduled sc ON sc.employee_id = e.id
 		LEFT JOIN hris.shifts s ON s.id = sc.shift_id
+		LEFT JOIN hris.shifts s2 ON s2.id = sc.shift2_id
 		LEFT JOIN hris.attendance a ON a.employee_id = e.id AND a.date = $1::date
 		LEFT JOIN LATERAL (
 		  SELECT lv.id, lv.leave_type
@@ -163,9 +178,13 @@ func (s *store) ScheduleRows(ctx context.Context, employeeID string) ([]*Row, er
 	return queryRows(ctx, s.db, `SELECT es.day_of_week, es.shift_id,
 		es.effective_from::text, es.effective_to::text,
 		s.name AS shift_name, s.start_time::text, s.end_time::text,
-		s.is_overnight
+		s.is_overnight, s.code AS shift_code,
+		es.shift2_id::text AS shift2_id, s2.code AS shift2_code, s2.name AS shift2_name,
+		s2.start_time::text AS shift2_start_time, s2.end_time::text AS shift2_end_time,
+		s2.is_overnight AS shift2_is_overnight
 		FROM hris.v_employee_schedule es
 		LEFT JOIN hris.shifts s ON s.id = es.shift_id
+		LEFT JOIN hris.shifts s2 ON s2.id = es.shift2_id
 		WHERE es.employee_id = $1
 		ORDER BY es.effective_from DESC, es.priority, es.day_of_week ASC`, employeeID)
 }
