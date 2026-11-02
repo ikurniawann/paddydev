@@ -16,12 +16,18 @@
 #   2. Kirim angka pratinjau ke HR (Manager HR) dan tunggu PERSETUJUAN TERTULIS (K-22).
 #      Di production: juga izin eksplisit user untuk jam eksekusi (jam sepi).
 #   3. DM01_APPROVED=yes tools/ops/dm01-cleanup.sh execute   (hari yang sama dengan pratinjau)
-#        Menolak bila: DM01_APPROVED bukan "yes"; belum ada pratinjau hari ini (WIB); ada payroll
-#        run draft yang periodenya mencakup ≤ 20 Okt; angka saat ini beda dari pratinjau yang
-#        disetujui. Lalu: pg_dump -Fc → db.dump, pg_restore -l, restore ke DB sementara
-#        paddydev_dm01_check dan bandingkan angkanya (DB sementara selalu dihapus), core SQL
-#        (psql -1), cek pasca-eksekusi (0 yang tersisa untuk dihapus, checksum leave_balances
-#        sama, baris audit = angka pratinjau). Hasil di ~/backups/dm01-<stamp>-eksekusi/.
+#        Pratinjau yang disetujui = pratinjau terakhir hari ini (WIB), atau DM01_PREVIEW_DIR (harus
+#        juga dari hari ini dan target yang sama). Menolak bila: DM01_APPROVED bukan "yes"; tidak ada
+#        pratinjau hari ini; ada payroll run draft yang periodenya mencakup ≤ 20 Okt; angka saat ini
+#        beda dari pratinjau yang disetujui; ruang disk volume data Postgres tidak cukup untuk DB
+#        uji restore. Lalu: pg_dump -Fc → db.dump, pg_restore -l, restore ke DB sementara
+#        paddydev_dm01_check (selalu dihapus), angka disetujui ditampilkan, core SQL (psql -1),
+#        cek pasca-eksekusi (0 yang tersisa untuk dihapus, checksum leave_balances sama, baris
+#        audit = angka pratinjau). Hasil di ~/backups/dm01-<stamp>-eksekusi/.
+#        Uji restore (keputusan controller): HAPUS, CHECKSUM leave_balances dan FILE hasil restore
+#        harus SAMA PERSIS dengan database sebelum eksekusi; total baris per tabel hanya
+#        ditampilkan, karena absensi berjalan (clock-in) di antara pratinjau dan dump membuat total
+#        yang ketat gagal tanpa alasan.
 #   4. DM01_APPROVED=yes tools/ops/dm01-cleanup.sh files
 #        Hanya baris FILE (bukan FILE_LAIN) dari folder eksekusi terakhir yang berhasil:
 #        cek tidak ada baris DB yang masih merujuk, tar ke files-<stamp>.tgz, cocokkan isi tar
@@ -36,6 +42,7 @@
 #   DM01_BACKUP_DIR    folder backup                          (~/backups)
 #   DM01_SQL_DIR       folder SQL DM-01                        (backend/database/sql/fixes repo ini)
 #   DM01_APPROVED      harus "yes" untuk execute dan files
+#   DM01_PREVIEW_DIR   (execute) folder pratinjau yang disetujui; bawaan: pratinjau terakhir hari ini
 #   DM01_RUN_DIR       (files) folder eksekusi tertentu; bawaan: folder eksekusi terakhir
 #
 # Payroll draft (keputusan): execute ditolak bila ada hris.payroll_runs status 'draft' dengan
@@ -85,8 +92,17 @@ EOF
 # --- pembersihan saat keluar (juga saat gagal / Ctrl-C) ---
 CLEANUP_FILES=()
 DROP_CHECK=0
+CORE_STARTED=0   # 1 sejak core SQL dijalankan: data mungkin sudah ter-COMMIT
+CORE_IN_CONTAINER=""
 on_exit() {
   local rc=$?
+  if [ -n "$CORE_IN_CONTAINER" ]; then
+    docker exec "$DB_CONTAINER" rm -f -- "$CORE_IN_CONTAINER" >/dev/null 2>&1 || true
+  fi
+  if [ "$rc" != 0 ] && [ "$CORE_STARTED" = 1 ]; then
+    echo "PERINGATAN: berhenti SETELAH core SQL dijalankan. Data mungkin sudah ter-COMMIT (atau sudah di-rollback bila psql gagal)." >&2
+    echo "  Jangan ulangi execute. Periksa dengan '$0 preview' (HAPUS 0 = sudah terhapus) dan pratinjau-sesudah.txt / core.log di ${RUN_DIR_NOW:-folder eksekusi}." >&2
+  fi
   if [ "$DROP_CHECK" = 1 ]; then
     docker exec "$DB_CONTAINER" dropdb -U "$DB_USER" --if-exists "$CHECK_DB" >/dev/null 2>&1 ||
       echo "PERINGATAN: DB sementara $CHECK_DB gagal dihapus; hapus manual (dropdb $CHECK_DB)" >&2
@@ -193,22 +209,42 @@ SQL
 # run_preview <database> <berkas keluaran>: pratinjau + inventaris + payroll draft, ditulis atomik.
 run_preview() {
   local db=$1 out=$2
-  {
-    psql_db "$db" -f - <"$PREVIEW_SQL"
-    inventory_sql | psql_db "$db" -qAt -f -
-    payroll_draft_sql | psql_db "$db" -qAt -f -
-  } >"$out.tmp" || { rm -f -- "$out.tmp"; die "pratinjau gagal di database $db"; }
-  grep -q $'^CHECKSUM\tleave_balances\t' "$out.tmp" || { rm -f -- "$out.tmp"; die "keluaran pratinjau tidak lengkap ($db)"; }
+  # Tiap perintah dicek sendiri (dalam grup di kiri || set -e tidak berlaku).
+  if ! psql_db "$db" -f - <"$PREVIEW_SQL" >"$out.tmp"; then
+    rm -f -- "$out.tmp"; die "pratinjau SQL gagal di database $db"
+  fi
+  if ! inventory_sql | psql_db "$db" -qAt -f - >>"$out.tmp"; then
+    rm -f -- "$out.tmp"; die "inventaris FK/trigger gagal di database $db"
+  fi
+  if ! payroll_draft_sql | psql_db "$db" -qAt -f - >>"$out.tmp"; then
+    rm -f -- "$out.tmp"; die "cek payroll draft gagal di database $db"
+  fi
+  if ! grep -q $'^CHECKSUM\tleave_balances\t' "$out.tmp" || ! grep -q $'^FK\t' "$out.tmp" ||
+    ! grep -q $'^TRIGGER\t' "$out.tmp" || [ "$(grep -c $'^HAPUS\t' "$out.tmp")" != "${#TABLES[@]}" ]; then
+    rm -f -- "$out.tmp"; die "keluaran pratinjau tidak lengkap ($db): CHECKSUM, FK, TRIGGER dan HAPUS per tabel wajib ada"
+  fi
   mv -- "$out.tmp" "$out"
 }
 
 # Bagian pratinjau yang harus sama dengan yang disetujui HR (data ≤ 20 Okt dan struktur);
 # TETAP, STATUS tetap dan CHECKSUM ikut berubah oleh aktivitas harian sehingga tidak dibandingkan.
 core_lines() {
-  grep -E $'^(HAPUS|PENGECUALIAN|BERKAS|FILE|FILE_LAIN|FK|TRIGGER)\t|^STATUS\t[^\t]+\thapus\t' "$1" || true
+  grep_ok -E $'^(HAPUS|PENGECUALIAN|BERKAS|FILE|FILE_LAIN|FK|TRIGGER)\t|^STATUS\t[^\t]+\thapus\t' "$1"
 }
 
-lines_of() { grep -E "^$1"$'\t' "$2" || true; }
+# grep yang membedakan "tidak ada baris" (rc 1, wajar) dari kegagalan grep (rc ≥ 2).
+grep_ok() {
+  local rc=0
+  grep "$@" || rc=$?
+  [ "$rc" -le 1 ] || { echo "GAGAL: grep $* (rc $rc)" >&2; return 2; }
+}
+count_of() { # <pola> <berkas> → jumlah baris cocok
+  local n rc=0
+  n=$(grep -cE "$1" "$2") || rc=$?
+  [ "$rc" -le 1 ] || { echo "GAGAL: grep -c $1 $2 (rc $rc)" >&2; return 2; }
+  printf '%s\n' "$n"
+}
+lines_of() { grep_ok -E "^$1"$'\t' "$2"; }
 
 summary() { # <pratinjau.txt>
   local p=$1
@@ -230,10 +266,14 @@ summary() { # <pratinjau.txt>
 
 cmd_preview() {
   resolve_env
-  local dir
+  local dir tmp
+  # Folder pratinjau baru dibuat setelah pratinjau berhasil, jadi tidak ada folder pratinjau setengah jadi.
+  tmp=$(mktemp "$BACKUP_DIR/.dm01-pratinjau-XXXXXX")
+  CLEANUP_FILES+=("$tmp" "$tmp.tmp")
+  run_preview "$DB_NAME" "$tmp"
   dir=$(new_dir pratinjau)
   printf '%s\n' "$TARGET" >"$dir/target.txt"
-  run_preview "$DB_NAME" "$dir/pratinjau.txt"
+  mv -- "$tmp" "$dir/pratinjau.txt"
   lines_of FILE "$dir/pratinjau.txt" | cut -f2- >"$dir/files.txt"
   summary "$dir/pratinjau.txt"
   info "Pratinjau: $dir/pratinjau.txt"
@@ -251,15 +291,32 @@ check_payroll_drafts() {
   fi
 }
 
+# DB uji restore memakai ruang di volume data Postgres: tolak bila sisa < 1,2 × ukuran database.
+check_restore_space() {
+  local size avail
+  size=$(psql_db "$DB_NAME" -qAt -c "SELECT pg_database_size(current_database())") || die "ukuran database tidak terbaca"
+  avail=$(docker exec "$DB_CONTAINER" sh -c 'df -Pk "${PGDATA:-/var/lib/postgresql/data}" | tail -n 1' | awk '{print $4 * 1024}') ||
+    die "ruang kosong volume data Postgres tidak terbaca"
+  [[ "$size" =~ ^[0-9]+$ && "$avail" =~ ^[0-9]+$ ]] || die "ukuran database ($size) atau ruang kosong ($avail) tidak valid"
+  info "Ukuran database $((size / 1048576)) MiB; ruang kosong volume data Postgres $((avail / 1048576)) MiB"
+  [ "$avail" -ge $((size + size / 5)) ] ||
+    die "ruang kosong volume data Postgres ($((avail / 1048576)) MiB) kurang dari 1,2 × ukuran database ($((size / 1048576)) MiB) untuk uji restore $CHECK_DB; kosongkan disk dulu"
+}
+
 cmd_execute() {
   require_approval
   resolve_env
   local approved_dir approved cur dir t
 
-  approved_dir=$(latest_dir "$BACKUP_DIR"/dm01-"$(today)"-*-pratinjau*)
+  approved_dir=${DM01_PREVIEW_DIR:-$(latest_dir "$BACKUP_DIR"/dm01-"$(today)"-*-pratinjau*)}
+  approved_dir=${approved_dir%/}
   approved="$approved_dir/pratinjau.txt"
   [ -n "$approved_dir" ] && [ -f "$approved" ] ||
     die "belum ada pratinjau hari ini (WIB) di $BACKUP_DIR. Jalankan '$0 preview', minta persetujuan HR atas angkanya, lalu execute di hari yang sama."
+  case "$(basename "$approved_dir")" in
+    dm01-"$(today)"-*-pratinjau*) ;;
+    *) die "pratinjau $approved_dir bukan dari hari ini (WIB); pratinjau harus dari hari yang sama dengan eksekusi. Jalankan preview lagi dan minta persetujuan HR." ;;
+  esac
   info "Pratinjau yang disetujui: $approved"
   same_target "$approved_dir"
 
@@ -276,7 +333,10 @@ cmd_execute() {
   fi
   rm -f -- "$cur.diff"
 
+  check_restore_space
+
   dir=$(new_dir eksekusi)
+  RUN_DIR_NOW=$dir
   printf '%s\n' "$TARGET" >"$dir/target.txt"
   info "Folder eksekusi: $dir"
   cp -- "$approved" "$dir/pratinjau-disetujui.txt"
@@ -318,9 +378,17 @@ cmd_execute() {
   info "Uji restore cocok; DB sementara dihapus"
 
   # 3. Hapus data (satu transaksi).
+  echo "Angka yang disetujui HR ($approved):"
+  lines_of HAPUS "$approved" | awk -F'\t' '{printf "  %-22s %s\n", $2, $3}'
+  CORE_IN_CONTAINER="/tmp/dm01-core-$(basename "$dir").sql"
+  docker cp "$CORE_SQL" "$DB_CONTAINER:$CORE_IN_CONTAINER" >/dev/null || die "salin core SQL ke container gagal"
   info "Menjalankan $(basename "$CORE_SQL") (psql -1)"
-  if ! psql_db "$DB_NAME" -1 -f - <"$CORE_SQL" 2>&1 | tee "$dir/core.log"; then
-    die "core SQL gagal; transaksi dibatalkan sehingga tidak ada yang terhapus (lihat $dir/core.log)"
+  local core_rc=0
+  CORE_STARTED=1
+  psql_db "$DB_NAME" -1 -f "$CORE_IN_CONTAINER" >"$dir/core.log" 2>&1 || core_rc=$?
+  cat -- "$dir/core.log"
+  if [ "$core_rc" != 0 ]; then
+    die "core SQL gagal (psql rc $core_rc); transaksi -1 dibatalkan sehingga tidak ada yang terhapus — pastikan dengan preview (lihat $dir/core.log)"
   fi
 
   # 4. Cek pasca-eksekusi.
@@ -403,9 +471,12 @@ cmd_files() {
   [ ! -f "$dir/files.ok" ] || die "penghapusan berkas untuk $dir sudah selesai (files.ok)"
   list="$dir/files.txt"
   [ -f "$list" ] || die "daftar berkas tidak ada: $list"
-  n=$(grep -c . "$list" || true)
-  bad=$(grep -vE "$FILE_RE" "$list" | grep -c . || true)
-  [ "$bad" = 0 ] || die "$bad path di $list tidak sesuai pola lampiran DM-01; berhenti tanpa menghapus apa pun"
+  n=$(count_of . "$list")
+  bad=$(grep_ok -vE "$FILE_RE" "$list")
+  [ -z "$bad" ] || {
+    echo "$bad" | head -n 20 >&2
+    die "$(echo "$bad" | wc -l) path di $list tidak sesuai pola lampiran DM-01 (di atas); berhenti tanpa menghapus apa pun"
+  }
   if grep -qE '/(\.|\.\.)$' "$list"; then die "path '.'/'..' di $list; berhenti"; fi
   if [ "$n" = 0 ]; then
     info "Tidak ada berkas FILE untuk dihapus"
@@ -444,13 +515,13 @@ SQL
   hasil="$dir/files-$st-hasil.txt"
 
   sort -u "$list" | tool ro "$CLASSIFY_SH" >"$status" || die "pemeriksaan berkas di volume $VOLUME gagal"
-  [ "$(grep -c . "$status")" = "$(sort -u "$list" | grep -c .)" ] || die "pemeriksaan berkas tidak lengkap"
+  [ "$(count_of . "$status")" = "$(sort -u "$list" | wc -l)" ] || die "pemeriksaan berkas tidak lengkap"
   awk -F'\t' '$1 == "ADA" {print $2}' "$status" >"$ada"
 
   local n_ada n_hilang n_lewati n_hapus=0 n_gagal=0
-  n_ada=$(grep -c . "$ada" || true)
-  n_hilang=$(grep -c $'^HILANG\t' "$status" || true)
-  n_lewati=$(grep -c $'^LEWATI\t' "$status" || true)
+  n_ada=$(count_of . "$ada")
+  n_hilang=$(count_of $'^HILANG\t' "$status")
+  n_lewati=$(count_of $'^LEWATI\t' "$status")
 
   if [ "$n_ada" -gt 0 ]; then
     info "Mengarsipkan $n_ada berkas → $tgz"
@@ -462,21 +533,31 @@ SQL
     info "Isi arsip cocok dengan daftar ($n_ada path)"
 
     tool rw '
+last=""; ok=0
 while IFS= read -r p; do
-  f="/s/private/$p"
-  if [ -f "$f" ] && [ ! -L "$f" ]; then
+  f="/s/private/$p"; d="${f%/*}"
+  if [ "$d" != "$last" ]; then
+    last=$d
+    if [ "$(readlink -f "$d" 2>/dev/null)" = "$d" ]; then ok=1; else ok=0; fi
+  fi
+  if [ "$ok" != 1 ]; then printf "LEWATI\t%s\n" "$p"
+  elif [ -f "$f" ] && [ ! -L "$f" ]; then
     if rm -f -- "$f" && [ ! -e "$f" ]; then printf "DIHAPUS\t%s\n" "$p"; else printf "GAGAL\t%s\n" "$p"; fi
   else printf "HILANG\t%s\n" "$p"; fi
 done' <"$ada" >"$hasil" || die "penghapusan berkas terhenti (lihat $hasil)"
-    n_hapus=$(grep -c $'^DIHAPUS\t' "$hasil" || true)
-    n_gagal=$(grep -c $'^GAGAL\t' "$hasil" || true)
-    n_hilang=$((n_hilang + $(grep -c $'^HILANG\t' "$hasil" || true)))
+    local x
+    n_hapus=$(count_of $'^DIHAPUS\t' "$hasil")
+    n_gagal=$(count_of $'^GAGAL\t' "$hasil")
+    x=$(count_of $'^HILANG\t' "$hasil")
+    n_hilang=$((n_hilang + x))
+    x=$(count_of $'^LEWATI\t' "$hasil")
+    n_lewati=$((n_lewati + x))
   fi
 
   echo "Ringkasan berkas:"
   printf '  %-20s: %s\n' "daftar FILE" "$n" "diarsipkan (tar)" "$n_ada" "dihapus" "$n_hapus" \
     "sudah tidak ada" "$n_hilang" "dilewati (symlink)" "$n_lewati" "gagal" "$n_gagal"
-  [ "$n_lewati" = 0 ] || info "Berkas dilewati (tinjau manual): lihat baris LEWATI di $status"
+  [ "$n_lewati" = 0 ] || info "Berkas dilewati (tinjau manual): lihat baris LEWATI di $status dan $hasil"
   [ "$n_gagal" = 0 ] || die "$n_gagal berkas gagal dihapus (lihat $hasil); jalankan files lagi setelah diperbaiki"
   echo "files $st: dihapus $n_hapus, sudah tidak ada $n_hilang, dilewati $n_lewati — arsip $tgz" >"$dir/files.ok"
   info "Selesai. Salin $dir ke lokal; tinjau FILE_LAIN di pratinjau secara manual."

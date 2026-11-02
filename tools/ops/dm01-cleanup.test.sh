@@ -2,10 +2,12 @@
 # Tes runner cleanup DM-01 (EPIC-083): tools/ops/dm01-cleanup.sh.
 #
 # Hanya memakai DB uji lokal dan volume docker sementara:
-#   - database sementara dm01_runner_test, dibuat dari template DB uji (createdb -T) di container
-#     DB uji, lalu dihapus di akhir (DB uji bersama tidak disentuh);
+#   - database sementara dm01_runner_test_<pid>, dibuat dari template DB uji (createdb -T) di
+#     container DB uji, lalu dihapus di akhir (DB uji bersama tidak disentuh);
 #   - volume docker sementara dm01-runner-test-<pid>, dihapus di akhir;
-#   - folder backup sementara (mktemp), dihapus di akhir.
+#   - folder backup sementara (mktemp), dihapus di akhir;
+#   - kegagalan disimulasikan dengan pembungkus `docker` di PATH (hanya di tes; runner tidak punya
+#     kait khusus tes).
 # TIDAK PERNAH memakai paddydev-db atau paddydev-storage.
 #
 # Pemakaian: bash tools/ops/dm01-cleanup.test.sh
@@ -16,14 +18,51 @@ ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 RUNNER="$ROOT/tools/ops/dm01-cleanup.sh"
 C=${DM01_TEST_CONTAINER:-paddydev-sdd-testdb}
 TEMPLATE=${DM01_TEST_TEMPLATE:-paddy_test_e071}
-DB=dm01_runner_test
-RESTORE_DB=dm01_runner_restore
+DB=dm01_runner_test_$$
+RESTORE_DB=dm01_runner_restore_$$
 VOL=dm01-runner-test-$$
+WORK=""
+
+case "$C" in paddydev-db|*prod*) echo "TOLAK: tes tidak boleh memakai $C" >&2; exit 1 ;; esac
+
+cleanup() {
+  docker exec "$C" dropdb -U postgres --if-exists "$DB" >/dev/null 2>&1 || true
+  docker exec "$C" dropdb -U postgres --if-exists "$RESTORE_DB" >/dev/null 2>&1 || true
+  docker exec "$C" dropdb -U postgres --if-exists paddydev_dm01_check >/dev/null 2>&1 || true
+  docker volume rm -f "$VOL" >/dev/null 2>&1 || true
+  if [ -n "$WORK" ]; then rm -rf -- "$WORK"; fi
+}
+trap cleanup EXIT
+
 WORK=$(mktemp -d)
 BK="$WORK/backups"
 IMAGE=$(docker inspect -f '{{.Config.Image}}' "$C")
 
-case "$C" in paddydev-db|*prod*) echo "TOLAK: tes tidak boleh memakai $C" >&2; exit 1 ;; esac
+# Pembungkus docker untuk simulasi kegagalan: DM01_TEST_GAGAL=inventaris (query inventaris FK/trigger
+# gagal) atau pg_dump (pg_dump gagal). Selain itu diteruskan apa adanya ke docker asli.
+mkdir -p "$WORK/bin"
+cat >"$WORK/bin/docker" <<'SH'
+#!/usr/bin/env bash
+real=$DM01_TEST_DOCKER_ASLI
+case "${DM01_TEST_GAGAL:-}" in
+  pg_dump)
+    if [[ " $* " == *" pg_dump "* ]]; then echo "pg_dump: error: simulasi gagal" >&2; exit 1; fi ;;
+  inventaris)
+    if [[ " $* " == *" psql "* && " $* " == *" -f - "* ]]; then
+      t=$(mktemp); cat >"$t"
+      if grep -q pg_constraint "$t"; then rm -f "$t"; echo "ERROR:  simulasi inventaris gagal" >&2; exit 1; fi
+      rc=0; "$real" "$@" <"$t" || rc=$?; rm -f "$t"; exit "$rc"
+    fi ;;
+esac
+exec "$real" "$@"
+SH
+chmod +x "$WORK/bin/docker"
+DOCKER_ASLI=$(command -v docker)
+gagal_di() { # <inventaris|pg_dump> <perintah…>
+  local apa=$1
+  shift
+  DM01_TEST_GAGAL=$apa DM01_TEST_DOCKER_ASLI=$DOCKER_ASLI PATH="$WORK/bin:$PATH" "$@"
+}
 
 A=aaaaaaaa-0000-4000-8000-00000000000a # karyawan pemilik berkas
 B=bbbbbbbb-0000-4000-8000-00000000000b # karyawan lain
@@ -38,14 +77,6 @@ run() {
     DM01_BACKUP_DIR="$BK" bash "$RUNNER" "$@"
 }
 setuju() { DM01_APPROVED=yes run "$@"; }
-
-cleanup() {
-  docker exec "$C" dropdb -U postgres --if-exists "$DB" >/dev/null 2>&1 || true
-  docker exec "$C" dropdb -U postgres --if-exists "$RESTORE_DB" >/dev/null 2>&1 || true
-  docker volume rm -f "$VOL" >/dev/null 2>&1 || true
-  rm -rf "$WORK"
-}
-trap cleanup EXIT
 
 GAGAL=0
 ok() { echo "  ok   $1"; }
@@ -111,6 +142,8 @@ harus_gagal "files tanpa DM01_APPROVED=yes ditolak" "DM01_APPROVED" run files
 harus_gagal "mode tak dikenal ditolak" "pemakaian|mode" run hapus-semua
 
 echo "== Pratinjau"
+harus_gagal "preview gagal bila query inventaris FK/trigger gagal" "inventaris" gagal_di inventaris run preview
+cek "preview gagal tidak meninggalkan folder pratinjau" "! ls -d '$BK'/dm01-*-pratinjau* >/dev/null 2>&1"
 out=$(run preview 2>&1) || { echo "$out" >&2; salah "preview berhasil"; exit 1; }
 ok "preview berhasil"
 echo "$out" | sed 's/^/      | /'
@@ -129,6 +162,14 @@ harus_gagal "files sebelum execute ditolak" "eksekusi" setuju files
 harus_gagal "execute ditolak bila pratinjau dibuat untuk target lain" "target lain" \
   env DM01_APPROVED=yes DM01_DB_CONTAINER="$C" DM01_DB_NAME="$TEMPLATE" DM01_DB_USER=postgres DM01_VOLUME="$VOL" \
   DM01_BACKUP_DIR="$BK" bash "$RUNNER" execute
+
+echo "== Penolakan pratinjau kemarin"
+KEMARIN="$BK/dm01-$(TZ=Asia/Jakarta date -d yesterday +%Y%m%d)-235959-pratinjau"
+mv -- "$PDIR" "$KEMARIN"
+harus_gagal "execute ditolak bila pratinjau terakhir dari kemarin" "pratinjau hari ini" setuju execute
+pin_kemarin() { DM01_PREVIEW_DIR="$KEMARIN" setuju execute; }
+harus_gagal "execute ditolak bila DM01_PREVIEW_DIR menunjuk pratinjau kemarin" "bukan dari hari ini" pin_kemarin
+mv -- "$KEMARIN" "$PDIR"
 
 echo "== Penolakan payroll draft yang mencakup ≤ 20 Okt"
 pg -c "INSERT INTO hris.payroll_runs (run_name, period_month, period_year, status) VALUES ('Uji Oktober', 10, 2026, 'draft')"
@@ -149,6 +190,12 @@ echo "== Penolakan bila data berubah sejak pratinjau"
 pg -c "INSERT INTO hris.leaves (employee_id, leave_type, start_date, end_date, total_days, reason, status) VALUES ('$A', 'annual', '2026-10-12', '2026-10-12', 1, 'uji berubah', 'pending')"
 harus_gagal "execute ditolak bila angka beda dari pratinjau" "berubah" setuju execute
 pg -c "DELETE FROM hris.leaves WHERE reason = 'uji berubah'"
+
+echo "== pg_dump gagal: berhenti sebelum core"
+harus_gagal "execute berhenti bila pg_dump gagal" "pg_dump gagal" gagal_di pg_dump setuju execute
+cek "data utuh setelah pg_dump gagal" "[ \"\$(pg -c \"SELECT count(*) FROM hris.leaves WHERE employee_id = '$A'\")\" = 3 ]"
+cek "tidak ada audit cleanup setelah pg_dump gagal" "[ \"\$(pg -c \"SELECT count(*) FROM audit.audit_log WHERE action = 'data_cleanup.dm01'\")\" = 0 ]"
+cek "tidak ada execute.ok setelah pg_dump gagal" "! ls '$BK'/dm01-*-eksekusi*/execute.ok >/dev/null 2>&1"
 
 echo "== Eksekusi (payroll draft November tanpa periode khusus tidak menghalangi)"
 out=$(DM01_APPROVED=yes run execute 2>&1) || { echo "$out" >&2; salah "execute berhasil"; exit 1; }
@@ -175,6 +222,12 @@ harus_gagal "execute kedua tanpa pratinjau baru tetap butuh angka yang sama" "be
   setuju execute
 
 echo "== Hapus berkas"
+cp -- "$EDIR/files.txt" "$WORK/files.txt.asli"
+echo 'leave-attachments/../../etc/passwd' >>"$EDIR/files.txt"
+harus_gagal "files ditolak bila files.txt memuat path di luar pola" "pola" setuju files
+cek "tidak ada berkas terhapus setelah penolakan pola" "ada leave-attachments/$A/hapus-1.pdf && ada overtime-attachments/$A/hapus-2.pdf"
+cek "tidak ada arsip/files.ok setelah penolakan pola" "! ls '$EDIR'/files-*.tgz '$EDIR'/files.ok >/dev/null 2>&1"
+cp -- "$WORK/files.txt.asli" "$EDIR/files.txt"
 cek "berkas belum dihapus sebelum mode files" "ada leave-attachments/$A/hapus-1.pdf"
 out=$(DM01_APPROVED=yes run files 2>&1) || { echo "$out" >&2; salah "files berhasil"; exit 1; }
 ok "files berhasil"
