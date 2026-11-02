@@ -90,6 +90,15 @@ func TestValidateEmployeeImportAdd(t *testing.T) {
 	}
 }
 
+func TestValidateEmployeeImportNIPTooLong(t *testing.T) {
+	long := "1234567890123456789012345678901234567890123456789012" // 52
+	rows := [][]string{{long, "Panjang", "p@x.id", "", "21/10/2026", "Kontrak (PKWT)", "Shift", "PPLN", "", "", ""}}
+	_, errs, _ := ValidateEmployeeImport("add", hdr, rows, 2, lk())
+	if !issueText(errs, "Baris 2, kolom NIP: NIP maksimal 50 karakter") || len(errs) != 1 {
+		t.Fatalf("errors %+v", errs)
+	}
+}
+
 func TestValidateEmployeeImportReplaceKeepsBlankCells(t *testing.T) {
 	rows := [][]string{{"202505272", "Feti P.", "", "", "", "", "Non-Shift", "", "", "", ""}}
 	out, errs, _ := ValidateEmployeeImport("replace", hdr, rows, 2, lk())

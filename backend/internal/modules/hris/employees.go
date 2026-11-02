@@ -51,26 +51,10 @@ func (s *Service) EmployeeDirectory(ctx context.Context, p domain.DirectoryParam
 	return s.repo.DirectoryPage(ctx, p)
 }
 
-// errNIPRequired is the 400 for a missing NIP (EPIC-081 R1).
-const errNIPRequired = "NIP wajib diisi"
-
-// cleanNIP trims the NIP HR typed; blank (or absent/null) is refused. The
-// application never makes a NIP up.
-func cleanNIP(v *string) (string, error) {
-	nip := ""
-	if v != nil {
-		nip = domain.JSTrim(*v)
-	}
-	if nip == "" {
-		return "", httpx.BadRequest(errNIPRequired)
-	}
-	return nip, nil
-}
-
 // CreateEmployee is createEmployee: the NIP is required and must be unique,
 // the email must be unique.
 func (s *Service) CreateEmployee(ctx context.Context, in employeeInput) (*Row, error) {
-	nip, err := cleanNIP(in.nip.Val)
+	nip, err := employeekeys.CleanNIP(in.nip.Val)
 	if err != nil {
 		return nil, err
 	}
@@ -168,7 +152,7 @@ func (s *Service) UpdateEmployee(ctx context.Context, id string, in employeeInpu
 	keys := in.keys()
 	var nip string
 	if in.nip.Sent {
-		if nip, err = cleanNIP(in.nip.Val); err != nil {
+		if nip, err = employeekeys.CleanNIP(in.nip.Val); err != nil {
 			return nil, err
 		}
 		keys.NIP = &nip

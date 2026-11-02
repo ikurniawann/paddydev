@@ -11,7 +11,6 @@ import (
 	"nuhabit/backend/internal/platform/database"
 	"nuhabit/backend/internal/platform/employeekeys"
 	"nuhabit/backend/internal/platform/httpx"
-	"nuhabit/backend/internal/platform/validate"
 )
 
 // ── job openings ────────────────────────────────────────────────────────────
@@ -81,15 +80,9 @@ func (s *Service) Promote(ctx context.Context, in promotionInput) (*promotion, e
 		status = *in.EmploymentStatus
 	}
 	// The NIP is never made up (EPIC-081): required, trimmed, unique.
-	nip := ""
-	if in.NIP != nil {
-		nip = validate.JSTrim(*in.NIP)
-	}
-	if nip == "" {
-		return nil, httpx.BadRequest("NIP wajib diisi")
-	}
-	if validate.UTF16Len(nip) > 50 {
-		return nil, httpx.BadRequest("NIP maksimal 50 karakter")
+	nip, err := employeekeys.CleanNIP(in.NIP)
+	if err != nil {
+		return nil, err
 	}
 	conflict, err := employeekeys.Find(ctx, s.db, employeekeys.Keys{NIP: &nip}, "")
 	if err != nil {

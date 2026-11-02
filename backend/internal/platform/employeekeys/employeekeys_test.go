@@ -1,6 +1,9 @@
 package employeekeys
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestConflictMessage(t *testing.T) {
 	c := Conflict{Field: "ktp", Name: "Alya Nur Hikmah", NIP: "202504229", Active: false}
@@ -34,6 +37,29 @@ func TestDigits(t *testing.T) {
 	} {
 		if got := digits(in); got != want {
 			t.Fatalf("digits(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestCleanNIP(t *testing.T) {
+	s := func(v string) *string { return &v }
+	long := strings.Repeat("9", 51)
+	for _, tc := range []struct {
+		in   *string
+		want string
+		err  string
+	}{
+		{s("  202511001 "), "202511001", ""},
+		{s(strings.Repeat("9", 50)), strings.Repeat("9", 50), ""},
+		{s(" " + strings.Repeat("9", 50) + " "), strings.Repeat("9", 50), ""},
+		{nil, "", "NIP wajib diisi"},
+		{s(""), "", "NIP wajib diisi"},
+		{s(" \t "), "", "NIP wajib diisi"},
+		{s(long), "", "NIP maksimal 50 karakter"},
+	} {
+		got, err := CleanNIP(tc.in)
+		if got != tc.want || (tc.err == "") != (err == nil) || (err != nil && err.Error() != tc.err) {
+			t.Errorf("CleanNIP(%v) = %q, %v; want %q, %q", tc.in, got, err, tc.want, tc.err)
 		}
 	}
 }

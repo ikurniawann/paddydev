@@ -4,6 +4,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"nuhabit/backend/internal/platform/validate"
 )
 
 // Values of the HR-facing Excel files (Spec 2026-10-19 §3): labels people
@@ -93,6 +95,9 @@ func CleanNIP(s string) (string, string) {
 	s = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(s), "'"))
 	if scientific.MatchString(s) {
 		return "", "NIP berubah jadi format angka Excel (mis. 2,02E+08). Ubah kolom NIP ke format Teks lalu ketik ulang."
+	}
+	if validate.UTF16Len(s) > 50 {
+		return "", validate.NIPTooLong
 	}
 	return s, ""
 }

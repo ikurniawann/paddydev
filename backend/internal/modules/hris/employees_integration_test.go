@@ -62,8 +62,13 @@ func TestEmployeeNIPManualRequired(t *testing.T) {
 		t.Fatalf("a refused create must not insert a row: %v -> %v", before, got)
 	}
 	long := strings.Repeat("9", 51)
-	if r := h.do(&hr, "POST", "/api/hris/employees", body("e", long, true)); r.status != 400 {
-		t.Fatalf("51-char NIP accepted: %d %s", r.status, r.raw)
+	expect(t, h.do(&hr, "POST", "/api/hris/employees", body("e", long, true)), 400, "NIP maksimal 50 karakter")
+	expect(t, h.do(&hr, "POST", "/api/hris/employees", body("e2", " "+long+" ", true)), 400, "NIP maksimal 50 karakter")
+	fifty := " T" + strings.Repeat("7", 49) + " "
+	edge := h.do(&hr, "POST", "/api/hris/employees", body("e3", fifty, true))
+	expect(t, edge, 200, "")
+	if got := edge.data()["nip"]; got != strings.TrimSpace(fifty) {
+		t.Fatalf("50 chars + padding must be stored trimmed, got %v", got)
 	}
 	r := h.do(&hr, "POST", "/api/hris/employees", body("f", taken, true))
 	if r.status != 400 || !strings.HasPrefix(r.body["error"].(string), "NIP sudah dipakai karyawan Pemilik NIP") {
@@ -85,6 +90,8 @@ func TestEmployeeNIPManualRequired(t *testing.T) {
 	if r.status != 400 || !strings.HasPrefix(r.body["error"].(string), "NIP sudah dipakai karyawan Pemilik NIP") {
 		t.Fatalf("duplicate NIP on update: %d %s", r.status, r.raw)
 	}
+	// Re-sending the employee's own NIP is not a conflict.
+	expect(t, h.do(&hr, "PUT", "/api/hris/employees/"+id, map[string]any{"nip": "5551" + other[:6], "phone": "081200000008"}), 200, "")
 	// Saving other fields without sending a NIP leaves it alone (R4: old EMP- numbers stay).
 	expect(t, h.do(&hr, "PUT", "/api/hris/employees/"+id, map[string]any{"phone": "081200000009"}), 200, "")
 	if got := h.scalar(`SELECT nip FROM hris.employees WHERE id = $1`, id); got != "5551"+other[:6] {

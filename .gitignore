@@ -63,3 +63,7 @@ storage/private/
 # go
 backend/bin/
 reports/pengembangan/
+
+# agent tooling caches
+.swarm/
+.claude-flow/

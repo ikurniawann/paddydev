@@ -18,7 +18,6 @@ import (
 	"nuhabit/backend/internal/platform/database"
 	"nuhabit/backend/internal/platform/employeekeys"
 	"nuhabit/backend/internal/platform/httpx"
-	"nuhabit/backend/internal/platform/validate"
 )
 
 // lib/users/user-service.ts: staff accounts linked to hris employees.
@@ -199,28 +198,6 @@ func (s *service) reload(ctx context.Context, id string) (*employeeView, error) 
 
 /* ── create ──────────────────────────────────────────────────────────── */
 
-// errNIPRequired is the 400 for a missing NIP (EPIC-081 R1).
-const (
-	errNIPRequired = "NIP wajib diisi"
-	errNIPTooLong  = "NIP maksimal 50 karakter"
-)
-
-// cleanNIP trims the NIP HR typed. Blank (or absent/null) is refused and so
-// is a value over 50 characters; the application never makes a NIP up.
-func cleanNIP(raw *string) (string, error) {
-	nip := ""
-	if raw != nil {
-		nip = validate.JSTrim(*raw)
-	}
-	if nip == "" {
-		return "", httpx.BadRequest(errNIPRequired)
-	}
-	if validate.UTF16Len(nip) > 50 {
-		return "", httpx.BadRequest(errNIPTooLong)
-	}
-	return nip, nil
-}
-
 // insertColumns are the hris.employees columns createUserEmployee writes
 // with `input.x ?? null`, after nip, full_name, email, phone, join_date,
 // employment_status and is_access_app.
@@ -260,7 +237,7 @@ func (s *service) createUser(ctx context.Context, actorID string, b *employeeBod
 	if err := checkHrisRole(b, nil); err != nil {
 		return nil, err
 	}
-	nip, err := cleanNIP(b.str("nip"))
+	nip, err := employeekeys.CleanNIP(b.str("nip"))
 	if err != nil {
 		return nil, err
 	}
@@ -514,7 +491,7 @@ func (s *service) updateUser(ctx context.Context, actorID, id string, b *employe
 	// NIP can be changed but never blanked (EPIC-081 R2).
 	var newNIP string
 	if b.has("nip") {
-		if newNIP, err = cleanNIP(b.str("nip")); err != nil {
+		if newNIP, err = employeekeys.CleanNIP(b.str("nip")); err != nil {
 			return nil, err
 		}
 	}

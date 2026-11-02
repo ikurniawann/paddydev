@@ -13,7 +13,23 @@ import (
 
 	"nuhabit/backend/internal/platform/database"
 	"nuhabit/backend/internal/platform/httpx"
+	"nuhabit/backend/internal/platform/validate"
 )
+
+// CleanNIP is the one NIP cleaner of every write path (EPIC-081): trim, blank
+// (or absent/null) is 400 "NIP wajib diisi", over 50 characters is 400
+// "NIP maksimal 50 karakter". Nothing ever makes a NIP up.
+func CleanNIP(raw *string) (string, error) {
+	in := ""
+	if raw != nil {
+		in = *raw
+	}
+	nip, problem := validate.CleanNIP(in)
+	if problem != "" {
+		return "", httpx.BadRequest(problem)
+	}
+	return nip, nil
+}
 
 // Keys are the unique identity columns of hris.employees. A nil, empty or
 // whitespace-only key is "not given" and never conflicts.

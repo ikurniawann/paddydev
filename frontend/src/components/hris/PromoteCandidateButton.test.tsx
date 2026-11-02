@@ -65,4 +65,16 @@ describe("PromoteCandidateButton — NIP manual wajib", () => {
     submit();
     expect(await screen.findByText("NIP sudah dipakai karyawan Budi (NIP 1, aktif)")).toBeInTheDocument();
   });
+
+  it("menutup dialog mengosongkan NIP dan galatnya", () => {
+    renderButton();
+    fireEvent.change(nipInput(), { target: { value: "   " } });
+    submit();
+    expect(screen.getByText("NIP wajib diisi")).toBeInTheDocument();
+    fireEvent.change(nipInput(), { target: { value: "202511001" } });
+    fireEvent.click(screen.getByRole("button", { name: "Batal" }));
+    fireEvent.click(screen.getByRole("button", { name: /Promote to Employee/ }));
+    expect(nipInput().value).toBe("");
+    expect(screen.queryByText("NIP wajib diisi")).not.toBeInTheDocument();
+  });
 });

@@ -754,10 +754,9 @@ func TestEmployeeNIPManualRequired(t *testing.T) {
 		wantError(t, code, body, 400, "NIP wajib diisi")
 	}
 	tooLong := employeeBody(uniqueEmail())
-	tooLong["nip"] = strings.Repeat("9", 51)
-	if code, body, _ = e.do("POST", "/api/users", tooLong); code != 400 {
-		t.Fatalf("51-char NIP: %d %v", code, body)
-	}
+	tooLong["nip"] = " " + strings.Repeat("9", 51) + " "
+	code, body, _ = e.do("POST", "/api/users", tooLong)
+	wantError(t, code, body, 400, "NIP maksimal 50 karakter")
 	if n := e.scalar(`SELECT count(*) FROM hris.employees WHERE email = $1`, without["email"]); n != int64(0) {
 		t.Fatalf("refused create left a row: %v", n)
 	}
@@ -782,6 +781,13 @@ func TestEmployeeNIPManualRequired(t *testing.T) {
 	if code != 200 || body["data"].(map[string]any)["nip"] != newNIP {
 		t.Fatalf("update NIP: %d %s", code, raw)
 	}
+	// Re-sending the employee's own NIP is not a conflict.
+	code, body, raw = e.do("PUT", "/api/users/"+id, map[string]any{"nip": newNIP, "phone": "08122"})
+	if code != 200 || body["data"].(map[string]any)["nip"] != newNIP {
+		t.Fatalf("own NIP: %d %s", code, raw)
+	}
+	code, body, _ = e.do("PUT", "/api/users/"+id, map[string]any{"nip": strings.Repeat("9", 51)})
+	wantError(t, code, body, 400, "NIP maksimal 50 karakter")
 	for _, blank := range []any{nil, "", "  "} {
 		code, body, _ = e.do("PUT", "/api/users/"+id, map[string]any{"nip": blank})
 		wantError(t, code, body, 400, "NIP wajib diisi")

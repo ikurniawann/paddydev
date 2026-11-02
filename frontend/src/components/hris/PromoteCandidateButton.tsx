@@ -58,6 +58,15 @@ export function PromoteCandidateButton({ candidate, onSuccess }: PromoteCandidat
   });
   const loading = promote.isPending;
 
+  // Tutup dialog (Batal, Esc, klik luar, atau sukses) = kolom NIP dan galatnya kembali bersih.
+  const handleOpenChange = (next: boolean) => {
+    setOpen(next);
+    if (!next) {
+      setNip('');
+      setNipError(null);
+    }
+  };
+
   const handlePromote = () => {
     const invalid = validateNip(nip);
     setNipError(invalid);
@@ -71,7 +80,7 @@ export function PromoteCandidateButton({ candidate, onSuccess }: PromoteCandidat
               ? `. Draft kontrak ${result.contract_number} dibuat otomatis — cek tab Kontrak.`
               : ''),
         });
-        setOpen(false);
+        handleOpenChange(false);
         onSuccess?.();
       },
       onError: (error) => {
@@ -106,7 +115,7 @@ export function PromoteCandidateButton({ candidate, onSuccess }: PromoteCandidat
         🎉 Promote to Employee
       </Button>
 
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog open={open} onOpenChange={handleOpenChange}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Promote Kandidat Jadi Karyawan</DialogTitle>
@@ -198,7 +207,7 @@ export function PromoteCandidateButton({ candidate, onSuccess }: PromoteCandidat
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setOpen(false)} disabled={loading}>
+            <Button variant="outline" onClick={() => handleOpenChange(false)} disabled={loading}>
               Batal
             </Button>
             <Button
