@@ -315,6 +315,46 @@ func ServiceOverOneYear(joinDate, periodEnd string) bool {
 	return join.AddDate(1, 0, 0).Before(end)
 }
 
+// ServiceYearReached: a full year of service on onDate (join + 1 year on or
+// before it, EPIC-084 R8). An unreadable date counts as reached, so a missing
+// join date never cuts pay.
+func ServiceYearReached(joinDate, onDate string) bool {
+	join, err1 := time.Parse(isoDate, joinDate)
+	on, err2 := time.Parse(isoDate, onDate)
+	if err1 != nil || err2 != nil {
+		return true
+	}
+	return !join.AddDate(1, 0, 0).After(on)
+}
+
+// pilgrimagePaidDays is how many calendar days of a Cuti Ibadah stay paid
+// for an employee under a year of service (TnC 03-11).
+const pilgrimagePaidDays = 14
+
+// LeaveDayKind classifies one working day of an approved leave (EPIC-084 R8):
+// "personal" (PIP), "sick" (PIS) or "" (full paid). Cuti Melahirkan/Keguguran
+// are paid only with a year of service at the leave start; Cuti Ibadah only
+// beyond its first 14 calendar days, under the same condition.
+func LeaveDayKind(leaveType, leaveStart, day, joinDate string) string {
+	switch leaveType {
+	case "personal":
+		return "personal"
+	case "sick":
+		return "sick"
+	case "maternity", "miscarriage":
+		if !ServiceYearReached(joinDate, leaveStart) {
+			return "personal"
+		}
+	case "pilgrimage":
+		start, err := time.Parse(isoDate, leaveStart)
+		if err == nil && day >= start.AddDate(0, 0, pilgrimagePaidDays).Format(isoDate) &&
+			!ServiceYearReached(joinDate, leaveStart) {
+			return "personal"
+		}
+	}
+	return ""
+}
+
 // earliestScheduleFrom is the earliest effective_from of the rows ("" without rows).
 func earliestScheduleFrom(rows []ShiftRow) string {
 	first := ""
