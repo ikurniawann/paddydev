@@ -344,9 +344,20 @@ func TestRunAutoCheckoutLookbackAtWIBMidnight(t *testing.T) {
 type staleRecordRepo struct {
 	Repository
 	stale *Row
+	// served is set after the first read: later reads see the stored row, as
+	// a re-read after a conditional write that missed does.
+	served *bool
 }
 
-func (r staleRecordRepo) AttendanceRecord(context.Context, string) (*Row, error) { return r.stale, nil }
+func (r staleRecordRepo) AttendanceRecord(ctx context.Context, id string) (*Row, error) {
+	if r.served == nil || !*r.served {
+		if r.served != nil {
+			*r.served = true
+		}
+		return r.stale, nil
+	}
+	return r.Repository.AttendanceRecord(ctx, id)
+}
 
 // EPIC-080 R5: a manual clock-out cannot overwrite an automatic one, neither
 // when it reads the closed row nor when it read it just before the job ran.
@@ -378,13 +389,18 @@ func TestManualClockOutAfterAutoCheckout(t *testing.T) {
 	}
 	body := map[string]any{"action": "clock-out", "attendance_id": id, "photo": photo}
 
+	// An auto-closed row says so, with the time (final review 2).
+	const autoClosed = "Absen sudah ditutup otomatis pukul 16.00 (jam selesai shift). Ajukan koreksi bila Anda pulang lebih lambat."
+
 	// Reads the closed row: the existing pre-check.
-	expect(t, h.do(&staff, "POST", "/api/hris/attendance", body), 400, "Sudah clock-out untuk absensi ini")
+	expect(t, h.do(&staff, "POST", "/api/hris/attendance", body), 400, autoClosed)
 	unchanged()
 
-	// Read the row before the job ran: the conditional write refuses.
-	h.svc.repo = staleRecordRepo{Repository: h.svc.repo, stale: stale}
-	expect(t, h.do(&staff, "POST", "/api/hris/attendance", body), 400, "Sudah clock-out untuk absensi ini")
+	// Read the row before the job ran: the conditional write refuses, and the
+	// row is read again to say why.
+	served := false
+	h.svc.repo = staleRecordRepo{Repository: h.svc.repo, stale: stale, served: &served}
+	expect(t, h.do(&staff, "POST", "/api/hris/attendance", body), 400, autoClosed)
 	unchanged()
 }
 

@@ -223,3 +223,62 @@ func TestWeeklyPatternTwoShifts(t *testing.T) {
 	}
 	t.Fatal("Monday pattern row missing")
 }
+
+// Final review 1 + 8: the backend applies the grid's order rule in every
+// path (cells, upload, weekly pattern), and a weekly pattern cannot take an
+// inactive shift as the second shift.
+func TestTwoShiftReversedOrderRejectedEverywhere(t *testing.T) {
+	h := newHarness(t)
+	hr, _ := h.staff("hrd", scheduleTestMenus, false)
+	writer := h.staffActions("hrd", scheduleWriter)
+	branch, ana, _ := scheduleFixture(h)
+	pagi4, sore4, _, _ := twoShiftFixture(h)
+	h.exec(`INSERT INTO hris.shifts (code, name, start_time, end_time, break_minutes, is_overnight) VALUES
+		('PAGI4R', 'Pagi 4 jam dini', '06:00', '10:00', 0, false),
+		('SORE22', 'Sore 18-22', '18:00', '22:00', 0, false), ('MLM02', 'Malam 22-02', '22:00', '02:00', 0, true),
+		('NGT06', 'Malam 22-06', '22:00', '06:00', 0, true), ('PGI07', 'Pagi 07-09', '07:00', '09:00', 0, false)
+		ON CONFLICT (upper(code)) DO NOTHING`)
+	id := func(code string) string { return h.scalar(`SELECT id::text FROM hris.shifts WHERE code = $1`, code) }
+	nip := h.scalar(`SELECT nip FROM hris.employees WHERE id = $1`, ana)
+	reversed := "Shift kedua harus mulai setelah shift pertama selesai (SORE4 selesai 21.00, PAGI4R mulai 06.00)"
+
+	// Cells API.
+	bad := h.do(&writer, http.MethodPost, cellsPath, cellsBody(branch, "preview", anaCell(ana, "2026-10-06", "SORE4+PAGI4R")))
+	expect(t, bad, http.StatusOK, "")
+	if !strings.Contains(bad.raw, reversed) {
+		t.Fatalf("cells preview = %s", bad.raw)
+	}
+	// A second shift that crosses midnight, and an overnight first shift, are fine.
+	for _, code := range []string{"SORE22+MLM02", "NGT06+PGI07"} {
+		ok := h.do(&writer, http.MethodPost, cellsPath, cellsBody(branch, "preview", anaCell(ana, "2026-10-06", code)))
+		expect(t, ok, http.StatusOK, "")
+		if strings.Contains(ok.raw, "Shift kedua harus mulai") {
+			t.Fatalf("%s rejected: %s", code, ok.raw)
+		}
+		wantSummary(t, ok, map[string]float64{"new": 1})
+	}
+
+	// Upload.
+	pre := upload(t, h, &hr, map[string]string{"branch_id": branch, "from": "2026-10-05", "to": "2026-10-11", "step": "preview"},
+		anaWeek(branch, nip, []string{"SORE4+PAGI4R", "L", "L", "L", "L", "L", "L"}))
+	expect(t, pre, http.StatusOK, "")
+	if !strings.Contains(pre.raw, reversed) {
+		t.Fatalf("upload preview = %s", pre.raw)
+	}
+
+	// Weekly pattern.
+	put := func(first, second any) call {
+		days := []map[string]any{{"day_of_week": 1, "shift_id": first, "shift2_id": second}}
+		for d := 2; d <= 7; d++ {
+			days = append(days, map[string]any{"day_of_week": d, "shift_id": nil})
+		}
+		return h.do(&hr, "PUT", "/api/hris/employees/"+ana+"/shifts", map[string]any{"effective_from": "2026-10-05", "days": days})
+	}
+	expect(t, put(sore4, id("PAGI4R")), http.StatusBadRequest, "Senin: "+reversed)
+	expect(t, put(id("SORE22"), id("MLM02")), http.StatusOK, "")
+	expect(t, put(id("NGT06"), id("PGI07")), http.StatusOK, "")
+
+	// An inactive second shift is refused (same wording as the upload).
+	h.exec(`UPDATE hris.shifts SET is_active = false WHERE code = 'SORE4'`)
+	expect(t, put(pagi4, sore4), http.StatusBadRequest, "Senin: Shift SORE4 sudah nonaktif")
+}

@@ -25,7 +25,8 @@ const (
 
 // autoCheckoutSQL closes every open row whose employee holds a job title with
 // an active rule (all locations, or the row's own branch) once scheduled_end
-// has passed. Rows of a closed attendance period are left out with the same
+// has passed. A row the HR adjusted at or after scheduled_end (for example
+// reopened by clearing clock_out) is left alone. Rows of a closed attendance period are left out with the same
 // predicate as hris.attendance_closed_period_guard, so one closed row cannot
 // abort the whole statement. A clock-in at or after scheduled_end is left for
 // the HR to review (R3).
@@ -41,6 +42,7 @@ const autoCheckoutSQL = `UPDATE hris.attendance a
 	  AND a.scheduled_end IS NOT NULL
 	  AND a.scheduled_end <= $1::timestamptz
 	  AND a.clock_in < a.scheduled_end
+	  AND (a.adjusted_at IS NULL OR a.adjusted_at < a.scheduled_end)
 	  AND a.date >= $2::date
 	  AND EXISTS (SELECT 1 FROM hris.auto_checkout_rules r
 	               WHERE r.is_active
@@ -48,7 +50,7 @@ const autoCheckoutSQL = `UPDATE hris.attendance a
 	                 AND (r.branch_id IS NULL OR r.branch_id = a.branch_id))
 	  AND NOT EXISTS (SELECT 1 FROM hris.attendance_periods p
 	                   WHERE p.status = 'closed' AND a.date BETWEEN p.start_date AND p.end_date)
-	RETURNING a.id::text, a.scheduled_end`
+	RETURNING a.id::text, a.scheduled_end, e.full_name, a.date::text`
 
 // RunAutoCheckout closes the open attendance rows whose shift ended at or
 // before now (R3). The update and its audit rows commit together; it returns
@@ -63,13 +65,13 @@ func (s *Service) RunAutoCheckout(ctx context.Context, now time.Time) (closed in
 			return err
 		}
 		type closedRow struct {
-			id  string
-			end time.Time
+			id, name, date string
+			end            time.Time
 		}
 		var done []closedRow
 		for rows.Next() {
 			var c closedRow
-			if err := rows.Scan(&c.id, &c.end); err != nil {
+			if err := rows.Scan(&c.id, &c.end, &c.name, &c.date); err != nil {
 				rows.Close()
 				return err
 			}
@@ -81,13 +83,14 @@ func (s *Service) RunAutoCheckout(ctx context.Context, now time.Time) (closed in
 		}
 		actor := autoCheckoutActor
 		for _, c := range done {
-			id := c.id
+			id, label := c.id, c.name+" · "+c.date
 			if err := audit.Write(ctx, q, audit.Entry{
-				ActorName: &actor,
-				Action:    autoCheckoutAction,
-				Entity:    attendanceEntity,
-				EntityID:  &id,
-				After:     map[string]any{"clock_out": c.end.UTC().Format(time.RFC3339), "clock_out_auto": true},
+				ActorName:   &actor,
+				Action:      autoCheckoutAction,
+				Entity:      attendanceEntity,
+				EntityID:    &id,
+				EntityLabel: &label,
+				After:       map[string]any{"clock_out": c.end.UTC().Format(time.RFC3339), "clock_out_auto": true},
 			}); err != nil {
 				return err
 			}

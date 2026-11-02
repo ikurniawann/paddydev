@@ -40,7 +40,8 @@ Bergantung pada EPIC-079 (PR #63): sistem shift, Host Live/CRM bertipe Shift, pe
   - `scheduled_end` ≤ sekarang;
   - `clock_in` < `scheduled_end`;
   - tanggal ≥ hari ini − 2 (untuk shift malam);
-  - periode absensi belum ditutup.
+  - periode absensi belum ditutup;
+  - baris yang dibuka kembali HR dilewati: bila `adjusted_at` terisi dan ≥ `scheduled_end` (misalnya HR mengosongkan `clock_out`), job tidak menutupnya lagi.
 
   Absen yang ditutup otomatis mendapat:
   - `clock_out = scheduled_end`, bukan waktu job berjalan;
@@ -53,11 +54,13 @@ Bergantung pada EPIC-079 (PR #63): sistem shift, Host Live/CRM bertipe Shift, pe
   - Absen bertanda "Checkout otomatis" di kalender ESS/HR, Monitoring, dan Rekap.
   - Absen otomatis tidak memicu notifikasi "Jam Kerja Kurang" (trigger dilewati bila `clock_out_auto`).
   - Audit `attendance.auto_checkout` dicatat dengan aktor "Sistem (checkout otomatis)".
-- **R5 Setelah ditutup otomatis**, karyawan tidak bisa clock-out lagi di baris itu. Koreksi tetap lewat pengajuan absensi (EPIC-065/067) atau koreksi HR. Label kurang jam (`attendance_short_hours`) tetap berlaku seperti biasa.
+- **R5 Setelah ditutup otomatis**, karyawan tidak bisa clock-out lagi di baris itu (pesan: "Absen sudah ditutup otomatis pukul HH.MM (jam selesai shift). Ajukan koreksi bila Anda pulang lebih lambat."). Koreksi tetap lewat pengajuan absensi (EPIC-065/067) atau koreksi HR. Label kurang jam (`attendance_short_hours`) tetap berlaku seperti biasa.
 - **R6 Dua shift sehari (1 absen gabungan).**
   - `employee_shift_days` dan `employee_shifts` mendapat `shift2_id` (opsional). `v_employee_schedule` ikut membawa `shift2_id`.
   - Aturan validasi:
     - shift kedua harus mulai setelah shift pertama selesai;
+    - shift kedua tidak boleh mulai, menurut jam dinding, sebelum shift pertama mulai, kecuali shift pertama melewati tengah malam (jadi SORE4 17.00–21.00 + PAGI4 06.00–10.00 ditolak, bukan dibaca sebagai esok hari). Shift kedua sendiri boleh melewati tengah malam (18.00–22.00 + 22.00–02.00 diterima). Aturan yang sama dipakai grid, unggah xlsx, API sel, dan pola mingguan;
+    - pola mingguan menolak shift kedua yang sudah nonaktif;
     - shift kedua hanya boleh ada bila ada shift pertama.
   - Berlaku untuk semua staf shift (tidak dibatasi 3 jabatan); my call.
 - **R7 Kode jadwal 2 shift** di grid, upload xlsx, dan pola mingguan: `KODE1+KODE2` (contoh `PAGI4+SORE4`). Tampilan: "PAGI4 + SORE4 · 08.00–12.00, 17.00–21.00".

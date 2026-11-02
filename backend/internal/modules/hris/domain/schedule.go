@@ -74,7 +74,9 @@ func ScheduledWindow(dateISO string, s ShiftTimes) (start, end time.Time) {
 // TwoShiftWindow is the scheduled window of a two-shift day (EPIC-080 R8):
 // start of the first shift, end of the second, and the idle gap in minutes
 // between the first shift's end and the second's start. A second shift whose
-// clock time starts before the first's runs on the next calendar day. A
+// clock time starts before the first's runs on the next calendar day (only a
+// first overnight shift passes TwoShiftIssue that way; kept for rows stored
+// before that rule). A
 // second shift that does not start after the first ends has no gap (0).
 func TwoShiftWindow(dateISO string, first, second ShiftTimes) (start, end time.Time, gapMinutes int) {
 	start, firstEnd := ScheduledWindow(dateISO, first)

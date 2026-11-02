@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"regexp"
+	"strings"
 	"time"
 
 	"nuhabit/backend/internal/modules/hris/domain"
@@ -246,7 +247,7 @@ func (s *Service) ClockOut(ctx context.Context, a *Actor, in clockInput) (*Row, 
 		return nil, httpx.Forbidden("Tidak boleh mengubah absensi karyawan lain")
 	}
 	if att.Get("clock_out") != nil {
-		return nil, httpx.BadRequest("Sudah clock-out untuk absensi ini")
+		return nil, alreadyClockedOut(att)
 	}
 	if err := s.ensureAttendanceOpen(ctx, attendanceDate(att)); err != nil {
 		return nil, err
@@ -280,7 +281,24 @@ func (s *Service) ClockOut(ctx context.Context, a *Actor, in clockInput) (*Row, 
 		return nil, periodWriteError(err)
 	}
 	if row == nil {
-		return nil, httpx.BadRequest("Sudah clock-out untuk absensi ini")
+		// Closed meanwhile: read the row again to say who closed it.
+		latest, err := s.repo.AttendanceRecord(ctx, id)
+		if err != nil || latest == nil {
+			return nil, httpx.BadRequest("Sudah clock-out untuk absensi ini")
+		}
+		return nil, alreadyClockedOut(latest)
 	}
 	return row, nil
+}
+
+// alreadyClockedOut is the refusal of a clock-out on a closed row; a row the
+// automatic checkout closed says so, with the time (EPIC-080 R5).
+func alreadyClockedOut(att *Row) error {
+	if att.Bool("clock_out_auto") {
+		if t, ok := att.Time("clock_out"); ok {
+			return httpx.BadRequest("Absen sudah ditutup otomatis pukul " + strings.Replace(domain.ClockWIBText(t), ":", ".", 1) +
+				" (jam selesai shift). Ajukan koreksi bila Anda pulang lebih lambat.")
+		}
+	}
+	return httpx.BadRequest("Sudah clock-out untuk absensi ini")
 }

@@ -85,12 +85,22 @@ func secondShiftOffset(first, second UploadShift) int {
 	return ((clockMinutes(second.Start)-clockMinutes(first.Start))%(24*60) + 24*60) % (24 * 60)
 }
 
-// TwoShiftIssue checks a two-shift day (EPIC-080 R6): the second shift must
-// start at or after the first ends and end within 24 hours of the first's
-// start (so it cannot run into the next day's first shift).
+// shiftIsOvernight is whether the shift ends the day after it starts.
+func shiftIsOvernight(s UploadShift) bool {
+	return s.Overnight || clockMinutes(s.End) <= clockMinutes(s.Start)
+}
+
+// TwoShiftIssue checks a two-shift day (EPIC-080 R6), the same rule as the
+// grid (frontend canFollow): the second shift must start at or after the
+// first ends and end within 24 hours of the first's start, and it may not
+// start, by clock, before the first shift starts unless the first is
+// overnight (so SORE4 17–21 + PAGI4 06–10 is rejected, not read as the next
+// day). The second shift itself may run past midnight.
 func TwoShiftIssue(first, second UploadShift) string {
 	off := secondShiftOffset(first, second)
-	if off >= shiftSpanMinutes(first) && off+shiftSpanMinutes(second) <= 24*60 {
+	startsBefore := clockMinutes(second.Start) < clockMinutes(first.Start)
+	if (!startsBefore || shiftIsOvernight(first)) &&
+		off >= shiftSpanMinutes(first) && off+shiftSpanMinutes(second) <= 24*60 {
 		return ""
 	}
 	return fmt.Sprintf("Shift kedua harus mulai setelah shift pertama selesai (%s selesai %s, %s mulai %s)",

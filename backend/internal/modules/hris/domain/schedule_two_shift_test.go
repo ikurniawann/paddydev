@@ -84,7 +84,12 @@ func TestTwoShiftIssue(t *testing.T) {
 		{"shift sama", sh("PAGI4", "08:00", "12:00", false), sh("PAGI4", "08:00", "12:00", false),
 			"Shift kedua harus mulai setelah shift pertama selesai (PAGI4 selesai 12.00, PAGI4 mulai 08.00)"},
 		{"shift kedua lewat tengah malam", sh("SORE", "16:00", "20:00", false), sh("MALAM", "22:00", "02:00", true), ""},
-		{"shift kedua dini hari berikutnya", sh("SORE", "18:00", "22:00", false), sh("DINI", "00:00", "04:00", false), ""},
+		// Shift 2 may not start, by clock, before shift 1 starts (final review 1).
+		{"shift kedua dini hari esoknya ditolak", sh("SORE", "18:00", "22:00", false), sh("DINI", "00:00", "04:00", false),
+			"Shift kedua harus mulai setelah shift pertama selesai (SORE selesai 22.00, DINI mulai 00.00)"},
+		{"urutan terbalik", sh("SORE4", "17:00", "21:00", false), sh("PAGI4", "06:00", "10:00", false),
+			"Shift kedua harus mulai setelah shift pertama selesai (SORE4 selesai 21.00, PAGI4 mulai 06.00)"},
+		{"shift kedua lewat tengah malam setelah shift sore", sh("SORE", "18:00", "22:00", false), sh("MALAM", "22:00", "02:00", true), ""},
 		{"melewati mulai shift pertama esoknya", sh("SPG1", "08:00", "16:00", false), sh("PAGI", "07:00", "11:00", false),
 			"Shift kedua harus mulai setelah shift pertama selesai (SPG1 selesai 16.00, PAGI mulai 07.00)"},
 		{"setelah shift malam", sh("MALAM", "22:00", "06:00", true), sh("PAGI", "07:00", "09:00", false), ""},

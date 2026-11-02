@@ -77,7 +77,11 @@ describe("AutoCheckoutPage", () => {
   it("menampilkan catatan dan baris Jabatan / Lokasi", async () => {
     renderPage();
     const table = await screen.findByTestId("rules-table");
-    expect(screen.getByText("Absen karyawan yang belum clock-out ditutup otomatis di jam selesai shift.")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Absen karyawan yang belum clock-out ditutup otomatis di jam selesai shift. Aturan baru juga berlaku untuk absen terbuka 2 hari terakhir."
+      )
+    ).toBeTruthy();
     expect(within(table).getByText("Shopkeeper")).toBeTruthy();
     expect(within(table).getByText("Paddy Kopo")).toBeTruthy();
     expect(within(table).getByText("Host Live")).toBeTruthy();

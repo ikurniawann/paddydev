@@ -395,6 +395,9 @@ func patternTwoShiftIssue(ctx context.Context, q database.Querier, days []patter
 		if !ok1 || !ok2 {
 			return day + ": shift tidak ditemukan", nil
 		}
+		if !second.Active {
+			return day + ": Shift " + second.Code + " sudah nonaktif", nil
+		}
 		if msg := domain.TwoShiftIssue(first, second); msg != "" {
 			return day + ": " + msg, nil
 		}

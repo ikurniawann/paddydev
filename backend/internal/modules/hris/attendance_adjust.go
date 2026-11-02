@@ -139,7 +139,9 @@ func (s *Service) applyClockAndLateness(ctx context.Context, f *fields, in adjus
 		f.set("clock_out", out)
 		// The "Checkout otomatis" marker says who set the time (EPIC-080 R4):
 		// once a correction changes clock_out it is no longer the system's.
-		if current != nil && current.Bool("clock_out_auto") {
+		// Judged on the stored clock_out, not on the marker read earlier: the
+		// job may have closed the row since (stale read).
+		if current != nil {
 			if stored, found := current.Time("clock_out"); !found || out == nil || !out.Equal(stored) {
 				f.set("clock_out_auto", false)
 			}
@@ -184,8 +186,10 @@ func (s *Service) applyClockAndLateness(ctx context.Context, f *fields, in adjus
 			f.set("late_tolerance_minutes", snap.times.LateToleranceMinutes)
 			f.set("scheduled_start", start)
 			f.set("scheduled_end", end)
-			if snap.second != nil {
+			if snap.second != nil || current == nil {
 				// Two-shift day: the gap between the shifts is not worked time.
+				// A new row takes the shift master's break like clock-in does
+				// (OPSSAT 0), not the table default.
 				f.set("break_minutes", breakMinutes)
 			}
 		}

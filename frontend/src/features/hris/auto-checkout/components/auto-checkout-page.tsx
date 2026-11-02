@@ -15,7 +15,7 @@ import { useAutoCheckoutRules } from "../queries";
 import type { AutoCheckoutRule } from "../types";
 import { AddRuleDialog } from "./add-rule-dialog";
 
-export const AUTO_CHECKOUT_NOTE = "Absen karyawan yang belum clock-out ditutup otomatis di jam selesai shift.";
+export const AUTO_CHECKOUT_NOTE = "Absen karyawan yang belum clock-out ditutup otomatis di jam selesai shift. Aturan baru juga berlaku untuk absen terbuka 2 hari terakhir.";
 
 const ALL_LOCATIONS = "Semua lokasi";
 const NO_DELETE_RIGHT = "Anda tidak punya hak menghapus aturan ini";
