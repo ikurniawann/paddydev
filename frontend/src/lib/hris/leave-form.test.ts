@@ -91,6 +91,12 @@ describe("aturan TnC 03-11 di form (EPIC-084)", () => {
     expect(leaveRuleHint(info("personal"))).toBe("Hanya bila belum punya hak cuti atau cuti tahunan habis");
   });
 
+  it("form HR untuk karyawan lain tanpa aturan H-n / hari H", () => {
+    expect(leaveRuleHint(info("annual"), { forOthers: true })).toBeNull();
+    expect(leaveRuleHint(info("sick"), { forOthers: true })).toBeNull();
+    expect(leaveRuleHint(info("marriage"), { forOthers: true })).toBe("Maksimal 3 hari kerja");
+  });
+
   it("tanggal mulai paling awal", () => {
     expect(earliestStartDate(info("annual"), "2026-11-03")).toBe("2026-11-06");
     expect(earliestStartDate(info("pilgrimage"), "2026-11-03")).toBe("2026-12-03");

@@ -313,7 +313,7 @@ func (s *Service) CreateLeave(ctx context.Context, a *Actor, in leaveRequest) (*
 		}
 		if available >= 1 {
 			return nil, httpx.BadRequest("Izin Pribadi hanya untuk yang belum punya hak cuti atau cutinya habis — sisa Cuti Tahunan Anda " +
-				strconv.FormatFloat(available, 'f', -1, 64) + " hari")
+				strings.Replace(strconv.FormatFloat(available, 'f', -1, 64), ".", ",", 1) + " hari")
 		}
 	}
 	if in.LeaveType == "annual" {

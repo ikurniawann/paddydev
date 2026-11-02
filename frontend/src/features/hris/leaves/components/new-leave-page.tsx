@@ -75,7 +75,7 @@ export function NewLeavePage() {
   const singleDay = Boolean(typeInfo?.singleDay);
   const quotaNote = leaveFormNote(formData.leave_type, quota);
   // Aturan TnC (EPIC-084). HR yang mencatat untuk karyawan tidak terkena batas H-n.
-  const ruleHint = typeInfo ? leaveRuleHint(typeInfo) : null;
+  const ruleHint = typeInfo ? leaveRuleHint(typeInfo, { forOthers: true }) : null;
 
   const totalDays = previewBusinessDays(formData.start_date, formData.end_date);
 

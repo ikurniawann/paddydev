@@ -58,6 +58,7 @@ func TestDefaultAnnualLeaveMonthly2027(t *testing.T) {
 		{"belum genap di 2027", sp("2027-02-01"), 2027, nil, 0},
 		{"2026 tetap rumus lama", sp("2025-05-10"), 2026, []string{"2026-06-15"}, 7.5},
 		{"join kosong", nil, 2027, []string{"2027-06-15"}, 12},
+		{"tanggal cuti bersama ganda dihitung sekali", sp("2026-05-10"), 2027, []string{"2027-06-15", "2027-06-15"}, 6},
 	}
 	for _, c := range cases {
 		if got := DefaultAnnualLeave(c.join, c.year, c.cb); got != c.want {

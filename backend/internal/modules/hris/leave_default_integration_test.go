@@ -26,6 +26,7 @@ func TestDefaultAnnualLeaveSQLMatchesGo(t *testing.T) {
 	h.exec(`INSERT INTO hris.public_holidays (holiday_date, name, type, deducts_leave, status, is_day_off) VALUES
 		('2027-05-20', 'CB Mei', 'cuti_bersama', true, 'aktif', true),
 		('2027-06-15', 'CB Juni', 'cuti_bersama', true, 'aktif', true),
+		('2027-06-15', 'CB Juni (impor ganda)', 'cuti_bersama', true, 'aktif', true),
 		('2027-12-24', 'CB Natal', 'cuti_bersama', true, 'aktif', true),
 		('2027-08-18', 'CB kerja', 'cuti_bersama', true, 'aktif', false),
 		('2027-09-10', 'CB tak memotong', 'cuti_bersama', false, 'aktif', true),

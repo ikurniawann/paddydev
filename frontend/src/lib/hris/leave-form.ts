@@ -42,10 +42,13 @@ const ATTACHMENT_HINTS: Partial<Record<string, string>> = {
 };
 
 /** Ringkasan aturan pengajuan di bawah pilihan jenis (EPIC-084 R1/R2). Server tetap memutuskan. */
-export function leaveRuleHint(info: LeaveTypeInfo): string | null {
+export function leaveRuleHint(info: LeaveTypeInfo, opts: { forOthers?: boolean } = {}): string | null {
   const parts: string[] = [];
-  if (info.sameDayOnly) parts.push("Diajukan pada hari sakit");
-  else if (info.leadDays) parts.push(`Diajukan paling lambat H-${info.leadDays}`);
+  // Batas H-n dan hari H hanya untuk pengajuan sendiri; HR yang mencatat untuk karyawan lain bebas.
+  if (!opts.forOthers) {
+    if (info.sameDayOnly) parts.push("Diajukan pada hari sakit");
+    else if (info.leadDays) parts.push(`Diajukan paling lambat H-${info.leadDays}`);
+  }
   if (info.maxDays) parts.push(`maksimal ${info.maxDays} hari kerja`);
   if (info.maxSpanDays) parts.push(`maksimal ${info.maxSpanDays} hari kalender`);
   const note = RULE_NOTES[info.code];

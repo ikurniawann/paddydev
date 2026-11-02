@@ -150,8 +150,10 @@ func DefaultAnnualLeave(joinDate *string, year int, cutiBersama []string) float6
 			return 12
 		}
 		left := 12 - int(a.Month())
+		seen := map[string]bool{} // satu tanggal bisa tercatat dua kali (nama berbeda)
 		for _, d := range cutiBersama {
-			if t, ok := ParseDate(d); ok && t.Year() == year && t.Month() > a.Month() {
+			if t, ok := ParseDate(d); ok && t.Year() == year && t.Month() > a.Month() && !seen[d] {
+				seen[d] = true
 				left--
 			}
 		}

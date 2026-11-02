@@ -119,7 +119,7 @@ AS $$
     WHEN a.d <= make_date(p_year, 1, 1) THEN 12::numeric
     WHEN p_year >= 2027 AND extract(month FROM a.d) = 1 THEN 12::numeric
     WHEN p_year >= 2027 THEN GREATEST(0, 12 - extract(month FROM a.d)::int - (
-      SELECT count(*)::int FROM hris.public_holidays h
+      SELECT count(DISTINCT h.holiday_date)::int FROM hris.public_holidays h
       WHERE h.type = 'cuti_bersama' AND h.status = 'aktif' AND h.deleted_at IS NULL
         AND h.is_day_off AND h.deducts_leave
         AND h.holiday_date > (date_trunc('month', a.d) + interval '1 month - 1 day')::date

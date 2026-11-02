@@ -63,6 +63,9 @@ func TestLeaveTnCSubmission(t *testing.T) {
 	h.setBalance(own, 2026, 5, 0, 0, 0, 0, nil)
 	expect(t, h.do(&self, "POST", "/api/hris/leaves", tncLeave("personal", "2026-11-04", "2026-11-04")), 400,
 		"Izin Pribadi hanya untuk yang belum punya hak cuti atau cutinya habis — sisa Cuti Tahunan Anda 5 hari")
+	h.setBalance(own, 2026, 1.5, 0, 0, 0, 0, nil)
+	expect(t, h.do(&self, "POST", "/api/hris/leaves", tncLeave("personal", "2026-11-04", "2026-11-04")), 400,
+		"Izin Pribadi hanya untuk yang belum punya hak cuti atau cutinya habis — sisa Cuti Tahunan Anda 1,5 hari")
 	h.setBalance(own, 2026, 0, 0, 0, 0, 0, nil)
 	expect(t, h.do(&self, "POST", "/api/hris/leaves", tncLeave("personal", "2026-11-04", "2026-11-04")), 200, "")
 
