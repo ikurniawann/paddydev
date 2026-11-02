@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { PlusIcon, PencilIcon, TrashIcon, MoonIcon, MagnifyingGlassIcon } from "@heroicons/react/24/outline";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -77,9 +78,14 @@ export function ShiftsPage() {
             Daftar jam kerja yang dipilih saat mengatur jadwal karyawan dan menghitung keterlambatan
           </p>
         </div>
-        <Button className="gap-2" onClick={() => openDialog(null)}>
-          <PlusIcon className="h-4 w-4" /> Tambah shift
-        </Button>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <Button variant="outline" asChild>
+            <Link href="/dashboard/hris/auto-checkout">Checkout otomatis</Link>
+          </Button>
+          <Button className="gap-2" onClick={() => openDialog(null)}>
+            <PlusIcon className="h-4 w-4" /> Tambah shift
+          </Button>
+        </div>
       </div>
 
       <div className="relative max-w-sm">

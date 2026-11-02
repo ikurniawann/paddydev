@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { addDays } from "@/features/hris/schedules/schedule-range";
 import type { ScheduleGrid } from "@/features/hris/schedules/types";
@@ -15,6 +15,14 @@ vi.mock("@/features/hris/schedules/api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/features/hris/schedules/api")>()),
   ...scheduleApi,
 }));
+const autoCheckoutApi = vi.hoisted(() => ({
+  fetchAutoCheckoutRules: vi.fn(),
+  fetchAutoCheckoutOptions: vi.fn(),
+  createAutoCheckoutRule: vi.fn(),
+  setAutoCheckoutRuleActive: vi.fn(),
+  deleteAutoCheckoutRule: vi.fn(),
+}));
+vi.mock("@/features/hris/auto-checkout/api", () => autoCheckoutApi);
 const placementApi = vi.hoisted(() => ({
   searchPlacements: vi.fn(),
   fetchPlacementIds: vi.fn(),
@@ -140,6 +148,19 @@ it("satu toko tanpa hak penempatan: hanya tab Jadwal, grid toko itu", async () =
   expect(scheduleApi.fetchScheduleGrid).toHaveBeenCalledWith(expect.objectContaining({ branch_id: "s1" }));
   expect(screen.getByRole("tab", { name: "Jadwal" })).toBeTruthy();
   expect(screen.queryByRole("tab", { name: "Penempatan" })).toBeNull();
+});
+
+it("tab Checkout otomatis membuka aturan; aturan semua lokasi hanya baca bagi pengatur", async () => {
+  autoCheckoutApi.fetchAutoCheckoutRules.mockResolvedValue([
+    { id: "r1", position_id: "p1", position_title: "Shopkeeper", branch_id: "s1", branch_name: "Paddy Kopo", is_active: true, editable: true },
+    { id: "r2", position_id: "p2", position_title: "Host Live", branch_id: null, branch_name: null, is_active: true, editable: false },
+  ]);
+  renderPage({ is_delegate: true, can_place: false, branches: [STORE] });
+  fireEvent.click(await screen.findByRole("tab", { name: "Checkout otomatis" }));
+  const table = await screen.findByTestId("rules-table");
+  expect(table.textContent).toContain("Shopkeeper");
+  const allSwitch = within(table).getByRole("switch", { name: /Host Live Semua lokasi/ }) as HTMLButtonElement;
+  expect(allSwitch.disabled).toBe(true);
 });
 
 it("boleh atur penempatan: tab Penempatan tanpa filter departemen, Atur jadwal kembali ke tab Jadwal", async () => {

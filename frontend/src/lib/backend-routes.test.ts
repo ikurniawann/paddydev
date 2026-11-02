@@ -150,6 +150,18 @@ describe("goBackendTarget", () => {
   );
 
   it.each([
+    ["GET", "/api/hris/auto-checkout-rules"],
+    ["GET", "/api/hris/auto-checkout-rules/options"],
+    ["POST", "/api/hris/auto-checkout-rules"],
+    ["PATCH", "/api/hris/auto-checkout-rules/00000000-0000-4000-8000-000000000001"],
+    ["DELETE", "/api/hris/auto-checkout-rules/00000000-0000-4000-8000-000000000001"],
+  ])("forwards the EPIC-080 endpoint %s %s to Go", (method, pathname) => {
+    expect(goBackendTarget(pathname, method, { env })).toBe(
+      `http://go-api:8080${pathname}`,
+    );
+  });
+
+  it.each([
     ["GET", "/api/hris/me/lateness"],
     ["GET", "/api/hris/me/team-lateness"],
     ["GET", "/api/hris/me/leave-days"],
@@ -261,7 +273,9 @@ describe("Go route manifest", () => {
       // Info keterlambatan karyawan & tim (EPIC-077): hanya di Go, tanpa fallback Next.
       "/api/hris/me/lateness", "/api/hris/me/team-lateness",
       // Pratinjau hari cuti dari roster (EPIC-079 R4): hanya di Go, tanpa fallback Next.
-      "/api/hris/me/leave-days"];
+      "/api/hris/me/leave-days",
+      // Aturan checkout otomatis per jabatan dan lokasi (EPIC-080): hanya di Go, tanpa fallback Next.
+      "/api/hris/auto-checkout-rules"];
     const goNative = (p: string) =>
       goNativePrefixes.some((n) => p === n || p.startsWith(`${n}/`));
     const missing = switched

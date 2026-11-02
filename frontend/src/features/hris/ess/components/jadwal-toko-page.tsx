@@ -6,13 +6,14 @@ import { CalendarDays, Loader2, Store } from "lucide-react";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { AutoCheckoutPage } from "@/features/hris/auto-checkout";
 import { PlacementsPage } from "@/features/hris/placements/components/placements-page";
 import { NOT_DELEGATE_MESSAGE, StoreForbiddenProvider } from "@/features/hris/schedule-access/access-guard";
 import { useScheduleAccess } from "@/features/hris/schedule-access/queries";
 import { SCHEDULE_ACCESS_KEY } from "@/features/hris/schedule-access/query-keys";
 import { SchedulesPage } from "@/features/hris/schedules/components/schedules-page";
 
-type Tab = "jadwal" | "penempatan";
+type Tab = "jadwal" | "penempatan" | "checkout";
 
 /** Toko + karyawan yang dibawa dari "Atur jadwal" di tab Penempatan; `n` memasang ulang grid. */
 interface ScheduleTarget {
@@ -56,7 +57,8 @@ export function EssJadwalTokoPage() {
   // Kartu bukan pengatur sampai akses yang dimuat sesudah penolakan berkata lain (gagal muat = tetap kartu).
   const lost = lostAt !== null && access.dataUpdatedAt <= lostAt;
   // Hak penempatan dicabut saat tab Penempatan terbuka: kembali ke tab Jadwal.
-  const shownTab: Tab = (hrMode ? data?.hr_can_place : data?.can_place) ? tab : "jadwal";
+  const canPlace = hrMode ? data?.hr_can_place : data?.can_place;
+  const shownTab: Tab = tab === "penempatan" && !canPlace ? "jadwal" : tab;
   return (
     <div className="space-y-5">
       <div>
@@ -93,6 +95,7 @@ export function EssJadwalTokoPage() {
             <TabsList>
               <TabsTrigger value="jadwal">Jadwal</TabsTrigger>
               {data.hr_can_place ? <TabsTrigger value="penempatan">Penempatan</TabsTrigger> : null}
+              <TabsTrigger value="checkout">Checkout otomatis</TabsTrigger>
             </TabsList>
             <TabsContent value="jadwal" className="pt-2">
               <SchedulesPage
@@ -108,6 +111,9 @@ export function EssJadwalTokoPage() {
                 <PlacementsPage embedded onOpenSchedule={openSchedule} />
               </TabsContent>
             ) : null}
+            <TabsContent value="checkout" className="pt-2">
+              <AutoCheckoutPage embedded />
+            </TabsContent>
           </Tabs>
         </div>
       ) : !data.is_delegate || lost ? (
@@ -123,6 +129,7 @@ export function EssJadwalTokoPage() {
             <TabsList>
               <TabsTrigger value="jadwal">Jadwal</TabsTrigger>
               {data.can_place ? <TabsTrigger value="penempatan">Penempatan</TabsTrigger> : null}
+              <TabsTrigger value="checkout">Checkout otomatis</TabsTrigger>
             </TabsList>
             <TabsContent value="jadwal" className="pt-2">
               <SchedulesPage
@@ -138,6 +145,9 @@ export function EssJadwalTokoPage() {
                 <PlacementsPage mode="store" onOpenSchedule={openSchedule} />
               </TabsContent>
             ) : null}
+            <TabsContent value="checkout" className="pt-2">
+              <AutoCheckoutPage embedded />
+            </TabsContent>
           </Tabs>
         </StoreForbiddenProvider>
       )}
