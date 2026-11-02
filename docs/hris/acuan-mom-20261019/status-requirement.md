@@ -78,6 +78,14 @@ Kolom "Status MOM" menyalin status di dokumen MOM (Disepakati / Konfirmasi / Men
 |---|---|---|---|---|---|
 | LA-01 | Audit log perubahan data, termasuk import/export, koreksi absen & lembur | Disepakati | 🟡 | `audit.audit_log` append-only + halaman `/dashboard/settings/audit` + `GET /api/hris/employees/{id}/audit`. Tercakup: koreksi absensi, tutup/buka periode, import karyawan, resign, jadwal. EPIC-063 menambah `leave.approve|reject`, `overtime.approve|reject`, dan `overtime.correct` (kapasitas pemutus di `after.decided_as`). EPIC-065 menambah `attendance_request.approve|reject|cancel` (entity `hris.attendance_requests`) dan `branch_min_hours.update` (sebelum/sesudah jam minimum cabang); penulisan absensi dari persetujuan tercatat `attendance.create|update` dengan alasan. **Belum:** export, edit karyawan biasa, shift, payroll | Tambah event audit untuk yang belum tercakup |
 
+## Data & Migrasi (MOM 29-10-2026)
+
+| ID | Requirement | Status MOM | Kode | Bukti / perilaku sekarang | Langkah berikutnya |
+|---|---|---|---|---|---|
+| DM-01 | Database cleanup per 20 Oktober 2026 (pengajuan cuti & izin, lembur, transport, pinjaman), didahului backup | Disepakati; K-22 dijawab user 02-11 | ✅ ⏳ | **Siap, menunggu persetujuan tertulis HR (K-22) untuk production** (EPIC-083). Hapus permanen data ≤ 20 Okt (inklusif): absensi, pengajuan absensi, cuti/izin (`end_date`), lembur, perjalanan dinas, pinjaman (pinjaman berjalan dan saldo cuti tetap). SQL: `backend/database/sql/fixes/2026-11-03_dm01_preview.sql` (baca-saja) dan `2026-11-03_dm01_cleanup_core.sql` (satu transaksi, notifikasi dimatikan, jumlah wajib = angka disetujui, audit `data_cleanup.dm01`). Runner `tools/ops/dm01-cleanup.sh` (`preview / execute / files / restore`): backup `pg_dump -Fc`, uji restore, gladi core, gerbang payroll/periode, tar lampiran sebelum dihapus, pemulihan. Runbook `docs/hris/runbook-dm01-cleanup.md`. Test: `TestDM01Cleanup`, `TestDM01CleanupEdges`, `TestDM01CoreNeedsTransaction`, `TestDM01CoreRefusesChangedTriggers`, `TestDM01PreviewFileSafety`, `TestDM01SameCutoff`, `TestDM01CoreChecksExpectations`; `tools/ops/dm01-cleanup.test.sh`. Gladi staging 03-11 lolos (attendance 56.156, leaves 659, overtime 2.694, loans 18; 38 berkas) | Gladi di salinan production → pratinjau production → persetujuan tertulis HR (Manager HR) atas angka + SHA-256 → izin jam eksekusi → execute + files |
+
+DM-01 berasal dari MOM 29-10-2026 dan tidak masuk hitungan 31 requirement MOM 19-10 di bawah.
+
 ## Ringkasan
 
 | Status | Jumlah | ID |
