@@ -3,6 +3,7 @@ package hris
 import (
 	"context"
 	"log/slog"
+	"strconv"
 	"testing"
 	"time"
 
@@ -29,7 +30,18 @@ func TestGapDigestRun(t *testing.T) {
 	hr1, _ := h.staff("hrd", nil, false)
 	hr2, _ := h.staff("hrd", nil, false)
 	plain, _ := h.staff("pos", nil, false)
-	hrdUsers := h.scalar(`SELECT count(*)::text FROM users WHERE role = 'hrd'`)
+	// The digest notifies every hrd user, and other packages' tests commit
+	// users and delete them on cleanup (CI runs packages in parallel). Lock
+	// the hrd users seen now against deletion until the rollback (a deleted
+	// recipient fails the notification foreign key, 23503); row locks, not a
+	// table lock, so other packages can still create accounts meanwhile.
+	h.exec(`SELECT 1 FROM users WHERE role = 'hrd' FOR KEY SHARE`)
+	// Hrd users other packages add meanwhile are notified too: compare the
+	// recipients with this transaction's notifications, not with a count
+	// taken before the run.
+	sentNow := func() string {
+		return h.scalar(`SELECT count(*)::text FROM public.notifications WHERE title = 'Ringkasan Absen Terlewat' AND created_at = now()`)
+	}
 	notifications := func(userID string) string {
 		return h.scalar(`SELECT count(*)::text FROM public.notifications WHERE user_id = $1 AND title = 'Ringkasan Absen Terlewat'`, userID)
 	}
@@ -50,8 +62,8 @@ func TestGapDigestRun(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got == nil || got.Date != d || !got.Sent || got.Summary == nil || got.Summary.Missing != 1 ||
-		got.Recipients != atoi(t, hrdUsers) {
-		t.Fatalf("at 09:00 = %+v (hrd users %s)", got, hrdUsers)
+		got.Recipients < 2 || got.Recipients != atoi(t, sentNow()) {
+		t.Fatalf("at 09:00 = %+v (notifications %s)", got, sentNow())
 	}
 	for _, s := range []string{hr1.UserID, hr2.UserID} {
 		if notifications(s) != "1" {
@@ -67,7 +79,7 @@ func TestGapDigestRun(t *testing.T) {
 	}
 	marker := h.scalar(`SELECT concat_ws('|', missing, no_clock_out, unscheduled, recipients, (sent_at IS NOT NULL)::text)
 		FROM hris.attendance_gap_digests WHERE date = $1`, d)
-	if want := "1|0|0|" + hrdUsers + "|true"; marker != want {
+	if want := "1|0|0|" + strconv.Itoa(got.Recipients) + "|true"; marker != want {
 		t.Fatalf("marker = %q, want %q", marker, want)
 	}
 
