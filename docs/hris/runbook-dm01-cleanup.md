@@ -83,7 +83,12 @@ ST=$(TZ=Asia/Jakarta date +%Y%m%d-%H%M%S)
 IMG=$(docker inspect -f '{{.Config.Image}}' paddydev-db)
 docker exec paddydev-db sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' > ~/backups/dm01-gladi-$ST.dump
 docker run -d --name dm01-gladi-db -e POSTGRES_HOST_AUTH_METHOD=trust -e POSTGRES_DB=gladi "$IMG"
-sleep 5
+# tunggu sampai server benar-benar siap (bukan sleep): init container me-restart postgres sekali
+for i in $(seq 1 60); do
+  docker exec dm01-gladi-db pg_isready -h 127.0.0.1 -U postgres -d gladi >/dev/null 2>&1 && break
+  sleep 1
+done
+docker exec dm01-gladi-db pg_isready -h 127.0.0.1 -U postgres -d gladi || echo "DB gladi belum siap — berhenti"
 docker exec -i dm01-gladi-db pg_restore -U postgres -d gladi --no-owner --no-acl < ~/backups/dm01-gladi-$ST.dump
 docker volume create dm01-gladi-storage
 docker run --rm --network none -v paddydev-storage:/dari:ro -v dm01-gladi-storage:/ke "$IMG" sh -c 'cp -a /dari/. /ke/'
@@ -96,9 +101,21 @@ E=$(ls -1td ~/backups/dm01-gladi/dm01-*-eksekusi* | head -1)
 $G DM01_APPROVED=yes DM01_EXEC_DIR=$E bash $R files 2>&1 | tee "$(log gladi-files)"; echo "rc=${PIPESTATUS[0]}"
 $G DM01_RESTORE_APPROVED=yes bash $R restore $E 2>&1 | tee "$(log gladi-restore)"; echo "rc=${PIPESTATUS[0]}"   # uji pemulihan
 
-# bersihkan
-docker rm -f dm01-gladi-db && docker volume rm dm01-gladi-storage && rm -f ~/backups/dm01-gladi-$ST.dump
+# bersihkan: container + volume anonimnya (-v), salinan storage, dan SEMUA berkas gladi.
+# Dump dan tar gladi adalah salinan penuh data pribadi production: jangan disimpan.
+docker rm -fv dm01-gladi-db
+docker volume rm dm01-gladi-storage
+rm -f ~/backups/dm01-gladi-$ST.dump
+# catat dulu angka gladi (lihat di bawah), lalu hapus folder gladi beserta db.dump dan files-*.tgz-nya
+rm -rf ~/backups/dm01-gladi/
+ls ~/backups | grep -i gladi || echo "bersih"
 ```
+
+Gladi wajib memakai **salinan production yang di-restore**, bukan hanya pratinjau baca-saja. Uji
+restore saat execute gagal pada setiap FK yatim, dan staging membuktikannya (Automation Log
+03-11: data sisa QA di `leave_balances`, `employee_shifts`, `employee_placements` yang dibuat
+dengan `session_replication_role=replica`). Masalah seperti itu harus ketemu di gladi, bukan di
+jam eksekusi production.
 
 Dari gladi, catat:
 - angka per tabel;
@@ -144,6 +161,17 @@ Kirim ke HR (Manager HR):
 Minta persetujuan tertulis (K-22) yang menyebut SHA-256 itu.
 
 Angka ini harus sama dengan gladi di salinan production, kecuali ada data baru di antaranya. Peringatan payroll/periode harus diselesaikan dulu atau disetujui tertulis oleh HR (lihat §8).
+
+Persetujuan HR untuk gerbang payroll/periode harus **mengutip baris `PAYROLL_BELUM` /
+`PERIODE_TERBUKA` yang persis** dari `pratinjau.txt` (bulan, perusahaan, rentang). Persetujuan umum
+("lanjutkan saja") tidak cukup untuk `DM01_PAYROLL_ACK=yes`.
+
+**Periode Oktober di production.** Payroll run Oktober harus sudah **final** (bukan draft, dan tidak
+ada di daftar `PAYROLL_BELUM`) sebelum execute. Rentang periodenya:
+- `cutoff_day = 0`: bulan kalender 1–31 Okt;
+- dengan cutoff: rentang dari `attendance_periods`.
+
+Bila belum final, payroll Oktober nanti dihitung tanpa data absensi/cuti/lembur 1–20 Okt (gaji salah). ACK hanya pantas untuk bulan sebelum go-live yang payroll-nya dibuat di luar sistem, bukan untuk Oktober.
 
 ## 6. Eksekusi production
 
@@ -225,13 +253,14 @@ chmod -R go-rwx ~/Desktop/paddydev-backups/dm01-*
 | `periode absensi belum ditutup: <bulan>` | Periode ≤ 20 Okt masih open | Tutup periode di menu periode absensi, atau ACK seperti di atas. |
 | `data atau struktur berubah sejak pratinjau` (diff) | Drift: baris ≤ 20 Okt, status, berkas, FK, atau trigger berubah | Ulangi preview, kirim angka baru, minta persetujuan HR lagi. |
 | `ruang kosong folder backup … kurang` / `volume data Postgres … kurang` | Disk tidak cukup; pada pengecekan "sesudah dump", dump sudah ada tetapi data belum disentuh | Kosongkan disk (backup lama yang sudah disalin ke lokal, `docker image prune`), lalu ulangi execute. |
-| `pg_dump gagal`, `pg_restore -l gagal`, `restore … gagal`, `hasil restore berbeda` | Tidak ada yang dihapus | Periksa `restore.log`, disk, dan versi Postgres. Ulangi. |
+| `pg_dump gagal`, `pg_restore -l gagal`, `restore … gagal`, `hasil restore berbeda` | Tidak ada yang dihapus | Periksa `restore.log`, disk, dan versi Postgres. Bila `restore.log` memuat `violates foreign key constraint`, database asli punya baris yatim (FK tanpa induk; di staging: sisa QA yang dibuat dengan `session_replication_role=replica`). Tindakan: inventaris baris yatim itu, hapus/perbaiki dengan persetujuan, ulangi preview dan persetujuan, lalu ulangi execute. |
 | `gladi core SQL gagal di DB sementara` | Database asli TIDAK disentuh | Baca `core-gladi.log`: angka beda (data berubah), trigger tidak aktif, atau lock. Ulangi preview bila perlu. |
 | `core SQL gagal (psql rc …)` | Transaksi `-1` dibatalkan: **tidak ada yang terhapus** | Baca `core.log`. Penyebab umum: `lock_timeout` (ulangi di jam lebih sepi), angka beda (`jumlah terhapus beda dari angka yang disetujui` → ulangi preview + persetujuan), atau trigger notifikasi tidak aktif. Pastikan dengan `preview`: HAPUS sama seperti sebelumnya. |
 | `data SUDAH dihapus (COMMIT) tetapi cek pasca-eksekusi tidak lolos` | Data sudah terhapus, `execute.ok` tidak dibuat, `files` terkunci | Jangan ulangi execute. Periksa di folder eksekusi (daftar di bawah tabel). Setelah dipastikan aman: `touch $E/execute.ok`, lalu `files`. Bila salah hapus: §9 restore. |
 | `files`: `masih dirujuk baris di database` | Ada baris yang kembali merujuk berkas | Jangan hapus. Selidiki baris itu dulu. |
 | `files`: `dilewati (symlink)` > 0 | Folder atau berkas berupa symlink | Tinjau manual baris LEWATI di `files-*-status.txt` / `-hasil.txt`. |
 | `files`: `gagal` > 0 | Sebagian berkas tidak terhapus | Perbaiki izin, lalu jalankan `files` lagi. Arsip baru dibuat. Hanya berkas yang masih ada yang diarsipkan. |
+| `restore`: `… pengajuan absensi … tautan absensinya dilepas` | Absensi induk tidak dikembalikan (bentrok), jadi pengajuan dikembalikan tanpa tautan | Tinjau daftar `LEWAT_TAUT`. Bila perlu, tautkan manual ke absensi baru di tanggal yang sama. |
 | `restore`: `… baris dilewati karena bentrok` | Baris lama tidak dikembalikan karena sudah ada baris dengan id/kunci unik yang sama (dibuat sesudah cleanup) | Tinjau daftar `LEWAT` bersama HR. Baris yang ada dipertahankan; bila baris lama yang benar, perbaiki manual. |
 | FILE_LAIN di pratinjau | Lampiran di luar folder milik barisnya | Tidak dihapus otomatis. Tinjau manual bersama HR. |
 
@@ -262,7 +291,8 @@ Cara kerjanya:
   - urutannya induk lebih dulu: absensi, lalu pengajuan absensi, cuti, lembur, perjalanan dinas, pinjaman;
   - `INSERT … ON CONFLICT DO NOTHING`: bila id sudah ada, atau baris bentrok dengan kunci unik baris baru sesudah cleanup (mis. absensi karyawan + tanggal yang sama), baris yang ada dipertahankan. Baris lama dicatat sebagai `LEWAT` di `restore-<stamp>-db.txt` dan dihitung di peringatan;
   - semua trigger aktif pada enam tabel dimatikan sementara, sehingga tidak ada notifikasi dan tidak ada hitung ulang;
-  - tautan `attendance_requests.attendance_id` yang dikosongkan `ON DELETE SET NULL` dipulihkan.
+  - tautan `attendance_requests.attendance_id` yang dikosongkan `ON DELETE SET NULL` dipulihkan;
+  - pengajuan absensi yang absensi induknya tidak ada (mis. absensi itu `LEWAT` karena bentrok) tetap dikembalikan, tetapi dengan `attendance_id` NULL, dan dicatat `LEWAT_TAUT` (pengajuan, absensi) di keluaran dan `restore-<stamp>-db.txt`.
 - Baris yang dibuat atau diubah **sesudah** cleanup tidak disentuh.
 - Berkas dari `files-*.tgz` dikembalikan hanya bila belum ada (tanpa menimpa), dengan pemilik `1001:1001` (uid aplikasi) dan mode 644.
 - Satu baris audit `data_cleanup.dm01_restore` ditulis, lalu `restore.ok`.

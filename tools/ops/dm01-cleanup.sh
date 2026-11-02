@@ -2,7 +2,7 @@
 # EPIC-083 / DM-01 — runner cleanup data HRIS bertanggal ≤ 20 Oktober 2026.
 #
 # Dasar: MOM 29 Oktober 2026 §2 No. 6, DM-01 ("database cleanup per tanggal 20 Oktober 2026 …
-# didahului backup") dan K-22; ruling R1–R8 di docs/epics/EPIC-083-cleanup-data-20-oktober.md.
+# didahului backup") dan K-22; ruling R1–R11 di docs/epics/EPIC-083-cleanup-data-20-oktober.md.
 # RUNBOOK (perintah persis staging → production, contoh keluaran, tabel kegagalan, pemulihan):
 #   docs/hris/runbook-dm01-cleanup.md
 # SQL-nya: backend/database/sql/fixes/2026-11-03_dm01_preview.sql (baca-saja) dan
@@ -41,8 +41,9 @@
 #   5. Salin folder ~/backups/dm01-* (db.dump, files-*.tgz) ke lokal. FILE_LAIN ditinjau manual.
 #   Pemulihan: DM01_RESTORE_APPROVED=yes tools/ops/dm01-cleanup.sh restore <folder eksekusi>
 #        Baris yang cocok dengan kriteria cleanup di db.dump dimasukkan lagi (ON CONFLICT DO NOTHING:
-#        id/kunci unik yang bentrok dengan baris baru dilewati dan dicatat LEWAT; satu transaksi,
-#        trigger dimatikan sementara), berkas dari files-*.tgz dikembalikan
+#        id/kunci unik yang bentrok dengan baris baru dilewati dan dicatat LEWAT; pengajuan absensi
+#        yang induk absensinya tidak ada dikembalikan tanpa tautan, dicatat LEWAT_TAUT; satu
+#        transaksi, trigger dimatikan sementara), berkas dari files-*.tgz dikembalikan
 #        tanpa menimpa (pemilik 1001:1001, mode 644). Baris yang dibuat sesudah cleanup tidak disentuh.
 #
 # Variabel (bawaan untuk paddydev/production):
@@ -882,6 +883,14 @@ SQL
       printf '%s\n' '\.'
       echo "DO \$\$ BEGIN IF (SELECT count(*) FROM dm01_r_$t) <> $n_file THEN
   RAISE EXCEPTION 'DM-01 restore dibatalkan: baris hris.$t terbaca % dari $n_file', (SELECT count(*) FROM dm01_r_$t); END IF; END \$\$;"
+      if [ "$t" = attendance_requests ] && grep -qx attendance_id <<<"$live_cols"; then
+        # Induk absensi yang tidak ada di database asli sesudah langkah absensi (mis. LEWAT karena
+        # bentrok): pengajuan tetap dikembalikan tanpa tautan (attendance_id NULL), dicatat LEWAT_TAUT.
+        echo "SELECT format(E'LEWAT_TAUT\tattendance_requests\t%s\t%s', r.id, r.attendance_id) FROM dm01_r_attendance_requests r
+  WHERE r.attendance_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM hris.attendance a WHERE a.id = r.attendance_id) ORDER BY 1;
+UPDATE dm01_r_attendance_requests r SET attendance_id = NULL
+  WHERE r.attendance_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM hris.attendance a WHERE a.id = r.attendance_id);"
+      fi
       # ON CONFLICT tanpa target: id yang sudah ada ATAU bentrok kunci unik/eksklusi lain dengan baris
       # yang dibuat sesudah cleanup (mis. absensi baru di tanggal yang sama) → baris lama dilewati.
       echo "CREATE TEMP TABLE dm01_ins_$t ON COMMIT DROP AS SELECT id FROM hris.$t WITH NO DATA;
@@ -939,6 +948,11 @@ SQL
   lewat=$(count_of $'^LEWAT\t' "$dir/restore-$st-db.txt")
   if [ "$lewat" != 0 ]; then
     echo "PERINGATAN: $lewat baris dilewati karena bentrok dengan baris yang sudah ada (id sama, atau kunci unik seperti absensi karyawan+tanggal dengan baris baru sesudah cleanup); baris yang ada dipertahankan. Daftar: baris LEWAT di $dir/restore-$st-db.txt"
+  fi
+  lewat=$(count_of $'^LEWAT_TAUT\t' "$dir/restore-$st-db.txt")
+  if [ "$lewat" != 0 ]; then
+    echo "PERINGATAN: $lewat pengajuan absensi dikembalikan tetapi tautan absensinya dilepas (attendance_id NULL), karena absensi induknya tidak ada di database (mis. dilewati karena bentrok):"
+    grep_ok $'^LEWAT_TAUT\t' "$dir/restore-$st-db.txt" | awk -F'\t' '{printf "  pengajuan %s (absensi %s)\n", $3, $4}'
   fi
 
   # 3. Berkas: hanya yang belum ada, tanpa menimpa.

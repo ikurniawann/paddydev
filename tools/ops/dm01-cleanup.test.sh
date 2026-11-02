@@ -92,6 +92,7 @@ S=cccccccc-0000-4000-8000-00000000000c   # foldernya symlink ke luar private/
 ATT=dddddddd-0000-4000-8000-00000000000d # absensi ≤ 20 Okt yang dirujuk pengajuan 22 Okt
 REQ=eeeeeeee-0000-4000-8000-00000000000e # pengajuan absensi 22 Okt (tetap) → ATT
 ATT_S=ffffffff-0000-4000-8000-00000000000f # absensi S 16 Okt; bentrok (employee_id, date) dengan absensi baru
+REQ_S=99999999-0000-4000-8000-000000000009 # pengajuan S 16 Okt (dihapus) → ATT_S; dipulihkan tanpa tautan
 
 # search_path sama dengan sesi aplikasi: fungsi trigger memakai nama tabel tanpa schema.
 SP='public,iam,configuration,hris,performance,recruitment,item,purchasing,inventory,manufacturing,pos,crm,accounting,auth'
@@ -176,6 +177,8 @@ INSERT INTO hris.attendance_requests (id, employee_id, date, kind, reason, clock
   VALUES ('$REQ', '$A', '2026-10-22', 'correction', 'uji tautan absensi', '08:00', '$ATT');
 -- absensi S 16 Okt (dihapus); sesudah cleanup dibuat absensi baru di tanggal yang sama → restore melewatinya
 INSERT INTO hris.attendance (id, employee_id, date, status) VALUES ('$ATT_S', '$S', '2026-10-16', 'present');
+INSERT INTO hris.attendance_requests (id, employee_id, date, kind, reason, clock_in, attendance_id)
+  VALUES ('$REQ_S', '$S', '2026-10-16', 'correction', 'uji tautan lewat', '08:00', '$ATT_S');
 SQL
 
 vol "set -e; mkdir -p /s/private/leave-attachments/$A /s/private/leave-attachments/$B /s/private/overtime-attachments/$A
@@ -344,6 +347,9 @@ cek "baris yang dihapus kembali persis (isi baris sama dengan sebelum eksekusi)"
 cek "tautan pengajuan 22 Okt → absensi 15 Okt pulih" "[ \"\$(pg -c \"SELECT attendance_id FROM hris.attendance_requests WHERE id = '$REQ'\")\" = '$ATT' ]"
 cek "absensi baru yang bentrok (employee_id, date) dipertahankan, baris lama dilewati" \
   "[ \"\$(pg -c \"SELECT md5(a::text) FROM hris.attendance a WHERE employee_id = '$S' AND date = '2026-10-16'\")\" = '$ABSEN_BARU' ] && grep -qx \$'LEWAT\tattendance\t$ATT_S' \$(ls '$EDIR'/restore-*-db.txt)"
+cek "pengajuan yang induk absensinya LEWAT dipulihkan tanpa tautan" \
+  "[ \"\$(pg -c \"SELECT COALESCE(attendance_id::text, 'null') FROM hris.attendance_requests WHERE id = '$REQ_S'\")\" = null ] && grep -qx \$'LEWAT_TAUT\tattendance_requests\t$REQ_S\t$ATT_S' \$(ls '$EDIR'/restore-*-db.txt)"
+cek "keluaran restore: pengajuan 1 dari 1, 1 tautan dilepas" "grep -qE 'attendance_requests +1 / 1' <<<\"\$out\" && grep -q 'tautan absensinya dilepas' <<<\"\$out\""
 cek "keluaran restore: absensi 1 dari 2, 1 dilewati" "grep -qE 'attendance +1 / 2' <<<\"\$out\" && grep -q 'dilewati karena bentrok' <<<\"\$out\""
 cek "cuti baru sesudah cleanup tidak disentuh" "[ \"\$(pg -c \"SELECT md5(l::text) FROM hris.leaves l WHERE reason = 'baru setelah cleanup'\")\" = '$BARU_AWAL' ]"
 cek "cuti 25 Okt yang diubah sesudah cleanup tidak dikembalikan" \
