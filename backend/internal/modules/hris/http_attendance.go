@@ -113,7 +113,15 @@ func (h handlers) attendanceSchedule(w http.ResponseWriter, r *http.Request, a *
 	if err != nil {
 		return err
 	}
-	return ok(w, dataOf(rows))
+	// meta.schedule_type lets the calendar decide which red dates are a day
+	// off for this employee (EPIC-079 R1-R3); null when the employee is unknown.
+	var scheduleType any
+	if emp, err := h.svc.repo.LeaveEmployee(r.Context(), employeeID); err != nil {
+		return err
+	} else if emp != nil {
+		scheduleType = emp.Str("schedule_type")
+	}
+	return ok(w, obj("data", rows, "meta", obj("schedule_type", scheduleType)))
 }
 
 func (h handlers) attendanceStats(w http.ResponseWriter, r *http.Request, a *Actor) error {

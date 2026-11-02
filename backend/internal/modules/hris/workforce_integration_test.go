@@ -59,6 +59,9 @@ func TestAttendance(t *testing.T) {
 	if r := sched.list()[0].(map[string]any); r["effective_from"] != "2026-01-01" || r["start_time"] != "08:00:00" {
 		t.Fatalf("schedule = %s", sched.raw)
 	}
+	if m, _ := sched.body["meta"].(map[string]any); m == nil || m["schedule_type"] != "shift" {
+		t.Fatalf("schedule meta = %s", sched.raw)
+	}
 	stats := h.do(&staff, "GET", "/api/hris/attendance/stats", nil)
 	expect(t, stats, 200, "")
 	if s := stats.data(); s["month"] != 10.0 || s["month_late"] != 1.0 || s["active_employees"] != nil {

@@ -32,7 +32,11 @@ vi.mock("../mutations", () => ({
   useCreateLeave: () => ({ mutateAsync, isPending: false }),
 }));
 vi.mock("./leave-attachment-field", () => ({ LeaveAttachmentField: () => null }));
-vi.mock("./leave-success-dialog", () => ({ LeaveSuccessDialog: () => null }));
+vi.mock("./leave-success-dialog", () => ({
+  LeaveSuccessDialog: ({ submission }: { submission: { total_days: number } }) => (
+    <div data-testid="success-days">{submission.total_days}</div>
+  ),
+}));
 vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 
 function chooseEmployee(search: string, name: string) {
@@ -95,5 +99,22 @@ describe("NewLeavePage", () => {
 
     await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1));
     expect(mutateAsync.mock.calls[0][0]).toMatchObject({ employee_id: "e2", leave_type: "annual" });
+  });
+
+  it("shows the stored total_days of the server in the success dialog, not the Mon-Fri estimate", async () => {
+    // Staf shift: 21-23 Okt 2026 (Rab-Jum) diperkirakan 3 hari, roster menghitung 2.
+    mutateAsync.mockResolvedValue({ data: { id: "l2", total_days: 2 } });
+    render(<NewLeavePage />);
+    chooseEmployee("Budi", "Budi Staff");
+    fireEvent.change(document.getElementById("start_date")!, { target: { value: "2026-10-21" } });
+    fireEvent.change(document.getElementById("end_date")!, { target: { value: "2026-10-23" } });
+    expect(screen.getByText("Perkiraan hari kerja (Senin–Jumat):")).toBeTruthy();
+    expect(screen.getByText("3 hari")).toBeTruthy();
+    fireEvent.change(document.getElementById("reason")!, {
+      target: { value: "keperluan keluarga mendadak" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Ajukan Cuti/ }));
+
+    await waitFor(() => expect(screen.getByTestId("success-days").textContent).toBe("2"));
   });
 });
