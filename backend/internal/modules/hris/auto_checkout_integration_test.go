@@ -187,6 +187,9 @@ func TestRunAutoCheckout(t *testing.T) {
 	overnight := row(worker("Host CS3 Semalam", hostPos), "2026-10-04", "2026-10-04 16:00", "2026-10-05 00:00", "")
 	ruleOff := row(worker("Jabatan Aturan Mati", offPos), "2026-10-05", "2026-10-05 08:00", "2026-10-05 16:00", "")
 	noTitle := row(worker("Tanpa Jabatan", ""), "2026-10-05", "2026-10-05 08:00", "2026-10-05 16:00", "")
+	noEnd := row(worker("Host Tanpa Jam Selesai", hostPos), "2026-10-05", "2026-10-05 08:00", "2026-10-05 16:00", "")
+	h.exec(`UPDATE hris.attendance SET scheduled_end = NULL WHERE id = $1`, noEnd)
+	inAtEnd := row(worker("Host Masuk Tepat Jam Selesai", hostPos), "2026-10-05", "2026-10-05 16:00", "2026-10-05 16:00", "")
 	tooOld := row(worker("Host Terlalu Lama", hostPos), "2026-10-02", "2026-10-02 08:00", "2026-10-02 16:00", "")
 	moved := row(worker("Pindah Jabatan", ""), "2026-10-05", "2026-10-05 08:00", "2026-10-05 16:00", "")
 	h.exec(`UPDATE hris.employees e SET job_title_id = $2 FROM hris.attendance a WHERE a.id = $1 AND e.id = a.employee_id`, moved, latePos)
@@ -220,7 +223,7 @@ func TestRunAutoCheckout(t *testing.T) {
 		t.Errorf("overnight = %s, want 00:00|true (dated yesterday)", got)
 	}
 	for name, id := range map[string]string{"shopkeeper B": shopB, "after end": afterEnd, "rule off": ruleOff,
-		"no title": noTitle, "closed period": closedRow, "outside lookback": tooOld} {
+		"no title": noTitle, "no scheduled_end": noEnd, "clock-in at the end": inAtEnd, "closed period": closedRow, "outside lookback": tooOld} {
 		if got := state(id); got != "-|false" {
 			t.Errorf("%s = %s, want untouched", name, got)
 		}
@@ -306,4 +309,81 @@ func TestAutoCheckoutLoopRunsAtStart(t *testing.T) {
 	if got := h.scalar(`SELECT clock_out_auto::text FROM hris.attendance WHERE id = $1`, id); got != "true" {
 		t.Fatalf("start run did not close the row (clock_out_auto = %s)", got)
 	}
+}
+
+// The lookback is counted in WIB days: at 00:30 WIB (17:30 UTC the day before)
+// today-2 in WIB is still included, today-3 is not.
+func TestRunAutoCheckoutLookbackAtWIBMidnight(t *testing.T) {
+	h := newHarness(t)
+	pos := h.scalar(`INSERT INTO hris.positions (title) VALUES ('Jabatan Lookback Uji') RETURNING id::text`)
+	h.exec(`INSERT INTO hris.auto_checkout_rules (position_id) VALUES ($1)`, pos)
+	row := func(date, end string) string {
+		e := h.employee(emp{name: "Lookback " + date})
+		h.exec(`UPDATE hris.employees SET job_title_id = $2 WHERE id = $1`, e, pos)
+		return h.scalar(`INSERT INTO hris.attendance (employee_id, date, clock_in, scheduled_end)
+			VALUES ($1, $2::date, ($2 || ' 08:00+07')::timestamptz, ($3 || '+07')::timestamptz) RETURNING id::text`, e, date, end)
+	}
+	inWindow := row("2026-10-03", "2026-10-03 16:00")     // today-2 (WIB)
+	overnight := row("2026-10-04", "2026-10-05 00:00")    // dated yesterday
+	outside := row("2026-10-02", "2026-10-02 16:00")      // today-3
+	now := time.Date(2026, 10, 4, 17, 30, 0, 0, time.UTC) // 2026-10-05 00:30 WIB
+	n, err := h.svc.RunAutoCheckout(context.Background(), now)
+	if err != nil || n != 2 {
+		t.Fatalf("RunAutoCheckout = %d, %v; want 2", n, err)
+	}
+	auto := func(id string) string {
+		return h.scalar(`SELECT clock_out_auto::text FROM hris.attendance WHERE id = $1`, id)
+	}
+	if auto(inWindow) != "true" || auto(overnight) != "true" || auto(outside) != "false" {
+		t.Fatalf("auto = in-window %s, overnight %s, outside %s; want true, true, false", auto(inWindow), auto(overnight), auto(outside))
+	}
+}
+
+// staleRecordRepo serves the attendance row as it was before the automatic
+// checkout, the way a manual clock-out that read the row earlier sees it.
+type staleRecordRepo struct {
+	Repository
+	stale *Row
+}
+
+func (r staleRecordRepo) AttendanceRecord(context.Context, string) (*Row, error) { return r.stale, nil }
+
+// EPIC-080 R5: a manual clock-out cannot overwrite an automatic one, neither
+// when it reads the closed row nor when it read it just before the job ran.
+func TestManualClockOutAfterAutoCheckout(t *testing.T) {
+	h, _ := newFileHarness(t)
+	photo := dataURL("image/png", pngBytes(t))
+	pos := h.scalar(`INSERT INTO hris.positions (title) VALUES ('Jabatan Balapan Uji') RETURNING id::text`)
+	h.exec(`INSERT INTO hris.auto_checkout_rules (position_id) VALUES ($1)`, pos)
+	staff, e := h.staff("pos", nil, true, emp{name: "Crew Balapan"})
+	h.exec(`UPDATE hris.employees SET job_title_id = $2 WHERE id = $1`, e, pos)
+	id := h.scalar(`INSERT INTO hris.attendance (employee_id, date, clock_in, scheduled_end, notes)
+		VALUES ($1, '2026-10-05', '2026-10-05 08:00:00+07', '2026-10-05 16:00:00+07', 'Catatan awal') RETURNING id::text`, e)
+	stale, err := h.svc.repo.AttendanceRecord(context.Background(), id)
+	if err != nil || stale == nil || stale.Get("clock_out") != nil {
+		t.Fatalf("stale record = %v, %v", stale, err)
+	}
+
+	h.setNow("2026-10-05 16:10")
+	if n, err := h.svc.RunAutoCheckout(context.Background(), time.Date(2026, 10, 5, 16, 10, 0, 0, time.FixedZone("WIB", 7*3600))); err != nil || n != 1 {
+		t.Fatalf("RunAutoCheckout = %d, %v; want 1", n, err)
+	}
+	unchanged := func() {
+		t.Helper()
+		got := h.scalar(`SELECT to_char(clock_out AT TIME ZONE 'Asia/Jakarta', 'HH24:MI') || '|' || clock_out_auto::text || '|' || notes
+			|| '|' || coalesce(clock_out_photo_url, '-') FROM hris.attendance WHERE id = $1`, id)
+		if want := "16:00|true|Catatan awal · Checkout otomatis pukul 16.00 (jam selesai shift)|-"; got != want {
+			t.Fatalf("row = %q, want %q", got, want)
+		}
+	}
+	body := map[string]any{"action": "clock-out", "attendance_id": id, "photo": photo}
+
+	// Reads the closed row: the existing pre-check.
+	expect(t, h.do(&staff, "POST", "/api/hris/attendance", body), 400, "Sudah clock-out untuk absensi ini")
+	unchanged()
+
+	// Read the row before the job ran: the conditional write refuses.
+	h.svc.repo = staleRecordRepo{Repository: h.svc.repo, stale: stale}
+	expect(t, h.do(&staff, "POST", "/api/hris/attendance", body), 400, "Sudah clock-out untuk absensi ini")
+	unchanged()
 }

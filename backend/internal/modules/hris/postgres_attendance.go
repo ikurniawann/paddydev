@@ -70,6 +70,18 @@ func (s *store) UpdateAttendance(ctx context.Context, id string, f fields) (*Row
 	return updateOne(ctx, s.db, "hris.attendance", f, fields{{"id", id}}, "*")
 }
 
+func (s *store) CloseAttendance(ctx context.Context, id string, f fields) (*Row, error) {
+	set := make([]string, len(f))
+	args := make([]any, 0, len(f)+1)
+	for i, c := range f {
+		args = append(args, c.val)
+		set[i] = fmt.Sprintf("%s = $%d", c.col, len(args))
+	}
+	args = append(args, id)
+	return queryRow(ctx, s.db, fmt.Sprintf(`UPDATE hris.attendance SET %s WHERE id = $%d AND clock_out IS NULL RETURNING *`,
+		strings.Join(set, ", "), len(args)), args...)
+}
+
 func (s *store) DeleteAttendance(ctx context.Context, id string) error {
 	_, err := s.db.Exec(ctx, `DELETE FROM hris.attendance WHERE id = $1`, id)
 	return err

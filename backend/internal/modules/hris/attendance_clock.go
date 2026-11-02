@@ -273,6 +273,14 @@ func (s *Service) ClockOut(ctx context.Context, a *Actor, in clockInput) (*Row, 
 	f.add("notes", notes)
 	f.add("clock_out_geofence", geo.status())
 	f.add("clock_out_distance_m", geo.distance())
-	row, err := s.repo.UpdateAttendance(ctx, id, f)
-	return row, periodWriteError(err)
+	// Conditional on clock_out IS NULL: the automatic checkout may have closed
+	// the row while the selfie and geofence were being processed (EPIC-080 R5).
+	row, err := s.repo.CloseAttendance(ctx, id, f)
+	if err != nil {
+		return nil, periodWriteError(err)
+	}
+	if row == nil {
+		return nil, httpx.BadRequest("Sudah clock-out untuk absensi ini")
+	}
+	return row, nil
 }

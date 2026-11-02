@@ -269,7 +269,7 @@ func (s *Service) logAdjustment(ctx context.Context, r Repository, a *Actor, act
 		label = *name + " · " + date
 	}
 	meta.ActorID, meta.ActorName = a.UserID, ptr(actorName(a))
-	meta.Action, meta.Entity, meta.EntityID = "attendance."+action, "hris.attendance", &attendanceID
+	meta.Action, meta.Entity, meta.EntityID = "attendance."+action, attendanceEntity, &attendanceID
 	meta.EntityLabel = &label
 	if b != nil {
 		meta.Before = b

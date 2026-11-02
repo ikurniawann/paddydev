@@ -17,6 +17,10 @@ type AttendanceRepo interface {
 	AttendancePage(ctx context.Context, p attendanceListParams) ([]*Row, int64, error)
 	AttendanceDetail(ctx context.Context, id string) (*Row, error)
 	UpdateAttendance(ctx context.Context, id string, f fields) (*Row, error)
+	// CloseAttendance is UpdateAttendance that only applies while clock_out
+	// is still NULL; nil when the row was closed (or removed) meanwhile, so a
+	// manual clock-out never overwrites the automatic one (EPIC-080 R5).
+	CloseAttendance(ctx context.Context, id string, f fields) (*Row, error)
 	DeleteAttendance(ctx context.Context, id string) error
 	// RosterRows: employeeIDs nil = every active employee, else only those.
 	RosterRows(ctx context.Context, date string, dow int, superAdmins, employeeIDs []string) ([]*Row, error)

@@ -124,6 +124,8 @@ func (s *Service) autoCheckoutTick(ctx context.Context) {
 			s.log.Error("hris auto checkout panicked", "panic", fmt.Sprint(p))
 		}
 	}()
+	ctx, cancel := context.WithTimeout(ctx, time.Minute)
+	defer cancel()
 	closed, err := s.RunAutoCheckout(ctx, s.now())
 	if err != nil {
 		s.log.Error("hris auto checkout failed", "error", err)
