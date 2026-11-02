@@ -84,6 +84,7 @@ func TestLeaveHiringManagerIsNotHRBackup(t *testing.T) {
 // Data live: satu karyawan reporting_to-nya dirinya sendiri (EPIC-063 R2).
 func TestLeaveSelfManagerCannotApproveOwn(t *testing.T) {
 	h, _ := newFileHarness(t)
+	h.setNow("2026-10-02 10:00") // EPIC-084 R6: lembur 01-10 masih dalam batas H+1
 	loop, loopID := h.staff("pos", nil, true, emp{name: "Retail Ops Loop", phone: "0812 1111 2222"})
 	h.exec(`UPDATE hris.employees SET reporting_to = id WHERE id = $1`, loopID)
 

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 
@@ -31,6 +32,7 @@ const TopicOvertimeRequested = contracts.TopicOvertimeRequested
 type LeaveRepo interface {
 	LeavePage(ctx context.Context, f leaveFilter, page, limit int) ([]*Row, int64, error)
 	LeaveEmployee(ctx context.Context, id string) (*Row, error)
+	FirstContract(ctx context.Context, employeeID string) (*domain.FirstContract, error)
 	ActiveHolidays(ctx context.Context, start, end string) ([]domain.Holiday, error)
 	InsertLeave(ctx context.Context, f fields) (*Row, error)
 	LeaveDetail(ctx context.Context, id string) (*Row, error)
@@ -207,6 +209,26 @@ func (s *Service) MyLeaveDays(ctx context.Context, a *Actor, start, end string) 
 	return obj("days", days, "excluded", excluded), nil
 }
 
+// checkBirthdayLeave is EPIC-084 R4: a filled-in birth date, a day in the
+// birthday month, and the first contract over by the birthday that year.
+func (s *Service) checkBirthdayLeave(ctx context.Context, employeeID string, emp *Row, date string) error {
+	birthday, ok := domain.BirthdayInYear(emp.Str("birth_date"), yearOf(date))
+	if !ok {
+		return httpx.BadRequest("Tanggal lahir belum diisi di data karyawan — hubungi HR")
+	}
+	if birthday[5:7] != date[5:7] {
+		return httpx.BadRequest("Birthday Leave hanya dalam bulan ulang tahun Anda")
+	}
+	first, err := s.repo.FirstContract(ctx, employeeID)
+	if err != nil {
+		return err
+	}
+	if !domain.InitialContractPassed(first, emp.Str("employment_status"), birthday) {
+		return httpx.BadRequest("Birthday Leave berlaku setelah masa kontrak awal selesai")
+	}
+	return nil
+}
+
 // CreateLeave is createLeave: days are counted by leaveDays (the roster for
 // shift staff; Non-Shift staff skip weekends and day-off holidays); a range
 // with no working day is refused.
@@ -247,12 +269,52 @@ func (s *Service) CreateLeave(ctx context.Context, a *Actor, in leaveRequest) (*
 			return nil, httpx.BadRequest("Izin Leader hanya untuk jabatan Supervisor ke atas")
 		}
 	}
+	// TnC 03-11 (EPIC-084). Batas waktu dan kunci cut off hanya untuk
+	// pengajuan milik sendiri; HR yang mencatat untuk karyawan lain tidak.
+	isSelf := a.EmployeeID != nil && *employeeID == *a.EmployeeID
+	if msg := domain.LeaveGenderError(lt, emp.Str("gender")); msg != "" {
+		return nil, httpx.BadRequest(msg)
+	}
+	if lt.AttachmentRequired && (in.AttachmentURL == nil || strings.TrimSpace(*in.AttachmentURL) == "") {
+		return nil, httpx.BadRequest(lt.Label + " wajib melampirkan dokumen")
+	}
+	if isSelf {
+		if msg := domain.LeaveTimingError(lt, in.StartDate, domain.TodayWIB(s.now())); msg != "" {
+			return nil, httpx.BadRequest(msg)
+		}
+		if err := s.ensureSubmissionOpen(ctx, in.StartDate); err != nil {
+			return nil, err
+		}
+	}
+	if lt.Code == "birthday" {
+		if err := s.checkBirthdayLeave(ctx, *employeeID, emp, in.StartDate); err != nil {
+			return nil, err
+		}
+	}
 	totalDays, excluded, err := s.leaveDays(ctx, *employeeID, emp.Str("schedule_type"), in.StartDate, in.EndDate)
 	if err != nil {
 		return nil, err
 	}
 	if totalDays == 0 {
 		return nil, httpx.BadRequest(domain.NoWorkingDayMessage(excluded, emp.Str("schedule_type")))
+	}
+	if msg := domain.LeaveSizeError(lt, in.StartDate, in.EndDate, totalDays); msg != "" {
+		return nil, httpx.BadRequest(msg)
+	}
+	if isSelf && lt.Code == "personal" {
+		// R5: Izin Pribadi hanya bila belum punya hak cuti atau cutinya habis.
+		year := yearOf(in.StartDate)
+		if err := s.EnsureLeaveBalance(ctx, *employeeID, year); err != nil {
+			return nil, err
+		}
+		available, _, err := s.repo.AnnualAvailable(ctx, *employeeID, year, in.StartDate)
+		if err != nil {
+			return nil, err
+		}
+		if available >= 1 {
+			return nil, httpx.BadRequest("Izin Pribadi hanya untuk yang belum punya hak cuti atau cutinya habis — sisa Cuti Tahunan Anda " +
+				strconv.FormatFloat(available, 'f', -1, 64) + " hari")
+		}
 	}
 	if in.LeaveType == "annual" {
 		// R6: the year's row is created from the default rule when missing,
@@ -310,6 +372,16 @@ func (s *Service) CreateLeave(ctx context.Context, a *Actor, in leaveRequest) (*
 				return httpx.BadRequest(fmt.Sprintf("Kuota %s bulan %s sudah habis (%s dari %d hari)",
 					lt.Label, month, strconv.FormatFloat(used, 'f', -1, 64), lt.MonthlyQuota),
 					obj("quota", lt.MonthlyQuota, "used", used, "month", month))
+			}
+		}
+		if lt.Code == "birthday" {
+			year := in.StartDate[:4]
+			use, err := r.MonthlyLeaveUse(ctx, *employeeID, year+"-01-01", year+"-12-31")
+			if err != nil {
+				return err
+			}
+			if use["birthday"] > 0 {
+				return httpx.BadRequest("Birthday Leave sudah dipakai tahun " + year)
 			}
 		}
 		if leave, err = r.InsertLeave(ctx, f); err != nil {

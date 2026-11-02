@@ -17,6 +17,7 @@ func TestOvertimeCorrectionByAdminHRIS(t *testing.T) {
 	t.Cleanup(func() { _ = h.tx.Rollback(context.Background()) })
 	staff, _ := h.staff("pos", nil, true, emp{name: "Crew Koreksi"})
 
+	h.setNow("2026-10-02 09:00") // EPIC-084 R6: diajukan H+1
 	created := h.do(&staff, "POST", "/api/hris/overtime", h.otSelfBody(&staff, "2026-10-01", "17:00", "19:00"))
 	expect(t, created, 200, "")
 	id := created.data()["id"].(string)
@@ -48,17 +49,20 @@ func TestOvertimeCorrectionByAdminHRIS(t *testing.T) {
 	}
 
 	// Tanggal bentrok dengan lembur aktif lain → 400 duplikat, bukan 500.
+	h.setNow("2026-10-04 09:00") // EPIC-084 R6: diajukan H+1
 	expect(t, h.do(&staff, "POST", "/api/hris/overtime", h.otSelfBody(&staff, "2026-10-03", "17:00", "19:00")), 200, "")
 	expect(t, h.do(&admin, "PATCH", path, map[string]any{"date": "2026-10-03", "reason": "Pindah ke Sabtu"}), 400,
 		"Sudah ada pengajuan lembur pending/approved di tanggal tersebut")
 
 	// Lembur sendiri tidak bisa dikoreksi sendiri.
+	h.setNow("2026-10-06 09:00") // EPIC-084 R6: diajukan H+1
 	mine := h.do(&admin, "POST", "/api/hris/overtime", h.otSelfBody(&admin, "2026-10-05", "06:00", "08:00"))
 	expect(t, mine, 200, "")
 	expect(t, h.do(&admin, "PATCH", "/api/hris/overtime/"+mine.data()["id"].(string),
 		map[string]any{"end_time": "21:00", "reason": "Tambah jam sendiri"}), 403, "Tidak bisa mengoreksi lembur sendiri")
 
 	// Yang ditolak tidak bisa dikoreksi.
+	h.setNow("2026-10-05 09:00") // EPIC-084 R6: diajukan H+1
 	other := h.do(&staff, "POST", "/api/hris/overtime", h.otSelfBody(&staff, "2026-10-04", "17:00", "19:00"))
 	expect(t, other, 200, "")
 	otherID := other.data()["id"].(string)
@@ -110,6 +114,7 @@ func TestOvertimeCorrectionHonoursLazyAndNewDateClosing(t *testing.T) {
 	h, _ := newFileHarness(t)
 	admin, _ := h.staff("hrd", []string{"hris.kepegawaian.overtime"}, true, emp{name: "Admin HRIS"})
 	staff, _ := h.staff("pos", nil, true, emp{name: "Crew Closing"})
+	h.setNow("2026-10-02 09:00") // EPIC-084 R6: diajukan H+1
 	created := h.do(&staff, "POST", "/api/hris/overtime", h.otSelfBody(&staff, "2026-10-01", "17:00", "19:00"))
 	expect(t, created, 200, "")
 	path := "/api/hris/overtime/" + created.data()["id"].(string)
@@ -144,6 +149,7 @@ func TestOvertimeCorrectionOfApprovedRow(t *testing.T) {
 	h, _ := newFileHarness(t)
 	admin, _ := h.staff("hrd", []string{"hris.kepegawaian.overtime"}, true, emp{name: "Admin HRIS"})
 	staff, _ := h.staff("pos", nil, true, emp{name: "Crew Disetujui"})
+	h.setNow("2026-10-02 09:00") // EPIC-084 R6: diajukan H+1
 	created := h.do(&staff, "POST", "/api/hris/overtime", h.otSelfBody(&staff, "2026-10-01", "17:00", "19:00"))
 	expect(t, created, 200, "")
 	id := created.data()["id"].(string)

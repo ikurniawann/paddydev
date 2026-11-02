@@ -37,6 +37,7 @@ func TestOvertimeInputAfterFinished(t *testing.T) {
 		t.Fatalf("lembur malam = %s", ok.raw)
 	}
 
+	h.setNow("2026-10-03 10:00") // EPIC-084 R6: lembur 02-10 masih dalam batas H+1
 	noFile := map[string]any{"date": "2026-10-02", "start_time": "17:00", "end_time": "19:00"}
 	expect(t, post(noFile), 400, "Lampirkan minimal 1 dokumentasi lembur")
 	tooShort := h.otSelfBody(&staff, "2026-10-02", "17:00", "18:00")
@@ -62,9 +63,11 @@ func TestOvertimeInputAfterFinished(t *testing.T) {
 
 	// Periode absensi yang sudah di-closing → 409. Materialisasi dulu periodenya
 	// (periode dibuat saat pertama dibutuhkan), lalu pastikan tertutup.
+	h.setNow("2026-10-05 10:00")
 	_ = h.svc.ensureAttendanceOpen(context.Background(), "2026-09-15")
 	h.exec(`UPDATE hris.attendance_periods SET status = 'closed', range_frozen = true
 		WHERE '2026-09-15' BETWEEN start_date AND end_date`)
+	h.setNow("2026-09-16 10:00") // EPIC-084 R6: H+1; periodenya sudah ditutup
 	closed := post(h.otSelfBody(&staff, "2026-09-15", "17:00", "19:00"))
 	if closed.status != 409 {
 		t.Fatalf("periode tutup = %s", closed.raw)

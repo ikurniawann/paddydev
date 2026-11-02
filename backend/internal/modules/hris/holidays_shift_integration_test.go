@@ -311,7 +311,8 @@ func TestShiftLeaveCountsRoster(t *testing.T) {
 		return n
 	}
 	book := func(s *testutil.Staff, start, end string) call {
-		return h.do(s, "POST", "/api/hris/leaves", leaveBody("marriage", start, end))
+		// Cuti Tahunan: tanpa batas hari kerja (Cuti Menikah kini maks 3, EPIC-084).
+		return h.do(s, "POST", "/api/hris/leaves", leaveBody("annual", start, end))
 	}
 	// Toko: 4 hari ber-shift, 23-12 libur roster; tanggal merah tidak berlaku.
 	if got := days(book(&store, "2026-12-21", "2026-12-25")); got != 4 {

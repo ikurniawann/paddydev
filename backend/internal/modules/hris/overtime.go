@@ -156,7 +156,11 @@ func (s *Service) CreateOvertime(ctx context.Context, a *Actor, in overtimeInput
 			ends, _ := domain.OvertimeEndsAt(in.Date, in.StartTime, in.EndTime)
 			return nil, httpx.BadRequest("Lembur baru bisa diinput setelah selesai (" + ends.Format("02-01-2006 15:04") + " WIB)")
 		}
-		if err := s.ensureAttendanceOpen(ctx, in.Date); err != nil {
+		// R6 (EPIC-084): diajukan paling lambat H+1; R3 kunci cut off.
+		if limit, ok := domain.ParseDate(in.Date); ok && domain.TodayWIB(s.now()) > limit.AddDate(0, 0, 1).Format(domain.DateLayout) {
+			return nil, httpx.BadRequest("Lembur diajukan paling lambat H+1 (" + limit.AddDate(0, 0, 1).Format("02-01-2006") + ")")
+		}
+		if err := s.ensureSubmissionOpen(ctx, in.Date); err != nil {
 			return nil, err
 		}
 		if err := s.checkOvertimeAttachments(*targetID, in.Attachments); err != nil {

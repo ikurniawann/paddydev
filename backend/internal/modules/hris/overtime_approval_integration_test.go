@@ -46,14 +46,17 @@ func TestOvertimeDayTypeFollowsSchedule(t *testing.T) {
 	expect(t, h.do(&staff, "GET", "/api/hris/overtime/day-type?date=2026-10-12&employee_id="+freeID, nil), 403,
 		"Insufficient permissions")
 
+	h.setNow("2026-10-06 09:00")                                  // EPIC-084 R6: diajukan H+1
 	wrong := h.otSelfBody(&staff, "2026-10-05", "06:00", "08:00") // Senin ber-shift, sudah selesai
 	wrong["day_type"] = "rest_day"
 	expect(t, h.do(&staff, "POST", "/api/hris/overtime", wrong), 400, "Jenis lembur tanggal ini Weekday sesuai jadwal Anda")
+	h.setNow("2026-10-05 09:00") // EPIC-084 R6: diajukan H+1
 	sunday := h.do(&staff, "POST", "/api/hris/overtime", h.otSelfBody(&staff, "2026-10-04", "09:00", "12:00"))
 	expect(t, sunday, 200, "")
 	if sunday.data()["day_type"] != "rest_day" {
 		t.Fatalf("tanpa jenis memakai saran jadwal: %s", sunday.raw)
 	}
+	h.setNow("2026-10-06 09:00") // EPIC-084 R6: diajukan H+1
 	chosen := h.otSelfBody(&free, "2026-10-05", "06:00", "08:00")
 	chosen["day_type"] = "rest_day"
 	freeRow := h.do(&free, "POST", "/api/hris/overtime", chosen)
@@ -76,6 +79,7 @@ func TestOvertimeDecisionRecordsCapacityAndNotifiesManager(t *testing.T) {
 		}
 	}
 
+	h.setNow("2026-10-02 09:00") // EPIC-084 R6: diajukan H+1
 	first := h.do(&staff, "POST", "/api/hris/overtime", h.otSelfBody(&staff, "2026-10-01", "17:00", "19:30"))
 	expect(t, first, 200, "")
 	dispatch()
@@ -100,6 +104,7 @@ func TestOvertimeDecisionRecordsCapacityAndNotifiesManager(t *testing.T) {
 	if d := byBoss.data(); d["decided_as"] != "manager" || d["decided_by_name"] == nil {
 		t.Fatalf("manager approve = %s", byBoss.raw)
 	}
+	h.setNow("2026-10-03 09:00") // EPIC-084 R6: diajukan H+1
 	second := h.do(&staff, "POST", "/api/hris/overtime", h.otSelfBody(&staff, "2026-10-02", "17:00", "19:00"))
 	expect(t, second, 200, "")
 	secondID := second.data()["id"].(string)
@@ -123,11 +128,13 @@ func TestOvertimeSelfAndHiringManagerCannotDecide(t *testing.T) {
 	_, bossID := h.staff("pos", nil, true, emp{name: "Atasan Lembur"})
 	staff, _ := h.staff("pos", nil, true, emp{name: "Crew Lembur", boss: &bossID})
 
+	h.setNow("2026-10-02 09:00") // EPIC-084 R6: diajukan H+1
 	mine := h.do(&hr, "POST", "/api/hris/overtime", h.otSelfBody(&hr, "2026-10-01", "17:00", "19:00"))
 	expect(t, mine, 200, "")
 	expect(t, h.do(&hr, "POST", "/api/hris/overtime/decide",
 		map[string]any{"overtime_id": mine.data()["id"], "action": "approve"}), 403, "Tidak bisa memutuskan pengajuan lembur sendiri")
 
+	h.setNow("2026-10-02 09:00") // EPIC-084 R6: diajukan H+1
 	req := h.do(&staff, "POST", "/api/hris/overtime", h.otSelfBody(&staff, "2026-10-01", "17:00", "19:00"))
 	expect(t, req, 200, "")
 	id := req.data()["id"].(string)
@@ -148,6 +155,7 @@ func TestOvertimeStartTimeStrictAndStaleDecision(t *testing.T) {
 	bad := otBody("2026-10-04", "9:00", "11:00")
 	expect(t, h.do(&staff, "POST", "/api/hris/overtime", bad), 400, "Validation failed")
 
+	h.setNow("2026-10-02 09:00") // EPIC-084 R6: diajukan H+1
 	req := h.do(&staff, "POST", "/api/hris/overtime", h.otSelfBody(&staff, "2026-10-01", "17:00", "19:00"))
 	expect(t, req, 200, "")
 	id := req.data()["id"].(string)
@@ -195,6 +203,7 @@ func TestOvertimeHRDayTypeOverrideScopeAndAudit(t *testing.T) {
 	}
 
 	// (b) HR changes an employee request's type: stored + audited before/after.
+	h.setNow("2026-10-02 09:00") // EPIC-084 R6: diajukan H+1
 	changed := h.do(&staff, "POST", "/api/hris/overtime", h.otSelfBody(&staff, "2026-10-01", "17:00", "19:00"))
 	expect(t, changed, 200, "")
 	changedID := changed.data()["id"].(string)
@@ -207,10 +216,12 @@ func TestOvertimeHRDayTypeOverrideScopeAndAudit(t *testing.T) {
 	}
 
 	// (c) unchanged (or omitted) type leaves day_type out of the audit diff.
+	h.setNow("2026-10-03 09:00") // EPIC-084 R6: diajukan H+1
 	same := h.do(&staff, "POST", "/api/hris/overtime", h.otSelfBody(&staff, "2026-10-02", "17:00", "19:00"))
 	expect(t, same, 200, "")
 	sameID := same.data()["id"].(string)
 	decide(&hr, sameID, map[string]any{"day_type": "regular"})
+	h.setNow("2026-10-06 09:00") // EPIC-084 R6: diajukan H+1
 	omitted := h.do(&staff, "POST", "/api/hris/overtime", h.otSelfBody(&staff, "2026-10-05", "06:00", "08:00"))
 	expect(t, omitted, 200, "")
 	omittedID := omitted.data()["id"].(string)
@@ -249,6 +260,7 @@ func TestOvertimeHRSideNeedsApprove(t *testing.T) {
 	}
 
 	// (i) App role hrd without "approve" on Lembur: refused like a non-HR.
+	h.setNow("2026-10-02 23:00") // EPIC-084 R6: lembur 01-10 dan 02-10 masih dalam H+1
 	first := file(&staff, "2026-10-01")
 	expect(t, decide(&hrdRead, first, "approve", nil), 403, "Hanya atasan langsung atau HRD yang bisa memproses pengajuan ini")
 	loneReq := file(&lone, "2026-10-01")

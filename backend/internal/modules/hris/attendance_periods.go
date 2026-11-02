@@ -270,6 +270,28 @@ func (s *Service) ensureAttendanceOpen(ctx context.Context, date string) error {
 	return nil
 }
 
+// ensureSubmissionOpen is ensureAttendanceOpen plus the cut-off lock of an
+// employee's own submissions (EPIC-084 R3): from the day after the period's
+// end date nothing may be filed for a date inside it, while HR keeps the
+// closing window for its corrections.
+func (s *Service) ensureSubmissionOpen(ctx context.Context, date string) error {
+	if len(date) >= 10 {
+		date = date[:10]
+	}
+	today := domain.TodayWIB(s.now())
+	p, err := periodContaining(ctx, s.repo.querier(), date, today)
+	if err != nil {
+		return err
+	}
+	if p.Closed() {
+		return closedPeriodError(p)
+	}
+	if today > p.End {
+		return httpx.Conflict(fmt.Sprintf("Periode %s sudah lewat cut off; pengajuan untuk tanggal ini ditutup", p.Label()))
+	}
+	return nil
+}
+
 // periodWriteError turns the database guard's error (an attendance write
 // that raced a closing) into the same 409.
 func periodWriteError(err error) error {
