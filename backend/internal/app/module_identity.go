@@ -9,6 +9,6 @@ import (
 // active stall. The stall switcher reads warehouses through identityStalls.
 func init() {
 	Register(identity.Name, func(d module.Deps) module.Module {
-		return identity.New(d, identityStalls{db: d.DB})
+		return identity.New(d, identityStalls{db: d.DB}, identityEmployeePhotos{db: d.DB})
 	})
 }

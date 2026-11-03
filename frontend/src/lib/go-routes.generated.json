@@ -401,6 +401,16 @@
   },
   {
     "module": "identity",
+    "method": "DELETE",
+    "path": "/api/auth/me/avatar"
+  },
+  {
+    "module": "identity",
+    "method": "POST",
+    "path": "/api/auth/me/avatar"
+  },
+  {
+    "module": "identity",
     "method": "GET",
     "path": "/api/auth/scope"
   },

@@ -20,15 +20,17 @@ import (
 	"nuhabit/backend/internal/platform/httpx"
 	"nuhabit/backend/internal/platform/scope"
 	"nuhabit/backend/internal/platform/stall"
+	"nuhabit/backend/internal/platform/storage"
 	"nuhabit/backend/internal/platform/validate"
 )
 
 // Profile is the configuration.users row GET /api/auth/me returns.
 type Profile struct {
-	ID       string
-	FullName *string
-	Role     *string
-	BrandID  *string
+	ID        string
+	FullName  *string
+	Role      *string
+	BrandID   *string
+	AvatarURL *string
 }
 
 // Credentials is the auth.users row a login checks.
@@ -60,6 +62,10 @@ type NewSession struct {
 type Repository interface {
 	// Profile returns nil, nil when the user has no configuration.users row.
 	Profile(ctx context.Context, userID string) (*Profile, error)
+	// SetAvatar writes avatar_url (EPIC-087), returning the previous value;
+	// found is false without a configuration.users row.
+	SetAvatar(ctx context.Context, userID string, url *string) (old *string, found bool, err error)
+	AuditAvatar(ctx context.Context, user *auth.User, before, after *string) error
 	// Credentials finds auth.users by case-insensitive email; nil when none.
 	Credentials(ctx context.Context, email string) (*Credentials, error)
 	// CreateSession inserts the session and stamps last_sign_in_at.
@@ -113,6 +119,9 @@ type Service struct {
 	pruneRoll func() float64
 	// warn logs a swallowed throttle failure.
 	warn func(ctx context.Context, msg string, err error)
+	// files and photos serve the profile photo (EPIC-087); photos may be nil.
+	files  *storage.Store
+	photos EmployeePhotos
 }
 
 // NewService wires the use cases. now and warn may be nil.
@@ -146,6 +155,8 @@ type Me struct {
 	Role     *string `json:"role"`
 	BrandID  *string `json:"brand_id"`
 	Email    string  `json:"email"`
+	// AvatarURL is the profile photo (EPIC-087); null = initial avatar.
+	AvatarURL *string `json:"avatar_url"`
 }
 
 // Me mirrors frontend/src/app/api/auth/me/route.ts: a session without a
@@ -165,7 +176,7 @@ func (s *Service) Me(r *http.Request) (*Me, error) {
 	if p == nil {
 		return nil, httpx.Unauthorized("Not authenticated")
 	}
-	return &Me{ID: user.ID, FullName: p.FullName, Role: p.Role, BrandID: p.BrandID, Email: user.Email}, nil
+	return &Me{ID: user.ID, FullName: p.FullName, Role: p.Role, BrandID: p.BrandID, Email: user.Email, AvatarURL: p.AvatarURL}, nil
 }
 
 // ── sessions ─────────────────────────────────────────────────────────────

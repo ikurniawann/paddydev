@@ -22,8 +22,8 @@ func NewPostgres(db database.Querier) *Postgres { return &Postgres{db: db} }
 func (p *Postgres) Profile(ctx context.Context, userID string) (*Profile, error) {
 	var out Profile
 	err := p.db.QueryRow(ctx,
-		`SELECT id::text, full_name, role, brand_id::text FROM configuration.users WHERE id = $1`, userID).
-		Scan(&out.ID, &out.FullName, &out.Role, &out.BrandID)
+		`SELECT id::text, full_name, role, brand_id::text, avatar_url FROM configuration.users WHERE id = $1`, userID).
+		Scan(&out.ID, &out.FullName, &out.Role, &out.BrandID, &out.AvatarURL)
 	if database.IsNoRows(err) {
 		return nil, nil
 	}
