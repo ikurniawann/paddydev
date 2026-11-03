@@ -17,7 +17,7 @@ import {
 import { CENTRAL_CASHIER_MENU } from "@/lib/pos/central-cashier";
 
 const PROFILE_SELECT =
-  "full_name, role, brand_id, business_scope, can_switch_stall, can_central_checkout, default_warehouse_id";
+  "full_name, role, brand_id, business_scope, can_switch_stall, can_central_checkout, default_warehouse_id, avatar_url";
 const PROFILE_SELECT_LEGACY =
   "full_name, role, brand_id, business_scope, can_switch_stall, default_warehouse_id";
 
@@ -45,6 +45,8 @@ export interface AuthUser {
   role: UserRole;
   email: string;
   brand_id: string | null;
+  /** Foto profil akun (EPIC-087); null = avatar inisial. */
+  avatar_url: string | null;
   company_name: string | null;
   branch_id: string | null;
   branch_name: string | null;
@@ -188,6 +190,7 @@ export const getUser = cache(async (): Promise<{
       role: profile.role as UserRole,
       email: user.email ?? "",
       brand_id: profile.brand_id,
+      avatar_url: (profile as { avatar_url?: string | null }).avatar_url ?? null,
       company_name,
       branch_id: scope?.branch_id ?? null,
       branch_name,

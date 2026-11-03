@@ -18,6 +18,7 @@ import { useScheduleAccess } from "@/features/hris/schedule-access/queries";
 import { todayWib } from "@/lib/dates";
 import { useEssBeranda } from "../queries";
 import { EssClockPanel } from "./ess-clock-panel";
+import { UserAvatar } from "@/components/shared/user-avatar";
 import { JadwalTokoShortcut } from "./jadwal-toko-shortcut";
 import { LatenessBerandaCard } from "@/features/hris/lateness";
 import { TeamAttendanceCard } from "./team-attendance-card";
@@ -75,9 +76,13 @@ export function EssBerandaPage() {
       {/* ── Header sapaan + profil ── */}
       <div className="overflow-hidden rounded-2xl bg-gradient-to-br from-pink-600 via-pink-500 to-indigo-500 p-5 text-white shadow-md sm:p-6">
         <div className="flex flex-wrap items-center gap-4">
-          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white/20 text-lg font-bold ring-2 ring-white/40 backdrop-blur-sm">
-            {initials(emp.full_name)}
-          </div>
+          {emp.photo_url ? (
+            <UserAvatar name={emp.full_name} src={emp.photo_url} size={56} className="ring-2 ring-white/40" />
+          ) : (
+            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white/20 text-lg font-bold ring-2 ring-white/40 backdrop-blur-sm">
+              {initials(emp.full_name)}
+            </div>
+          )}
           <div className="min-w-0 flex-1 basis-40">
             <p className="text-sm text-white/80">{greeting()},</p>
             <h1 className="truncate text-xl font-bold sm:text-2xl">{emp.full_name}</h1>

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { Suspense, useMemo, useState, useSyncExternalStore } from "react";
 import {
+  Camera,
   Check,
   ChevronsUpDown,
   CircleUser,
@@ -61,6 +62,8 @@ import AppSidebarNav from "./app-sidebar-nav";
 import { DashboardBreadcrumbs } from "./dashboard-breadcrumbs";
 import { GlobalSearch } from "./global-search";
 import { PhoneNav } from "./phone-nav";
+import { ProfilePhotoDialog } from "./profile-photo-dialog";
+import { UserAvatar } from "./user-avatar";
 import Image from "next/image";
 import { signOut } from "@/lib/auth/client";
 import { stallLabel, type StallLabelSource } from "@/lib/auth/stall-label";
@@ -69,6 +72,8 @@ export interface SidebarUser {
   full_name: string;
   role: string;
   email?: string;
+  /** Foto profil akun (EPIC-087); null/absen = inisial. */
+  avatar_url?: string | null;
   company_name?: string | null;
   branch_id?: string | null;
   branch_name?: string | null;
@@ -272,9 +277,12 @@ function AppSidebarContent({
               className="flex h-11 items-center gap-2.5 rounded-full bg-card p-1.5 shadow-card transition-colors hover:bg-surface-2 focus-visible:ring-2 focus-visible:ring-forest/40 focus-visible:outline-none xl:pr-4"
               aria-label={`Akun ${user.full_name}`}
             >
-              <span className="grid size-8 shrink-0 place-items-center rounded-full bg-accent text-xs font-semibold text-accent-foreground">
-                {user.full_name?.slice(0, 1).toUpperCase() || "A"}
-              </span>
+              <UserAvatar
+                name={user.full_name ?? ""}
+                src={user.avatar_url ?? null}
+                size={32}
+                className="bg-accent text-xs font-semibold text-accent-foreground"
+              />
               <span className="hidden min-w-0 text-left xl:block">
                 <span className="block max-w-[10rem] truncate text-sm leading-tight font-semibold text-foreground">
                   {user.full_name}
@@ -309,6 +317,7 @@ function AppSidebarContent({
         leaves={leaves}
         userName={user.full_name}
         userRole={user.role}
+        userAvatar={user.avatar_url ?? null}
         onAccount={() => setAccountOpen(true)}
       />
 
@@ -682,6 +691,7 @@ function AccountPopup({
   onClose: () => void;
 }) {
   const [passwordOpen, setPasswordOpen] = useState(false);
+  const [photoOpen, setPhotoOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
 
   async function handleLogout() {
@@ -733,9 +743,12 @@ function AccountPopup({
           <div className="p-4">
             <div className="relative isolate flex items-center gap-3 overflow-hidden rounded-2xl bg-ink p-4 text-on-ink">
               <div aria-hidden className="pointer-events-none absolute -top-16 -right-16 -z-10 size-40 rounded-full bg-accent/30 blur-3xl" />
-              <div className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-accent text-base font-bold text-accent-foreground">
-                {user.full_name?.slice(0, 1).toUpperCase() || "A"}
-              </div>
+              <UserAvatar
+                name={user.full_name ?? ""}
+                src={user.avatar_url ?? null}
+                size={48}
+                className="bg-accent text-base font-bold text-accent-foreground"
+              />
               <div className="min-w-0">
                 <div className="truncate text-sm font-semibold text-white">
                   {user.full_name}
@@ -762,6 +775,10 @@ function AccountPopup({
                 <CircleUser />
                 Profil
               </Link>
+              <button type="button" onClick={() => setPhotoOpen(true)} className={actionClass}>
+                <Camera />
+                Ubah foto profil
+              </button>
               <button
                 type="button"
                 onClick={() => setPasswordOpen(true)}
@@ -798,6 +815,12 @@ function AccountPopup({
       </div>
 
       <ChangePasswordDialog open={passwordOpen} onOpenChange={setPasswordOpen} />
+      <ProfilePhotoDialog
+        open={photoOpen}
+        onOpenChange={setPhotoOpen}
+        name={user.full_name ?? ""}
+        currentUrl={user.avatar_url ?? null}
+      />
     </>
   );
 }
