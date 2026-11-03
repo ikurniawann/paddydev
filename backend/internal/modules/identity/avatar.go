@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/jackc/pgx/v5"
+
 	"nuhabit/backend/internal/modules/identity/domain"
 	"nuhabit/backend/internal/platform/audit"
 	"nuhabit/backend/internal/platform/auth"
@@ -19,6 +21,9 @@ import (
 
 // avatarBucket is a staff bucket: any signed-in dashboard account reads it.
 const avatarBucket = "profile-photos"
+
+// maxAvatarBody is the JSON body limit: a 5 MB picture as base64 plus slack.
+const maxAvatarBody = 8 << 20
 
 // EmployeePhotos mirrors the account photo into the linked employee's
 // photo_url, never over a photo HR set (the adapter lives in internal/app).
@@ -64,24 +69,29 @@ func (s *Service) ClearAvatar(ctx context.Context, user *auth.User) (*AvatarResu
 }
 
 func (s *Service) switchAvatar(ctx context.Context, user *auth.User, url *string) error {
-	old, found, err := s.repo.SetAvatar(ctx, user.ID, url)
+	// Baris + audit dalam satu transaksi: gagal → tidak ada yang berubah.
+	old, found, err := s.repo.SetAvatar(ctx, user, url)
 	if err != nil {
 		return err
 	}
 	if !found {
 		return httpx.Unauthorized("Not authenticated")
 	}
-	if err := s.repo.AuditAvatar(ctx, user, old, url); err != nil {
-		return err
+	if old == nil && url == nil {
+		return nil // tidak ada foto yang dihapus
 	}
+	// Sesudah commit: jangan ikut batal bila klien menutup permintaan.
+	after := context.WithoutCancel(ctx)
 	if s.photos != nil {
-		if err := s.photos.SetForUser(ctx, user.ID, url, old); err != nil {
-			s.warn(ctx, "salin foto profil ke karyawan gagal", err)
+		if err := s.photos.SetForUser(after, user.ID, url, old); err != nil {
+			// File lama mungkin masih dirujuk hris.employees.photo_url: biarkan.
+			s.warn(after, "salin foto profil ke karyawan gagal", err)
+			return nil
 		}
 	}
 	if old != nil && strings.HasPrefix(*old, "/api/files/"+avatarBucket+"/") {
 		if err := s.files.Delete(avatarBucket, *old); err != nil {
-			s.warn(ctx, "hapus foto profil lama gagal", err)
+			s.warn(after, "hapus foto profil lama gagal", err)
 		}
 	}
 	return nil
@@ -89,29 +99,40 @@ func (s *Service) switchAvatar(ctx context.Context, user *auth.User, url *string
 
 // ── storage ──────────────────────────────────────────────────────────────
 
-// SetAvatar writes avatar_url and returns the previous value; found is false
-// without a configuration.users row.
-func (p *Postgres) SetAvatar(ctx context.Context, userID string, url *string) (*string, bool, error) {
+// SetAvatar writes avatar_url and its account.avatar audit row in one
+// transaction and returns the previous value; found is false without a
+// configuration.users row. Removing an absent photo writes no audit row.
+func (p *Postgres) SetAvatar(ctx context.Context, user *auth.User, url *string) (*string, bool, error) {
 	var old *string
-	err := p.db.QueryRow(ctx, `UPDATE configuration.users u SET avatar_url = $2, updated_at = now()
-		FROM (SELECT avatar_url FROM configuration.users WHERE id = $1 FOR UPDATE) prev
-		WHERE u.id = $1 RETURNING prev.avatar_url`, userID, url).Scan(&old)
-	if database.IsNoRows(err) {
-		return nil, false, nil
+	found := false
+	run := func(q database.Querier) error {
+		err := q.QueryRow(ctx, `UPDATE configuration.users u SET avatar_url = $2, updated_at = now()
+			FROM (SELECT avatar_url FROM configuration.users WHERE id = $1 FOR UPDATE) prev
+			WHERE u.id = $1 RETURNING prev.avatar_url`, user.ID, url).Scan(&old)
+		if database.IsNoRows(err) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		found = true
+		if old == nil && url == nil {
+			return nil
+		}
+		name := user.FullName
+		if name == "" {
+			name = user.Email
+		}
+		id := user.ID
+		return audit.Write(ctx, q, audit.Entry{ActorID: user.ID, ActorName: &name, Action: "account.avatar",
+			Entity: "configuration.users", EntityID: &id, EntityLabel: &name,
+			Before: map[string]any{"avatar_url": old}, After: map[string]any{"avatar_url": url}})
 	}
-	return old, err == nil, err
-}
-
-// AuditAvatar writes one account.avatar row (before/after URL).
-func (p *Postgres) AuditAvatar(ctx context.Context, user *auth.User, before, after *string) error {
-	name := user.FullName
-	if name == "" {
-		name = user.Email
+	if tb, ok := p.db.(database.TxBeginner); ok {
+		err := database.WithTx(ctx, tb, func(tx pgx.Tx) error { return run(tx) })
+		return old, found, err
 	}
-	id := user.ID
-	return audit.Write(ctx, p.db, audit.Entry{ActorID: user.ID, ActorName: &name, Action: "account.avatar",
-		Entity: "configuration.users", EntityID: &id, EntityLabel: &name,
-		Before: map[string]any{"avatar_url": before}, After: map[string]any{"avatar_url": after}})
+	return old, found, run(p.db) // sudah di dalam transaksi pemanggil
 }
 
 // ── HTTP ─────────────────────────────────────────────────────────────────
@@ -124,7 +145,10 @@ func (h handlers) setAvatar(w http.ResponseWriter, r *http.Request) error {
 	var body struct {
 		Image string `json:"image"`
 	}
-	raw, _ := io.ReadAll(io.LimitReader(r.Body, 8<<20))
+	raw, _ := io.ReadAll(io.LimitReader(r.Body, maxAvatarBody+1))
+	if len(raw) > maxAvatarBody {
+		return httpx.BadRequest(domain.ErrAvatarTooLarge.Error())
+	}
 	_ = json.Unmarshal(raw, &body)
 	res, err := h.svc.SetAvatar(r.Context(), user, body.Image)
 	if err != nil {

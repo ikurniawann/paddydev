@@ -77,7 +77,12 @@ export function EssBerandaPage() {
       <div className="overflow-hidden rounded-2xl bg-gradient-to-br from-pink-600 via-pink-500 to-indigo-500 p-5 text-white shadow-md sm:p-6">
         <div className="flex flex-wrap items-center gap-4">
           {emp.photo_url ? (
-            <UserAvatar name={emp.full_name} src={emp.photo_url} size={56} className="ring-2 ring-white/40" />
+            <UserAvatar
+              name={emp.full_name}
+              src={emp.photo_url}
+              size={56}
+              className="bg-white/20 text-lg font-bold ring-2 ring-white/40 backdrop-blur-sm"
+            />
           ) : (
             <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white/20 text-lg font-bold ring-2 ring-white/40 backdrop-blur-sm">
               {initials(emp.full_name)}

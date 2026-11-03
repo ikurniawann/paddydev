@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"errors"
+	"hash/crc32"
 	"image"
 	"image/color"
 	"image/gif"
@@ -153,5 +154,28 @@ func TestDecodeDataURL(t *testing.T) {
 	}
 	if ErrAvatarTooLarge.Error() != "Ukuran foto maksimal 5 MB" || !strings.Contains(ErrAvatarFormat.Error(), "WebP") {
 		t.Errorf("pesan ukuran = %q", ErrAvatarTooLarge.Error())
+	}
+}
+
+// Review akhir (Important 1): gambar kecil berdimensi raksasa ditolak sebelum
+// di-decode penuh (header PNG 16000×16000 tanpa data piksel).
+func TestSquareAvatarRejectsHugeDimensions(t *testing.T) {
+	ihdr := make([]byte, 13)
+	binary.BigEndian.PutUint32(ihdr[0:], 16000)
+	binary.BigEndian.PutUint32(ihdr[4:], 16000)
+	ihdr[8], ihdr[9] = 8, 6 // 8-bit RGBA
+	chunk := func(kind string, data []byte) []byte {
+		out := make([]byte, 4)
+		binary.BigEndian.PutUint32(out, uint32(len(data)))
+		out = append(out, kind...)
+		out = append(out, data...)
+		sum := make([]byte, 4)
+		binary.BigEndian.PutUint32(sum, crc32.ChecksumIEEE(append([]byte(kind), data...)))
+		return append(out, sum...)
+	}
+	data := append([]byte("\x89PNG\r\n\x1a\n"), chunk("IHDR", ihdr)...)
+	data = append(data, chunk("IEND", nil)...)
+	if _, err := SquareAvatar(data); !errors.Is(err, ErrAvatarTooLarge) {
+		t.Fatalf("err = %v, want ErrAvatarTooLarge", err)
 	}
 }

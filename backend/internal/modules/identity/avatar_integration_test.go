@@ -26,6 +26,7 @@ type photoCall struct{ user, newURL, oldURL string }
 type recordingPhotos struct {
 	mu    sync.Mutex
 	calls []photoCall
+	fail  bool
 }
 
 func deref(s *string) string {
@@ -39,6 +40,9 @@ func (p *recordingPhotos) SetForUser(_ context.Context, userID string, newURL, o
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.calls = append(p.calls, photoCall{userID, deref(newURL), deref(oldURL)})
+	if p.fail {
+		return context.DeadlineExceeded
+	}
 	return nil
 }
 
@@ -120,5 +124,27 @@ func TestAvatarUploadAndClear(t *testing.T) {
 	want := []photoCall{{staff.UserID, first, ""}, {staff.UserID, second, first}, {staff.UserID, "", second}}
 	if len(photos.calls) != 3 || photos.calls[0] != want[0] || photos.calls[1] != want[1] || photos.calls[2] != want[2] {
 		t.Fatalf("salinan karyawan = %+v", photos.calls)
+	}
+
+	// Hapus saat tidak ada foto: tanpa audit dan tanpa salinan (review akhir).
+	rec, _ = testutil.Do(t, mux, testutil.AsStaff(testutil.Request("DELETE", "/api/auth/me/avatar", nil), staff))
+	if rec.Code != 200 || len(photos.calls) != 3 ||
+		count(t, deps, `SELECT count(*)::int FROM audit.audit_log WHERE action = 'account.avatar' AND entity_id = $1`, staff.UserID) != 3 {
+		t.Fatalf("hapus tanpa foto: %d calls=%d", rec.Code, len(photos.calls))
+	}
+
+	// Body > 8 MB → pesan ukuran, bukan pesan format.
+	code, out = post(map[string]any{"image": "data:image/png;base64," + strings.Repeat("A", 9<<20)})
+	if code != 400 || out["error"] != "Ukuran foto maksimal 5 MB" {
+		t.Fatalf("body besar = %d %v", code, out["error"])
+	}
+
+	// Salinan ke karyawan gagal → file lama TIDAK dihapus (masih dirujuk karyawan).
+	_, out = post(map[string]any{"image": pngDataURL(t, 50, 50)})
+	third := out["data"].(map[string]any)["avatar_url"].(string)
+	photos.fail = true
+	_, out = post(map[string]any{"image": pngDataURL(t, 60, 60)})
+	if fourth := out["data"].(map[string]any)["avatar_url"].(string); fourth == "" || !onDisk(third) || !onDisk(fourth) {
+		t.Fatalf("salinan gagal: file lama on disk=%v", onDisk(third))
 	}
 }

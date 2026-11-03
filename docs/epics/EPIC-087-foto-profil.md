@@ -71,6 +71,13 @@ Permintaan user 03-11-2026: setelah login, user bisa mengunggah foto profil untu
   - crop manual;
   - foto di aplikasi mobile.
 
+## Catatan deploy
+- **Migrasi dulu**: delta `20261108090000_users_avatar_url` harus diterapkan sebelum binary dan frontend baru jalan. `tools/deploy-paddydev.sh` menerapkan migrasi sebelum mengganti container; bila migrasi gagal, berhenti dan jangan lanjut.
+- Pengaman bila tetap terjadi:
+  - Go `Profile` jatuh ke select tanpa `avatar_url` (error 42703);
+  - Next `requireUser` memakai select tanpa avatar yang tetap membaca `can_central_checkout`.
+- Bucket `profile-photos` memakai `STORAGE_DIR` yang sama dengan modul upload Go lainnya.
+
 ## Tasks
 Rencana: `docs/superpowers/plans/2026-11-03-foto-profil.md`.
 

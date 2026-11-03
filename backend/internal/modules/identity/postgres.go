@@ -24,6 +24,11 @@ func (p *Postgres) Profile(ctx context.Context, userID string) (*Profile, error)
 	err := p.db.QueryRow(ctx,
 		`SELECT id::text, full_name, role, brand_id::text, avatar_url FROM configuration.users WHERE id = $1`, userID).
 		Scan(&out.ID, &out.FullName, &out.Role, &out.BrandID, &out.AvatarURL)
+	if database.PgCode(err) == "42703" { // kolom avatar_url belum dimigrasi (EPIC-087)
+		err = p.db.QueryRow(ctx,
+			`SELECT id::text, full_name, role, brand_id::text FROM configuration.users WHERE id = $1`, userID).
+			Scan(&out.ID, &out.FullName, &out.Role, &out.BrandID)
+	}
 	if database.IsNoRows(err) {
 		return nil, nil
 	}

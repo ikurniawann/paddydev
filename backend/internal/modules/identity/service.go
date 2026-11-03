@@ -62,10 +62,10 @@ type NewSession struct {
 type Repository interface {
 	// Profile returns nil, nil when the user has no configuration.users row.
 	Profile(ctx context.Context, userID string) (*Profile, error)
-	// SetAvatar writes avatar_url (EPIC-087), returning the previous value;
-	// found is false without a configuration.users row.
-	SetAvatar(ctx context.Context, userID string, url *string) (old *string, found bool, err error)
-	AuditAvatar(ctx context.Context, user *auth.User, before, after *string) error
+	// SetAvatar writes avatar_url and its audit row in one transaction
+	// (EPIC-087), returning the previous value; found is false without a
+	// configuration.users row.
+	SetAvatar(ctx context.Context, user *auth.User, url *string) (old *string, found bool, err error)
 	// Credentials finds auth.users by case-insensitive email; nil when none.
 	Credentials(ctx context.Context, email string) (*Credentials, error)
 	// CreateSession inserts the session and stamps last_sign_in_at.

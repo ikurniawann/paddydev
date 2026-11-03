@@ -18,6 +18,9 @@ import { CENTRAL_CASHIER_MENU } from "@/lib/pos/central-cashier";
 
 const PROFILE_SELECT =
   "full_name, role, brand_id, business_scope, can_switch_stall, can_central_checkout, default_warehouse_id, avatar_url";
+/** Sebelum delta EPIC-087 diterapkan: tanpa avatar_url, can_central_checkout tetap terbaca. */
+const PROFILE_SELECT_NO_AVATAR =
+  "full_name, role, brand_id, business_scope, can_switch_stall, can_central_checkout, default_warehouse_id";
 const PROFILE_SELECT_LEGACY =
   "full_name, role, brand_id, business_scope, can_switch_stall, default_warehouse_id";
 
@@ -78,6 +81,14 @@ export const getUser = cache(async (): Promise<{
     .select(PROFILE_SELECT)
     .eq("id", user.id)
     .single();
+
+  if (isMissingColumnError(profileError)) {
+    const noAvatar = await db.from("users").select(PROFILE_SELECT_NO_AVATAR).eq("id", user.id).single();
+    if (!isMissingColumnError(noAvatar.error)) {
+      profile = noAvatar.data ? { ...noAvatar.data, avatar_url: null } : noAvatar.data;
+      profileError = noAvatar.error;
+    }
+  }
 
   if (isMissingColumnError(profileError)) {
     const fallback = await db

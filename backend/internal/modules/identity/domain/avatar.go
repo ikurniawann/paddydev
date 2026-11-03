@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"bytes"
 	"encoding/base64"
 	"errors"
 	"image"
@@ -18,6 +19,9 @@ const (
 	AvatarMaxBytes = 5 << 20
 	AvatarSize     = 512
 	avatarQuality  = 85
+	// avatarMaxPixels bounds the decoded size (lebar × tinggi) so a small file
+	// with huge dimensions cannot exhaust memory (review akhir EPIC-087).
+	avatarMaxPixels = 40_000_000
 )
 
 var (
@@ -47,6 +51,13 @@ func DecodeDataURL(s string) ([]byte, error) {
 // SquareAvatar turns an uploaded picture into the stored profile photo.
 // imageproc.Decode already applies the EXIF orientation.
 func SquareAvatar(data []byte) ([]byte, error) {
+	cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
+	if err != nil {
+		return nil, ErrAvatarFormat
+	}
+	if cfg.Width*cfg.Height > avatarMaxPixels {
+		return nil, ErrAvatarTooLarge
+	}
 	img, format, err := imageproc.Decode(data)
 	if err != nil {
 		return nil, ErrAvatarFormat
@@ -59,8 +70,17 @@ func SquareAvatar(data []byte) ([]byte, error) {
 	b := img.Bounds()
 	side := min(b.Dx(), b.Dy())
 	x0, y0 := b.Min.X+(b.Dx()-side)/2, b.Min.Y+(b.Dy()-side)/2
-	square := image.NewNRGBA(image.Rect(0, 0, side, side))
-	draw.Draw(square, square.Bounds(), img, image.Pt(x0, y0), draw.Src)
+	crop := image.Rect(x0, y0, x0+side, y0+side)
+	var square image.Image
+	if sub, ok := img.(interface {
+		SubImage(image.Rectangle) image.Image
+	}); ok {
+		square = sub.SubImage(crop) // tanpa salinan piksel
+	} else {
+		cp := image.NewNRGBA(image.Rect(0, 0, side, side))
+		draw.Draw(cp, cp.Bounds(), img, crop.Min, draw.Src)
+		square = cp
+	}
 	small := imageproc.FitInside(square, AvatarSize, AvatarSize)
 	return imageproc.EncodeJPEG(imageproc.Flatten(small, color.White), avatarQuality)
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Loader2 } from "lucide-react";
@@ -14,6 +15,7 @@ import {
   DialogPanelHeader,
   DialogPanelTitle,
 } from "@/components/ui/dialog";
+import { essQueryKeys } from "@/features/hris/ess/query-keys";
 import { deleteProfilePhoto, uploadProfilePhoto, validateProfilePhoto } from "@/lib/profile-photo";
 import { UserAvatar } from "./user-avatar";
 
@@ -30,11 +32,20 @@ export function ProfilePhotoDialog({
   currentUrl: string | null;
 }) {
   const router = useRouter();
-  const [preview, setPreview] = useState<string | null>(null);
+  const queryClient = useQueryClient();
   const [busy, setBusy] = useState(false);
+  // Setiap kali dialog ditutup, sesi bertambah: pratinjau dari pembacaan file
+  // sesi sebelumnya (selesai setelah ditutup) tidak ditampilkan.
+  const [session, setSession] = useState(0);
+  const [prevOpen, setPrevOpen] = useState(open);
+  if (open !== prevOpen) {
+    setPrevOpen(open);
+    if (!open) setSession(session + 1);
+  }
+  const [picked, setPicked] = useState<{ session: number; url: string } | null>(null);
+  const preview = picked && picked.session === session ? picked.url : null;
 
   function close(next: boolean) {
-    if (!next) setPreview(null);
     onOpenChange(next);
   }
 
@@ -48,7 +59,8 @@ export function ProfilePhotoDialog({
       return;
     }
     const reader = new FileReader();
-    reader.onloadend = () => setPreview(reader.result as string);
+    const started = session;
+    reader.onloadend = () => setPicked({ session: started, url: reader.result as string });
     reader.readAsDataURL(file);
   }
 
@@ -57,7 +69,8 @@ export function ProfilePhotoDialog({
     try {
       await action();
       toast.success(done);
-      router.refresh();
+      router.refresh(); // top bar, popup, drawer (render server)
+      void queryClient.invalidateQueries({ queryKey: essQueryKeys.beranda() }); // Beranda ESS
       close(false);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Gagal menyimpan foto profil");
