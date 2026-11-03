@@ -171,6 +171,7 @@ type OvertimeRequest struct {
 	Date    string
 	Hours   float64
 	DayType string // regular | rest_day (hari istirahat mingguan)
+	OnTrip  bool   // tanggal tercakup perjalanan dinas disetujui (EPIC-085 R4)
 }
 
 // OvertimeSplit is splitOvertimeHours' result.
@@ -207,7 +208,8 @@ func SplitOvertimeWith(requests []OvertimeRequest, attendance []AttendanceRow, h
 	var regular, holiday float64
 	for _, req := range requests {
 		att, ok := byDate[req.Date]
-		if requireClockout && (!ok || !att.HasClockOut) {
+		// Saat perjalanan dinas tidak ada absensi kantor (EPIC-085 R4).
+		if requireClockout && !req.OnTrip && (!ok || !att.HasClockOut) {
 			continue
 		}
 		hours := req.Hours
