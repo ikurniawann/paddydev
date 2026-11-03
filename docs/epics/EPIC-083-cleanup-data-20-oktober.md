@@ -131,3 +131,22 @@ FK `attendance_requests.attendance_id` → `attendance` (SET NULL).
   - Pelajaran: gladi production **wajib** juga dijalankan di salinan production yang di-restore (runbook §4), karena uji restore gagal pada setiap FK yatim. Masalah seperti ini harus ketemu sebelum jam eksekusi.
   - Perbaikan menyusul: restore mengembalikan pengajuan absensi yang absensi induknya dilewati (bentrok) tanpa tautan (`LEWAT_TAUT`). Runbook diperbarui: gladi salinan production dengan `pg_isready` dan `docker rm -fv`, folder gladi dihapus, persetujuan HR mengutip baris gerbang, payroll Oktober wajib final sebelum execute production.
   - Status → `ready-for-qa`. Production menunggu tiga hal: gladi di salinan production, persetujuan tertulis HR (K-22) atas pratinjau production + SHA-256, dan izin jam eksekusi.
+- 2026-11-03 — **Cakupan diubah (keputusan user 03-11):**
+  - Batas menjadi **≤ 30 September 2026** (semula 20 Oktober). Alasan: run payroll aktif di HRIS hanya November 2026 (periode 21 Okt–20 Nov); data sebelumnya tidak dipakai payroll HRIS mana pun.
+  - Pinjaman **pending** ≤ 30 Sep ikut dihapus ("oke delete aja"). Pinjaman yang masih bersisa tetap.
+  - Hitungan prod baca-saja 03-11:
+    - absensi 52.927 (tertua 20-02-2026);
+    - cuti/izin 560;
+    - lembur 2.455;
+    - pinjaman lunas 14 + pending 3 (10 bersisa tetap);
+    - perjalanan dinas dan pengajuan absensi 0.
+  - Skrip inti, pratinjau, dan runner diubah ke 2026-09-30 (gerbang draft `(2026, 9)`). Tes:
+    - Go DM-01 7/7 PASS;
+    - runner 96 cek PASS.
+  - Berikutnya:
+    1. merge;
+    2. salin skrip ke `~/paddydev-src` prod;
+    3. pratinjau prod;
+    4. konfirmasi akhir user/HR + jam;
+    5. execute (backup otomatis).
+
