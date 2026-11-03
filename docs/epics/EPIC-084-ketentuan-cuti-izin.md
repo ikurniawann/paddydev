@@ -1,6 +1,6 @@
 # EPIC-084: Ketentuan Cuti & Izin + SLA Pengajuan terhadap Payroll (`MODULE-HRIS`)
 
-status: review
+status: ready-for-qa
 environment: dev
 retries: 0
 
@@ -207,4 +207,22 @@ Rencana: `docs/superpowers/plans/2026-11-03-ketentuan-cuti-izin.md` (Task 1–7)
     - Nov 21 Okt–20 Nov;
     - Des 21 Nov–20 Des.
   - Production tetap cutoff 0 sampai HR memutuskan periode transisi.
-
+- 2026-11-03 11.40 WIB — **LIVE production** (izin user 03-11: "semua yang belum merged main production lakukan implementasi CI deploy sampai hijau" + "tapi nanti backup").
+  - PR #69, #70, #71 di-merge (merge commit, karena bertumpuk). main `a39feb81`, CI 4/4 hijau. Staging = main (`local-20261103-113500`).
+  - Gladi di salinan prod 11.34:
+    - 2 migrasi lancar;
+    - `leave_balances` md5 sama (`04963f81…`, 387 baris);
+    - default 2027 untuk join 2026-05-10 = 7;
+    - production **sudah memakai cutoff 20** (offset 4, diatur HR), jadi kunci tanggal 21 langsung berlaku;
+    - 1 run payroll draft 2026-11, tanpa cuti melahirkan/haji aktif yang terdampak;
+    - 80 lembur lama > 4 jam tetap ada dan bisa dikoreksi turun;
+    - 2 pengajuan lembur pending milik level SPV+ tetap bisa diputuskan;
+    - `birth_date` terisi 60 dari 314.
+  - Deploy prod:
+    - backup `~/backups/prod-db-before-main-e086-20261103-113943.dump` (3918 entri);
+    - image `local-20261103-114048` (rollback ke image `local-20261103-004840` + `~/paddydev-src.before-main-e086-20261103-113943`);
+    - 576 migrasi, verify 0 berbeda;
+    - container healthy, 0 error API;
+    - md5 saldo sama;
+    - `/login` dan `/api/ready` 200.
+  - Runner: `~/Desktop/paddydev-backups/prod084/run.sh`.
