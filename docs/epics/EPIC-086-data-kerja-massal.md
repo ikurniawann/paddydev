@@ -139,3 +139,10 @@ Rencana: `docs/superpowers/plans/2026-11-03-data-kerja-massal.md`.
   - Data contoh dihapus kembali dari staging; audit kembali 206. Baris audit append-only tetap ada.
   - Template staging 03-11 yang dikirim lebih awal sudah tidak dipakai. Template production dibuat dengan `ENV=prod … template` setelah izin.
 
+- 2026-11-03 08.57 WIB — **Production (baca saja, izin user "Ya, buat template prod")**.
+  - Audit:
+    - non_shift: 121 aktif, 4 belum lengkap (1 tanpa penempatan, 1 tanpa jadwal, 2 tanpa jabatan);
+    - shift: 193 aktif, **193 tanpa jadwal**, 5 tanpa penempatan, 8 tanpa departemen, 10 tanpa jabatan.
+  - Template prod berisi 197 baris, 54 kode toko, 21 kode shift + LIBUR. Dikirim ke user (`.share/bulk-jadwal/Template-Data-Kerja-PROD-20261103.xlsx`).
+  - Binary dan file sudah dibersihkan dari VPS/container.
+  - Berikutnya: HR mengisi → `preview` prod → izin tertulis user + HR → `apply`.
