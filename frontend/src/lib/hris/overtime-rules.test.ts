@@ -3,6 +3,7 @@ import {
   overtimeAttachmentHref,
   overtimeTimeChanges,
   canDecideOvertime,
+  OVERTIME_RULES_HINT,
   decidedAs,
   OVERTIME_DAY_TYPE_OPTIONS,
   OVERTIME_TOO_LATE,
@@ -192,5 +193,13 @@ describe("overtimeAttachmentHref & overtimeTimeChanges (EPIC-066)", () => {
   it("istirahat tersimpan string/null dibandingkan sebagai angka", () => {
     expect(overtimeTimeChanges({ ...stored, break_minutes: "30" as unknown as number }, { start_time: "17:00", end_time: "21:00", break_minutes: 30 })).toBeUndefined();
     expect(overtimeTimeChanges({ ...stored, break_minutes: undefined }, { start_time: "17:00", end_time: "21:00", break_minutes: 0 })).toBeUndefined();
+  });
+});
+
+describe("OVERTIME_RULES_HINT (EPIC-085)", () => {
+  it("merangkum jam mulai dan batas 4/18/72 jam", () => {
+    expect(OVERTIME_RULES_HINT).toBe(
+      "Lembur hari kerja dimulai setelah jam kerja selesai · maks. 4 jam/hari, 18 jam/minggu, 72 jam/periode"
+    );
   });
 });
