@@ -27,6 +27,7 @@ case "$MODE" in
       [ "${DATA_KERJA_APPROVED:-}" = yes ] || die 3 "apply butuh DATA_KERJA_APPROVED=yes (izin tertulis user dan HR)"
       SHA=${3:-}
       [ -n "$SHA" ] || die 2 "sha wajib untuk apply (salin dari laporan pratinjau)"
+      [[ "$SHA" =~ ^[0-9a-f]{64}$ ]] || die 2 "sha harus 64 karakter heksadesimal (salin dari laporan pratinjau)"
     fi ;;
   *) die 2 "mode harus audit, template, preview, atau apply" ;;
 esac
@@ -37,13 +38,19 @@ OUT=${DATA_KERJA_OUT:-$HOME/Desktop/paddydev-backups/data-kerja}/$ENV-$STAMP
 mkdir -p "$OUT"
 BIN="$OUT/hris-data-kerja"
 command -v go >/dev/null || PATH="$HOME/.local/go/bin:$PATH"
-(cd "$ROOT/backend" && CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o "$BIN" ./cmd/hris-data-kerja)
+(cd "$ROOT/backend" && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o "$BIN" ./cmd/hris-data-kerja)
 
 # on runs a shell command on the host that owns the containers.
 on() { if [ "$ENV" = prod ]; then ssh paddy-prod "$1"; else bash -c "$1"; fi; }
 # put copies a local file to the host's work dir, prints the host path.
 HOST_DIR=/tmp/data-kerja-$STAMP
-on "mkdir -p $HOST_DIR"
+# Bersihkan binary dan file (berisi data karyawan) di server/container
+# apa pun hasilnya.
+cleanup() {
+  on "docker exec -u 0 paddydev-api rm -f /tmp/hris-data-kerja /tmp/data-kerja-input.xlsx /tmp/data-kerja-template.xlsx; rm -rf $HOST_DIR" || true
+}
+trap cleanup EXIT
+on "umask 077; mkdir -p $HOST_DIR"
 put() {
   if [ "$ENV" = prod ]; then scp -q "$1" "paddy-prod:$HOST_DIR/$(basename "$1")"; else cp "$1" "$HOST_DIR/"; fi
   echo "$HOST_DIR/$(basename "$1")"
@@ -61,8 +68,8 @@ fi
 [ -n "$SHA" ] && ARGS="$ARGS -sha $SHA"
 
 if [ "$MODE" = apply ]; then
-  if [ "$ENV" = prod ]; then DUMP="~/backups/data-kerja-$STAMP.dump"; else DUMP="$OUT/db.dump"; fi
-  on "set -e; umask 077; docker exec paddydev-db sh -c 'pg_dump -Fc -U \"\$POSTGRES_USER\" \"\$POSTGRES_DB\"' > $DUMP; ls -la $DUMP"
+  if [ "$ENV" = prod ]; then DUMP="\$HOME/backups/data-kerja-$STAMP.dump"; else DUMP="$OUT/db.dump"; fi
+  on "set -e; umask 077; docker exec paddydev-db sh -c 'pg_dump -Fc -U \"\$POSTGRES_USER\" \"\$POSTGRES_DB\"' > \"$DUMP\"; ls -la \"$DUMP\""
 fi
 
 set +e
@@ -74,6 +81,5 @@ if [ "$MODE" = template ] && [ "$CODE" = 0 ]; then
   get "$HOST_DIR/template.xlsx" "$OUT/Template-Data-Kerja-$ENV-$STAMP.xlsx"
   echo "Template: $OUT/Template-Data-Kerja-$ENV-$STAMP.xlsx"
 fi
-on "docker exec -u 0 paddydev-api rm -f /tmp/hris-data-kerja /tmp/data-kerja-input.xlsx /tmp/data-kerja-template.xlsx; rm -rf $HOST_DIR" || true
 echo "Laporan: $OUT/$MODE.md"
 exit "$CODE"

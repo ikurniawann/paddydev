@@ -30,6 +30,7 @@ expect 2 "ENV harus staging atau prod" ENV=lokal -- audit
 expect 2 "mode harus" ENV=staging -- hapus
 expect 2 "sha wajib" ENV=prod DATA_KERJA_APPROVED=yes -- apply "$WORK/isi.xlsx"
 expect 2 "file tidak ada" ENV=prod -- preview "$WORK/tidak-ada.xlsx"
+expect 2 "sha harus 64 karakter heksadesimal" ENV=prod DATA_KERJA_APPROVED=yes -- apply "$WORK/isi.xlsx" 'abc; rm -rf /tmp/x' 
 if [ -f "$WORK/called" ]; then echo "GAGAL: runner memanggil alat sebelum gerbang: $(cat "$WORK/called")"; fail=1; fi
 [ "$fail" = 0 ] && echo PASS
 exit "$fail"

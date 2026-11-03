@@ -133,7 +133,7 @@ func loadWorkDataMasters(ctx context.Context, q database.Querier, today string) 
 		})
 	}
 	rows, err := q.Query(ctx, `SELECT e.id::text, e.nip, e.full_name, e.schedule_type, e.is_active,
-		       coalesce((SELECT min(work_date)::text FROM hris.employee_shift_days s
+		       coalesce((SELECT max(work_date)::text FROM hris.employee_shift_days s
 		                 WHERE s.employee_id = e.id AND s.work_date >= $1::date), '')
 		FROM hris.employees e WHERE e.nip IS NOT NULL AND btrim(e.nip) <> ''`, today)
 	if err != nil {
@@ -141,7 +141,7 @@ func loadWorkDataMasters(ctx context.Context, q database.Querier, today string) 
 	}
 	emps, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (domain.WorkDataEmployee, error) {
 		var e domain.WorkDataEmployee
-		return e, r.Scan(&e.ID, &e.NIP, &e.Name, &e.ScheduleType, &e.Active, &e.RosterFrom)
+		return e, r.Scan(&e.ID, &e.NIP, &e.Name, &e.ScheduleType, &e.Active, &e.RosterLast)
 	})
 	if err != nil {
 		return m, err
@@ -154,8 +154,15 @@ func loadWorkDataMasters(ctx context.Context, q database.Querier, today string) 
 	if err != nil {
 		return m, err
 	}
+	ambiguous := func(dst map[string]string, k, v string) {
+		if _, dup := dst[k]; dup {
+			dst[k] = "" // dipakai lebih dari satu baris master: ditolak validator
+			return
+		}
+		dst[k] = v
+	}
 	for _, b := range branches {
-		m.Branches[b.k] = b.v
+		ambiguous(m.Branches, b.k, b.v)
 	}
 	shifts, err := loadShifts(ctx, q, true)
 	if err != nil {
@@ -170,18 +177,14 @@ func loadWorkDataMasters(ctx context.Context, q database.Querier, today string) 
 		return m, err
 	}
 	for _, d := range depts {
-		m.Departments[d.k] = d.v
+		ambiguous(m.Departments, d.k, d.v)
 	}
 	positions, err := collect(`SELECT lower(btrim(title)), id::text FROM hris.positions WHERE coalesce(is_active, true)`)
 	if err != nil {
 		return m, err
 	}
 	for _, p := range positions {
-		if _, dup := m.Positions[p.k]; dup {
-			m.Positions[p.k] = ""
-			continue
-		}
-		m.Positions[p.k] = p.v
+		ambiguous(m.Positions, p.k, p.v)
 	}
 	closed, err := collect(`SELECT start_date::text, end_date::text FROM hris.attendance_periods
 		WHERE status = 'closed' AND end_date >= $1::date`, today)
@@ -254,7 +257,8 @@ func WorkDataTemplate(ctx context.Context, q database.Querier, today string) ([]
 	locked := func(h string, w float64) xlsx.TemplateColumn {
 		return xlsx.TemplateColumn{Header: h, ReadOnly: true, Width: w}
 	}
-	cols := []xlsx.TemplateColumn{locked("NIP", 18), locked("Nama", 28), locked("Departemen Saat Ini", 22),
+	// NIP tetap bisa diketik: baris kosong di bawah dipakai untuk karyawan lain.
+	cols := []xlsx.TemplateColumn{{Header: "NIP", Width: 18}, locked("Nama", 28), locked("Departemen Saat Ini", 22),
 		locked("Jabatan Saat Ini", 24), locked("Penempatan Saat Ini", 14), locked("Tipe Saat Ini", 12),
 		locked("Yang Perlu Dilengkapi", 26),
 		{Header: "Penempatan Utama (Kode Toko)", Kind: xlsx.KindList, Options: storeCodes, Width: 16},
@@ -348,6 +352,7 @@ type WorkDataReport struct {
 	Valid, Errors, Warnings int
 	Issues                  []domain.UploadIssue // errors first, then warnings
 	Rows                    []domain.WorkDataRow
+	Notes                   []string // catatan saat apply (mis. perubahan tipe jadwal)
 }
 
 // WorkDataPreview validates the file against the live masters without
@@ -391,7 +396,7 @@ func WorkDataApply(ctx context.Context, tx database.DB, file []byte, today, sha 
 	guard := clearGuard{Allowed: true, Reason: "Unggah massal data kerja (EPIC-086)"}
 	counts := map[string]int{}
 	for _, row := range rep.Rows {
-		if err := applyWorkDataRow(ctx, r, actor, guard, row, counts); err != nil {
+		if err := applyWorkDataRow(ctx, r, actor, guard, row, counts, &rep.Notes); err != nil {
 			return nil, fmt.Errorf("baris %d (%s): %w", row.Line, row.NIP, err)
 		}
 	}
@@ -404,7 +409,7 @@ func WorkDataApply(ctx context.Context, tx database.DB, file []byte, today, sha 
 }
 
 // applyWorkDataRow writes one employee's changes in R4 order.
-func applyWorkDataRow(ctx context.Context, r *store, actor *auth.User, g clearGuard, row domain.WorkDataRow, counts map[string]int) error {
+func applyWorkDataRow(ctx context.Context, r *store, actor *auth.User, g clearGuard, row domain.WorkDataRow, counts map[string]int, notes *[]string) error {
 	q := r.querier()
 	if row.DepartmentID != nil || row.PositionID != nil {
 		var dept, pos *string
@@ -443,6 +448,9 @@ func applyWorkDataRow(ctx context.Context, r *store, actor *auth.User, g clearGu
 			return err
 		}
 		counts["tipe_jadwal"] += res.Changed
+		if res.ClearedDays > 0 {
+			*notes = append(*notes, fmt.Sprintf("%s: %d jadwal per tanggal dihapus mulai %s", row.NIP, res.ClearedDays, row.From))
+		}
 	}
 	if row.Pattern != nil {
 		days := make([]patternDay, 7)

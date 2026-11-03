@@ -93,6 +93,20 @@ func TestWorkDataAuditAndTemplate(t *testing.T) {
 	if !slices.Equal(nips, want) {
 		t.Fatalf("baris template = %v, want %v", nips, want)
 	}
+	// NIP bisa diketik di baris kosong (review akhir): sel tidak terkunci.
+	book, err := excelize.OpenReader(bytes.NewReader(data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	styleID, err := book.GetCellStyle("Data", "A"+strconv.Itoa(len(m)+2))
+	if err != nil {
+		t.Fatal(err)
+	}
+	style, err := book.GetStyle(styleID)
+	if err != nil || style.Protection == nil || style.Protection.Locked {
+		t.Fatalf("sel NIP baris kosong terkunci: %+v %v", style, err)
+	}
+	book.Close()
 	codes, err := xlsx.ParseMatrix(data, xlsx.ReadOptions{PreferSheet: "Kode Shift"})
 	if err != nil {
 		t.Fatal(err)

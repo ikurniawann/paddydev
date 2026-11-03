@@ -22,12 +22,12 @@ const (
 
 var workDataDays = []string{"Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"}
 
-// WorkDataEmployee is an employee the file may refer to. RosterFrom is the
-// first per-date roster day on or after today ("" without one).
+// WorkDataEmployee is an employee the file may refer to. RosterLast is the
+// last per-date roster day on or after today ("" without one).
 type WorkDataEmployee struct {
 	ID, NIP, Name, ScheduleType string
 	Active                      bool
-	RosterFrom                  string
+	RosterLast                  string
 }
 
 // WorkDataMasters are the live masters a file is checked against. Branches
@@ -98,9 +98,14 @@ func ValidateWorkData(header []string, rows [][]string, firstLine int, m WorkDat
 		out := WorkDataRow{Line: line, EmployeeID: emp.ID, NIP: nip, Name: emp.Name}
 		bad := false
 		if code := strings.ToUpper(cellAt(r, colBranch)); code != "" {
-			if id, ok := m.Branches[code]; ok {
+			id, ok := m.Branches[code]
+			switch {
+			case ok && id == "":
+				fail("Kode toko " + code + " ada lebih dari satu di master — hubungi tim")
+				bad = true
+			case ok:
 				out.BranchID = &id
-			} else {
+			default:
 				fail("Kode toko " + code + " tidak dikenal/nonaktif")
 				bad = true
 			}
@@ -150,10 +155,19 @@ func ValidateWorkData(header []string, rows [][]string, firstLine int, m WorkDat
 				warns = append(warns, UploadIssue{Line: line, Name: nip, Message: "Pola tanpa hari LIBUR (masuk 7 hari)"})
 			}
 		}
+		if out.ScheduleType != nil && *out.ScheduleType == "shift" && emp.ScheduleType != "shift" && filled == 0 {
+			fail("Ubah ke Shift wajib mengisi pola Senin–Minggu (jadwal tetap berhenti mulai Berlaku Mulai)")
+			bad = true
+		}
 		if name := cellAt(r, colDept); name != "" {
-			if id, ok := m.Departments[strings.ToLower(name)]; ok {
+			id, ok := m.Departments[strings.ToLower(name)]
+			switch {
+			case ok && id == "":
+				fail("Departemen " + name + " ada lebih dari satu di master — hubungi tim")
+				bad = true
+			case ok:
 				out.DepartmentID = &id
-			} else {
+			default:
 				fail("Departemen " + name + " tidak dikenal")
 				bad = true
 			}
@@ -198,10 +212,17 @@ func ValidateWorkData(header []string, rows [][]string, firstLine int, m WorkDat
 		if bad {
 			continue
 		}
-		if out.Pattern != nil && emp.RosterFrom != "" && emp.RosterFrom >= out.From {
-			t, _ := ParseDate(emp.RosterFrom)
-			warns = append(warns, UploadIssue{Line: line, Name: nip, Message: "Sudah ada jadwal per tanggal mulai " +
-				t.Format("02-01-2006") + "; jadwal per tanggal tetap berlaku di atas pola"})
+		if emp.RosterLast != "" && emp.RosterLast >= out.From {
+			last, _ := ParseDate(emp.RosterLast)
+			from, _ := ParseDate(out.From)
+			switch {
+			case out.ScheduleType != nil && *out.ScheduleType == "non_shift" && emp.ScheduleType == "shift":
+				warns = append(warns, UploadIssue{Line: line, Name: nip, Message: "Ubah ke Non-Shift menghapus jadwal per tanggal mulai " +
+					from.Format("02-01-2006") + " (sampai " + last.Format("02-01-2006") + ")"})
+			case out.Pattern != nil:
+				warns = append(warns, UploadIssue{Line: line, Name: nip, Message: "Sudah ada jadwal per tanggal sampai " +
+					last.Format("02-01-2006") + "; jadwal per tanggal tetap berlaku di atas pola"})
+			}
 		}
 		if dated || out.DepartmentID != nil || out.PositionID != nil {
 			valid = append(valid, out)

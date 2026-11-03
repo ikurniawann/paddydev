@@ -35,7 +35,6 @@ func run(args []string, stdout, stderr io.Writer) int {
 	file := fs.String("file", "", "file Excel terisi (preview/apply)")
 	out := fs.String("out", "", "tujuan template (template)")
 	sha := fs.String("sha", "", "sha256 file dari pratinjau (apply)")
-	today := fs.String("today", domain.TodayWIB(time.Now()), "hari ini (YYYY-MM-DD, WIB)")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -66,7 +65,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return fail("koneksi database: " + err.Error())
 	}
 	defer pool.Close()
-	if err := execute(ctx, pool, *mode, *file, *out, *sha, *today, stdout); err != nil {
+	// "Hari ini" selalu jam server (WIB): tidak bisa dimundurkan untuk melewati cek tanggal.
+	if err := execute(ctx, pool, *mode, *file, *out, *sha, domain.TodayWIB(time.Now()), stdout); err != nil {
 		fmt.Fprintln(stderr, "GAGAL:", err)
 		return 1
 	}
@@ -133,6 +133,9 @@ func report(w io.Writer, rep *hris.WorkDataReport, title string) {
 			fmt.Fprintf(w, "| %d | %s | %s: %s |\n", is.Line, is.Name, kind, is.Message)
 		}
 		fmt.Fprintln(w)
+	}
+	for _, n := range rep.Notes {
+		fmt.Fprintln(w, "- "+n)
 	}
 	fmt.Fprintln(w, "## Perubahan per karyawan\n\n| Baris | NIP | Nama | Penempatan | Tipe | Pola | Berlaku | Dept/Jabatan |\n|---|---|---|---|---|---|---|---|")
 	yes := func(b bool) string {

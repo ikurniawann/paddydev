@@ -16,6 +16,7 @@ func TestRunRefusesBadArgs(t *testing.T) {
 		{[]string{"-mode", "preview"}, "-file wajib"},
 		{[]string{"-mode", "hapus"}, "mode harus audit, template, preview, atau apply"},
 		{[]string{"-mode", "template"}, "-out wajib"},
+		{[]string{"-mode", "audit", "-today", "2020-01-01"}, "flag provided but not defined: -today"},
 	}
 	for _, c := range cases {
 		var out, errOut bytes.Buffer

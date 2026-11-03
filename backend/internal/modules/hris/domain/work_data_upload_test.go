@@ -11,9 +11,10 @@ func workDataMasters() WorkDataMasters {
 			"A1": {ID: "ea", NIP: "A1", Name: "Ana Shift", ScheduleType: "shift", Active: true},
 			"B1": {ID: "eb", NIP: "B1", Name: "Budi HQ", ScheduleType: "non_shift", Active: true},
 			"C1": {ID: "ec", NIP: "C1", Name: "Cici Keluar", ScheduleType: "shift", Active: false},
-			"D1": {ID: "ed", NIP: "D1", Name: "Dodi Roster", ScheduleType: "shift", Active: true, RosterFrom: "2026-11-12"},
+			"D1": {ID: "ed", NIP: "D1", Name: "Dodi Roster", ScheduleType: "shift", Active: true, RosterLast: "2026-11-30"},
+			"E1": {ID: "ee", NIP: "E1", Name: "Eka Pola", ScheduleType: "non_shift", Active: true},
 		},
-		Branches:    map[string]string{"BXST": "br-bxst"},
+		Branches:    map[string]string{"BXST": "br-bxst", "DUA": ""},
 		Shifts:      map[string]UploadShift{"SPG1": {ID: "s1", Code: "SPG1", Start: "08:00:00", End: "16:00:00", Active: true}, "SPG3": {ID: "s3", Code: "SPG3", Start: "13:30:00", End: "21:30:00", Active: true}},
 		Departments: map[string]string{"retail operational": "d-retail"},
 		Positions:   map[string]string{"shopkeeper staff": "p-shop", "supervisor": ""},
@@ -86,7 +87,16 @@ func TestValidateWorkData(t *testing.T) {
 	check("tanpa libur", wdRow("A1", "", "", wdWeek("SPG1", "SPG1", "SPG1", "SPG1", "SPG1", "SPG1", "SPG1"), "2026-11-10", "", ""),
 		"", "Pola tanpa hari LIBUR (masuk 7 hari)")
 	check("roster sudah ada", wdRow("D1", "", "", full, "2026-11-10", "", ""),
-		"", "Sudah ada jadwal per tanggal mulai 12-11-2026; jadwal per tanggal tetap berlaku di atas pola")
+		"", "Sudah ada jadwal per tanggal sampai 30-11-2026; jadwal per tanggal tetap berlaku di atas pola")
+	check("ke non-shift hapus roster", wdRow("D1", "", "Non-Shift", nil, "2026-11-10", "", ""),
+		"", "Ubah ke Non-Shift menghapus jadwal per tanggal mulai 10-11-2026 (sampai 30-11-2026)")
+	check("ke shift tanpa pola", wdRow("E1", "", "Shift", nil, "2026-11-10", "", ""),
+		"Ubah ke Shift wajib mengisi pola Senin–Minggu (jadwal tetap berhenti mulai Berlaku Mulai)", "")
+	if v := check("ke shift berpola", wdRow("E1", "", "Shift", full, "2026-11-10", "", ""), "", ""); len(v) != 1 {
+		t.Fatalf("ke shift berpola = %+v", v)
+	}
+	check("kode toko ganda", wdRow("A1", "DUA", "", nil, "2026-11-10", "", ""),
+		"Kode toko DUA ada lebih dari satu di master — hubungi tim", "")
 
 	check("jabatan ganda di master", wdRow("A1", "", "", nil, "", "", "Supervisor"),
 		"Jabatan Supervisor ada lebih dari satu di master — tulis maksudnya di Catatan dan hubungi tim", "")
