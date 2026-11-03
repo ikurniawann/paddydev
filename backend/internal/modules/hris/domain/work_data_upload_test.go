@@ -16,7 +16,7 @@ func workDataMasters() WorkDataMasters {
 		Branches:    map[string]string{"BXST": "br-bxst"},
 		Shifts:      map[string]UploadShift{"SPG1": {ID: "s1", Code: "SPG1", Start: "08:00:00", End: "16:00:00", Active: true}, "SPG3": {ID: "s3", Code: "SPG3", Start: "13:30:00", End: "21:30:00", Active: true}},
 		Departments: map[string]string{"retail operational": "d-retail"},
-		Positions:   map[string]string{"shopkeeper staff": "p-shop"},
+		Positions:   map[string]string{"shopkeeper staff": "p-shop", "supervisor": ""},
 		Today:       "2026-11-03",
 		ClosedFrom:  func(d string) bool { return d <= "2026-10-31" },
 	}
@@ -88,6 +88,12 @@ func TestValidateWorkData(t *testing.T) {
 	check("roster sudah ada", wdRow("D1", "", "", full, "2026-11-10", "", ""),
 		"", "Sudah ada jadwal per tanggal mulai 12-11-2026; jadwal per tanggal tetap berlaku di atas pola")
 
+	check("jabatan ganda di master", wdRow("A1", "", "", nil, "", "", "Supervisor"),
+		"Jabatan Supervisor ada lebih dari satu di master — tulis maksudnya di Catatan dan hubungi tim", "")
+	// Sel tanggal Excel terbaca sebagai timestamp ISO (Review Focus 5).
+	if v := check("tanggal excel", wdRow("A1", "BXST", "", nil, "2026-11-10T00:00:00.000Z", "", ""), "", ""); len(v) != 1 || v[0].From != "2026-11-10" {
+		t.Fatalf("tanggal excel = %+v", v)
+	}
 	// Hanya departemen/jabatan: tanpa tanggal tetap boleh.
 	if v := check("jabatan saja", wdRow("A1", "", "", nil, "", "", "Shopkeeper Staff"), "", ""); len(v) != 1 || *v[0].PositionID != "p-shop" {
 		t.Fatalf("jabatan saja = %+v", v)

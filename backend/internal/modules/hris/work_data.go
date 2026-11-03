@@ -2,11 +2,16 @@ package hris
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
 
 	"nuhabit/backend/internal/modules/hris/domain"
+	"nuhabit/backend/internal/platform/audit"
+	"nuhabit/backend/internal/platform/auth"
 	"nuhabit/backend/internal/platform/database"
 	"nuhabit/backend/internal/platform/xlsx"
 )
@@ -330,4 +335,156 @@ var workDataGuide = [][]any{
 	{"7. Karyawan lain boleh ditambahkan di baris kosong (cukup NIP + kolom yang diubah)."},
 	{""},
 	{"Setelah selesai, kirim file kembali. Tim menjalankan pratinjau (daftar baris salah dan peringatan) sebelum menyimpan ke HRIS."},
+}
+
+/* ── Pratinjau & terapkan (R3, R4) ─────────────────────────────────────── */
+
+// workDataActorName is the audit actor of the ops command.
+const workDataActorName = "Sistem (unggah massal data kerja)"
+
+// WorkDataReport is the preview/apply result.
+type WorkDataReport struct {
+	SHA                     string
+	Valid, Errors, Warnings int
+	Issues                  []domain.UploadIssue // errors first, then warnings
+	Rows                    []domain.WorkDataRow
+}
+
+// WorkDataPreview validates the file against the live masters without
+// writing anything.
+func WorkDataPreview(ctx context.Context, q database.Querier, file []byte, today string) (*WorkDataReport, error) {
+	m, err := xlsx.ParseMatrix(file, xlsx.ReadOptions{PreferSheet: "Data"})
+	if err != nil {
+		return nil, err
+	}
+	masters, err := loadWorkDataMasters(ctx, q, today)
+	if err != nil {
+		return nil, err
+	}
+	var header []string
+	var body [][]string
+	if len(m) > 0 {
+		header, body = m[0], m[1:]
+	}
+	valid, errs, warns := domain.ValidateWorkData(header, body, 2, masters)
+	sum := sha256.Sum256(file)
+	return &WorkDataReport{SHA: hex.EncodeToString(sum[:]), Valid: len(valid), Errors: len(errs), Warnings: len(warns),
+		Issues: append(errs, warns...), Rows: valid}, nil
+}
+
+// WorkDataApply writes a previewed file on tx (the caller commits): it is
+// refused when sha is not the file's sha256 or any row has an error, before
+// anything is written.
+func WorkDataApply(ctx context.Context, tx database.DB, file []byte, today, sha string) (*WorkDataReport, error) {
+	rep, err := WorkDataPreview(ctx, tx, file, today)
+	if err != nil {
+		return nil, err
+	}
+	if sha != rep.SHA {
+		return nil, fmt.Errorf("sha file %s tidak sama dengan sha pratinjau %s — jalankan pratinjau ulang", rep.SHA, sha)
+	}
+	if rep.Errors > 0 {
+		return nil, fmt.Errorf("file masih berisi %d baris error — perbaiki lalu pratinjau ulang", rep.Errors)
+	}
+	r := newStore(tx)
+	actor := &auth.User{FullName: workDataActorName}
+	guard := clearGuard{Allowed: true, Reason: "Unggah massal data kerja (EPIC-086)"}
+	counts := map[string]int{}
+	for _, row := range rep.Rows {
+		if err := applyWorkDataRow(ctx, r, actor, guard, row, counts); err != nil {
+			return nil, fmt.Errorf("baris %d (%s): %w", row.Line, row.NIP, err)
+		}
+	}
+	name := workDataActorName
+	if err := audit.Write(ctx, tx, audit.Entry{ActorName: &name, Action: "hris.bulk_work_data", Entity: "hris",
+		After: map[string]any{"sha": rep.SHA, "rows": rep.Valid, "warnings": rep.Warnings, "changes": counts}}); err != nil {
+		return nil, err
+	}
+	return rep, nil
+}
+
+// applyWorkDataRow writes one employee's changes in R4 order.
+func applyWorkDataRow(ctx context.Context, r *store, actor *auth.User, g clearGuard, row domain.WorkDataRow, counts map[string]int) error {
+	q := r.querier()
+	if row.DepartmentID != nil || row.PositionID != nil {
+		var dept, pos *string
+		if err := q.QueryRow(ctx, `SELECT department_id::text, job_title_id::text FROM hris.employees WHERE id = $1`,
+			row.EmployeeID).Scan(&dept, &pos); err != nil {
+			return err
+		}
+		if _, err := q.Exec(ctx, `UPDATE hris.employees SET department_id = coalesce($2::uuid, department_id),
+			job_title_id = coalesce($3::uuid, job_title_id), updated_at = now() WHERE id = $1`,
+			row.EmployeeID, row.DepartmentID, row.PositionID); err != nil {
+			return err
+		}
+		if err := writeEmployeeAudit(ctx, q, actor, "employee.update", row.EmployeeID, row.Name,
+			map[string]any{"department_id": dept, "job_title_id": pos},
+			map[string]any{"department_id": row.DepartmentID, "job_title_id": row.PositionID}); err != nil {
+			return err
+		}
+		counts["departemen_jabatan"]++
+	}
+	if row.BranchID != nil {
+		changed, err := setPrimaryPlacement(ctx, q, row.EmployeeID, *row.BranchID, row.From)
+		if err != nil {
+			return err
+		}
+		if changed {
+			if err := writeEmployeeAudit(ctx, q, actor, "employee.placement", row.EmployeeID, row.Name, nil,
+				map[string]any{"branch_id": *row.BranchID, "is_primary": true, "start_date": row.From}); err != nil {
+				return err
+			}
+			counts["penempatan"]++
+		}
+	}
+	if row.ScheduleType != nil {
+		res, err := changeScheduleTypeTx(ctx, r, actor, []string{row.EmployeeID}, *row.ScheduleType, row.From, false, g)
+		if err != nil {
+			return err
+		}
+		counts["tipe_jadwal"] += res.Changed
+	}
+	if row.Pattern != nil {
+		days := make([]patternDay, 7)
+		for i, c := range row.Pattern {
+			days[i] = patternDay{DayOfWeek: i + 1, ShiftID: c.Shift1, Shift2ID: c.Shift2}
+		}
+		if err := r.SaveShiftPattern(ctx, row.EmployeeID, row.From, days, workDataActorName); err != nil {
+			return err
+		}
+		if err := writeEmployeeAudit(ctx, q, actor, "employee.shift_pattern", row.EmployeeID, row.Name, nil,
+			map[string]any{"effective_from": row.From, "days": days}); err != nil {
+			return err
+		}
+		counts["pola"]++
+	}
+	return nil
+}
+
+// setPrimaryPlacement makes branch the employee's primary placement from
+// `from` (R4): the running primary ends the day before, primaries starting
+// on/after `from` are removed, and a non-primary row at the same branch
+// overlapping `from` is cut so the EXCLUDE constraints hold. Already
+// primary there: no change.
+func setPrimaryPlacement(ctx context.Context, q database.Querier, employeeID, branchID, from string) (bool, error) {
+	var same bool
+	if err := q.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM hris.employee_placements
+		WHERE employee_id = $1 AND branch_id = $2 AND is_primary AND start_date <= $3::date
+		  AND (end_date IS NULL OR end_date >= $3::date))`, employeeID, branchID, from).Scan(&same); err != nil || same {
+		return false, err
+	}
+	for _, sql := range []string{
+		`DELETE FROM hris.employee_placements WHERE employee_id = $1 AND start_date >= $3::date
+		   AND (is_primary OR branch_id = $2)`,
+		`UPDATE hris.employee_placements SET end_date = $3::date - 1, updated_at = now()
+		 WHERE employee_id = $1 AND start_date < $3::date AND (end_date IS NULL OR end_date >= $3::date)
+		   AND (is_primary OR branch_id = $2)`,
+		`INSERT INTO hris.employee_placements (employee_id, branch_id, is_primary, start_date, notes)
+		 VALUES ($1, $2, true, $3::date, 'Unggah massal data kerja (EPIC-086)')`,
+	} {
+		if _, err := q.Exec(ctx, sql, employeeID, branchID, from); err != nil {
+			return false, err
+		}
+	}
+	return true, nil
 }

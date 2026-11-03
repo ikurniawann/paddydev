@@ -159,15 +159,24 @@ func ValidateWorkData(header []string, rows [][]string, firstLine int, m WorkDat
 			}
 		}
 		if name := cellAt(r, colPos); name != "" {
-			if id, ok := m.Positions[strings.ToLower(name)]; ok {
+			id, ok := m.Positions[strings.ToLower(name)]
+			switch {
+			case ok && id == "":
+				fail("Jabatan " + name + " ada lebih dari satu di master — tulis maksudnya di Catatan dan hubungi tim")
+				bad = true
+			case ok:
 				out.PositionID = &id
-			} else {
+			default:
 				fail("Jabatan " + name + " tidak dikenal")
 				bad = true
 			}
 		}
 		dated := out.BranchID != nil || out.ScheduleType != nil || out.Pattern != nil
-		if from := cellAt(r, colFrom); from != "" {
+		from := cellAt(r, colFrom)
+		if len(from) > 10 && from[10] == 'T' { // sel tanggal Excel dibaca sebagai timestamp ISO
+			from = from[:10]
+		}
+		if from != "" {
 			t, ok := ParseDate(from)
 			switch {
 			case !ok || len(from) != 10:
