@@ -117,8 +117,10 @@ var idMonths = [...]string{"Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu
 // Modules never import each other, so desktop keeps its own copy: change them together.
 var leaveTypeLabels = map[string]string{
 	"annual": "Cuti Tahunan", "sick": "Sakit", "personal": "Izin Pribadi", "leader": "Izin Leader",
-	"maternity": "Cuti Melahirkan", "paternity": "Cuti Ayah", "pilgrimage": "Cuti Ibadah Haji/Umrah",
-	"marriage": "Cuti Menikah", "bereavement": "Cuti Duka",
+	"birthday": "Birthday Leave (Cuti Ulang Tahun)", "maternity": "Cuti Melahirkan", "miscarriage": "Cuti Keguguran",
+	"paternity": "Cuti Istri Melahirkan", "wife_miscarriage": "Cuti Istri Keguguran", "marriage": "Cuti Menikah",
+	"child_marriage": "Cuti Menikahkan Anak", "child_ceremony": "Cuti Khitanan/Baptis Anak",
+	"pilgrimage": "Cuti Ibadah Haji/Umrah", "bereavement": "Cuti Berkabung",
 	"emergency": "Izin Darurat", "unpaid": "Izin Tanpa Gaji", "menstrual": "Cuti Haid",
 }
 

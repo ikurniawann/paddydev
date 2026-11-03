@@ -2,6 +2,7 @@ package domain
 
 import (
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -12,7 +13,8 @@ func TestLeaveTypeCatalog(t *testing.T) {
 			selectable = append(selectable, c)
 		}
 	}
-	want := []string{"annual", "sick", "personal", "leader", "maternity", "paternity", "pilgrimage", "marriage", "bereavement"}
+	want := []string{"annual", "sick", "personal", "leader", "birthday", "maternity", "miscarriage", "paternity",
+		"wife_miscarriage", "marriage", "child_marriage", "child_ceremony", "pilgrimage", "bereavement"}
 	if !slices.Equal(selectable, want) {
 		t.Fatalf("selectable = %v", selectable)
 	}
@@ -22,7 +24,7 @@ func TestLeaveTypeCatalog(t *testing.T) {
 			t.Fatalf("%s harus tetap dikenal tetapi tidak bisa diajukan: %+v %v", removed, lt, ok)
 		}
 	}
-	if len(LeaveTypeCodes()) != 12 {
+	if len(LeaveTypeCodes()) != 17 {
 		t.Fatalf("codes = %v", LeaveTypeCodes())
 	}
 	leader, _ := LookupLeaveType("leader")
@@ -80,5 +82,49 @@ func TestMonthBounds(t *testing.T) {
 	}
 	if MonthOf("2031-03-31") != "2031-03" || MonthOf("2031-04-01") != "2031-04" {
 		t.Fatal("MonthOf")
+	}
+}
+
+// TestLeaveCatalogTnC pins the TnC 03-11 columns (EPIC-084 R1).
+func TestLeaveCatalogTnC(t *testing.T) {
+	get := func(code string) LeaveType {
+		t.Helper()
+		lt, ok := LookupLeaveType(code)
+		if !ok {
+			t.Fatalf("%s tidak ada di katalog", code)
+		}
+		return lt
+	}
+	if b := get("birthday"); !b.Selectable || !b.SingleDay || b.LeadDays != 3 || !b.AttachmentRequired {
+		t.Errorf("birthday = %+v", b)
+	}
+	if m := get("miscarriage"); m.MaxSpanDays != 45 || m.Gender != "female" || !m.AttachmentRequired {
+		t.Errorf("miscarriage = %+v", m)
+	}
+	if p := get("pilgrimage"); p.MaxSpanDays != 40 || p.LeadDays != 30 {
+		t.Errorf("pilgrimage = %+v", p)
+	}
+	if !get("sick").SameDayOnly {
+		t.Error("sick harus SameDayOnly")
+	}
+	if get("marriage").MaxDays != 3 {
+		t.Error("marriage MaxDays harus 3")
+	}
+	if got := LeaveTypeLabel("paternity"); got != "Cuti Istri Melahirkan" {
+		t.Errorf("label paternity = %q", got)
+	}
+	if got := LeaveTypeExportLabel("paternity"); got != "Cuti Ayah" {
+		t.Errorf("export paternity = %q", got)
+	}
+	var selectable []string
+	for _, c := range LeaveTypeCodes() {
+		if get(c).Selectable {
+			selectable = append(selectable, c)
+		}
+	}
+	want := []string{"annual", "sick", "personal", "leader", "birthday", "maternity", "miscarriage", "paternity",
+		"wife_miscarriage", "marriage", "child_marriage", "child_ceremony", "pilgrimage", "bereavement"}
+	if strings.Join(selectable, ",") != strings.Join(want, ",") {
+		t.Errorf("selectable = %v", selectable)
 	}
 }

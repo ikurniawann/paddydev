@@ -109,16 +109,21 @@ func isInt(f float64) bool { return IsFinite(f) && f == float64(int64(f)) }
 /* ── Leave (lib/hris/leave-balances-repo, leave-wa, recruitment/wa) ────── */
 
 // DefaultAnnualLeave is the default annual-leave quota of an employee for
-// year (EPIC-068 R1). It is the Go twin of the SQL function
+// year (EPIC-068 R1, EPIC-084 R7). It is the Go twin of the SQL function
 // hris.default_annual_leave, and the parity test
 // TestDefaultAnnualLeaveSQLMatchesGo pins the two together: change both or
-// neither. Leave is
-// earned after 12 months of service: with A = join + 12 months, A after 31
-// Dec of year gives 0, A on or before 1 Jan gives 12, otherwise 12 × days
-// from A to 31 Dec (inclusive) / days in year, floored to a multiple of 0.5.
+// neither. Leave is earned after 12 months of service: with A = join + 12
+// months, A after 31 Dec of year gives 0, A on or before 1 Jan gives 12. In
+// A's own year:
+//   - up to 2026: 12 × days from A to 31 Dec (inclusive) / days in year,
+//     floored to a multiple of 0.5;
+//   - from 2027: 12 when A falls in January, otherwise the months after A's
+//     month minus the cutiBersama dates (YYYY-MM-DD, already filtered to
+//     active day-off cuti bersama) in those months, floored at 0.
+//
 // A missing or unreadable join date gives 12. Integer maths keeps the floor
 // exact and identical to the SQL function.
-func DefaultAnnualLeave(joinDate *string, year int) float64 {
+func DefaultAnnualLeave(joinDate *string, year int, cutiBersama []string) float64 {
 	if joinDate == nil || *joinDate == "" {
 		return 12
 	}
@@ -140,6 +145,20 @@ func DefaultAnnualLeave(joinDate *string, year int) float64 {
 	if !a.After(yearStart) {
 		return 12
 	}
+	if year >= monthlyProrataFrom {
+		if a.Month() == time.January {
+			return 12
+		}
+		left := 12 - int(a.Month())
+		seen := map[string]bool{} // satu tanggal bisa tercatat dua kali (nama berbeda)
+		for _, d := range cutiBersama {
+			if t, ok := ParseDate(d); ok && t.Year() == year && t.Month() > a.Month() && !seen[d] {
+				seen[d] = true
+				left--
+			}
+		}
+		return float64(max(0, left))
+	}
 	days := int(yearEnd.Sub(a).Hours()/24) + 1
 	inYear := 365
 	if isLeapYear(year) {
@@ -147,6 +166,9 @@ func DefaultAnnualLeave(joinDate *string, year int) float64 {
 	}
 	return float64(24*days/inYear) / 2
 }
+
+// monthlyProrataFrom is the first balance year of the EPIC-084 R7 prorata.
+const monthlyProrataFrom = 2027
 
 func isLeapYear(y int) bool { return y%4 == 0 && (y%100 != 0 || y%400 == 0) }
 

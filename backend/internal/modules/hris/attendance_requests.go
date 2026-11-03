@@ -87,7 +87,7 @@ func (s *Service) CreateAttendanceRequest(ctx context.Context, a *Actor, in atte
 	if msg != "" {
 		return nil, httpx.BadRequest(msg)
 	}
-	if err := s.ensureAttendanceOpen(ctx, in.Date); err != nil {
+	if err := s.ensureSubmissionOpen(ctx, in.Date); err != nil { // EPIC-084 R3
 		return nil, err
 	}
 	pending, err := s.repo.PendingAttendanceRequestOn(ctx, employeeID, in.Date)

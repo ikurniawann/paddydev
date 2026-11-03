@@ -12,6 +12,7 @@ func TestOvertimeManagerCorrectsTimesOnApprove(t *testing.T) {
 	staff, _ := h.staff("pos", nil, true, emp{name: "Crew Dikoreksi", boss: &bossID})
 	lone, _ := h.staff("pos", nil, true, emp{name: "Crew Tanpa Atasan"})
 
+	h.setNow("2026-10-02 09:00") // EPIC-084 R6: diajukan H+1
 	created := h.do(&staff, "POST", "/api/hris/overtime", h.otSelfBody(&staff, "2026-10-01", "17:00", "21:00"))
 	expect(t, created, 200, "")
 	id := created.data()["id"].(string)
@@ -40,6 +41,7 @@ func TestOvertimeManagerCorrectsTimesOnApprove(t *testing.T) {
 	}
 
 	// Karyawan tanpa atasan: HR boleh mengoreksi.
+	h.setNow("2026-10-03 09:00") // EPIC-084 R6: diajukan H+1
 	solo := h.do(&lone, "POST", "/api/hris/overtime", h.otSelfBody(&lone, "2026-10-02", "17:00", "20:00"))
 	expect(t, solo, 200, "")
 	byHR := h.do(&hr, "POST", "/api/hris/overtime/decide",
@@ -57,8 +59,10 @@ func TestOvertimeHRCorrectsWhenManagerInactive(t *testing.T) {
 	_, bossID := h.staff("pos", nil, true, emp{name: "Atasan Nonaktif"})
 	staff, staffID := h.staff("pos", nil, true, emp{name: "Crew Atasan Nonaktif", boss: &bossID})
 
+	h.setNow("2026-10-02 09:00") // EPIC-084 R6: diajukan H+1
 	first := h.do(&staff, "POST", "/api/hris/overtime", h.otSelfBody(&staff, "2026-10-01", "17:00", "21:00"))
 	expect(t, first, 200, "")
+	h.setNow("2026-10-03 09:00") // EPIC-084 R6: diajukan H+1
 	second := h.do(&staff, "POST", "/api/hris/overtime", h.otSelfBody(&staff, "2026-10-02", "17:00", "21:00"))
 	expect(t, second, 200, "")
 	h.exec(`UPDATE hris.employees SET is_active = false WHERE id = $1`, bossID)
@@ -88,6 +92,7 @@ func TestOvertimeCorrectionBreakMinutes(t *testing.T) {
 	hr, _ := h.staff("hrd", []string{menuKepegawaian, "hris.kepegawaian.overtime"}, true)
 	lone, _ := h.staff("pos", nil, true, emp{name: "Crew Istirahat"})
 
+	h.setNow("2026-10-02 09:00") // EPIC-084 R6: diajukan H+1
 	created := h.do(&lone, "POST", "/api/hris/overtime", h.otSelfBody(&lone, "2026-10-01", "17:00", "21:00"))
 	expect(t, created, 200, "")
 	id := created.data()["id"].(string)

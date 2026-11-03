@@ -315,6 +315,64 @@ func ServiceOverOneYear(joinDate, periodEnd string) bool {
 	return join.AddDate(1, 0, 0).Before(end)
 }
 
+// ServiceYearReached: a full year of service on onDate (join + 1 year on or
+// before it, EPIC-084 R8). An unreadable date counts as reached, so a missing
+// join date never cuts pay.
+func ServiceYearReached(joinDate, onDate string) bool {
+	join, err1 := time.Parse(isoDate, joinDate)
+	on, err2 := time.Parse(isoDate, onDate)
+	if err1 != nil || err2 != nil {
+		return true
+	}
+	// 29 Feb + 1 tahun = 28 Feb, seperti interval Postgres dan saldo cuti HRIS.
+	year := join.AddDate(1, 0, 0)
+	if join.Month() == time.February && join.Day() == 29 {
+		year = time.Date(join.Year()+1, time.February, 28, 0, 0, 0, 0, time.UTC)
+	}
+	return !year.After(on)
+}
+
+// LeaveTnCEffective is the TnC 03-11 date: leave starting earlier keeps the
+// old pay (maternity under a year → PIS, Cuti Ibadah full paid), so approved
+// leave is never cut retroactively (EPIC-084 final review).
+const LeaveTnCEffective = "2026-11-03"
+
+// pilgrimagePaidDays is how many calendar days of a Cuti Ibadah stay paid
+// for an employee under a year of service (TnC 03-11).
+const pilgrimagePaidDays = 14
+
+// LeaveDayKind classifies one working day of an approved leave (EPIC-084 R8):
+// "personal" (PIP), "sick" (PIS) or "" (full paid). Cuti Melahirkan/Keguguran
+// are paid only with a year of service at the leave start; past its first 14
+// calendar days Cuti Ibadah is paid under the same condition. Leave starting
+// before LeaveTnCEffective keeps the old pay.
+func LeaveDayKind(leaveType, leaveStart, day, joinDate string) string {
+	switch leaveType {
+	case "personal":
+		return "personal"
+	case "sick":
+		return "sick"
+	case "maternity", "miscarriage":
+		if ServiceYearReached(joinDate, leaveStart) {
+			return ""
+		}
+		if leaveStart < LeaveTnCEffective {
+			return "sick"
+		}
+		return "personal"
+	case "pilgrimage":
+		if leaveStart < LeaveTnCEffective {
+			return ""
+		}
+		start, err := time.Parse(isoDate, leaveStart)
+		if err == nil && day >= start.AddDate(0, 0, pilgrimagePaidDays).Format(isoDate) &&
+			!ServiceYearReached(joinDate, leaveStart) {
+			return "personal"
+		}
+	}
+	return ""
+}
+
 // earliestScheduleFrom is the earliest effective_from of the rows ("" without rows).
 func earliestScheduleFrom(rows []ShiftRow) string {
 	first := ""

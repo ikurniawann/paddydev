@@ -6,6 +6,7 @@ import "testing"
 // langsung; badge ikut Perjalanan Dinas dan kasbon tahap manager.
 func TestTeamApprovalsQueueAndBadge(t *testing.T) {
 	h, _ := newFileHarness(t)
+	h.setNow("2026-10-02 10:00") // EPIC-084 R6: lembur 01-10 masih dalam batas H+1
 	boss, bossID := h.staff("pos", nil, true, emp{name: "Atasan Tim"})
 	memberA, _ := h.staff("pos", nil, true, emp{name: "Anggota A", boss: &bossID})
 	memberB, _ := h.staff("pos", nil, true, emp{name: "Anggota B", boss: &bossID})

@@ -417,7 +417,8 @@ func Calculate(in Input, c Config) Result {
 	// G6: PIP dan PIS (EPIC-059 R6/R7). Komponen per_day sudah tidak dibayar
 	// pada hari tidak hadir, jadi yang dipotong hanya bagian yang tetap dibayar:
 	// PIP = pokok (bukan upah harian) + jabatan + transport/makan flat;
-	// PIS (sakit + melahirkan) = transport/makan flat. Intern tidak dipotong PIP.
+	// PIS (sakit) = transport/makan flat; Cuti Melahirkan full paid (ES-16,
+	// EPIC-084). Intern tidak dipotong PIP.
 	flatTransport, flatMeal := in.TransportAllowance, in.MealAllowance
 	if in.TransportPerDay {
 		flatTransport = 0
@@ -433,8 +434,8 @@ func Calculate(in Input, c Config) Result {
 		}
 		personal = Round(perDay(pipBasis, in.PersonalLeaveDays))
 	}
-	if sickDays := in.SickLeaveDays + in.MaternityLeaveDays; c.SickLeaveDeduction && sickDays > 0 {
-		sick = Round(perDay(flatTransport+flatMeal, sickDays))
+	if c.SickLeaveDeduction && in.SickLeaveDays > 0 {
+		sick = Round(perDay(flatTransport+flatMeal, in.SickLeaveDays))
 	}
 
 	method := c.Pph21Method

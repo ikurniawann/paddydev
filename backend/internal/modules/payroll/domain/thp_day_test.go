@@ -55,12 +55,13 @@ func TestPersonalLeaveNoDoubleDeduction(t *testing.T) {
 	eq(t, "intern tanpa PIP", intern.PersonalLeaveDeduction, 0)
 }
 
-// Sakit & Cuti Melahirkan: potong transport + makan hanya bagian flat.
+// Sakit: potong transport + makan hanya bagian flat. Cuti Melahirkan tidak
+// lagi dipotong (ES-16, EPIC-084).
 func TestSickAndMaternityDeductFlatAllowancesOnly(t *testing.T) {
 	c := DefaultConfig()
 	c.SickLeaveDeduction = true
 	flat := Calculate(base4(func(in *Input) { in.SickLeaveDays, in.MaternityLeaveDays = 1, 2 }), c)
-	eq(t, "flat: (220k+220k)/22 × 3", flat.SickLeaveDeduction, 60_000)
+	eq(t, "flat: (220k+220k)/22 × 1 sakit", flat.SickLeaveDeduction, 20_000)
 	perDay := Calculate(base4(func(in *Input) {
 		in.TransportPerDay, in.MealPerDay = true, true
 		in.SickLeaveDays, in.MaternityLeaveDays = 1, 2

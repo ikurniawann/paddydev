@@ -19,12 +19,23 @@ func TestDefaultAnnualLeaveSQLMatchesGo(t *testing.T) {
 		"2020-02-29", "2023-12-31", "2024-01-01", "2024-02-29", "2024-03-01", "2024-12-31",
 		"2025-01-01", "2025-01-02", "2025-02-28", "2025-03-10", "2025-06-30", "2025-07-01",
 		"2025-12-30", "2025-12-31", "2026-01-01", "2026-02-01", "2026-12-31", "2027-07-01",
-		"2027-12-31", "2028-02-29",
+		"2027-12-31", "2028-02-29", "2026-01-15", "2026-05-10", "2026-11-10",
 	}
-	for _, year := range []int{2024, 2025, 2026, 2028} {
+	// EPIC-084 R7: only active day-off cuti bersama count; the others are
+	// inserted to prove the SQL filter matches the list Go receives.
+	h.exec(`INSERT INTO hris.public_holidays (holiday_date, name, type, deducts_leave, status, is_day_off) VALUES
+		('2027-05-20', 'CB Mei', 'cuti_bersama', true, 'aktif', true),
+		('2027-06-15', 'CB Juni', 'cuti_bersama', true, 'aktif', true),
+		('2027-06-15', 'CB Juni (impor ganda)', 'cuti_bersama', true, 'aktif', true),
+		('2027-12-24', 'CB Natal', 'cuti_bersama', true, 'aktif', true),
+		('2027-08-18', 'CB kerja', 'cuti_bersama', true, 'aktif', false),
+		('2027-09-10', 'CB tak memotong', 'cuti_bersama', false, 'aktif', true),
+		('2027-10-10', 'Nasional', 'nasional', false, 'aktif', true)`)
+	cb := []string{"2027-05-20", "2027-06-15", "2027-12-24"}
+	for _, year := range []int{2024, 2025, 2026, 2027, 2028} {
 		for _, join := range joins {
 			got := h.scalar(`SELECT hris.default_annual_leave($1::date, $2::int)::text`, join, year)
-			want := domain.DefaultAnnualLeave(&join, year)
+			want := domain.DefaultAnnualLeave(&join, year, cb)
 			if f, err := strconv.ParseFloat(got, 64); err != nil || f != want {
 				t.Errorf("join %s year %d: SQL %s, Go %v", join, year, got, want)
 			}
@@ -57,7 +68,7 @@ func TestNewEmployeeLeaveBalanceRows(t *testing.T) {
 
 	for _, year := range []int{curYear - 1, curYear} {
 		got, _ := strconv.ParseFloat(h.scalar(`SELECT annual_leave_total::text FROM hris.leave_balances WHERE employee_id = $1 AND year = $2`, id, year), 64)
-		if want := domain.DefaultAnnualLeave(&join, year); got != want {
+		if want := domain.DefaultAnnualLeave(&join, year, nil); got != want {
 			t.Errorf("year %d: total %v, want %v", year, got, want)
 		}
 	}

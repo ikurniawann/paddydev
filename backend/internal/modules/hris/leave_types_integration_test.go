@@ -105,7 +105,8 @@ func TestLeaderLeaveEligibility(t *testing.T) {
 func TestLeaveMonthlyQuota(t *testing.T) {
 	h := newHarness(t)
 	hr, _ := h.staff("hrd", []string{menuWorkforce, iam.LeafCuti}, true) // EPIC-067 R11: approve on Cuti
-	staff, _ := h.staff("pos", nil, true)
+	staff, staffID := h.staff("pos", nil, true)
+	h.setBalance(staffID, 2031, 0, 0, 0, 0, 0, nil) // EPIC-084 R5: Izin Pribadi saat cuti habis
 	var ids []string
 	for _, d := range []string{"2031-03-04", "2031-03-05", "2031-03-06"} {
 		res := h.do(&staff, "POST", "/api/hris/leaves", leaveBody("personal", d, d))
@@ -121,7 +122,7 @@ func TestLeaveMonthlyQuota(t *testing.T) {
 		"rejection_reason": "Uji kuota"}), 200, "")
 	expect(t, h.do(&staff, "POST", "/api/hris/leaves", leaveBody("personal", "2031-03-31", "2031-03-31")), 200, "")
 	// Kombinasi: jenis lain di bulan yang sama tetap boleh, kuotanya terpisah.
-	expect(t, h.do(&staff, "POST", "/api/hris/leaves", leaveBody("annual", "2031-03-11", "2031-03-12")), 200, "")
+	expect(t, h.do(&staff, "POST", "/api/hris/leaves", leaveBody("bereavement", "2031-03-11", "2031-03-12")), 200, "")
 }
 
 func TestLeaveOverlapRefused(t *testing.T) {
@@ -130,14 +131,14 @@ func TestLeaveOverlapRefused(t *testing.T) {
 	staff, _ := h.staff("pos", nil, true)
 	annual := h.do(&staff, "POST", "/api/hris/leaves", leaveBody("annual", "2031-03-04", "2031-03-06"))
 	expect(t, annual, 200, "")
-	expect(t, h.do(&staff, "POST", "/api/hris/leaves", leaveBody("personal", "2031-03-05", "2031-03-05")), 400,
+	expect(t, h.do(&staff, "POST", "/api/hris/leaves", leaveBody("bereavement", "2031-03-05", "2031-03-05")), 400,
 		"Tanggal ini bertabrakan dengan pengajuan Cuti Tahunan (2031-03-04 s.d. 2031-03-06, menunggu persetujuan)")
 	// Bersebelahan boleh (dikombinasikan).
-	expect(t, h.do(&staff, "POST", "/api/hris/leaves", leaveBody("personal", "2031-03-07", "2031-03-07")), 200, "")
+	expect(t, h.do(&staff, "POST", "/api/hris/leaves", leaveBody("bereavement", "2031-03-07", "2031-03-07")), 200, "")
 	// Setelah dibatalkan, tanggalnya bebas lagi.
 	id := annual.data()["id"].(string)
 	expect(t, h.do(&hr, "PUT", "/api/hris/leaves/"+id, map[string]any{"status": "cancelled"}), 200, "")
-	expect(t, h.do(&staff, "POST", "/api/hris/leaves", leaveBody("personal", "2031-03-05", "2031-03-05")), 200, "")
+	expect(t, h.do(&staff, "POST", "/api/hris/leaves", leaveBody("bereavement", "2031-03-05", "2031-03-05")), 200, "")
 }
 
 func TestLeaveQuotaEndpoint(t *testing.T) {
@@ -147,6 +148,7 @@ func TestLeaveQuotaEndpoint(t *testing.T) {
 	spv, spvID := h.staff("pos", nil, true)
 	stranger, _ := h.staff("pos", nil, true)
 	h.leaderPosition(spvID, "Supervisor")
+	h.setBalance(spvID, 2031, 0, 0, 0, 0, 0, nil) // EPIC-084 R5
 	expect(t, h.do(&spv, "POST", "/api/hris/leaves", leaveBody("personal", "2031-03-04", "2031-03-04")), 200, "")
 
 	own := h.do(&spv, "GET", "/api/hris/leave-quota?month=2031-03", nil)
@@ -179,7 +181,8 @@ func TestLeaveQuotaEndpoint(t *testing.T) {
 // (keputusan user 20-10-2026). Kode "internship" dari rekrutmen ikut.
 func TestLeaveQuotaInternNoThpDeduction(t *testing.T) {
 	h := newHarness(t)
-	intern, _ := h.staff("pos", nil, true, emp{status: "intern"})
+	intern, internID := h.staff("pos", nil, true, emp{status: "intern"})
+	h.setBalance(internID, 2031, 0, 0, 0, 0, 0, nil) // EPIC-084 R5
 	recruited, _ := h.staff("pos", nil, true, emp{status: "internship"})
 	worker, _ := h.staff("pos", nil, true, emp{status: "contract"})
 

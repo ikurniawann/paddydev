@@ -108,7 +108,7 @@ export const TOGGLE_FIELDS: { key: string; label: string; help: string }[] = [
   },
   {
     key: "sick_leave_deduction",
-    label: "Potong transport & makan saat Sakit / Cuti Melahirkan",
+    label: "Potong transport & makan saat Sakit",
     help: "Hanya tunjangan flat: (transport + makan) ÷ pembagi hari × hari sakit & melahirkan. Tunjangan per hari sudah tidak dibayar saat tidak hadir.",
   },
 ];

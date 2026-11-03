@@ -167,6 +167,7 @@ func TestLeaves(t *testing.T) {
 
 func TestOvertimeAndShifts(t *testing.T) {
 	h, _ := newFileHarness(t)
+	h.setNow("2026-10-02 10:00") // EPIC-084 R6: lembur 01-10 masih dalam batas H+1
 	hr, _ := h.staff("hrd", []string{menuKepegawaian}, true)
 	boss, bossID := h.staff("pos", nil, true)
 	staff, own := h.staff("pos", nil, true)

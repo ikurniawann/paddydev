@@ -67,8 +67,34 @@ func (s *store) LeavePage(ctx context.Context, f leaveFilter, page, limit int) (
 }
 
 func (s *store) LeaveEmployee(ctx context.Context, id string) (*Row, error) {
-	row, err := queryRow(ctx, s.db, `SELECT id, full_name, employment_status, is_active, schedule_type FROM hris.employees WHERE id = $1`, id)
+	row, err := queryRow(ctx, s.db, `SELECT id, full_name, employment_status, is_active, schedule_type,
+		       gender, birth_date::text AS birth_date, join_date::text AS join_date
+		FROM hris.employees WHERE id = $1`, id)
 	return row, ignoreBadInput(err)
+}
+
+// FirstContract is the employee's earliest non-draft contract (EPIC-084 R4);
+// nil without one.
+func (s *store) FirstContract(ctx context.Context, employeeID string) (*domain.FirstContract, error) {
+	var end, probation *string
+	err := s.db.QueryRow(ctx, `SELECT end_date::text, probation_end_date::text
+		FROM hris.employment_contracts
+		WHERE employee_id = $1 AND status <> 'draft'
+		ORDER BY start_date, sequence LIMIT 1`, employeeID).Scan(&end, &probation)
+	if database.IsNoRows(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	fc := domain.FirstContract{}
+	if end != nil {
+		fc.EndDate = *end
+	}
+	if probation != nil {
+		fc.ProbationEnd = *probation
+	}
+	return &fc, nil
 }
 
 // ActiveHolidays is loadHolidayIndex's query: only aktif rows count.

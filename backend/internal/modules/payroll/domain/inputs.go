@@ -277,8 +277,9 @@ func BuildInputRange(emp Employee, salary Salary, rec WorkforceRecords, loans []
 			if !IsWorkDate(d, periodSchedule, holidays) || (partial && !inCoverage(d)) {
 				continue
 			}
-			// Hanya unpaid/personal/sick/maternity yang memotong; leader dan
-			// jenis lain full paid (EPIC-058).
+			// Yang memotong: unpaid, lalu LeaveDayKind (EPIC-084 R8): Izin Pribadi,
+			// Sakit, dan melahirkan/keguguran/haji > 14 hari bila masa kerja < 1
+			// tahun. Jenis lain full paid.
 			if l.LeaveType == "unpaid" {
 				unpaid++
 				unpaidDates[d] = true
@@ -289,13 +290,14 @@ func BuildInputRange(emp Employee, salary Salary, rec WorkforceRecords, loans []
 			if attended[d] {
 				continue
 			}
-			switch l.LeaveType {
+			switch LeaveDayKind(l.LeaveType, *s, d, emp.JoinDate) {
 			case "personal":
 				personal++
 			case "sick":
 				sick++
-			case "maternity":
-				maternity++
+			}
+			if l.LeaveType == "maternity" || l.LeaveType == "miscarriage" {
+				maternity++ // informasi slip; tidak lagi memotong (ES-16)
 			}
 			paidLeaveDates[d] = true
 		}

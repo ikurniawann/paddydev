@@ -6,8 +6,9 @@
  */
 
 export type LeaveTypeCode =
-  | "annual" | "sick" | "personal" | "leader" | "maternity" | "paternity"
-  | "pilgrimage" | "marriage" | "bereavement" | "emergency" | "unpaid" | "menstrual";
+  | "annual" | "sick" | "personal" | "leader" | "birthday" | "maternity" | "miscarriage" | "paternity"
+  | "wife_miscarriage" | "marriage" | "child_marriage" | "child_ceremony" | "pilgrimage" | "bereavement"
+  | "emergency" | "unpaid" | "menstrual";
 
 export interface LeaveTypeInfo {
   code: LeaveTypeCode;
@@ -20,20 +21,41 @@ export interface LeaveTypeInfo {
   leaderOnly?: boolean;
   /** Memotong 1 hari THP per hari izin (rule PIP payroll). */
   deductsThpDay?: boolean;
+  /** Aturan TnC 03-11 (EPIC-084 R1); kosong = tanpa batas. */
+  maxDays?: number; // hari kerja per pengajuan
+  maxSpanDays?: number; // hari kalender per pengajuan
+  leadDays?: number; // diajukan paling lambat H-n
+  sameDayOnly?: boolean; // diajukan pada hari itu
+  attachmentRequired?: boolean;
+  gender?: "female" | "male";
 }
 
 export const LEAVE_TYPES: readonly LeaveTypeInfo[] = [
-  { code: "annual", label: "Cuti Tahunan", short: "Tahunan", exportLabel: "Cuti Tahunan", selectable: true },
-  { code: "sick", label: "Sakit", short: "Sakit", exportLabel: "Cuti Sakit", selectable: true },
+  { code: "annual", label: "Cuti Tahunan", short: "Tahunan", exportLabel: "Cuti Tahunan", selectable: true, leadDays: 3 },
+  { code: "sick", label: "Sakit", short: "Sakit", exportLabel: "Cuti Sakit", selectable: true, sameDayOnly: true },
   { code: "personal", label: "Izin Pribadi", short: "Izin Pribadi", exportLabel: "Izin Pribadi", selectable: true,
     monthlyQuota: 3, singleDay: true, deductsThpDay: true },
   { code: "leader", label: "Izin Leader", short: "Izin Leader", exportLabel: "Izin Leader", selectable: true,
     monthlyQuota: 1, singleDay: true, leaderOnly: true },
-  { code: "maternity", label: "Cuti Melahirkan", short: "Melahirkan", exportLabel: "Cuti Melahirkan", selectable: true },
-  { code: "paternity", label: "Cuti Ayah", short: "Ayah", exportLabel: "Cuti Ayah", selectable: true },
-  { code: "pilgrimage", label: "Cuti Ibadah Haji/Umrah", short: "Haji/Umrah", exportLabel: "Cuti Haji/Umrah", selectable: true },
-  { code: "marriage", label: "Cuti Menikah", short: "Pernikahan", exportLabel: "Cuti Menikah", selectable: true },
-  { code: "bereavement", label: "Cuti Duka", short: "Duka Cita", exportLabel: "Cuti Duka", selectable: true },
+  { code: "birthday", label: "Birthday Leave (Cuti Ulang Tahun)", short: "Ulang Tahun",
+    exportLabel: "Birthday Leave (Cuti Ulang Tahun)", selectable: true, singleDay: true, leadDays: 3, attachmentRequired: true },
+  { code: "maternity", label: "Cuti Melahirkan", short: "Melahirkan", exportLabel: "Cuti Melahirkan", selectable: true,
+    maxSpanDays: 90, leadDays: 3, gender: "female" },
+  { code: "miscarriage", label: "Cuti Keguguran", short: "Keguguran", exportLabel: "Cuti Keguguran", selectable: true,
+    maxSpanDays: 45, attachmentRequired: true, gender: "female" },
+  { code: "paternity", label: "Cuti Istri Melahirkan", short: "Istri Melahirkan", exportLabel: "Cuti Ayah", selectable: true,
+    maxDays: 2, gender: "male" },
+  { code: "wife_miscarriage", label: "Cuti Istri Keguguran", short: "Istri Keguguran", exportLabel: "Cuti Istri Keguguran",
+    selectable: true, maxDays: 2, gender: "male" },
+  { code: "marriage", label: "Cuti Menikah", short: "Pernikahan", exportLabel: "Cuti Menikah", selectable: true,
+    maxDays: 3, leadDays: 3 },
+  { code: "child_marriage", label: "Cuti Menikahkan Anak", short: "Menikahkan Anak", exportLabel: "Cuti Menikahkan Anak",
+    selectable: true, maxDays: 2, leadDays: 3 },
+  { code: "child_ceremony", label: "Cuti Khitanan/Baptis Anak", short: "Khitanan/Baptis",
+    exportLabel: "Cuti Khitanan/Baptis Anak", selectable: true, maxDays: 2, leadDays: 3 },
+  { code: "pilgrimage", label: "Cuti Ibadah Haji/Umrah", short: "Haji/Umrah", exportLabel: "Cuti Haji/Umrah", selectable: true,
+    maxSpanDays: 40, leadDays: 30 },
+  { code: "bereavement", label: "Cuti Berkabung", short: "Berkabung", exportLabel: "Cuti Duka", selectable: true, maxDays: 2 },
   // Dihapus untuk pengajuan baru (EPIC-058); riwayat tetap terbaca.
   { code: "emergency", label: "Izin Darurat", short: "Darurat", exportLabel: "Cuti Darurat", selectable: false },
   { code: "unpaid", label: "Izin Tanpa Gaji", short: "Tidak Dibayar", exportLabel: "Cuti Tanpa Upah", selectable: false },
