@@ -36,6 +36,10 @@ type OvertimeRepo interface {
 	CorrectOvertime(ctx context.Context, id, fromStatus string, f fields) (*Row, error)
 	// OvertimeForUpdate is OvertimeForDecision locking the request row.
 	OvertimeForUpdate(ctx context.Context, id string) (*Row, error)
+	// EPIC-085: jadwal, jam terpakai, dan perjalanan dinas untuk aturan TnC.
+	OvertimeShiftEndOn(ctx context.Context, employeeID, date string) (*domain.OvertimeShiftEnd, error)
+	OvertimeHoursUsed(ctx context.Context, employeeID, from, to, excludeID string) (float64, error)
+	OnApprovedTrip(ctx context.Context, employeeID, date string) (bool, error)
 }
 
 type overtimeFilter struct {
@@ -180,6 +184,9 @@ func (s *Service) CreateOvertime(ctx context.Context, a *Actor, in overtimeInput
 	if target == nil || (target.Has("is_active") && target.Get("is_active") == false) {
 		return nil, httpx.NotFound("Karyawan tidak ditemukan/nonaktif")
 	}
+	if err := s.overtimeLevelCheck(ctx, *targetID); err != nil { // EPIC-085 R1
+		return nil, err
+	}
 	exists, err := s.repo.OvertimeActiveOn(ctx, *targetID, in.Date)
 	if err != nil {
 		return nil, err
@@ -204,6 +211,11 @@ func (s *Service) CreateOvertime(ctx context.Context, a *Actor, in overtimeInput
 	if err != nil {
 		return nil, err
 	}
+	if isSelf { // EPIC-085 R2; HR assigning someone sets the hours itself
+		if err := s.overtimeStartCheck(ctx, s.repo, *targetID, in.Date, in.StartTime, dayType); err != nil {
+			return nil, err
+		}
+	}
 	source := "company"
 	if isSelf {
 		source = "employee"
@@ -223,6 +235,9 @@ func (s *Service) CreateOvertime(ctx context.Context, a *Actor, in overtimeInput
 	f.add("requested_by", a.EmployeeID)
 	var row *Row
 	err = s.repo.InTx(ctx, func(r Repository) error {
+		if err := s.checkOvertimeCaps(ctx, r, *targetID, in.Date, hours, ""); err != nil { // EPIC-085 R3
+			return err
+		}
 		var err error
 		if row, err = r.InsertOvertime(ctx, f); err != nil || source != "employee" {
 			return err
@@ -338,6 +353,7 @@ func (s *Service) DecideOvertime(ctx context.Context, a *Actor, id, action strin
 			auditAfter["day_type"] = *dayType
 		}
 	}
+	correctedHours := 0.0 // > 0 bila jam dikoreksi (EPIC-085 R3)
 	if times.any() {
 		if action != "approve" || ot.Str("source") != "employee" {
 			return nil, httpx.BadRequest("Koreksi jam hanya saat menyetujui input lembur karyawan")
@@ -370,6 +386,15 @@ func (s *Service) DecideOvertime(ctx context.Context, a *Actor, id, action strin
 			return nil, httpx.BadRequest("Durasi lembur minimal 1 jam")
 		}
 		if start != was.start || end != was.end || brk != was.brk {
+			// EPIC-085 R2/R3 untuk jam hasil koreksi.
+			dt := ot.Str("day_type")
+			if action == "approve" && isHR && dayType != nil && ot.Str("source") == "employee" {
+				dt = *dayType
+			}
+			if err := s.overtimeStartCheck(ctx, s.repo, ot.Str("employee_id"), dateText(ot, "date"), start, dt); err != nil {
+				return nil, err
+			}
+			correctedHours = hours
 			f.add("start_time", start)
 			f.add("end_time", end)
 			f.add("break_minutes", brk)
@@ -398,6 +423,11 @@ func (s *Service) DecideOvertime(ctx context.Context, a *Actor, id, action strin
 	f.add("updated_at", now)
 	var row *Row
 	err = s.repo.InTx(ctx, func(r Repository) error {
+		if correctedHours > 0 {
+			if err := s.checkOvertimeCaps(ctx, r, ot.Str("employee_id"), dateText(ot, "date"), correctedHours, id); err != nil {
+				return err
+			}
+		}
 		var err error
 		if row, err = r.DecideOvertime(ctx, id, f); err != nil || decidedAs == "" {
 			return err
