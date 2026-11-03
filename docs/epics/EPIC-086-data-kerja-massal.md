@@ -1,6 +1,6 @@
 # EPIC-086: Pengisian Massal Data Kerja Karyawan (Jadwal, Shift, Penempatan) via Template Excel (`MODULE-HRIS`)
 
-status: backlog
+status: review
 environment: dev
 retries: 0
 
@@ -88,15 +88,54 @@ Alurnya:
   5. izin user dan HR;
   6. backup → `apply` → verifikasi `audit` ulang.
 
+## Petunjuk ops
+```bash
+ENV=staging tools/ops/data-kerja.sh audit
+ENV=prod tools/ops/data-kerja.sh template          # → ~/Desktop/paddydev-backups/data-kerja/prod-<stamp>/Template-*.xlsx
+ENV=prod tools/ops/data-kerja.sh preview isi.xlsx   # laporan + sha256
+DATA_KERJA_APPROVED=yes ENV=prod tools/ops/data-kerja.sh apply isi.xlsx <sha256>   # pg_dump dulu, satu transaksi
+```
+
+- Hasil (laporan, template, salinan input) disimpan di `~/Desktop/paddydev-backups/data-kerja/<env>-<stamp>/`.
+- Binary dan file input dihapus dari server dan container setelah selesai.
+
 ## Tasks
 Rencana: `docs/superpowers/plans/2026-11-03-data-kerja-massal.md`.
 
 ## Acceptance Criteria
-- [ ] `audit`, `template`, `preview`, dan `apply` berjalan di staging lewat runner.
-- [ ] Template dari master live (kode toko, shift + LIBUR) berisi karyawan yang belum lengkap.
-- [ ] Pratinjau melaporkan baris valid, error (dengan alasan), dan peringatan sesuai R3.
-- [ ] `apply` atomik: satu baris error → tidak ada yang tertulis; audit lengkap; `audit` ulang menunjukkan celah tertutup.
+- [x] `audit`, `template`, `preview`, dan `apply` berjalan di staging lewat runner.
+- [x] Template dari master live (kode toko, shift + LIBUR) berisi karyawan yang belum lengkap.
+- [x] Pratinjau melaporkan baris valid, error (dengan alasan), dan peringatan sesuai R3.
+- [x] `apply` atomik: satu baris error → tidak ada yang tertulis; audit lengkap; `audit` ulang menunjukkan celah tertutup.
 - [ ] Production hanya dengan izin user dan HR, setelah backup.
 
 ## Automation Log
 - 2026-11-03 — Audit staging + pemetaan fitur; epic + rencana ditulis. Worktree `.worktrees/epic086`, branch `feat/epic086-data-kerja-massal`, ditumpuk di atas EPIC-085 (#70) supaya staging tetap utuh.
+- 2026-11-03 — Implementasi native, 4 task + perbaikan review akhir; HEAD `784131d2`.
+  - Gates:
+    - `go vet` + `gofmt` bersih;
+    - `go test -p 1 ./...` hijau;
+    - tes runner PASS.
+  - Review akhir: 0 Critical, 2 Important. Keduanya diperbaiki:
+    - NIP bisa diketik di baris kosong;
+    - ubah ke Shift tanpa pola = error; ubah ke Non-Shift yang menghapus roster = peringatan + catatan apply.
+  - Minor yang ikut diperbaiki:
+    - peringatan roster memakai tanggal roster terakhir;
+    - kode toko/departemen ganda di master ditolak;
+    - runner: validasi sha, `trap` cleanup, `umask 077`, `GOARCH=amd64`, path dump dikutip;
+    - flag `-today` dihapus.
+  - Minor ditunda:
+    - audit penempatan tanpa "before" (pg_dump menjadi catatan);
+    - perubahan departemen memicu jadwal tetap mulai hari ini tanpa peringatan pratinjau;
+    - jabatan ganda tetap tampil di dropdown.
+- 2026-11-03 — **Gladi staging** (runner, binary di container `paddydev-api`):
+  - audit: shift 207/206 tanpa jadwal, non_shift 125/3 belum lengkap;
+  - template dibuat;
+  - file contoh berisi 1 error: pratinjau melaporkan `Kode toko ZZZ`, apply ditolak dan tidak menulis apa pun;
+  - file benar:
+    - pratinjau 4 valid;
+    - apply (backup `db.dump`): 3 pola + 1 penempatan + 5 audit;
+    - audit ulang 206 → 203.
+  - Data contoh dihapus kembali dari staging; audit kembali 206. Baris audit append-only tetap ada.
+  - Template staging 03-11 yang dikirim lebih awal sudah tidak dipakai. Template production dibuat dengan `ENV=prod … template` setelah izin.
+
