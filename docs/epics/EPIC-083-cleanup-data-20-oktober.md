@@ -1,6 +1,6 @@
 # EPIC-083: Database Cleanup per 20 Oktober 2026 — DM-01 (`MODULE-HRIS`)
 
-status: ready-for-qa
+status: done
 environment: dev
 retries: 0
 
@@ -149,4 +149,19 @@ FK `attendance_requests.attendance_id` → `attendance` (SET NULL).
     3. pratinjau prod;
     4. konfirmasi akhir user/HR + jam;
     5. execute (backup otomatis).
+- 2026-11-03 14.40 WIB — **DIEKSEKUSI di production** (izin user: "oke delete aja" untuk cakupan ≤ 30 Sep termasuk pinjaman pending; "Run now" atas pertanyaan "HR konfirmasi payroll Feb–Sep sudah dicatat di luar HRIS → `DM01_PAYROLL_ACK=yes`").
+  - PR #73 merged (`22ac894b`). Skrip disalin ke `~/dm01-src` di VPS; `~/paddydev-src` tidak disentuh.
+  - Pratinjau prod 12.58: `~/backups/dm01-20261103-125822-pratinjau`, SHA-256 `c3311d99…086d5`.
+  - Execute: `~/backups/dm01-20261103-143956-eksekusi`.
+    - Backup `db.dump` (7,0 MB + sha256 + toc), uji restore lolos.
+    - Terhapus: absensi 52.927, cuti/izin 560, lembur 2.455, pinjaman 17 (14 lunas + 3 pending), pengajuan absensi 0, perjalanan dinas 0.
+    - Notifikasi "Dihapus": 0. Trigger notifikasi aktif kembali.
+    - Langkah `files`: 0 berkas.
+    - Audit `data_cleanup.dm01` 1 baris.
+  - Verifikasi:
+    - sisa ≤ 30 Sep hanya 10 pinjaman bersisa (sengaja tetap);
+    - absensi ≥ 1 Okt 5.498;
+    - `leave_balances` tidak disentuh cleanup (2 perubahan hari ini terjadi 11.49 dan 13.19, sebelum eksekusi; tidak ada perubahan sesudah 14.40);
+    - `/login` dan `/api/ready` 200, 0 error API.
+  - Pemulihan bila perlu: `DM01_RESTORE_APPROVED=yes bash ~/dm01-src/tools/ops/dm01-cleanup.sh restore ~/backups/dm01-20261103-143956-eksekusi` (runbook §9).
 
