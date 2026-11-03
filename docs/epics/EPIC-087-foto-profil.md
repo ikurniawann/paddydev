@@ -1,6 +1,6 @@
 # EPIC-087: Upload Foto Profil Akun (`MODULE-IDENTITY`)
 
-status: backlog
+status: review
 environment: dev
 retries: 0
 
@@ -82,10 +82,42 @@ Permintaan user 03-11-2026: setelah login, user bisa mengunggah foto profil untu
 Rencana: `docs/superpowers/plans/2026-11-03-foto-profil.md`.
 
 ## Acceptance Criteria
-- [ ] Semua role bisa mengunggah dan menghapus foto dari popup akun; avatar top bar, popup, dan drawer HP langsung berganti.
-- [ ] Karyawan terhubung: foto juga tampil di Beranda ESS, roster absensi, bagan organisasi, dan daftar user. Foto yang diisi HR tidak tertimpa.
-- [ ] Format/ukuran salah ditolak dengan pesan R2; gambar disimpan 512×512 JPEG persegi.
-- [ ] Gates hijau; QA staging (desktop + HP).
+- [x] Semua role bisa mengunggah dan menghapus foto dari popup akun; avatar top bar, popup, dan drawer HP langsung berganti.
+- [x] Karyawan terhubung: foto juga tampil di Beranda ESS, roster absensi, bagan organisasi, dan daftar user. Foto yang diisi HR tidak tertimpa.
+- [x] Format/ukuran salah ditolak dengan pesan R2; gambar disimpan 512×512 JPEG persegi.
+- [x] Gates hijau; QA staging (desktop + HP).
 
 ## Automation Log
 - 2026-11-03 — Pemetaan + 4 jawaban user; epic + rencana ditulis. Worktree `.worktrees/epic087`, branch `feat/epic087-foto-profil` dari main `614d3694`.
+- 2026-11-03 — Implementasi native, 3 task. Gates: `go vet` + `gofmt` bersih, `go test -p 1 ./...` hijau, vitest 6474 lulus, `tsc` + eslint bersih.
+- 2026-11-03 — Review akhir (reviewer terpisah): 0 Critical, 4 Important, 8 Minor. Semua Important diperbaiki dengan tes:
+  - batas piksel 40 MP sebelum decode (bom dekompresi);
+  - update avatar + audit dalam satu transaksi, langkah sesudah commit tidak ikut batal;
+  - file lama tidak dihapus bila salinan ke karyawan gagal;
+  - fallback pra-migrasi di Go dan Next, plus catatan deploy.
+
+  Minor diperbaiki:
+  - pesan body > 8 MB;
+  - hapus tanpa foto tidak menulis audit;
+  - pratinjau basi;
+  - Beranda dimuat ulang;
+  - gaya fallback Beranda.
+
+  Ditunda:
+  - avatar di Paddy OS desktop (popup akun, layar kunci) masih inisial;
+  - `users-table` / `employee-profile-header` tanpa fallback `onError`;
+  - tautan ulang karyawan ke user lain;
+  - cache browser 5 menit setelah hapus.
+- 2026-11-03 — **Staging** `local-20261103-163801`.
+  - Backup `staging-db-before-epic087-20261103-*.dump`. Migrasi: 1 delta, verify 10763 objek, 0 berbeda.
+  - QA menemukan layout dashboard tidak meneruskan `avatar_url` ke sidebar; diperbaiki (`2a2d301d`).
+  - QA ulang lulus (akun karyawan di desktop, akun HR tanpa karyawan di HP):
+    - GIF ditolak "Foto harus berupa gambar JPG, PNG, atau WebP";
+    - 6 MB ditolak "Ukuran foto maksimal 5 MB";
+    - simpan → foto tampil di top bar, popup, dan Beranda; `hris.employees.photo_url` ikut terisi;
+    - file tersimpan 512×512 JPEG, satu file per akun;
+    - PNG transparan → putih;
+    - hapus foto → kembali inisial;
+    - 0 error API dan console.
+  - Data demo qa087 dan berkasnya dihapus.
+
