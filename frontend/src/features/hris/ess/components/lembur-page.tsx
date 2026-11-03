@@ -17,6 +17,8 @@ import { todayWib } from "@/lib/dates";
 import { formatDate } from "@/lib/format";
 import {
   OVERTIME_DAY_TYPE_OPTIONS,
+  OVERTIME_LEADER_REFUSED,
+  OVERTIME_RULES_HINT,
   overtimeDayTypeLabel,
   overtimeEndLabel,
   overtimeNotFinished,
@@ -24,6 +26,7 @@ import {
   type OvertimeDayType,
 } from "@/lib/hris/overtime-rules";
 import { splitOvertime } from "@/lib/hris/ess-view";
+import { useLeaveQuota } from "@/features/hris/leaves/queries";
 import { useEssMe, useMyOvertime, useOvertimeDayType } from "../queries";
 import { useDecideOvertime, useSubmitOvertime } from "../mutations";
 import type { EssOvertimeDecision, EssOvertimeForm } from "../types";
@@ -61,6 +64,8 @@ const EMPTY_FORM: EssOvertimeForm = {
 export function EssLemburPage() {
   const { data: me, isLoading } = useEssMe();
   const rows = useMyOvertime().data ?? [];
+  // EPIC-085 R1: level Supervisor ke atas (sama dengan syarat Izin Leader) tidak berhak lembur.
+  const isLeader = useLeaveQuota(todayWib().slice(0, 7)).data?.leader_eligible === true;
   const submitMutation = useSubmitOvertime();
   const decideMutation = useDecideOvertime();
   const [dialog, setDialog] = useState(false);
@@ -141,10 +146,18 @@ export function EssLemburPage() {
             Input lembur setelah selesai, atau konfirmasi penugasan lembur dari perusahaan
           </p>
         </div>
-        <Button className="gap-2" onClick={() => setDialog(true)}>
-          <PaperAirplaneIcon className="h-4 w-4" /> Input Lembur
-        </Button>
+        {!isLeader && (
+          <Button className="gap-2" onClick={() => setDialog(true)}>
+            <PaperAirplaneIcon className="h-4 w-4" /> Input Lembur
+          </Button>
+        )}
       </div>
+
+      {isLeader && (
+        <p className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700">
+          {OVERTIME_LEADER_REFUSED}
+        </p>
+      )}
 
       {companyAssignments.length > 0 && (
         <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-5 shadow-sm">
@@ -254,6 +267,7 @@ export function EssLemburPage() {
             <DialogTitle>Input Lembur</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
+            <p className="rounded-lg bg-sky-50 px-3 py-2 text-xs text-sky-700">{OVERTIME_RULES_HINT}</p>
             <div>
               <label htmlFor="ot-date" className="mb-1 block text-xs font-medium text-gray-600">Tanggal</label>
               <Input

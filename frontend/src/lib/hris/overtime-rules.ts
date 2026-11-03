@@ -202,3 +202,11 @@ export function overtimeTimeChanges(
   if (next.break_minutes !== Number(stored.break_minutes ?? 0)) changes.break_minutes = next.break_minutes;
   return Object.keys(changes).length > 0 ? changes : undefined;
 }
+
+/** Ringkasan Ketentuan Lembur TnC 03-11 (EPIC-085); server yang menegakkan. */
+export const OVERTIME_RULES_HINT =
+  "Lembur hari kerja dimulai setelah jam kerja selesai · maks. 4 jam/hari, 18 jam/minggu, 72 jam/periode";
+
+/** EPIC-085 R1: jabatan Supervisor ke atas tidak berhak lembur. */
+export const OVERTIME_LEADER_REFUSED = "Lembur tidak berlaku untuk jabatan Supervisor ke atas";
+

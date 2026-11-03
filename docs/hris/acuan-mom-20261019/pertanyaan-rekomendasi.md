@@ -40,6 +40,8 @@ Semua rekomendasi pada tabel di bawah **berlaku sebagai keputusan**, kecuali **K
 | K-20 (MOM 29 Okt) | Kunci setelah tanggal 21 berlaku untuk semua pengajuan, termasuk koreksi absen? | **Dijawab user 03-11-2026**: ya, periode 21–20. Kode: cuti/izin, lembur, dan koreksi absen milik sendiri ditolak sejak hari sesudah `end_date` periode; aktivasi `cutoff_day = 20` menunggu keputusan HR soal periode transisi | ES-13 |
 | K-21 (MOM 29 Okt) | Birthday Leave: kuota, dampak gaji, attachment, rentang? | **Dijawab user 03-11-2026**: 1 hari dalam bulan ulang tahun, 1x/tahun, full paid, attachment wajib, setelah masa kontrak awal | ES-14 |
 | K-27 (MOM 29 Okt) | Sakit diajukan pada hari H? | **Dijawab user 03-11-2026** (TnC SLA): pengajuan sakit sendiri harus bertanggal mulai hari ini; sakit mundur dicatat HR | ES-12 |
+| K-23 (MOM 29 Okt) | Batas 72 jam lembur: blokir atau peringatan? Dihitung dari jam pengajuan atau realisasi? | **Dijawab user 03-11-2026** (EPIC-085): blokir; dihitung dari jam dibayar pengajuan menunggu + disetujui; ditambah TnC 4 jam/hari dan 18 jam/minggu (Senin–Minggu) | AP-07 |
+| TNC-LEMBUR (03-11) | Level tanpa lembur, jam mulai lembur, lembur saat dinas | **Diputuskan user 03-11-2026** (EPIC-085): SPV ke atas (sama dengan Izin Leader); jam mulai ≥ jam selesai shift hari itu (hari kerja); dinas di tanggal merah → ajukan lembur biasa, tarif libur, tanpa clock-out | AP-02, AP-03 |
 | TNC-CUTI (03-11) | Prorata cuti tahunan, upah melahirkan/haji < 1 tahun | **Diputuskan user 03-11-2026** (EPIC-084): prorata = bulan sesudah bulan genap 1 tahun dikurangi cuti bersama, mulai saldo 2027; < 1 tahun → hari itu tidak dibayar (PIP), hanya untuk cuti yang mulai ≥ 03-11-2026 | ES-03, ES-09, ES-16 |
 
 ## Rekomendasi urutan eksekusi

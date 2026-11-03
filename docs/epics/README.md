@@ -87,6 +87,7 @@ deploying-dev · ready-for-qa · blocked · done).
 | [EPIC-082](./EPIC-082-pph21-bpjs-nonaktif.md) | Saklar Nonaktif PPh 21 & BPJS di Pengaturan Gaji (`MODULE-PAYROLL`) | ready-for-qa | 2026-11-02 |
 | [EPIC-083](./EPIC-083-cleanup-data-20-oktober.md) | Cleanup Data HRIS per 20 Oktober 2026 — DM-01 (`MODULE-HRIS`) | ready-for-qa | 2026-11-03 |
 | [EPIC-084](./EPIC-084-ketentuan-cuti-izin.md) | Ketentuan Cuti & Izin + SLA Pengajuan terhadap Payroll (`MODULE-HRIS`) | review | 2026-11-03 |
+| [EPIC-085](./EPIC-085-ketentuan-lembur.md) | Ketentuan Lembur + Batas 72 Jam per Cut Off (`MODULE-HRIS`) | review | 2026-11-03 |
 
 Aturan:
 - Epic + registry ini adalah sumber kebenaran status pekerjaan (canonical).

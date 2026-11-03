@@ -302,22 +302,26 @@ func (payrollWorkforceSQL) PeriodRecords(ctx context.Context, q database.Querier
 		return rec, err
 	}
 
-	rows, err = q.Query(ctx, `SELECT date::text, hours::text, day_type FROM hris.overtime_requests
-		WHERE employee_id = $1 AND status = 'approved' AND date >= $2 AND date <= $3`, employeeID, start, end)
+	rows, err = q.Query(ctx, `SELECT o.date::text, o.hours::text, o.day_type,
+		       EXISTS (SELECT 1 FROM hris.business_trips t WHERE t.employee_id = o.employee_id
+		               AND t.status = 'approved' AND o.date BETWEEN t.start_date AND t.end_date)
+		FROM hris.overtime_requests o
+		WHERE o.employee_id = $1 AND o.status = 'approved' AND o.date >= $2 AND o.date <= $3`, employeeID, start, end)
 	if err != nil {
 		return rec, err
 	}
 	overtime, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (*domain.OvertimeRequest, error) {
 		var date, hours *string
 		var dayType string
-		if err := r.Scan(&date, &hours, &dayType); err != nil {
+		var onTrip bool
+		if err := r.Scan(&date, &hours, &dayType, &onTrip); err != nil {
 			return nil, err
 		}
 		d := domain.DateText(date)
 		if d == nil {
 			return nil, nil
 		}
-		return &domain.OvertimeRequest{Date: *d, Hours: domain.OrZero(payrollText(hours)), DayType: dayType}, nil
+		return &domain.OvertimeRequest{Date: *d, Hours: domain.OrZero(payrollText(hours)), DayType: dayType, OnTrip: onTrip}, nil
 	})
 	if err != nil {
 		return rec, err

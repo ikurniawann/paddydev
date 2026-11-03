@@ -16,10 +16,15 @@ vi.mock("../mutations", () => ({
   useSubmitOvertime: () => ({ mutate: submit, isPending: false }),
   useDecideOvertime: () => ({ mutate: vi.fn(), isPending: false, variables: undefined }),
 }));
+let leaderEligible = false;
+vi.mock("@/features/hris/leaves/queries", () => ({
+  useLeaveQuota: () => ({ data: { leader_eligible: leaderEligible } }),
+}));
 const upload = vi.fn();
 vi.mock("../api", () => ({ uploadOvertimeAttachment: (f: File) => upload(f) }));
 
 import { EssLemburPage } from "./lembur-page";
+import { OVERTIME_RULES_HINT } from "@/lib/hris/overtime-rules";
 
 const PATH = "overtime-attachments/e1/1-abcdefabcdefabcd.pdf";
 beforeEach(() => upload.mockResolvedValue(PATH));
@@ -43,6 +48,7 @@ afterEach(() => {
   upload.mockReset();
   toastError.mockReset();
   hint = null;
+  leaderEligible = false;
   vi.useRealTimers();
 });
 
@@ -166,5 +172,20 @@ describe("EssLemburPage — jenis lembur (EPIC-063)", () => {
     fireEvent.change(select, { target: { value: "rest_day" } });
     fireEvent.click(screen.getByRole("button", { name: "Kirim" }));
     expect(submit).toHaveBeenCalledWith(expect.objectContaining({ day_type: "rest_day" }), expect.anything());
+  });
+});
+
+describe("Ketentuan lembur di ESS (EPIC-085)", () => {
+  it("form menampilkan ringkasan aturan lembur", () => {
+    render(<EssLemburPage />);
+    fireEvent.click(screen.getByRole("button", { name: /Input Lembur/ }));
+    expect(screen.getByText(OVERTIME_RULES_HINT)).toBeTruthy();
+  });
+
+  it("Supervisor ke atas: pemberitahuan, tanpa tombol Input Lembur", () => {
+    leaderEligible = true;
+    render(<EssLemburPage />);
+    expect(screen.getByText("Lembur tidak berlaku untuk jabatan Supervisor ke atas")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Input Lembur/ })).toBeNull();
   });
 });

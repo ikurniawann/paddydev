@@ -37,6 +37,17 @@ func (s *Service) suggestOvertimeDayType(ctx context.Context, employeeID, date s
 	if span != nil {
 		scheduleType = span.Str("schedule_type")
 	}
+	// EPIC-085 R4: lembur saat perjalanan dinas di tanggal merah = tarif libur,
+	// juga untuk staf shift.
+	if trip, err := s.repo.OnApprovedTrip(ctx, employeeID, date); err != nil {
+		return "", false, err
+	} else if trip {
+		for _, h := range holidays {
+			if h.Date == date && domain.HolidayDayOff(h, "non_shift") {
+				return domain.OvertimeWeekend, true, nil
+			}
+		}
+	}
 	dayType, known := domain.OvertimeDayTypeFor(date, domain.DayOffDates(holidays, scheduleType)[date], pattern)
 	return dayType, known, nil
 }
