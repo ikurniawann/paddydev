@@ -66,7 +66,7 @@ if [ "$MODE" = apply ]; then
 fi
 
 set +e
-on "docker exec paddydev-api /tmp/hris-data-kerja $ARGS" | tee "$OUT/$MODE.md"
+on "docker exec paddydev-api /tmp/hris-data-kerja $ARGS 2>&1" | tee "$OUT/$MODE.md"
 CODE=${PIPESTATUS[0]}
 set -e
 if [ "$MODE" = template ] && [ "$CODE" = 0 ]; then
