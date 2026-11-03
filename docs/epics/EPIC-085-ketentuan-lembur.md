@@ -1,6 +1,6 @@
 # EPIC-085: Ketentuan Lembur + Batas 72 Jam per Cut Off (`MODULE-HRIS`)
 
-status: backlog
+status: review
 environment: dev
 retries: 0
 
@@ -61,11 +61,34 @@ TnC (ringkas):
 Rencana: `docs/superpowers/plans/2026-11-03-ketentuan-lembur.md`.
 
 ## Acceptance Criteria
-- [ ] SPV+ tidak bisa mengajukan/ditugaskan lembur; ESS menampilkan pemberitahuan.
-- [ ] Lembur hari kerja yang mulai sebelum jam selesai shift ditolak; hari libur/dinas bebas.
-- [ ] Batas 4/18/72 jam memblokir create, approve-koreksi, dan koreksi HR dengan sisa jam di pesan.
-- [ ] Lembur di tanggal merah saat dinas disarankan Weekend/Libur dan dibayar 2× tanpa clock-out.
-- [ ] Gates hijau; staging QA.
+- [x] SPV+ tidak bisa mengajukan/ditugaskan lembur; ESS menampilkan pemberitahuan.
+- [x] Lembur hari kerja yang mulai sebelum jam selesai shift ditolak; hari libur/dinas bebas.
+- [x] Batas 4/18/72 jam memblokir create, approve-koreksi, dan koreksi HR dengan sisa jam di pesan.
+- [x] Lembur di tanggal merah saat dinas disarankan Weekend/Libur dan dibayar 2× tanpa clock-out.
+- [x] Gates hijau; staging QA.
 
 ## Automation Log
 - 2026-11-03 — Epic + rencana ditulis setelah 4 jawaban user. Worktree `.worktrees/epic085`, branch `feat/epic085-ketentuan-lembur`, ditumpuk di atas `feat/epic084-ketentuan-cuti` (PR #69) karena memakai H+1 dan kunci cut off EPIC-084.
+- 2026-11-03 — Implementasi native (executing-plans), 4 task + perbaikan review akhir. Commit `0f4b8945`. Gates:
+  - `go vet` + `gofmt` bersih;
+  - `go test -p 1 ./...` hijau;
+  - vitest 6462 lulus;
+  - `tsc` + eslint bersih.
+- 2026-11-03 — Review akhir (reviewer terpisah): 0 Critical, 1 Important, 7 Minor.
+  - **Important**: baris lama yang melewati batas tidak bisa dikoreksi. Diperbaiki: R3 hanya bila jam bertambah atau tanggal berubah; R2 hanya bila mulai/tanggal/jenis berubah.
+  - Diperbaiki juga:
+    - urutan kunci di approve-koreksi (baris lembur → karyawan);
+    - "sisa" dibulatkan 2 desimal dan tidak negatif;
+    - ID huruf besar tetap dikecualikan.
+  - Ditunda (minor):
+    - HR mengubah jenis rest_day → regular tanpa ubah jam melewati cek R2;
+    - halaman ESS menampilkan tombol sebentar saat kuota belum terbaca;
+    - urutan pesan untuk SPV;
+    - belum ada tes integrasi untuk jalur SQL 2 shift.
+- 2026-11-03 — **Staging** `local-20261103-075159`.
+  - Backup `~/Desktop/paddydev-backups/staging-db-before-epic085-20261103-075152.dump`.
+  - Verify migrasi: 10762 objek, 0 berbeda (tanpa migrasi baru).
+  - QA (akun demo qa085, sudah dihapus):
+    - staf HQ: lembur 17:00 ditolak (selesai shift 18:00), 4,5 jam ditolak, 18:00–21:00 tersimpan; dialog menampilkan ringkasan aturan;
+    - akun level Supervisor: halaman Lembur menampilkan pemberitahuan tanpa tombol Input, API menolak dengan pesan R1.
+
