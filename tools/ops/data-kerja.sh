@@ -36,6 +36,7 @@ STAMP=$(TZ=Asia/Jakarta date +%Y%m%d-%H%M%S)
 OUT=${DATA_KERJA_OUT:-$HOME/Desktop/paddydev-backups/data-kerja}/$ENV-$STAMP
 mkdir -p "$OUT"
 BIN="$OUT/hris-data-kerja"
+command -v go >/dev/null || PATH="$HOME/.local/go/bin:$PATH"
 (cd "$ROOT/backend" && CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o "$BIN" ./cmd/hris-data-kerja)
 
 # on runs a shell command on the host that owns the containers.
@@ -73,6 +74,6 @@ if [ "$MODE" = template ] && [ "$CODE" = 0 ]; then
   get "$HOST_DIR/template.xlsx" "$OUT/Template-Data-Kerja-$ENV-$STAMP.xlsx"
   echo "Template: $OUT/Template-Data-Kerja-$ENV-$STAMP.xlsx"
 fi
-on "docker exec paddydev-api rm -f /tmp/hris-data-kerja /tmp/data-kerja-input.xlsx /tmp/data-kerja-template.xlsx; rm -rf $HOST_DIR" || true
+on "docker exec -u 0 paddydev-api rm -f /tmp/hris-data-kerja /tmp/data-kerja-input.xlsx /tmp/data-kerja-template.xlsx; rm -rf $HOST_DIR" || true
 echo "Laporan: $OUT/$MODE.md"
 exit "$CODE"
