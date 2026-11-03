@@ -1,4 +1,6 @@
-# Runbook DM-01 — cleanup data HRIS ≤ 20 Oktober 2026 (EPIC-083)
+# Runbook DM-01 — cleanup data HRIS ≤ 30 September 2026 (EPIC-083)
+
+> **Perubahan 03-11-2026 (keputusan user):** batas dimundurkan dari ≤ 30 Sepober ke **≤ 30 September 2026**. Data mulai 1 Oktober tidak disentuh. Pinjaman pending ≤ 30 Sep ikut dihapus ("oke delete aja"). Contoh keluaran di bawah masih memakai angka gladi 20 Okt.
 
 Dasar: MOM 29 Oktober 2026 §2 No. 6, DM-01 dan K-22. Ruling ada di
 [`docs/epics/EPIC-083-cleanup-data-20-oktober.md`](../epics/EPIC-083-cleanup-data-20-oktober.md).
@@ -132,7 +134,7 @@ Contoh keluaran (ilustrasi: angka tabel dari inventaris staging 02-11, angka ber
 
 ```
 • Target: host VM-…, container paddydev-db, database paddy (user …), volume paddydev-storage, backup /home/wit/backups
-Akan dihapus (≤ 20 Okt 2026):
+Akan dihapus (≤ 30 Sep 2026):
   attendance_requests    11
   attendance             56156
   leaves                 659
@@ -141,12 +143,12 @@ Akan dihapus (≤ 20 Okt 2026):
   loans                  18
 Tetap ada (seluruh tabel):
   …
-Pengecualian (≤ 20 Okt tetapi TIDAK dihapus):
+Pengecualian (≤ 30 Sep tetapi TIDAK dihapus):
   leaves                 melintasi 21 Okt: 1
   loans                  berjalan (approved, sisa > 0): 15
 Berkas: 51234 FILE dihapus otomatis, 3 FILE_LAIN ditinjau manual
 Inventaris: 1 FK merujuk enam tabel, 12 trigger
-PERINGATAN: periode absensi ≤ 20 Okt yang belum ditutup (execute menolak kecuali DM01_PAYROLL_ACK=yes):
+PERINGATAN: periode absensi ≤ 30 Sep yang belum ditutup (execute menolak kecuali DM01_PAYROLL_ACK=yes):
   2026-10 open (2026-09-21..2026-10-20)
 • Pratinjau: /home/wit/backups/dm01-20261103-221500-pratinjau/pratinjau.txt
 • SHA-256 pratinjau: 3f1c…
@@ -248,10 +250,10 @@ chmod -R go-rwx ~/Desktop/paddydev-backups/dm01-*
 |---|---|---|
 | `DM01_PREVIEW_DIR wajib`, `berumur … jam (> 36 jam)`, `SHA-256 … beda` | Belum ada yang berubah | Pakai folder pratinjau yang disetujui. Bila lebih dari 36 jam atau SHA beda: ulangi preview dan minta persetujuan HR lagi. |
 | `dibuat untuk target lain` | Folder dari host/DB/volume lain (mis. gladi) | Pakai pratinjau dari target ini. |
-| `payroll run berstatus draft` | Ada run draft yang mencakup ≤ 20 Okt; ACK tidak berlaku | Selesaikan (completed) atau hapus run draft itu lewat aplikasi, lalu ulangi execute. |
-| `payroll belum final: <bulan> <perusahaan>` | Perusahaan bergaji aktif tanpa run final pada periode ≤ 20 Okt | Finalkan payroll periode itu. Bila payroll bulan itu memang dibuat di luar sistem (sebelum go-live), mintalah pernyataan tertulis HR, lalu jalankan dengan `DM01_PAYROLL_ACK=yes`. Peringatan dicatat di `payroll-ack.txt`. |
-| `periode absensi belum ditutup: <bulan>` | Periode ≤ 20 Okt masih open | Tutup periode di menu periode absensi, atau ACK seperti di atas. |
-| `data atau struktur berubah sejak pratinjau` (diff) | Drift: baris ≤ 20 Okt, status, berkas, FK, atau trigger berubah | Ulangi preview, kirim angka baru, minta persetujuan HR lagi. |
+| `payroll run berstatus draft` | Ada run draft yang mencakup ≤ 30 Sep; ACK tidak berlaku | Selesaikan (completed) atau hapus run draft itu lewat aplikasi, lalu ulangi execute. |
+| `payroll belum final: <bulan> <perusahaan>` | Perusahaan bergaji aktif tanpa run final pada periode ≤ 30 Sep | Finalkan payroll periode itu. Bila payroll bulan itu memang dibuat di luar sistem (sebelum go-live), mintalah pernyataan tertulis HR, lalu jalankan dengan `DM01_PAYROLL_ACK=yes`. Peringatan dicatat di `payroll-ack.txt`. |
+| `periode absensi belum ditutup: <bulan>` | Periode ≤ 30 Sep masih open | Tutup periode di menu periode absensi, atau ACK seperti di atas. |
+| `data atau struktur berubah sejak pratinjau` (diff) | Drift: baris ≤ 30 Sep, status, berkas, FK, atau trigger berubah | Ulangi preview, kirim angka baru, minta persetujuan HR lagi. |
 | `ruang kosong folder backup … kurang` / `volume data Postgres … kurang` | Disk tidak cukup; pada pengecekan "sesudah dump", dump sudah ada tetapi data belum disentuh | Kosongkan disk (backup lama yang sudah disalin ke lokal, `docker image prune`), lalu ulangi execute. |
 | `pg_dump gagal`, `pg_restore -l gagal`, `restore … gagal`, `hasil restore berbeda` | Tidak ada yang dihapus | Periksa `restore.log`, disk, dan versi Postgres. Bila `restore.log` memuat `violates foreign key constraint`, database asli punya baris yatim (FK tanpa induk; di staging: sisa QA yang dibuat dengan `session_replication_role=replica`). Tindakan: inventaris baris yatim itu, hapus/perbaiki dengan persetujuan, ulangi preview dan persetujuan, lalu ulangi execute. |
 | `gladi core SQL gagal di DB sementara` | Database asli TIDAK disentuh | Baca `core-gladi.log`: angka beda (data berubah), trigger tidak aktif, atau lock. Ulangi preview bila perlu. |

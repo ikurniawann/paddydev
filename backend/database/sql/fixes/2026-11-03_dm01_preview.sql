@@ -1,8 +1,10 @@
--- EPIC-083 / DM-01 — PRATINJAU baca-saja cleanup data per 20 Oktober 2026. Tidak menulis apa pun.
+-- EPIC-083 / DM-01 — PRATINJAU baca-saja cleanup data ≤ 30 September 2026. Tidak menulis apa pun.
+-- PERUBAHAN 03-11-2026 (keputusan user): batas dimundurkan ke ≤ 30 September 2026 (semula 20 Oktober);
+--   pinjaman pending ikut dihapus ("oke delete aja"). Data 1 Oktober ke atas tidak disentuh.
 --
 -- Dasar: MOM 29 Oktober 2026 (WIT × Paddy) §2 No. 6, DM-01 ("database cleanup per tanggal
 -- 20 Oktober 2026 … didahului backup") dan K-22. Jawaban user 02-11-2026:
---   - cakupan: data bertanggal ≤ 20 Oktober 2026 (absensi, pengajuan absensi, cuti & izin,
+--   - cakupan: data bertanggal ≤ 30 September 2026 (absensi, pengajuan absensi, cuti & izin,
 --     lembur, perjalanan dinas, pinjaman/kasbon);
 --   - hapus permanen, didahului backup penuh database dan file lampiran;
 --   - pinjaman yang masih berjalan (approved, sisa > 0) tidak dihapus;
@@ -17,7 +19,7 @@
 --   HAPUS        <tabel> <n>                       baris yang akan dihapus
 --   TETAP        <tabel> <n>                       baris yang tetap ada (seluruh tabel)
 --   STATUS       <tabel> hapus|tetap <status> <n>  rincian status
---   PENGECUALIAN <tabel> <alasan> <n>              bertanggal ≤ 20 Okt tetapi TIDAK dihapus
+--   PENGECUALIAN <tabel> <alasan> <n>              bertanggal ≤ 30 Sep tetapi TIDAK dihapus
 --   CHECKSUM     leave_balances <jumlah baris> <md5>  harus sama sebelum dan sesudah eksekusi
 --   BERKAS       <kolom> referensi_hapus|dipakai_baris_tetap|di_luar_folder_baris|tidak_valid <n>
 --   FILE_LAIN    <nilai>   nilai lampiran di luar folder milik barisnya (tidak dihapus otomatis;
@@ -45,7 +47,7 @@
 \pset format unaligned
 BEGIN READ ONLY;
 
-WITH cutoff AS (SELECT DATE '2026-10-20' AS d),
+WITH cutoff AS (SELECT DATE '2026-09-30' AS d),
 tabel (urut, nama) AS (
   VALUES (1, 'attendance_requests'), (2, 'attendance'), (3, 'leaves'),
          (4, 'overtime_requests'), (5, 'business_trips'), (6, 'loans')
