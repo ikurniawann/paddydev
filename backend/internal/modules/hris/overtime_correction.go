@@ -118,12 +118,17 @@ func (s *Service) CorrectOvertime(ctx context.Context, a *Actor, id string, in o
 					" sudah di-closing — lembur tidak bisa dikoreksi")
 			}
 		}
-		// EPIC-085 R2/R3 untuk tanggal & jam hasil koreksi.
-		if err := s.overtimeStartCheck(ctx, r, ot.Str("employee_id"), date, start, dayType); err != nil {
-			return err
+		// EPIC-085 R2/R3 hanya bila koreksi menggeser mulai/tanggal/jenis atau
+		// menambah jam, supaya baris lama tetap bisa dirapikan atau dikurangi.
+		if date != was.date || start != was.start || dayType != was.dayType {
+			if err := s.overtimeStartCheck(ctx, r, ot.Str("employee_id"), date, start, dayType); err != nil {
+				return err
+			}
 		}
-		if err := s.checkOvertimeCaps(ctx, r, ot.Str("employee_id"), date, hours, id); err != nil {
-			return err
+		if date != was.date || hours > ot.Num("hours") {
+			if err := s.checkOvertimeCaps(ctx, r, ot.Str("employee_id"), date, hours, id); err != nil {
+				return err
+			}
 		}
 		label := was.date
 		if emp := ot.Child("employee"); emp != nil {

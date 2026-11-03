@@ -103,7 +103,7 @@ func (s *store) OvertimeHoursUsed(ctx context.Context, employeeID, from, to, exc
 	var used float64
 	err := s.db.QueryRow(ctx, `SELECT coalesce(sum(hours), 0)::float8 FROM hris.overtime_requests
 		WHERE employee_id = $1 AND status IN ('pending', 'approved')
-		  AND date BETWEEN $2::date AND $3::date AND id::text <> $4`, employeeID, from, to, excludeID).Scan(&used)
+		  AND date BETWEEN $2::date AND $3::date AND ($4 = '' OR id <> $4::uuid)`, employeeID, from, to, excludeID).Scan(&used)
 	return used, err
 }
 

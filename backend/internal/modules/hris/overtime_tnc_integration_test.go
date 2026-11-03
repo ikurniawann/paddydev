@@ -91,7 +91,9 @@ func TestOvertimeTnC(t *testing.T) {
 		return h.do(boss, "POST", "/api/hris/overtime/decide", map[string]any{"overtime_id": friID, "action": "approve", "end_time": end})
 	}
 	expect(t, decide("22:00"), 400, "Lembur minggu 02-11 s.d. 08-11 sudah 15 jam; maksimal 18 jam per minggu (sisa 3 jam)")
-	expect(t, decide("21:00"), 200, "")
+	// ID huruf besar tetap mengecualikan barisnya sendiri.
+	expect(t, h.do(boss, "POST", "/api/hris/overtime/decide",
+		map[string]any{"overtime_id": strings.ToUpper(friID), "action": "approve", "end_time": "21:00"}), 200, "")
 
 	// (h) Koreksi HR (karyawan tanpa atasan) yang melewati 4 jam sehari.
 	tue := h.scalar(`SELECT id::text FROM hris.overtime_requests WHERE employee_id = $1 AND date = '2026-11-03'`, own)
@@ -136,4 +138,19 @@ func TestOvertimeTnCWeekAcrossPeriods(t *testing.T) {
 	expect(t, h.do(&staff, "POST", "/api/hris/overtime", h.otSelfBody(&staff, "2026-11-21", "10:00", "13:00")), 400,
 		"Lembur minggu 16-11 s.d. 22-11 sudah 16 jam; maksimal 18 jam per minggu (sisa 2 jam)")
 	expect(t, h.do(&staff, "POST", "/api/hris/overtime", h.otSelfBody(&staff, "2026-11-21", "10:00", "12:00")), 200, "")
+}
+
+// Review akhir: baris lama (sebelum EPIC-085) yang sudah melewati batas tetap
+// bisa dikoreksi selama jamnya tidak bertambah.
+func TestOvertimeTnCLegacyCorrection(t *testing.T) {
+	h, _ := newFileHarness(t)
+	hrd, _ := h.staff("hrd", []string{"hris.kepegawaian.overtime"}, true, emp{name: "Admin Lembur"})
+	_, own := h.staff("pos", nil, true, emp{name: "Staf Lama"})
+	id := h.scalar(`INSERT INTO hris.overtime_requests (employee_id, date, start_time, end_time, hours, source, status, day_type)
+		VALUES ($1, '2026-10-05', '17:00', '23:00', 6, 'employee', 'approved', 'regular') RETURNING id::text`, own)
+	path := "/api/hris/overtime/" + id
+	expect(t, h.do(&hrd, "PATCH", path, map[string]any{"day_type": "rest_day", "reason": "Ternyata hari libur"}), 200, "")
+	expect(t, h.do(&hrd, "PATCH", path, map[string]any{"end_time": "22:00", "reason": "Jam pulang sebenarnya"}), 200, "")
+	expect(t, h.do(&hrd, "PATCH", path, map[string]any{"end_time": "23:30", "reason": "Menambah jam"}), 400,
+		"Lembur maksimal 4 jam per hari")
 }

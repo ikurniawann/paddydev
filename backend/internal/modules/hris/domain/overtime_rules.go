@@ -2,6 +2,7 @@ package domain
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 )
@@ -48,9 +49,9 @@ func OvertimeStartError(start, dayType string, shift *OvertimeShiftEnd, onTrip b
 	return ""
 }
 
-// jam formats hours with a decimal comma: 70,5.
+// jam formats hours with a decimal comma, rounded to 2 decimals: 70,5.
 func jam(h float64) string {
-	return strings.Replace(strconv.FormatFloat(h, 'f', -1, 64), ".", ",", 1)
+	return strings.Replace(strconv.FormatFloat(math.Round(h*100)/100, 'f', -1, 64), ".", ",", 1)
 }
 
 // OvertimeCapError is R3, checked day → week → period: the used totals
@@ -62,10 +63,10 @@ func OvertimeCapError(hours, dayUsed, weekUsed, periodUsed float64, weekStart, w
 		return fmt.Sprintf("Lembur maksimal %d jam per hari", OvertimeMaxDailyHours)
 	case weekUsed+hours > OvertimeMaxWeeklyHours:
 		return fmt.Sprintf("Lembur minggu %s s.d. %s sudah %s jam; maksimal %d jam per minggu (sisa %s jam)",
-			dayMonth(weekStart), dayMonth(weekEnd), jam(weekUsed), OvertimeMaxWeeklyHours, jam(OvertimeMaxWeeklyHours-weekUsed))
+			dayMonth(weekStart), dayMonth(weekEnd), jam(weekUsed), OvertimeMaxWeeklyHours, jam(max(0, OvertimeMaxWeeklyHours-weekUsed)))
 	case periodUsed+hours > OvertimeMaxPeriodHours:
 		return fmt.Sprintf("Lembur periode %s sudah %s jam; maksimal %d jam per periode (sisa %s jam)",
-			periodLabel, jam(periodUsed), OvertimeMaxPeriodHours, jam(OvertimeMaxPeriodHours-periodUsed))
+			periodLabel, jam(periodUsed), OvertimeMaxPeriodHours, jam(max(0, OvertimeMaxPeriodHours-periodUsed)))
 	}
 	return ""
 }

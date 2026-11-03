@@ -57,6 +57,10 @@ func TestOvertimeCapError(t *testing.T) {
 		{"lewat batas periode", 2, 0, 0, 70.5,
 			"Lembur periode 21 Okt – 20 Nov 2026 sudah 70,5 jam; maksimal 72 jam per periode (sisa 1,5 jam)"},
 		{"tepat batas", 2, 0, 16, 70, ""},
+		{"sisa dibulatkan 2 desimal", 2, 0, 16.67, 0,
+			"Lembur minggu 02-11 s.d. 08-11 sudah 16,67 jam; maksimal 18 jam per minggu (sisa 1,33 jam)"},
+		{"sisa tidak negatif", 1, 0, 20, 0,
+			"Lembur minggu 02-11 s.d. 08-11 sudah 20 jam; maksimal 18 jam per minggu (sisa 0 jam)"},
 	}
 	for _, c := range cases {
 		if got := OvertimeCapError(c.hours, c.day, c.week, c.period, "2026-11-02", "2026-11-08", label); got != c.want {
