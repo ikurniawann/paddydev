@@ -2542,6 +2542,11 @@
   {
     "module": "hris",
     "method": "GET",
+    "path": "/api/hris/me/team-history"
+  },
+  {
+    "module": "hris",
+    "method": "GET",
     "path": "/api/hris/me/team-lateness"
   },
   {

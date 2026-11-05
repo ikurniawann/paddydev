@@ -108,6 +108,10 @@ type ApprovalRepo interface {
 	TeamPendingCount(ctx context.Context, managerID string) (int64, error)
 	// EmployeesWithoutManager is the reporting_to data quality report (R9).
 	EmployeesWithoutManager(ctx context.Context) ([]*Row, error)
+	// TeamLeaveHistory / TeamOvertimeHistory are managerID's direct reports'
+	// requests of every status dated [from, to] (EPIC-090).
+	TeamLeaveHistory(ctx context.Context, managerID, from, to string) ([]*Row, error)
+	TeamOvertimeHistory(ctx context.Context, managerID, from, to string) ([]*Row, error)
 	// NotifyManager is the in-app bell of employeeID's direct manager
 	// (EPIC-088 R11); nothing without a manager, a reporting_to pointing at
 	// the employee, or a manager without a login account.

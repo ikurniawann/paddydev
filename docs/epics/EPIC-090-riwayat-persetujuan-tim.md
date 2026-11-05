@@ -1,0 +1,36 @@
+# EPIC-090: Riwayat Persetujuan Tim untuk Atasan (`MODULE-HRIS`)
+
+status: backlog
+environment: dev
+retries: 0
+
+## Goal
+Permintaan user 05-11-2026: "pastikan atasan dan HR bisa melihat cuti dan lembur karyawan ini dengan melihat detail".
+
+QA staging menunjukkan HR sudah bisa melihat semua status, tetapi atasan hanya bisa membuka Detail selama pengajuan **menunggu keputusannya**. Setelah atasan memutus, atau setelah cuti berlampiran pindah ke tahap verifikasi HR (EPIC-088), pengajuan itu hilang dari Persetujuan Tim dan atasan tidak bisa melihatnya lagi. Jawaban user: "Ya, buat Riwayat".
+
+## Ruling
+- **R1 API.** `GET /api/hris/me/team-history` mengembalikan `{ period: { from, to, label }, leaves, overtime }`:
+  - isinya cuti/izin dan lembur **bawahan langsung** (`reporting_to` = akun; atasan dirinya sendiri tidak dihitung, seperti EPIC-063 R2);
+  - semua status dan sumber;
+  - tanggal (`start_date` / `date`) dalam rentang **awal periode absensi sebelumnya s.d. akhir periode berjalan** (`periodContaining`);
+  - urut tanggal terbaru dulu, maksimal 300 per jenis.
+
+  Akun tanpa data karyawan mendapat daftar kosong. Kolom:
+  - cuti: id, leave_type, start/end, total_days, reason, attachment_url, status, attachment_review, attachment_return_reason, rejection_reason, decided_by_name, manager_approved_name, attachment_reviewed_name, created_at, employee;
+  - lembur: id, date, start/end, hours, break_minutes, attachments, day_type, reason, source, status, rejection_reason, decided_by_name, created_at, employee.
+- **R2 Tampilan.** Persetujuan Tim mendapat pilihan **"Menunggu" | "Riwayat"**. Isi "Menunggu" tidak berubah.
+  - "Riwayat" menampilkan rentang periode lalu daftar Cuti & Izin dan Lembur dengan lencana status:
+    - Menunggu atasan / Menunggu verifikasi HR / Lampiran dikembalikan;
+    - Disetujui / Ditolak / Dibatalkan.
+  - Tombol **Detail** membuka dialog baca-saja: data pengajuan, alasan, lampiran/dokumentasi, dan catatan keputusan ("Disetujui oleh …", "Disetujui atasan …", "Diverifikasi HR …", "Alasan penolakan …").
+  - Keputusan di tab Menunggu menyegarkan Riwayat.
+- **Di luar cakupan**: bawahan tidak langsung, filter/pencarian, rentang lebih dari 2 periode, ekspor.
+
+## Acceptance Criteria
+- [ ] Atasan melihat cuti & lembur bawahan langsung semua status (2 periode) dan bisa membuka Detail beserta lampirannya.
+- [ ] Bukan bawahan dan di luar rentang tidak tampil.
+- [ ] Gates hijau; QA staging (HP + desktop).
+
+## Automation Log
+- 2026-11-05 — Spesifikasi ditulis setelah QA detail (26/26 untuk pengajuan menunggu). Worktree `.worktrees/epic090`, branch `feat/epic090-riwayat-tim`, ditumpuk di atas EPIC-089 (#77).

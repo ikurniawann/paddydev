@@ -155,6 +155,7 @@ func (h handlers) routes() []module.Route {
 		r("GET /api/hris/me/team", h.withActor(h.team)),
 		r("GET /api/hris/me/team-attendance", h.withActor(h.teamAttendance)),
 		r("GET /api/hris/me/team-approvals", h.withActor(h.teamApprovals)),
+		r("GET /api/hris/me/team-history", h.withActor(h.teamHistory)),
 		r("GET /api/hris/me/attendance-requests", h.withActor(h.myAttendanceRequests)),
 		r("GET /api/hris/me/attendance-gaps", h.withActor(h.myAttendanceGaps)),
 		// Jumlah & tingkat keterlambatan per periode (EPIC-077).
