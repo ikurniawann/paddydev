@@ -100,3 +100,21 @@ describe("TeamHistoryPanel", () => {
     expect(screen.getByRole("alert").textContent).toMatch(/Gagal memuat riwayat/);
   });
 });
+
+// EPIC-092 R7: cuti berjenjang — tahap SPV yang sudah lewat terlihat di Riwayat & Detail.
+describe("TeamHistoryPanel — tahap SPV (EPIC-092)", () => {
+  it("pending yang sudah disetujui SPV: lencana menunggu Manager dan nama SPV di Detail", () => {
+    history = {
+      data: {
+        period: { from: "2026-10-01", to: "2026-11-30", label: "1 Okt – 30 Nov 2026" },
+        leaves: [{ ...base, id: "l9", start_date: "2026-11-25", end_date: "2026-11-25", status: "pending",
+          attachment_review: null, spv_approved_at: "2026-11-05T03:00:00Z", spv_approved_name: "SPV Toko" }],
+        loans: [], overtime: [],
+      },
+    };
+    render(<TeamHistoryPanel />);
+    expect(screen.getByText("Disetujui SPV — menunggu Manager")).toBeTruthy();
+    fireEvent.click(screen.getAllByRole("button", { name: /Detail/ })[0]);
+    expect(within(screen.getByRole("dialog")).getByText("Disetujui SPV oleh SPV Toko")).toBeTruthy();
+  });
+});

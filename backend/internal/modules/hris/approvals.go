@@ -166,8 +166,9 @@ const teamEmployee = `json_build_object('id', m.id, 'full_name', m.full_name, 'n
 
 func (s *store) TeamPendingLeaves(ctx context.Context, managerID string) ([]*Row, error) {
 	rows, err := queryRows(ctx, s.db, `SELECT l.id, l.employee_id, l.leave_type, l.start_date::text AS start_date,
-		l.end_date::text AS end_date, l.total_days, l.reason, l.attachment_url, l.created_at, `+teamEmployee+`
-		FROM hris.leaves l `+teamMember("l")+`
+		l.end_date::text AS end_date, l.total_days, l.reason, l.attachment_url, l.spv_approved_name, l.spv_approved_at,
+		l.created_at, `+teamEmployee+`
+		FROM hris.leaves l `+stageMember("l")+`
 		WHERE l.status = 'pending' AND l.attachment_review IS NULL
 		ORDER BY l.start_date, l.created_at LIMIT 200`, managerID)
 	return rows, ignoreBadInput(err)
@@ -185,9 +186,9 @@ func (s *store) TeamPendingOvertime(ctx context.Context, managerID string) ([]*R
 func (s *store) TeamPendingCount(ctx context.Context, managerID string) (int64, error) {
 	var n int64
 	err := s.db.QueryRow(ctx, `SELECT
-		  (SELECT count(*) FROM hris.leaves l `+teamMember("l")+` WHERE l.status = 'pending' AND l.attachment_review IS NULL)
+		  (SELECT count(*) FROM hris.leaves l `+stageMember("l")+` WHERE l.status = 'pending' AND l.attachment_review IS NULL)
 		+ (SELECT count(*) FROM hris.overtime_requests o `+teamMember("o")+` WHERE o.status = 'pending' AND o.source = 'employee')
-		+ (SELECT count(*) FROM hris.business_trips t `+teamMember("t")+` WHERE t.status = 'pending')`,
+		+ (SELECT count(*) FROM hris.business_trips t `+stageMember("t")+` WHERE t.status = 'pending')`,
 		managerID).Scan(&n)
 	return n, ignoreBadInput(err)
 }
@@ -199,6 +200,15 @@ func (h handlers) teamApprovals(w http.ResponseWriter, r *http.Request, a *Actor
 		return err
 	}
 	return ok(w, dataOf(out))
+}
+
+// stageMember joins the requester (alias m) of a tiered request (alias
+// carries spv_approved_at) when $1 decides its running stage (EPIC-092).
+// request_team is a superset (the stage approver is the nearest SPV or
+// Manager) and computed once, so stage_approver only runs for $1's team.
+func stageMember(alias string) string {
+	return fmt.Sprintf(`JOIN hris.employees m ON m.id = %[1]s.employee_id AND m.id IN (SELECT hris.request_team($1::uuid))
+		AND hris.stage_approver(m.id, %[1]s.spv_approved_at IS NOT NULL) = $1::uuid`, alias)
 }
 
 // approverFor is the approver of emp (an employee embed with approver_id and

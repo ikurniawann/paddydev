@@ -16,6 +16,9 @@ export interface TeamLeaveRequest {
   total_days: string | number;
   reason: string | null;
   attachment_url: string | null;
+  /** EPIC-092: tahap SPV yang sudah lewat (pending = menunggu Manager). */
+  spv_approved_at?: string | null;
+  spv_approved_name?: string | null;
   created_at: string;
   employee: TeamMemberRef;
 }

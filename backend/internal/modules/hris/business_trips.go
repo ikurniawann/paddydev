@@ -21,6 +21,8 @@ import (
 // TripRepo is the business trip storage.
 type TripRepo interface {
 	TripList(ctx context.Context, f tripFilter) ([]*Row, error)
+	// StageNames are the SPV and Manager approver names (EPIC-092).
+	StageNames(ctx context.Context, employeeID string) (spv, mgr string, err error)
 	TripByID(ctx context.Context, id string) (*Row, error)
 	InsertTrip(ctx context.Context, f fields) (*Row, error)
 	DecideTrip(ctx context.Context, id, fromStatus string, f fields) (*Row, error)
@@ -31,6 +33,9 @@ type TripRepo interface {
 type tripFilter struct {
 	EmployeeIDs []string
 	Status      string
+	// StageApprover limits pending trips to those whose running tiered stage
+	// this employee decides; decided trips to their team (EPIC-092).
+	StageApprover string
 }
 
 type tripInput struct {
@@ -58,11 +63,7 @@ func (s *Service) ListTrips(ctx context.Context, a *Actor, scope, status, employ
 		if a.EmployeeID == nil {
 			return []*Row{}, nil
 		}
-		ids, err := s.repo.SubordinateIDs(ctx, *a.EmployeeID)
-		if err != nil || len(ids) == 0 {
-			return []*Row{}, err
-		}
-		f.EmployeeIDs = ids
+		f.StageApprover = *a.EmployeeID
 	case isHR && employeeID == "me":
 		if a.EmployeeID == nil {
 			return []*Row{}, nil
@@ -161,23 +162,49 @@ func (s *Service) DecideTrip(ctx context.Context, a *Actor, id, action string, r
 	if action != "cancel" && status != "pending" {
 		return nil, httpx.BadRequest("Pengajuan sudah "+status, obj("current_status", status))
 	}
-	var reportingTo *string
-	if emp := trip.Child("employee"); emp != nil {
-		reportingTo = approverFor(emp, a.EmployeeID) // EPIC-091: SPV terdekat atau Manager di atasnya
-	}
-	allowed, reason := domain.CanDecideBusinessTrip(domain.TripActor{EmployeeID: a.EmployeeID, IsHR: a.CanApprove(iam.LeafAbsensi)},
-		domain.TripRef{EmployeeID: trip.Str("employee_id"), ReportingTo: reportingTo, Status: status}, action)
-	if !allowed {
-		return nil, httpx.Forbidden(reason)
+	emp := trip.Child("employee")
+	deciderName := actorName(a)
+	final := true
+	if action == "cancel" {
+		allowed, reason := domain.CanDecideBusinessTrip(domain.TripActor{EmployeeID: a.EmployeeID, IsHR: a.CanApprove(iam.LeafAbsensi)},
+			domain.TripRef{EmployeeID: trip.Str("employee_id"), Status: status}, action)
+		if !allowed {
+			return nil, httpx.Forbidden(reason)
+		}
+	} else {
+		// EPIC-092: SPV then the Manager above; HR (approve on Absensi) may act
+		// for the running stage.
+		stage := tieredStage(emp, trip.Get("spv_approved_at") != nil)
+		decidedAs, onBehalf, last, refusal := domain.DecideTiered(domain.Approver{EmployeeID: a.EmployeeID,
+			IsHR: a.CanApprove(iam.LeafAbsensi)}, trip.Str("employee_id"), stage, "Perjalanan Dinas")
+		if decidedAs == "" {
+			return nil, httpx.Forbidden(tripRefusal(refusal))
+		}
+		final = last
+		if onBehalf {
+			spv, mgr, err := s.repo.StageNames(ctx, trip.Str("employee_id"))
+			if err != nil {
+				return nil, err
+			}
+			name := spv
+			if current, _ := stage.Current(); current != nil && stage.Manager != nil && *current == *stage.Manager &&
+				(stage.SPV == nil || *stage.SPV != *stage.Manager) {
+				name = mgr
+			}
+			deciderName += " (mewakili " + name + ")"
+		}
 	}
 	if action == "reject" && (rejection == nil || domain.JSTrim(*rejection) == "") {
 		return nil, httpx.BadRequest("Alasan penolakan wajib diisi")
+	}
+	if action == "approve" && !final {
+		return s.spvApproveTrip(ctx, a, trip, emp, deciderName, deciderName != actorName(a), meta)
 	}
 	next := tripNext[action]
 	var f fields
 	f.add("status", next)
 	f.add("decided_by", a.EmployeeID)
-	f.add("decided_by_name", actorName(a))
+	f.add("decided_by_name", deciderName)
 	f.add("decided_at", s.clock())
 	if action == "reject" {
 		f.add("rejection_reason", domain.JSTrim(*rejection))
@@ -224,7 +251,7 @@ func (s *Service) auditTrip(ctx context.Context, r Repository, a *Actor, action 
 
 var tripColumns = `t.id, t.employee_id, t.start_date::text AS start_date, t.end_date::text AS end_date,
 	t.destination, t.purpose, t.status, t.requested_by, t.decided_by, t.decided_by_name, t.decided_at,
-	t.rejection_reason, t.created_at, t.updated_at, ` +
+	t.rejection_reason, t.created_at, t.updated_at, t.spv_approved_by, t.spv_approved_name, t.spv_approved_at, ` +
 	embedOne("employee", "id, full_name, nip, reporting_to, hris.request_approver(employees.id) AS approver_id, hris.request_manager(employees.id) AS manager_id", "hris.employees", "id = t.employee_id")
 
 func (s *store) TripList(ctx context.Context, f tripFilter) ([]*Row, error) {
@@ -237,6 +264,12 @@ func (s *store) TripList(ctx context.Context, f tripFilter) ([]*Row, error) {
 	if f.Status != "" {
 		args = append(args, f.Status)
 		where = append(where, fmt.Sprintf("t.status = $%d", len(args)))
+	}
+	if f.StageApprover != "" {
+		args = append(args, f.StageApprover)
+		// request_team first (computed once); stage_approver only for the team.
+		where = append(where, fmt.Sprintf(`t.employee_id IN (SELECT hris.request_team($%[1]d::uuid))
+			AND (t.status <> 'pending' OR hris.stage_approver(t.employee_id, t.spv_approved_at IS NOT NULL) = $%[1]d::uuid)`, len(args)))
 	}
 	rows, err := queryRows(ctx, s.db, `SELECT `+tripColumns+` FROM hris.business_trips t WHERE `+
 		strings.Join(where, " AND ")+` ORDER BY t.start_date DESC, t.created_at DESC LIMIT 200`, args...)

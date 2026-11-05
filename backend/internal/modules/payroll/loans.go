@@ -463,6 +463,60 @@ func (s *service) decideLoanSupervisor(ctx context.Context, approverEmployeeID, 
 	return &messageData{Data: row, Message: msg}, nil
 }
 
+// decideLoanStageForHR approves the running atasan stage on behalf of that
+// atasan (EPIC-092 R5): the SPV stage rings the Manager; the Manager stage
+// moves the loan to manager_approved, waiting for HR's own decision.
+func (s *service) decideLoanStageForHR(ctx context.Context, userID string, hrEmployee *string, loanID string,
+	l *loanForDecision) (*messageData, error) {
+	stage, supervisorStage := l.stageOf()
+	label := loanTypeLabel(l.LoanType)
+	var hrName, stageName string
+	if err := s.db.QueryRow(ctx, `SELECT coalesce((SELECT full_name FROM configuration.users WHERE id::text = $1), 'HR'),
+		coalesce((SELECT full_name FROM hris.employees WHERE id::text = $2), '')`, userID, stage).Scan(&hrName, &stageName); err != nil {
+		return nil, err
+	}
+	name := hrName + " (mewakili " + stageName + ")"
+	now := s.clock()
+	var row *obj
+	err := database.WithTx(ctx, s.db, func(tx pgx.Tx) error {
+		var err error
+		if supervisorStage {
+			row, err = queryObj(ctx, tx, `UPDATE hris.loans SET supervisor_approved_by = $2, supervisor_approved_at = $3,
+				supervisor_approved_name = $4, updated_at = $3 WHERE id::text = $1 AND status = 'pending'
+				AND NOT `+supervisorStageDone+`
+				RETURNING id, employee_id, loan_type, status, principal_amount, tenor_months, manager_approver_id`,
+				loanID, hrEmployee, now, name)
+			if err != nil || row == nil || row.Str("manager_approver_id") == "" {
+				return err
+			}
+			var crew string
+			if err := tx.QueryRow(ctx, `SELECT full_name FROM hris.employees WHERE id = $1`, row.Str("employee_id")).Scan(&crew); err != nil {
+				return err
+			}
+			principal, _ := strconv.ParseFloat(row.Str("principal_amount"), 64)
+			return notifyApprover(ctx, tx, row.Str("manager_approver_id"), loanTitle(row.Str("loan_type"), crew),
+				loanWhat(crew, row.Str("loan_type"), principal, row.Int("tenor_months"))+" Disetujui "+name+
+					". Menunggu persetujuan Anda di Area Karyawan → Pinjaman.")
+		}
+		row, err = queryObj(ctx, tx, `UPDATE hris.loans SET status = 'manager_approved', manager_approved_by = $2,
+			manager_approved_at = $3, manager_approved_name = $4, updated_at = $3 WHERE id::text = $1 AND status = 'pending'
+			AND `+supervisorStageDone+`
+			RETURNING id, employee_id, loan_type, status, manager_approved_name`, loanID, hrEmployee, now, name)
+		return err
+	})
+	if err != nil {
+		return nil, opaque(err)
+	}
+	if row == nil {
+		return nil, httpx.Conflict("Pinjaman sudah diproses oleh orang lain")
+	}
+	next := "Manager"
+	if !supervisorStage {
+		next = "HR"
+	}
+	return &messageData{Data: row, Message: label + " disetujui HR (mewakili " + stageName + ") — menunggu persetujuan " + next}, nil
+}
+
 // decideLoanHR is the HR decision: step 2 for a loan with a manager
 // approver, the only step without one (EPIC-060, EPIC-076 R7).
 func (s *service) decideLoanHR(ctx context.Context, userID, loanID string, approve bool, reason *string, showCap bool) (*messageData, error) {
@@ -476,9 +530,15 @@ func (s *service) decideLoanHR(ctx context.Context, userID, loanID string, appro
 	}
 	label := loanTypeLabel(l.LoanType)
 	waitingManager := l.ManagerApprover != nil && l.Status == "pending"
-	// HR may still reject a request that waits for its manager; only approve is blocked.
+	// EPIC-092 R5: approving while an atasan stage runs is HR acting for that
+	// atasan (unavailable); the loan moves to the next stage. Rejecting stays
+	// possible at any time.
 	if waitingManager && approve {
-		return nil, httpx.BadRequest(label + " menunggu persetujuan Manager Departemen")
+		// Review akhir: nobody steps in for their own atasan (EPIC-092).
+		if approver != nil && *approver == l.EmployeeID {
+			return nil, httpx.Forbidden("Tidak bisa menyetujui " + strings.ToLower(label) + " sendiri mewakili atasan")
+		}
+		return s.decideLoanStageForHR(ctx, userID, approver, loanID, l)
 	}
 	if l.Status != "pending" && l.Status != "manager_approved" {
 		return nil, httpx.BadRequest("Pinjaman sudah diproses")

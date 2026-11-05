@@ -199,3 +199,59 @@ func TestLoanHRWhoIsApproverActsAsHR(t *testing.T) {
 		t.Fatalf("status = %s", status)
 	}
 }
+
+// EPIC-092 R5: HR boleh mewakili tahap SPV dan Manager (atasan tidak available).
+func TestLoanHROnBehalfOfStages(t *testing.T) {
+	e := setup(t)
+	worker := kasbonWorker(e, "permanent")
+	_, mgrStaff, _, _ := e.spvChain(worker)
+	id := e.loan(&e.staff, map[string]any{"loan_type": "kasbon", "principal_amount": 1000000, "tenor_months": 2}, 200)["data"].(map[string]any)["id"].(string)
+	approve := func() map[string]any {
+		t.Helper()
+		return e.call(&e.hr, "POST", "/api/hris/loans/"+id+"/approve", map[string]any{"approved": true}, 200)
+	}
+	row := func() (status, spvName, mgrName string) {
+		t.Helper()
+		e.scalar(&status, `SELECT status || '|' || coalesce(supervisor_approved_name, '') || '|' || coalesce(manager_approved_name, '') FROM hris.loans WHERE id = $1`, id)
+		parts := strings.SplitN(status, "|", 3)
+		return parts[0], parts[1], parts[2]
+	}
+	if out := approve(); out["message"] != "Kasbon disetujui HR (mewakili SPV Toko) — menunggu persetujuan Manager" {
+		t.Fatalf("HR tahap SPV = %v", out)
+	}
+	if st, spv, _ := row(); st != "pending" || !strings.Contains(spv, "(mewakili SPV Toko)") {
+		t.Fatalf("setelah HR tahap SPV = %s %s", st, spv)
+	}
+	if n, _ := e.bell(mgrStaff.UserID, "Pengajuan Kasbon: Peminjam Kasbon", "/dashboard/me/pinjaman"); n != 1 {
+		t.Fatalf("lonceng Manager = %d", n)
+	}
+	if out := approve(); out["message"] != "Kasbon disetujui HR (mewakili Manager Area) — menunggu persetujuan HR" {
+		t.Fatalf("HR tahap Manager = %v", out)
+	}
+	if st, _, mgr := row(); st != "manager_approved" || !strings.Contains(mgr, "(mewakili Manager Area)") {
+		t.Fatalf("setelah HR tahap Manager = %s %s", st, mgr)
+	}
+	approve()
+	if st, _, _ := row(); st != "approved" {
+		t.Fatalf("final HR = %s", st)
+	}
+}
+
+// Review akhir EPIC-092: HR tidak bisa "mewakili" atasan pada pinjamannya sendiri.
+func TestLoanHRCannotActOnBehalfForOwnLoan(t *testing.T) {
+	e := setup(t)
+	worker := kasbonWorker(e, "permanent")
+	e.spvChain(worker)
+	id := e.loan(&e.staff, map[string]any{"loan_type": "kasbon", "principal_amount": 1000000, "tenor_months": 2}, 200)["data"].(map[string]any)["id"].(string)
+	hrEmp := e.employee("HR Peminjam", e.hr.UserID, true)
+	e.exec(`UPDATE hris.loans SET employee_id = $2 WHERE id = $1`, id, hrEmp)
+	out := e.call(&e.hr, "POST", "/api/hris/loans/"+id+"/approve", map[string]any{"approved": true}, 403)
+	if msg, _ := out["error"].(string); !strings.Contains(msg, "sendiri") {
+		t.Fatalf("pesan = %v", out)
+	}
+	var status string
+	e.scalar(&status, `SELECT status || '/' || (supervisor_approved_at IS NULL)::text FROM hris.loans WHERE id = $1`, id)
+	if status != "pending/true" {
+		t.Fatalf("status = %s", status)
+	}
+}

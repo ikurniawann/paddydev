@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 import { MANAGER_APPROVED_AWAITING_HR } from "@/lib/hris/leave-attachment-review";
+import { SPV_APPROVED_MESSAGE, spvApprovedNote } from "@/lib/hris/tiered-approval";
 import { BanknotesIcon, CalendarDaysIcon, ClockIcon } from "@heroicons/react/24/outline";
 import { AttachmentPreviewButtons } from "@/components/hris/attachment-preview";
 import { RequestDetailDialog } from "@/components/hris/request-detail-dialog";
@@ -98,9 +99,11 @@ export function EssPersetujuanTimPage() {
     decide.mutate(
       { kind, id, action, rejectionReason, times },
       {
-        // Cuti berlampiran masih menunggu verifikasi HR (EPIC-088 R3): pesan server.
+        // Masih ada tahap berikutnya — verifikasi lampiran HR (EPIC-088 R3) atau
+        // Manager setelah SPV (EPIC-092): pesan server.
         onSuccess: (res) =>
-          toast.success(res?.message === MANAGER_APPROVED_AWAITING_HR ? res.message : DONE[kind][action]),
+          toast.success(res?.message === MANAGER_APPROVED_AWAITING_HR || res?.message === SPV_APPROVED_MESSAGE
+            ? res.message : DONE[kind][action]),
         onError: (e) => toast.error(e.message || "Gagal memproses"),
       }
     );
@@ -226,6 +229,7 @@ export function EssPersetujuanTimPage() {
                         {leavePeriod(row)} ({Number(row.total_days)} hari)
                       </p>
                       <p className="line-clamp-2 break-words text-xs text-gray-600">{row.reason || "—"}</p>
+                      {spvApprovedNote(row) && <p className="text-xs text-indigo-700">{spvApprovedNote(row)}</p>}
                     </div>
                     <div className="flex shrink-0 flex-wrap items-center gap-3">
                       {row.attachment_url && (
@@ -335,6 +339,9 @@ export function EssPersetujuanTimPage() {
                 ]
           }
           reason={{ text: shown.row.reason }}
+          notes={shown.kind === "leave" && spvApprovedNote(shown.row) ? (
+            <p className="text-xs text-indigo-700">{spvApprovedNote(shown.row)}</p>
+          ) : undefined}
           attachments={
             shown.kind === "leave"
               ? { paths: shown.row.attachment_url ? [shown.row.attachment_url] : [], hrefFor: leaveAttachmentHref, label: "Lampiran" }

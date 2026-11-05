@@ -81,6 +81,15 @@ describe("EssPersetujuanTimPage", () => {
     expect(toastSuccess).toHaveBeenCalledWith("Disetujui atasan — menunggu verifikasi lampiran oleh HR");
   });
 
+  it("cuti berjenjang: SPV menyetujui → toast menunggu Manager; Manager melihat nama SPV (EPIC-092)", () => {
+    queue = { leaves: [{ ...leave, spv_approved_at: "2031-03-02T00:00:00Z", spv_approved_name: "SPV Toko" }], overtime: [] };
+    decide.mockImplementation((_v, opts) => opts.onSuccess({ message: "Disetujui SPV — menunggu persetujuan Manager" }));
+    render(<EssPersetujuanTimPage />);
+    expect(screen.getByText("Disetujui SPV oleh SPV Toko")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Setujui cuti Anggota A" }));
+    expect(toastSuccess).toHaveBeenCalledWith("Disetujui SPV — menunggu persetujuan Manager");
+  });
+
   it("lembur: ringkasan menampilkan istirahat & dokumentasi; Setujui tanpa perubahan tidak mengirim jam (EPIC-066)", () => {
     queue = { leaves: [], overtime: [overtime] };
     decide.mockImplementation((_v, opts) => opts.onSuccess());
