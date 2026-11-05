@@ -89,12 +89,13 @@ describe("LeavesPage: verifikasi lampiran (EPIC-088)", () => {
     expect(review).toHaveBeenCalledWith({ leave_id: "l2", action: "return", reason: "Surat buram" }, expect.anything());
   });
 
-  it("baris dikembalikan: badge dan tanpa tombol keputusan", () => {
+  it("baris dikembalikan: badge, hanya Tolak (review akhir: tidak macet selamanya)", () => {
     grant(true);
     rows = [{ ...budi, id: "l3", attachment_review: "returned", attachment_return_reason: "Surat buram" }];
     render(<LeavesPage />);
     expect(screen.getAllByText("Lampiran dikembalikan").length).toBeGreaterThan(0);
     expect(screen.queryByText("tombol-keputusan")).toBeNull();
+    expect(screen.getByText("tombol-tolak")).toBeTruthy();
     expect(screen.queryByRole("button", { name: /Verifikasi lampiran/ })).toBeNull();
   });
 

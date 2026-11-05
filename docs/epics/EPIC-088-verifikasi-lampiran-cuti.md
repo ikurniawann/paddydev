@@ -43,7 +43,7 @@ Poin 12 (Izin Leader 1x/bulan, hangus, SPV ke atas, tanpa potong THP = ES-15) **
   - Pengajuan tanpa lampiran berjalan seperti sekarang.
 - **R3 Atasan menyetujui pengajuan berlampiran.** Status tetap `pending`. Kolom diisi: `attachment_review='awaiting'`, `manager_approved_*`, `decided_as`.
   - Respons: "Disetujui atasan — menunggu verifikasi lampiran oleh HR".
-  - HR mendapat notifikasi in-app (`NotifyHR`, kind `leave_attachment`): judul "Lampiran cuti menunggu verifikasi", tautan `/dashboard/hris/leaves?review=awaiting`.
+  - HR mendapat notifikasi in-app (`NotifyHR`, kind `approval`): judul "Lampiran cuti menunggu verifikasi", tautan `/dashboard/hris/leaves?review=awaiting`.
   - Pesan WA ke karyawan: "... telah disetujui atasan dan menunggu verifikasi lampiran oleh HR."
   - Saldo Cuti Tahunan **belum** dipotong.
 - **R4 Antrean atasan.** `TeamPendingLeaves` dan `TeamPendingCount` hanya menghitung `pending` dengan `attachment_review IS NULL`.
@@ -59,17 +59,17 @@ Poin 12 (Izin Leader 1x/bulan, hangus, SPV ke atas, tanpa potong THP = ES-15) **
     - potong saldo Cuti Tahunan dan hitung ulang sisa bawaan (jalur yang sama dengan `DecideLeave`);
     - audit `leave.attachment_verify`.
 
-    Pesan "Lampiran terverifikasi — cuti disetujui". Karyawan mendapat notifikasi (`NotifyEmployee`, kind `leave_attachment`) "Cuti disetujui".
+    Pesan "Lampiran terverifikasi — cuti disetujui". Karyawan mendapat notifikasi "✅ Cuti Disetujui" dari trigger `fn_notify_leave_changes` (status → approved). Tidak ada notifikasi kedua (review akhir).
   - **`return`**:
     - `reason` wajib, kalau kosong 400 "Alasan pengembalian wajib diisi";
     - `attachment_review='returned'`, `attachment_return_reason`, kolom pemeriksa diisi;
-    - audit `leave.attachment_return`.
+    - audit `leave.attachment_return` (before memuat `attachment_url` yang dikembalikan).
 
     Pesan "Lampiran dikembalikan ke karyawan". Karyawan mendapat notifikasi "Lampiran cuti dikembalikan" berisi alasannya, dengan tautan `/dashboard/me/cuti`.
   - Balapan dua pemeriksa → 409 (`decisionRace`).
 - **R6 Unggah ulang.** `PUT /api/hris/leaves/{id}` dengan `attachment_url` dari **pemilik** diterima hanya bila `status='pending'` dan `attachment_review='returned'`.
   - Path wajib diawali `leave-attachments/<employee_id pengajuan>/`. Bila tidak, 400 "Lampiran tidak valid".
-  - Efeknya: `attachment_url` baru, `attachment_review='awaiting'`, `attachment_return_reason=NULL`, HR dinotifikasi lagi.
+  - Efeknya: `attachment_url` baru, `attachment_review='awaiting'`, `attachment_return_reason=NULL`, HR dinotifikasi lagi, audit `leave.attachment_resubmit` (before/after `attachment_url`).
   - Pesan "Lampiran baru terkirim — menunggu verifikasi HR".
   - Selain kondisi itu, pemilik tetap 403 seperti sekarang. HR tetap boleh mengedit seperti sekarang; edit HR tidak mengubah `attachment_review`.
 - **R7 Pembatalan.** Tidak berubah. Pemilik boleh membatalkan selama `pending`, termasuk saat menunggu HR atau dikembalikan.

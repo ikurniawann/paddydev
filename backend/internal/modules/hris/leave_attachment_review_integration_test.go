@@ -95,7 +95,9 @@ func TestLeaveAttachmentReviewFlow(t *testing.T) {
 		AND title = 'Lampiran cuti dikembalikan' AND message LIKE '%Surat tidak terbaca%'`, staff.UserID); n != "1" {
 		t.Fatalf("notifikasi karyawan kembali = %s", n)
 	}
-	if n := h.scalar(`SELECT count(*)::text FROM audit.audit_log WHERE action = 'leave.attachment_return' AND entity_id = $1`, annual); n != "1" {
+	// Review akhir (Important 1): audit menyimpan lampiran yang dikembalikan.
+	if n := h.scalar(`SELECT count(*)::text FROM audit.audit_log WHERE action = 'leave.attachment_return' AND entity_id = $1
+		AND before->>'attachment_url' = $2`, annual, "leave-attachments/"+staffID+"/surat.png"); n != "1" {
 		t.Fatalf("audit return = %s", n)
 	}
 	expect(t, h.do(&hr, "POST", review, reviewBody(annual, "verify", "")), 400, "Pengajuan ini tidak menunggu verifikasi lampiran")
@@ -109,6 +111,11 @@ func TestLeaveAttachmentReviewFlow(t *testing.T) {
 	if resub.body["message"] != "Lampiran baru terkirim — menunggu verifikasi HR" || col(annual, "attachment_review") != "awaiting" ||
 		col(annual, "attachment_return_reason") != "" || col(annual, "attachment_url") != "leave-attachments/"+staffID+"/surat-baru.png" {
 		t.Fatalf("unggah ulang = %s", resub.raw)
+	}
+	if n := h.scalar(`SELECT count(*)::text FROM audit.audit_log WHERE action = 'leave.attachment_resubmit' AND entity_id = $1
+		AND before->>'attachment_url' = $2 AND after->>'attachment_url' = $3 AND actor_id::text = $4`, annual,
+		"leave-attachments/"+staffID+"/surat.png", "leave-attachments/"+staffID+"/surat-baru.png", staff.UserID); n != "1" {
+		t.Fatalf("audit resubmit = %s", n)
 	}
 	if n := h.scalar(`SELECT count(*)::text FROM public.notifications WHERE user_id = $1 AND title = 'Lampiran cuti menunggu verifikasi'`, hr.UserID); n != "2" {
 		t.Fatalf("notifikasi HR setelah unggah ulang = %s", n)
@@ -133,7 +140,9 @@ func TestLeaveAttachmentReviewFlow(t *testing.T) {
 	if n := h.scalar(`SELECT count(*)::text FROM audit.audit_log WHERE action = 'leave.attachment_verify' AND entity_id = $1`, annual); n != "1" {
 		t.Fatalf("audit verify = %s", n)
 	}
-	if n := h.scalar(`SELECT count(*)::text FROM public.notifications WHERE user_id = $1 AND type = 'status_change' AND title = 'Cuti disetujui'`, staff.UserID); n != "1" {
+	// Review akhir: satu notifikasi "disetujui" saja (trigger fn_notify_leave_changes), bukan dua.
+	if n := h.scalar(`SELECT count(*)::text FROM public.notifications WHERE user_id = $1
+		AND title IN ('Cuti disetujui', '✅ Cuti Disetujui')`, staff.UserID); n != "1" {
 		t.Fatalf("notifikasi karyawan disetujui = %s", n)
 	}
 	expect(t, h.do(&hr2, "POST", review, reviewBody(annual, "verify", "")), 400, "Pengajuan ini tidak menunggu verifikasi lampiran")

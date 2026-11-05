@@ -461,7 +461,7 @@ type leaveUpdate struct {
 // UpdateLeave cancels (owner while pending, HR also once approved, with the
 // annual quota refunded in the same transaction) or lets HR edit the reason
 // and attachment.
-func (s *Service) UpdateLeave(ctx context.Context, a *Actor, id string, in leaveUpdate) (*Row, error) {
+func (s *Service) UpdateLeave(ctx context.Context, a *Actor, id string, in leaveUpdate, meta audit.Entry) (*Row, error) {
 	leave, err := s.repo.PlainLeave(ctx, id)
 	if err != nil {
 		return nil, err
@@ -510,7 +510,7 @@ func (s *Service) UpdateLeave(ctx context.Context, a *Actor, id string, in leave
 
 	if in.AttachmentURL.Sent && !in.Reason.Sent && leave.Str("attachment_review") == domain.AttachmentReturned &&
 		leave.Str("status") == "pending" && a.EmployeeID != nil && leave.Str("employee_id") == *a.EmployeeID {
-		return s.resubmitLeaveAttachment(ctx, id, in.AttachmentURL.Val)
+		return s.resubmitLeaveAttachment(ctx, a, id, in.AttachmentURL.Val, meta)
 	}
 
 	var f fields

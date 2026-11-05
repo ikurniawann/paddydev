@@ -101,7 +101,7 @@ func (h handlers) updateLeave(w http.ResponseWriter, r *http.Request, a *Actor) 
 	if err := formErr(f, ""); err != nil {
 		return err
 	}
-	out, err := h.svc.UpdateLeave(r.Context(), a, r.PathValue("id"), in)
+	out, err := h.svc.UpdateLeave(r.Context(), a, r.PathValue("id"), in, auditMeta(r))
 	if err != nil {
 		return err
 	}

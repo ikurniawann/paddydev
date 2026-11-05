@@ -134,8 +134,8 @@ func (s *Service) ReviewLeaveAttachment(ctx context.Context, a *Actor, in attach
 		rv.Reason = &reason
 	}
 	summary := leaveNotifySummary(leave)
-	title, message, action := "Cuti disetujui",
-		"Pengajuan "+summary+" disetujui setelah lampiran diverifikasi HR.", "leave.attachment_verify"
+	var title, message string
+	action := "leave.attachment_verify"
 	after := map[string]any{"status": "approved", "attachment_review": domain.AttachmentVerified}
 	if !verify {
 		title, message, action = leaveReturnedTitle,
@@ -152,10 +152,18 @@ func (s *Service) ReviewLeaveAttachment(ctx context.Context, a *Actor, in attach
 				return err
 			}
 		}
+		// before carries the reviewed file, so a later re-upload does not erase
+		// which attachment HR returned (review akhir).
 		if err := auditDecision(ctx, r.querier(), a, action, "hris.leaves", in.LeaveID,
 			leaveEmployeeName(leave)+" · "+dateText(leave, "start_date")+" s.d. "+dateText(leave, "end_date"),
-			map[string]any{"attachment_review": domain.AttachmentAwaiting}, after, meta); err != nil {
+			map[string]any{"attachment_review": domain.AttachmentAwaiting, "attachment_url": leave.Str("attachment_url")},
+			after, meta); err != nil {
 			return err
+		}
+		if verify {
+			// Turning approved fires fn_notify_leave_changes ("✅ Cuti Disetujui"):
+			// a second bell entry would duplicate it.
+			return nil
 		}
 		return r.NotifyEmployee(ctx, leave.Str("employee_id"), leaveDecisionKind, title, message, essLeaveLink)
 	})
@@ -177,8 +185,8 @@ func (s *Service) ReviewLeaveAttachment(ctx context.Context, a *Actor, in attach
 }
 
 // resubmitLeaveAttachment is the owner's new attachment for a returned
-// request (R6): back to HR's queue, HR notified again.
-func (s *Service) resubmitLeaveAttachment(ctx context.Context, id string, path *string) (*Row, error) {
+// request (R6): back to HR's queue, HR notified again, the swap audited.
+func (s *Service) resubmitLeaveAttachment(ctx context.Context, a *Actor, id string, path *string, meta audit.Entry) (*Row, error) {
 	leave, err := s.repo.LeaveForDecision(ctx, id)
 	if err != nil {
 		return nil, err
@@ -191,6 +199,12 @@ func (s *Service) resubmitLeaveAttachment(ctx context.Context, id string, path *
 	}
 	err = s.repo.InTx(ctx, func(r Repository) error {
 		if err := r.ResubmitLeaveAttachment(ctx, id, *path); err != nil {
+			return err
+		}
+		if err := auditDecision(ctx, r.querier(), a, "leave.attachment_resubmit", "hris.leaves", id,
+			leaveEmployeeName(leave)+" · "+dateText(leave, "start_date")+" s.d. "+dateText(leave, "end_date"),
+			map[string]any{"attachment_review": domain.AttachmentReturned, "attachment_url": leave.Str("attachment_url")},
+			map[string]any{"attachment_review": domain.AttachmentAwaiting, "attachment_url": *path}, meta); err != nil {
 			return err
 		}
 		return r.NotifyHR(ctx, leaveReviewKind, leaveReviewTitle,

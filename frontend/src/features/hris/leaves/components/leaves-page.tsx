@@ -73,11 +73,12 @@ export function LeavesPage() {
   const myEmployeeId = useEssMe().data?.employee?.id;
   const decidable = (leave: LeaveItem) => canDecide && leave.status === "pending" && leave.employee_id !== myEmployeeId;
   // Keputusan per tahap (EPIC-088 R4/R5): menunggu HR → Verifikasi/Kembalikan/Tolak;
-  // dikembalikan → menunggu karyawan; selain itu Setujui/Tolak seperti biasa.
+  // dikembalikan → menunggu karyawan, HR masih bisa Tolak agar tidak macet;
+  // selain itu Setujui/Tolak seperti biasa.
   const decisionFor = (leave: LeaveItem) => {
     if (!decidable(leave)) return undefined;
     const stage = leaveReviewStage(leave);
-    if (stage === "returned") return undefined;
+    if (stage === "returned") return <ApprovalButtons leaveId={leave.id} rejectOnly />;
     if (stage === "awaiting") {
       return (
         <div className="flex flex-wrap gap-2">
