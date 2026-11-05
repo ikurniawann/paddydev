@@ -1,6 +1,6 @@
 # EPIC-089: Lembur Lebih dari 4 Jam dengan Alasan, Dokumentasi Opsional (`MODULE-HRIS`)
 
-status: backlog
+status: review
 environment: dev
 retries: 0
 
@@ -54,10 +54,26 @@ Permintaan user 05-11-2026 merevisi EPIC-085 R3:
 Rencana: `docs/superpowers/plans/2026-11-05-lembur-lebih-4-jam.md`.
 
 ## Acceptance Criteria
-- [ ] Karyawan bisa mengajukan lembur > 4 jam bila Keterangan diisi (≥ 10 karakter); tanpa Keterangan ditolak dengan pesan R2.
-- [ ] Lembur bisa diajukan tanpa dokumentasi.
-- [ ] Batas 18 jam/minggu dan 72 jam/periode tetap memblokir; tidak ada lagi batas 4 jam/hari atau 12 jam kotor.
-- [ ] Gates hijau; QA staging (HP).
+- [x] Karyawan bisa mengajukan lembur > 4 jam bila Keterangan diisi (≥ 10 karakter); tanpa Keterangan ditolak dengan pesan R2.
+- [x] Lembur bisa diajukan tanpa dokumentasi.
+- [x] Batas 18 jam/minggu dan 72 jam/periode tetap memblokir; tidak ada lagi batas 4 jam/hari atau 12 jam kotor.
+- [x] Gates hijau; QA staging (HP).
 
 ## Automation Log
 - 2026-11-05 — Pemetaan + 4 jawaban user. Epic + rencana ditulis. Worktree `.worktrees/epic089`, branch `feat/epic089-lembur-4-jam`, ditumpuk di atas `feat/epic088-verifikasi-lampiran` (#76) karena `overtime.go` sudah berubah di R11.
+- 2026-11-05 — Implementasi native, 3 task (`2473aa99` domain, `e2ab0920` service, `e72d3be4` frontend + acuan).
+  - Gates: `go test -p 1 ./internal/modules/hris/... ./internal/app/` ok, vet + gofmt bersih, vitest 4518 lulus, tsc + eslint bersih.
+- 2026-11-05 — Review akhir (reviewer terpisah): 0 Critical, 1 Important, 4 Minor.
+  - **Important**: tanpa batas 12 jam, lembur lintas hari bisa menabrak jam kerja besok atau lembur lain (bayar ganda). Diperbaiki dengan R6 (`2972f42e`); tes `TestOvertimeOverlapError` + `TestOvertimeCrossDayOverlap` RED→GREEN.
+  - Ditunda: `TrimSpace` vs `JSTrim` (U+FEFF), import tes satu baris, pesan R2 sebagai var, komentar contoh "wajib, 1–3" di `private-attachments-field.tsx`.
+- 2026-11-05 — **Staging** `local-20261105-141328` (gabungan lokal EPIC-087 + EPIC-089, yang memuat EPIC-088; merge `775ac78d` tidak di-push).
+  - Backup `staging-db-before-epic089-20261105-141327.dump`. Verify 10774 objek, 0 berbeda.
+  - QA lulus 8/8 (karyawan di HP, atasan di desktop):
+    - label dokumentasi opsional;
+    - 2 jam tanpa dokumentasi terkirim;
+    - 6 jam tanpa Keterangan ditolak, dengan Keterangan terkirim (tersimpan tanpa lampiran);
+    - akumulasi minggu 15 + 5 jam ditolak dengan pesan 18 jam/minggu;
+    - atasan melihat Keterangan di Persetujuan Tim;
+    - 0 error API dan console.
+  - Data demo dan berkas dihapus.
+
