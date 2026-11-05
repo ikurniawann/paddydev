@@ -1,6 +1,6 @@
 # EPIC-091: Penyetuju Minimal SPV untuk Semua Pengajuan + Kasbon/Pinjaman Tiga Tahap (`MODULE-HRIS`, `MODULE-PAYROLL`)
 
-status: backlog
+status: review
 environment: dev
 retries: 0
 
@@ -58,9 +58,39 @@ Laporan user 05-11-2026: karyawan tidak bisa mengajukan pinjaman, atau pinjamann
   - data HR (status/level jabatan) tetap urusan HR.
 
 ## Acceptance Criteria
-- [ ] Manager penyetuju dan atasan langsung SPV mendapat lonceng saat kasbon/pinjaman diajukan; tanpa lonceng ganda bila keduanya orang yang sama.
-- [ ] Atasan langsung melihat kasbon/pinjaman tim di Riwayat dan bisa membuka detail beserta lampirannya.
-- [ ] Gates hijau; QA staging (HP + desktop).
+- [x] Semua pengajuan diputus atasan terdekat minimal SPV; atasan langsung berlevel Staff tidak memutus.
+- [x] Kasbon/pinjaman SPV → Manager (bila ada) → HR; lonceng per tahap tanpa duplikasi; atasan langsung non-penyetuju dilonceng untuk melihat detail.
+- [x] Atasan langsung dan penyetuju melihat kasbon/pinjaman tim di Riwayat beserta lampirannya.
+- [x] Gates hijau; QA staging (HP + desktop).
 
 ## Automation Log
 - 2026-11-05 — Investigasi laporan (staging + production read-only atas izin) dan 3 jawaban user. Worktree `.worktrees/epic091`, branch `feat/epic091-pinjaman-atasan`, ditumpuk di atas EPIC-090.
+- 2026-11-05 — Implementasi.
+  - Lonceng + Riwayat kasbon (`52a7b9f3`, `1c2035a5`). Setelah ralat user: `hris.request_approver` untuk semua pengajuan (`ac1d88d0`), tiga tahap kasbon (`7c8ba419`), status SPV di Riwayat (`986169b8`), Riwayat untuk atasan langsung/penyetuju tersimpan (`42a7c7db`).
+  - Gates: `go test -p 1` hris + payroll + app ok, vet + gofmt bersih, vitest 4594 lulus, tsc + eslint bersih.
+- 2026-11-05 — Review akhir (reviewer terpisah): 0 Critical, 4 Important, diperbaiki dengan tes (`a3e2dfbd`):
+  - lonceng Manager "(0x cicilan)";
+  - dokumen 403 bagi penyetuju saat ini pada pengajuan lama;
+  - tahap SPV dilewati bila SPV tersimpan nonaktif/tanpa akun;
+  - HR yang juga penyetuju tersimpan tetap bisa bertindak sebagai HR;
+  - laporan "tanpa atasan" mengikuti `request_approver` (alasan baru: `no_account`, `below_spv`).
+
+  Ditunda:
+  - fallback Next masih `reporting_to`;
+  - lonceng ke atasan langsung nonaktif;
+  - performa fungsi per baris (EXPLAIN di staging);
+  - `?tab=` hanya saat halaman dibuka;
+  - teks penolakan "Hanya atasan langsung…" dan "Manager Departemen";
+  - "SPV SPV Toko" ganda;
+  - tes HR di tahap SPV untuk approve.
+- 2026-11-05 — **Staging** `local-20261105-162804` (gabungan lokal EPIC-087 + EPIC-091, yang memuat #76–#78; merge `10254196` tidak di-push).
+  - Backup `staging-db-before-epic091b-20261105-162803.dump`. Migrasi `20261110090000` ok, verify 10780 objek, 0 berbeda.
+  - Data staging: 4 karyawan berganti penyetuju (atasan langsung berlevel Staff), 2 karyawan tanpa penyetuju (ke HR).
+  - QA 19/19 lulus (karyawan → Leader Staff → SPV → Manager; HP + desktop):
+    - cuti: lonceng ke SPV, bukan Leader; Leader 403; SPV menyetujui dari Persetujuan Tim;
+    - kasbon: tahap SPV lalu Manager; Manager 403 sebelum SPV;
+    - lonceng Manager setelah SPV; status `manager_approved`;
+    - Leader melihat Riwayat "Menunggu SPV" + dokumen;
+    - 0 error API dan console.
+  - Data demo dan berkas dihapus.
+
