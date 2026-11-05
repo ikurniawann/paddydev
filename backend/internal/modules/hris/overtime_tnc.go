@@ -43,15 +43,11 @@ func (s *Service) overtimeStartCheck(ctx context.Context, r Repository, employee
 }
 
 // checkOvertimeCaps is R3 on r (inside the caller's transaction): the
-// employee row is locked so two requests cannot both pass, then the day,
+// employee row is locked so two requests cannot both pass, then the
 // Monday–Sunday week and attendance period totals (pending + approved,
-// without excludeID) plus hours must stay within 4 / 18 / 72.
+// without excludeID) plus hours must stay within 18 / 72 (EPIC-089: no daily cap).
 func (s *Service) checkOvertimeCaps(ctx context.Context, r Repository, employeeID, date string, hours float64, excludeID string) error {
 	if err := r.LockLeaveEmployee(ctx, employeeID); err != nil {
-		return err
-	}
-	day, err := r.OvertimeHoursUsed(ctx, employeeID, date, date, excludeID)
-	if err != nil {
 		return err
 	}
 	mon, sun, _ := domain.WeekBounds(date)
@@ -67,7 +63,7 @@ func (s *Service) checkOvertimeCaps(ctx context.Context, r Repository, employeeI
 	if err != nil {
 		return err
 	}
-	if msg := domain.OvertimeCapError(hours, day, week, period, mon, sun, p.Label()); msg != "" {
+	if msg := domain.OvertimeCapError(hours, week, period, mon, sun, p.Label()); msg != "" {
 		return httpx.BadRequest(msg)
 	}
 	return nil

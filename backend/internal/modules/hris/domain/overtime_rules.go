@@ -9,11 +9,28 @@ import (
 
 // Ketentuan Lembur TnC 03-11-2026 (EPIC-085).
 
+// Batas keras 18 jam/minggu dan 72 jam/periode; batas harian 4 jam dan 12 jam
+// kotor dihapus (EPIC-089 R1): lebih dari 4 jam cukup diberi Keterangan.
 const (
-	OvertimeMaxDailyHours  = 4
 	OvertimeMaxWeeklyHours = 18
 	OvertimeMaxPeriodHours = 72
+
+	OvertimeReasonThresholdHours = 4
+	OvertimeLongReasonMin        = 10
 )
+
+// OvertimeLongReasonMsg is EPIC-089 R2.
+var OvertimeLongReasonMsg = fmt.Sprintf("Lembur lebih dari %d jam: isi Keterangan alasannya (minimal %d karakter)",
+	OvertimeReasonThresholdHours, OvertimeLongReasonMin)
+
+// OvertimeReasonError is R2 for the employee's own request: more than 4
+// paid hours need a Keterangan of at least 10 characters (trimmed).
+func OvertimeReasonError(hours float64, reason string) string {
+	if hours <= OvertimeReasonThresholdHours || len([]rune(strings.TrimSpace(reason))) >= OvertimeLongReasonMin {
+		return ""
+	}
+	return OvertimeLongReasonMsg
+}
 
 // OvertimeLeaderRefused is R1: no overtime from Supervisor up.
 const OvertimeLeaderRefused = "Lembur tidak berlaku untuk jabatan Supervisor ke atas"
@@ -54,13 +71,11 @@ func jam(h float64) string {
 	return strings.Replace(strconv.FormatFloat(math.Round(h*100)/100, 'f', -1, 64), ".", ",", 1)
 }
 
-// OvertimeCapError is R3, checked day → week → period: the used totals
-// (pending + approved, without the row being changed) plus hours must stay
-// within 4 / 18 / 72 hours.
-func OvertimeCapError(hours, dayUsed, weekUsed, periodUsed float64, weekStart, weekEnd, periodLabel string) string {
+// OvertimeCapError is R3 as revised by EPIC-089, checked week → period: the
+// used totals (pending + approved, without the row being changed) plus hours
+// must stay within 18 / 72 hours.
+func OvertimeCapError(hours, weekUsed, periodUsed float64, weekStart, weekEnd, periodLabel string) string {
 	switch {
-	case dayUsed+hours > OvertimeMaxDailyHours:
-		return fmt.Sprintf("Lembur maksimal %d jam per hari", OvertimeMaxDailyHours)
 	case weekUsed+hours > OvertimeMaxWeeklyHours:
 		return fmt.Sprintf("Lembur minggu %s s.d. %s sudah %s jam; maksimal %d jam per minggu (sisa %s jam)",
 			dayMonth(weekStart), dayMonth(weekEnd), jam(weekUsed), OvertimeMaxWeeklyHours, jam(max(0, OvertimeMaxWeeklyHours-weekUsed)))

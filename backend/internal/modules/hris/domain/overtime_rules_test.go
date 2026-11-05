@@ -46,25 +46,47 @@ func TestOvertimeStartError(t *testing.T) {
 func TestOvertimeCapError(t *testing.T) {
 	const label = "21 Okt – 20 Nov 2026"
 	cases := []struct {
-		name                     string
-		hours, day, week, period float64
-		want                     string
+		name                string
+		hours, week, period float64
+		want                string
 	}{
-		{"lebih 4 jam sehari", 4.5, 0, 0, 0, "Lembur maksimal 4 jam per hari"},
-		{"tepat 4 jam sehari", 2, 2, 0, 0, ""},
-		{"lewat batas minggu", 3, 0, 16, 0,
+		// EPIC-089 R1: tidak ada lagi batas harian.
+		{"6 jam sehari boleh", 6, 0, 0, ""},
+		{"lewat batas minggu", 3, 16, 0,
 			"Lembur minggu 02-11 s.d. 08-11 sudah 16 jam; maksimal 18 jam per minggu (sisa 2 jam)"},
-		{"lewat batas periode", 2, 0, 0, 70.5,
+		{"lewat batas periode", 2, 0, 70.5,
 			"Lembur periode 21 Okt – 20 Nov 2026 sudah 70,5 jam; maksimal 72 jam per periode (sisa 1,5 jam)"},
-		{"tepat batas", 2, 0, 16, 70, ""},
-		{"sisa dibulatkan 2 desimal", 2, 0, 16.67, 0,
+		{"tepat batas", 2, 16, 70, ""},
+		{"sisa dibulatkan 2 desimal", 2, 16.67, 0,
 			"Lembur minggu 02-11 s.d. 08-11 sudah 16,67 jam; maksimal 18 jam per minggu (sisa 1,33 jam)"},
-		{"sisa tidak negatif", 1, 0, 20, 0,
+		{"sisa tidak negatif", 1, 20, 0,
 			"Lembur minggu 02-11 s.d. 08-11 sudah 20 jam; maksimal 18 jam per minggu (sisa 0 jam)"},
 	}
 	for _, c := range cases {
-		if got := OvertimeCapError(c.hours, c.day, c.week, c.period, "2026-11-02", "2026-11-08", label); got != c.want {
+		if got := OvertimeCapError(c.hours, c.week, c.period, "2026-11-02", "2026-11-08", label); got != c.want {
 			t.Errorf("%s: got %q, want %q", c.name, got, c.want)
+		}
+	}
+}
+
+// EPIC-089 R2: lebih dari 4 jam dibayar wajib Keterangan minimal 10 karakter.
+func TestOvertimeReasonError(t *testing.T) {
+	const msg = "Lembur lebih dari 4 jam: isi Keterangan alasannya (minimal 10 karakter)"
+	cases := []struct {
+		hours  float64
+		reason string
+		want   string
+	}{
+		{4, "", ""},
+		{4.5, "", msg},
+		{4.5, "   ", msg},
+		{4.5, "123456789", msg},
+		{4.5, " 123456789 ", msg},
+		{4.5, "Stok opname akhir", ""},
+	}
+	for _, c := range cases {
+		if got := OvertimeReasonError(c.hours, c.reason); got != c.want {
+			t.Errorf("OvertimeReasonError(%v, %q) = %q, want %q", c.hours, c.reason, got, c.want)
 		}
 	}
 }
