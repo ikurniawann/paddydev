@@ -402,6 +402,10 @@ func (s *Service) CreateLeave(ctx context.Context, a *Actor, in leaveRequest) (*
 		if leave, err = r.InsertLeave(ctx, f); err != nil {
 			return err
 		}
+		title, message := domain.LeaveManagerNotice(emp.Str("full_name"), in.LeaveType, in.StartDate, in.EndDate, totalDays)
+		if err := r.NotifyManager(ctx, *employeeID, title, message, domain.TeamApprovalsLink); err != nil {
+			return err
+		}
 		reason := in.Reason
 		return r.Publish(ctx, TopicLeaveRequested, *employeeID, contracts.LeaveRequested{
 			LeaveID: leave.Str("id"), EmployeeID: *employeeID, EmployeeName: emp.Str("full_name"),

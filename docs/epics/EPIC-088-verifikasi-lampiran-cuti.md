@@ -83,6 +83,11 @@ Poin 12 (Izin Leader 1x/bulan, hangus, SPV ke atas, tanpa potong THP = ES-15) **
   - **Persetujuan Tim**: setelah atasan menyetujui pengajuan berlampiran, toast memakai pesan dari server.
 - **R9 Fallback Next.** `decideLeave` di Next menolak `approve` pada pengajuan berlampiran: 503 "Pengajuan berlampiran diproses oleh layanan utama, coba lagi sebentar". Route verifikasi hanya di Go (masuk `goNativePrefixes` di tes).
 - **R10 Data lama.** Pengajuan `approved` sebelum rilis tidak diubah. Pengajuan `pending` berlampiran yang diputuskan setelah rilis mengikuti alur baru.
+- **R11 Lonceng ke atasan (permintaan user 05-11).** Saat karyawan mengajukan cuti/izin, atau lembur (`source='employee'`), atasan langsung mendapat lonceng in-app (`notify_user`, type `approval`, tautan `/dashboard/me/persetujuan-tim`) dalam transaksi yang sama dengan pengajuan.
+  - Judul "Pengajuan cuti: <nama>" / "Pengajuan lembur: <nama>".
+  - Pesan contoh: "Budi mengajukan Cuti Menikah 16 Nov 2026 s.d. 17 Nov 2026 (2 hari). Tinjau di Area Karyawan → Persetujuan Tim."
+  - Tidak dikirim bila karyawan tanpa atasan, atasan = dirinya sendiri, atau atasan tanpa akun.
+  - Lonceng HR ("📋 Pengajuan Cuti Baru") dan WhatsApp ke atasan tetap jalan.
 - **Di luar cakupan**:
   - verifikasi lampiran lembur dan koreksi absen;
   - kunci periode untuk verifikasi atau unggah ulang. Mengikuti `DecideLeave`, yang juga tidak mengunci; dicatat untuk HR;
@@ -96,6 +101,7 @@ Rencana: `docs/superpowers/plans/2026-11-03-verifikasi-lampiran-cuti.md`.
 - [x] HR memverifikasi → cuti disetujui (saldo tahunan terpotong bila Cuti Tahunan); HR mengembalikan → karyawan melihat alasan dan bisa unggah ulang, lalu antrean HR terisi lagi.
 - [x] HR menyetujui langsung pengajuan berlampiran → sekaligus terverifikasi. Pengajuan tanpa lampiran tidak berubah.
 - [x] Gates hijau; QA staging (HR, atasan, karyawan; desktop + HP).
+- [ ] R11: atasan mendapat lonceng saat bawahan mengajukan cuti/izin dan lembur.
 
 ## Automation Log
 - 2026-11-03 — Pemetaan MOM 29-10 butir 11–12 + 4 jawaban user. Poin 12 sudah live (ES-15). Epic + rencana ditulis. Worktree `.worktrees/epic088`, branch `feat/epic088-verifikasi-lampiran` dari main `614d3694`.
