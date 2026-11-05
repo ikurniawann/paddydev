@@ -99,7 +99,8 @@ func (hrisPayrollSQL) PendingLoanCount(ctx context.Context, q database.Querier) 
 func (hrisPayrollSQL) ManagerPendingLoanCount(ctx context.Context, q database.Querier, managerID string) (int64, error) {
 	var n int64
 	err := q.QueryRow(ctx, `SELECT count(*) FROM hris.loans
-		WHERE status = 'pending' AND manager_approver_id = $1`, managerID).Scan(&n)
+		WHERE status = 'pending' AND ((supervisor_approver_id = $1 AND supervisor_approved_at IS NULL)
+		   OR (manager_approver_id = $1 AND (supervisor_approver_id IS NULL OR supervisor_approved_at IS NOT NULL)))`, managerID).Scan(&n)
 	return n, err
 }
 
@@ -107,10 +108,12 @@ func (hrisPayrollSQL) TeamLoanHistory(ctx context.Context, q database.Querier, m
 	rows, err := q.Query(ctx, `SELECT l.id::text, l.employee_id::text, m.full_name, m.nip, l.loan_type::text,
 		l.principal_amount::text, coalesce(l.monthly_installment, 0)::text, l.status::text,
 		to_char(l.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'), l.tenor_months,
-		l.purpose, l.rejection_reason, ma.full_name, l.attachments, l.collateral_attachments
+		l.purpose, l.rejection_reason, ma.full_name, l.attachments, l.collateral_attachments,
+		sa.full_name, l.supervisor_approved_at IS NOT NULL
 		FROM hris.loans l
 		JOIN hris.employees m ON m.id = l.employee_id AND hris.request_approver(m.id) = $1::uuid
 		LEFT JOIN hris.employees ma ON ma.id = l.manager_approver_id
+		LEFT JOIN hris.employees sa ON sa.id = l.supervisor_approver_id
 		WHERE l.created_at >= $2::date OR l.status IN ('pending', 'manager_approved')
 		ORDER BY l.created_at DESC LIMIT 300`, managerID, from)
 	if err != nil {
@@ -122,7 +125,7 @@ func (hrisPayrollSQL) TeamLoanHistory(ctx context.Context, q database.Querier, m
 		var l hris.TeamLoan
 		if err := rows.Scan(&l.ID, &l.EmployeeID, &l.EmployeeName, &l.EmployeeNIP, &l.LoanType, &l.Principal, &l.Monthly,
 			&l.Status, &l.CreatedAt, &l.Tenor, &l.Purpose, &l.RejectionReason, &l.ApproverName,
-			&l.Attachments, &l.Collateral); err != nil {
+			&l.Attachments, &l.Collateral, &l.SupervisorName, &l.SupervisorApproved); err != nil {
 			return nil, err
 		}
 		out = append(out, l)

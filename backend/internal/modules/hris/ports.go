@@ -52,6 +52,10 @@ type TeamLoan struct {
 	Tenor                                           int
 	Purpose, RejectionReason, ApproverName          *string
 	Attachments, Collateral                         []string
+	// SupervisorName is the SPV stage before the Manager (EPIC-091);
+	// SupervisorApproved once it approved.
+	SupervisorName     *string
+	SupervisorApproved bool
 }
 
 // PeriodRun is a payroll run's month and status (draft, processing,

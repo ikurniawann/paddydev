@@ -255,6 +255,9 @@ func TestTeamLoanHistory(t *testing.T) {
 		t.Fatalf("rows = %+v", rows)
 	}
 	p := rows[1]
+	if p.SupervisorName != nil || p.SupervisorApproved {
+		t.Fatalf("tahap SPV tanpa SPV = %+v", p)
+	}
 	if p.EmployeeName != "Peminjam Tim" || p.ApproverName == nil || *p.ApproverName != "Manager Riwayat" || p.Tenor != 2 ||
 		p.Principal != "1000000.00" || len(p.Attachments) != 1 || p.Purpose == nil || p.CreatedAt == "" {
 		t.Fatalf("pending = %+v", p)

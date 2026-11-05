@@ -55,6 +55,7 @@ func teamLoanRow(l TeamLoan) *Row {
 	return obj("id", l.ID, "employee_id", l.EmployeeID, "loan_type", l.LoanType, "principal_amount", l.Principal,
 		"monthly_installment", l.Monthly, "tenor_months", l.Tenor, "status", l.Status, "purpose", l.Purpose,
 		"rejection_reason", l.RejectionReason, "manager_approver_name", l.ApproverName,
+		"supervisor_approver_name", l.SupervisorName, "supervisor_approved", l.SupervisorApproved,
 		"attachments", nonNilStrings(l.Attachments), "collateral_attachments", nonNilStrings(l.Collateral),
 		"created_at", l.CreatedAt,
 		"employee", obj("id", l.EmployeeID, "full_name", l.EmployeeName, "nip", l.EmployeeNIP))

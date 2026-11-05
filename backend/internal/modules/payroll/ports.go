@@ -73,6 +73,9 @@ type Employees interface {
 	// reporting_to chain (not the employee) with a Manager-or-above position
 	// level; nil without one. Cycles and self-references stop the walk (EPIC-060).
 	LoanApprover(ctx context.Context, q database.Querier, employeeID string) (*string, error)
+	// RequestApprover is hris.request_approver: the nearest atasan from
+	// Supervisor up (active, with an account); nil without one (EPIC-091).
+	RequestApprover(ctx context.Context, q database.Querier, employeeID string) (*string, error)
 }
 
 // LoanApproverSQL walks reporting_to up to 10 levels; $1 = employee id.
