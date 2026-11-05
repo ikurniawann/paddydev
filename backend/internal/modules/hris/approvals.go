@@ -155,10 +155,11 @@ func (s *Service) teamPendingTotal(ctx context.Context, managerID string) (int64
 	return n + loans, err
 }
 
-// teamMember joins the requester (alias m) when $1 is their request approver
-// (EPIC-091: nearest atasan from Supervisor up; never oneself, R2).
+// teamMember joins the requester (alias m) when $1 may decide their requests
+// (EPIC-091: the nearest atasan from Supervisor up, or the Manager above;
+// never oneself, R2).
 func teamMember(alias string) string {
-	return fmt.Sprintf(`JOIN hris.employees m ON m.id = %s.employee_id AND hris.request_approver(m.id) = $1::uuid`, alias)
+	return fmt.Sprintf(`JOIN hris.employees m ON m.id = %s.employee_id AND hris.is_request_approver(m.id, $1::uuid)`, alias)
 }
 
 const teamEmployee = `json_build_object('id', m.id, 'full_name', m.full_name, 'nip', m.nip) AS employee`
@@ -198,4 +199,23 @@ func (h handlers) teamApprovals(w http.ResponseWriter, r *http.Request, a *Actor
 		return err
 	}
 	return ok(w, dataOf(out))
+}
+
+// approverFor is the approver of emp (an employee embed with approver_id and
+// manager_id) that actor may act as (EPIC-091, "2 atasan"): the Manager above
+// when that is the actor, otherwise the nearest SPV approver. The decision
+// rules then compare the actor against it.
+func approverFor(emp *Row, actor *string) *string {
+	if emp == nil {
+		return nil
+	}
+	if actor != nil && emp.Str("manager_id") == *actor {
+		return emp.StrPtr("manager_id")
+	}
+	return emp.StrPtr("approver_id")
+}
+
+// isApprover: actor is emp's SPV approver or the Manager above it.
+func isApprover(emp *Row, actor string) bool {
+	return actor != "" && (emp.Str("approver_id") == actor || emp.Str("manager_id") == actor)
 }

@@ -34,6 +34,9 @@ Laporan user 05-11-2026: karyawan tidak bisa mengajukan pinjaman, atau pinjamann
   - Riwayat tim.
 
   `approver_id` menggantikan `reporting_to_active` di data lembur HR (tombol Koreksi). Absensi Tim tetap memakai subtree `reporting_to`.
+- **R0c Dua atasan (ralat user 05-11, "route tetap bisa 2 atasan").** Cuti/izin, lembur, dan perjalanan dinas boleh diputus **SPV terdekat** (`request_approver`, mis. Farhan) **atau Manager di atasnya** (`hris.request_manager`: atasan terdekat berlevel Manager ke atas, aktif, berakun, mis. Dimas). Cukup salah satu; yang terlambat mendapat "sudah disetujui/ditolak".
+  - Implementasi: delta `20261110090100_request_manager.sql` (`request_manager`, `is_request_approver`), dipakai di antrean/badge, baca lampiran, Riwayat, dan keputusan (`approverFor`).
+  - Lonceng/WA pengajuan tetap ke SPV saja agar Manager yang membawahi banyak toko tidak dibanjiri; Manager melihat antrean dan badge.
 - **R0b Kasbon/pinjaman tiga tahap.**
   - **Penyetuju** (`loanStages`): tahap SPV = `request_approver`, dan tahap Manager = `LoanApprover` (≥ Manager) bila orangnya berbeda. Bila keduanya sama, atau salah satunya tidak ada, hanya satu tahap atasan.
   - **Kolom** `supervisor_approver_id/approved_by/approved_at`. Status tetap `pending` sampai Manager setuju (`manager_approved`), lalu HR.
@@ -100,4 +103,11 @@ Laporan user 05-11-2026: karyawan tidak bisa mengajukan pinjaman, atau pinjamann
 
     Setelah rilis, pengajuan ini tetap di Manager tersimpan (tanpa tahap SPV, R0b). Bila user ingin SPV ikut memutus pengajuan lama, perlu skrip ops terpisah yang mengisi `supervisor_approver_id` untuk pinjaman pending; skrip itu belum dibuat dan butuh izin.
 - 2026-11-05 — Keputusan user: pinjaman pending lama **tetap di Manager tersimpan** (tanpa skrip pengisian tahap SPV). Hanya pengajuan baru setelah rilis yang mengikuti SPV → Manager → HR.
+- 2026-11-05 — Ralat user "route tetap bisa 2 atasan… jabatan seperti Farhan bisa menyetujui semua pengajuan" → R0c.
+  - TDD `TestRequestApproverMinimumSupervisor` diperluas RED→GREEN:
+    - Manager di atas SPV melihat antrean dan memutus cuti; SPV yang telat ditolak;
+    - Manager memutus lembur dan perjalanan dinas;
+    - Leader Staff 403;
+    - Riwayat untuk SPV dan Manager.
+  - Gates: Go hris + payroll + app ok, vitest 4594, tsc + eslint.
 

@@ -61,7 +61,7 @@ func (s *Service) CorrectOvertime(ctx context.Context, a *Actor, id string, in o
 			return httpx.Forbidden(overtimeCorrectSelf)
 		}
 		if ot.Str("source") == "employee" {
-			reportingTo, managerActive := overtimeManager(ot.Child("employee"))
+			reportingTo, managerActive := overtimeManager(ot.Child("employee"), a.EmployeeID)
 			if allowed, msg := domain.CanCorrectOvertimeTimes(a.EmployeeID, a.IsHRD, ot.Str("employee_id"), reportingTo,
 				managerActive); !allowed {
 				return httpx.Forbidden(msg)

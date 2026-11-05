@@ -127,7 +127,7 @@ func (s *store) Publish(ctx context.Context, topic, key string, payload any) err
 
 func (s *store) LeaveDetail(ctx context.Context, id string) (*Row, error) {
 	row, err := queryRow(ctx, s.db, `SELECT *, `+
-		leaveEmployeeEmbed("employee", "id, full_name, nip, photo_url, email, phone, reporting_to, hris.request_approver(employees.id) AS approver_id, "+deptName+", "+
+		leaveEmployeeEmbed("employee", "id, full_name, nip, photo_url, email, phone, reporting_to, hris.request_approver(employees.id) AS approver_id, hris.request_manager(employees.id) AS manager_id, "+deptName+", "+
 			embedOne("job_title", "title", "hris.positions", "id = employees.job_title_id"))+", "+
 		leaveApproverEmbed("id, full_name, nip, email")+` FROM hris.leaves WHERE id = $1`, id)
 	return row, ignoreBadInput(err)
@@ -135,7 +135,7 @@ func (s *store) LeaveDetail(ctx context.Context, id string) (*Row, error) {
 
 func (s *store) LeaveForDecision(ctx context.Context, id string) (*Row, error) {
 	row, err := queryRow(ctx, s.db, `SELECT *, `+
-		leaveEmployeeEmbed("employee", "id, full_name, email, phone, reporting_to, hris.request_approver(employees.id) AS approver_id, "+
+		leaveEmployeeEmbed("employee", "id, full_name, email, phone, reporting_to, hris.request_approver(employees.id) AS approver_id, hris.request_manager(employees.id) AS manager_id, "+
 			embedOne("department", "id, name", "hris.departments", "id = employees.department_id")+", "+
 			embedOne("job_title", "id, title", "hris.positions", "id = employees.job_title_id"))+
 		` FROM hris.leaves WHERE id = $1`, id)

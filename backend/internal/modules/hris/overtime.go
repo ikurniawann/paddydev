@@ -329,7 +329,7 @@ func (s *Service) DecideOvertime(ctx context.Context, a *Actor, id, action strin
 		return nil, httpx.BadRequest("Pengajuan sudah "+status, obj("current_status", status))
 	}
 	emp := ot.Child("employee")
-	reportingTo, managerActive := overtimeManager(emp)
+	reportingTo, managerActive := overtimeManager(emp, a.EmployeeID)
 	// The HR side of the decision holds "approve" on the Lembur leaf
 	// (EPIC-067 R11): backup/override, day type, time correction, cancelling
 	// a company assignment.
@@ -628,14 +628,15 @@ func (s *Service) DeleteShift(ctx context.Context, id string) (string, error) {
 // managerActiveCol is the employee's request approver (EPIC-091: nearest
 // atasan from Supervisor up, active, with an account; NULL without one,
 // as an inactive manager counted as none before, EPIC-063 R9, EPIC-066).
-const managerActiveCol = `hris.request_approver(employees.id) AS approver_id`
+const managerActiveCol = `hris.request_approver(employees.id) AS approver_id, hris.request_manager(employees.id) AS manager_id`
 
-// overtimeManager is the owner's request approver and whether there is one.
-func overtimeManager(emp *Row) (reportingTo *string, active bool) {
+// overtimeManager is the owner's approver actor may act as (see approverFor)
+// and whether there is one.
+func overtimeManager(emp *Row, actor *string) (reportingTo *string, active bool) {
 	if emp == nil {
 		return nil, false
 	}
-	return emp.StrPtr("approver_id"), emp.Str("approver_id") != ""
+	return approverFor(emp, actor), emp.Str("approver_id") != ""
 }
 
 var overtimeSelect = `*, ` +
@@ -647,7 +648,7 @@ var overtimeSelect = `*, ` +
 func (s *store) SubordinateIDs(ctx context.Context, managerID string) ([]string, error) {
 	// EPIC-091: the people whose request approver is managerID (nearest
 	// atasan from Supervisor up); never oneself (EPIC-063 R2).
-	rows, err := queryRows(ctx, s.db, `SELECT id FROM hris.employees WHERE hris.request_approver(id) = $1::uuid`, managerID)
+	rows, err := queryRows(ctx, s.db, `SELECT id FROM hris.employees WHERE hris.is_request_approver(id, $1::uuid)`, managerID)
 	if err != nil {
 		return nil, ignoreBadInput(err)
 	}
