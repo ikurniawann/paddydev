@@ -99,8 +99,8 @@ func (hrisPayrollSQL) PendingLoanCount(ctx context.Context, q database.Querier) 
 func (hrisPayrollSQL) ManagerPendingLoanCount(ctx context.Context, q database.Querier, managerID string) (int64, error) {
 	var n int64
 	err := q.QueryRow(ctx, `SELECT count(*) FROM hris.loans
-		WHERE status = 'pending' AND ((supervisor_approver_id = $1 AND supervisor_approved_at IS NULL)
-		   OR (manager_approver_id = $1 AND (supervisor_approver_id IS NULL OR supervisor_approved_at IS NOT NULL)))`, managerID).Scan(&n)
+		WHERE status = 'pending' AND ((supervisor_approver_id = $1 AND NOT `+supervisorStageDone+`)
+		   OR (manager_approver_id = $1 AND `+supervisorStageDone+`))`, managerID).Scan(&n)
 	return n, err
 }
 
@@ -370,3 +370,7 @@ func (w *hrisWhatsApp) SendText(ctx context.Context, target, message string) (bo
 	res := gateway.SendText(ctx, target, message)
 	return res.Success, res.TimedOut, res.Reason
 }
+
+// supervisorStageDone mirrors payroll.supervisorStageDone (EPIC-091): the SPV
+// stage is over when absent, approved, or its SPV can no longer decide.
+const supervisorStageDone = `(supervisor_approver_id IS NULL OR supervisor_approved_at IS NOT NULL OR NOT EXISTS (SELECT 1 FROM hris.employees sx WHERE sx.id = supervisor_approver_id AND sx.is_active AND sx.user_id IS NOT NULL))`

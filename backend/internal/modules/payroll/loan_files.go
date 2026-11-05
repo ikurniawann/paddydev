@@ -66,7 +66,8 @@ func (s *service) isLoanApproverOf(ctx context.Context, employeeID, rel string) 
 	err := s.db.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM hris.loans l JOIN hris.employees e ON e.id = l.employee_id
 		WHERE ($2 = ANY(l.attachments) OR $2 = ANY(l.collateral_attachments))
 		  AND (l.manager_approver_id::text = $1 OR l.supervisor_approver_id::text = $1
-		       OR (e.reporting_to::text = $1 AND e.id::text <> $1)))`, employeeID, rel).Scan(&ok)
+		       OR (e.reporting_to::text = $1 AND e.id::text <> $1)
+		       OR hris.request_approver(e.id)::text = $1))`, employeeID, rel).Scan(&ok)
 	return ok, err
 }
 

@@ -48,6 +48,8 @@ describe("NO_MANAGER_REASON_LABELS", () => {
       empty: "Atasan belum diisi",
       self: "Atasan = diri sendiri",
       inactive: "Atasan nonaktif",
+      no_account: "Atasan belum punya akun login",
+      below_spv: "Tidak ada atasan minimal SPV",
     });
   });
 });

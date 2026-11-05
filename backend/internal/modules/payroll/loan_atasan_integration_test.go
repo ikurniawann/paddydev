@@ -83,7 +83,8 @@ func TestLoanThreeSteps(t *testing.T) {
 	if status != "pending/true" {
 		t.Fatalf("setelah SPV = %s", status)
 	}
-	if n, msg := e.bell(mgrStaff.UserID, title, "/dashboard/me/pinjaman"); n != 1 || !strings.Contains(msg, "Disetujui SPV SPV Toko") {
+	if n, msg := e.bell(mgrStaff.UserID, title, "/dashboard/me/pinjaman"); n != 1 || !strings.Contains(msg, "Disetujui SPV SPV Toko") ||
+		!strings.Contains(msg, "(2x cicilan)") {
 		t.Fatalf("lonceng Manager setelah SPV = %d %q", n, msg)
 	}
 	if queue(&spvStaff) != 0 || queue(&mgrStaff) != 1 {
@@ -144,11 +145,57 @@ func TestLoanStaffLevelAtasanSkipped(t *testing.T) {
 	if loan["supervisor_approver_id"] != spv {
 		t.Fatalf("SPV = %v, want %s", loan["supervisor_approver_id"], spv)
 	}
+	// Review akhir: pengajuan lama (tanpa tahap SPV) tetap terbaca oleh penyetuju
+	// saat ini (SPV di atas Store Leader) lewat Riwayat.
+	e.exec(`UPDATE hris.loans SET supervisor_approver_id = NULL WHERE id = $1`, loan["id"])
+	if rec := e.raw(&spvStaff, "GET", "/api/hris/loans/attachment/"+loan["attachments"].([]any)[0].(string), nil); rec.Code != 200 {
+		t.Fatalf("SPV baca lampiran pengajuan lama = %d", rec.Code)
+	}
+	e.exec(`UPDATE hris.loans SET supervisor_approver_id = $2 WHERE id = $1`, loan["id"], spv)
 	if n, _ := e.bell(spvStaff.UserID, "Pengajuan Kasbon: Peminjam Kasbon", "/dashboard/me/pinjaman"); n != 1 {
 		t.Fatalf("lonceng SPV = %d", n)
 	}
 	if n, msg := e.bell(leaderStaff.UserID, "Pengajuan Kasbon: Peminjam Kasbon", "/dashboard/me/persetujuan-tim?tab=riwayat"); n != 1 ||
 		!strings.Contains(msg, "SPV Toko") {
 		t.Fatalf("lonceng Store Leader = %d %q", n, msg)
+	}
+}
+
+// Review akhir: SPV tersimpan keluar/nonaktif → tahap SPV dilewati, Manager memutus.
+func TestLoanSupervisorStageSkippedWhenUnavailable(t *testing.T) {
+	e := setup(t)
+	worker := kasbonWorker(e, "permanent")
+	_, mgrStaff, spv, _ := e.spvChain(worker)
+	id := e.loan(&e.staff, map[string]any{"loan_type": "kasbon", "principal_amount": 1000000, "tenor_months": 2}, 200)["data"].(map[string]any)["id"].(string)
+	e.exec(`UPDATE hris.employees SET is_active = false WHERE id = $1`, spv)
+	if q := e.call(&mgrStaff, "GET", "/api/hris/loans?scope=approvals", nil, 200)["data"].([]any); len(q) != 1 {
+		t.Fatalf("antrean Manager = %d", len(q))
+	}
+	e.call(&mgrStaff, "POST", "/api/hris/loans/"+id+"/approve", map[string]any{"approved": true}, 200)
+	var status string
+	e.scalar(&status, `SELECT status FROM hris.loans WHERE id = $1`, id)
+	if status != "manager_approved" {
+		t.Fatalf("status = %s", status)
+	}
+}
+
+// Review akhir: HR yang juga Manager tersimpan tetap bisa menolak sebagai HR
+// saat masih giliran SPV.
+func TestLoanHRWhoIsApproverActsAsHR(t *testing.T) {
+	e := setup(t)
+	worker := kasbonWorker(e, "permanent")
+	spvStaff := e.plainStaff()
+	spv := e.employee("SPV Toko", spvStaff.UserID, true)
+	e.setLevel(spv, "Supervisor")
+	hrEmp := e.employee("HR Manager", e.hr.UserID, true)
+	e.setLevel(hrEmp, "Manager")
+	e.exec(`UPDATE hris.employees SET reporting_to = $2 WHERE id = $1`, worker, spv)
+	e.exec(`UPDATE hris.employees SET reporting_to = $2 WHERE id = $1`, spv, hrEmp)
+	id := e.loan(&e.staff, map[string]any{"loan_type": "kasbon", "principal_amount": 1000000, "tenor_months": 2}, 200)["data"].(map[string]any)["id"].(string)
+	e.call(&e.hr, "POST", "/api/hris/loans/"+id+"/approve", map[string]any{"approved": false, "rejection_reason": "Dokumen tidak lengkap"}, 200)
+	var status string
+	e.scalar(&status, `SELECT status FROM hris.loans WHERE id = $1`, id)
+	if status != "rejected" {
+		t.Fatalf("status = %s", status)
 	}
 }

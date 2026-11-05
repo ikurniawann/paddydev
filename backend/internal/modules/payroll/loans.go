@@ -71,11 +71,17 @@ func (s *service) listLoans(ctx context.Context, a *actor, employeeParam, status
 	return rows, s.stitch(ctx, s.db, rows, loanListPeople...)
 }
 
+// supervisorStageDone is true when a loan has no SPV stage left: none, the
+// SPV approved, or the stored SPV can no longer decide (inactive or without
+// an account), so the loan moves on to the Manager instead of stalling.
+// Mirror: app.hrisPayrollSQL.ManagerPendingLoanCount.
+const supervisorStageDone = `(supervisor_approver_id IS NULL OR supervisor_approved_at IS NOT NULL OR NOT EXISTS (SELECT 1 FROM hris.employees sx WHERE sx.id = supervisor_approver_id AND sx.is_active AND sx.user_id IS NOT NULL))`
+
 // loanStageOf is the pending loans whose current stage belongs to the
 // employee id param: the SPV stage first, then the Manager (EPIC-091).
 func loanStageOf(param string) string {
-	return `status = 'pending' AND ((supervisor_approver_id = ` + param + ` AND supervisor_approved_at IS NULL)
-		OR (manager_approver_id = ` + param + ` AND (supervisor_approver_id IS NULL OR supervisor_approved_at IS NOT NULL)))`
+	return `status = 'pending' AND ((supervisor_approver_id = ` + param + ` AND NOT ` + supervisorStageDone + `)
+		OR (manager_approver_id = ` + param + ` AND ` + supervisorStageDone + `))`
 }
 
 // listLoanApprovals is the atasan queue: pending kasbon and loans at the
@@ -361,7 +367,7 @@ func (s *service) loanForDecision(ctx context.Context, loanID string) (*loanForD
 	var l loanForDecision
 	err := s.db.QueryRow(ctx, `SELECT employee_id::text, COALESCE(status, ''), COALESCE(loan_type, ''),
 		principal_amount::float8, tenor_months, manager_approver_id::text, COALESCE(created_at, requested_date, now()),
-		supervisor_approver_id::text, supervisor_approved_at IS NOT NULL
+		supervisor_approver_id::text, `+supervisorStageDone+`
 		FROM hris.loans WHERE id::text = $1`, loanID).Scan(&l.EmployeeID, &l.Status, &l.LoanType,
 		&l.Principal, &l.Tenor, &l.ManagerApprover, &l.CreatedAt, &l.SupervisorApprover, &l.SupervisorDone)
 	if database.IsNoRows(err) {
@@ -380,7 +386,7 @@ func (s *service) decideLoanManager(ctx context.Context, approverEmployeeID, loa
 	if approve {
 		row, err = queryObj(ctx, s.db, `UPDATE hris.loans SET status = 'manager_approved', manager_approved_by = $2,
 			manager_approved_at = $3, updated_at = $3 WHERE id::text = $1 AND status = 'pending' AND manager_approver_id = $2
-			AND (supervisor_approver_id IS NULL OR supervisor_approved_at IS NOT NULL)
+			AND `+supervisorStageDone+`
 			RETURNING id, employee_id, loan_type, status, tenor_months, manager_approver_id, manager_approved_by, manager_approved_at`,
 			loanID, approverEmployeeID, now)
 	} else {
@@ -390,7 +396,7 @@ func (s *service) decideLoanManager(ctx context.Context, approverEmployeeID, loa
 		}
 		row, err = queryObj(ctx, s.db, `UPDATE hris.loans SET status = 'rejected', rejected_by = $2, rejected_at = $3,
 			rejection_reason = $4, is_active = false, updated_at = $3 WHERE id::text = $1 AND status = 'pending'
-			AND manager_approver_id = $2 AND (supervisor_approver_id IS NULL OR supervisor_approved_at IS NOT NULL)
+			AND manager_approver_id = $2 AND `+supervisorStageDone+`
 			RETURNING id, employee_id, loan_type, status, rejection_reason`,
 			loanID, approverEmployeeID, now, why)
 	}
@@ -440,9 +446,8 @@ func (s *service) decideLoanSupervisor(ctx context.Context, approverEmployeeID, 
 			return err
 		}
 		principal, _ := strconv.ParseFloat(row.Str("principal_amount"), 64)
-		tenor, _ := strconv.Atoi(row.Str("tenor_months"))
 		return notifyApprover(ctx, tx, row.Str("manager_approver_id"), loanTitle(row.Str("loan_type"), name),
-			loanWhat(name, row.Str("loan_type"), principal, tenor)+" Disetujui SPV "+spv+". Menunggu persetujuan Anda di Area Karyawan → Pinjaman.")
+			loanWhat(name, row.Str("loan_type"), principal, row.Int("tenor_months"))+" Disetujui SPV "+spv+". Menunggu persetujuan Anda di Area Karyawan → Pinjaman.")
 	})
 	if err != nil {
 		return nil, opaque(err)
@@ -638,8 +643,19 @@ func (h *handler) decideLoan(w http.ResponseWriter, r *http.Request) error {
 	}
 	if a.EmployeeID != nil && ((l.ManagerApprover != nil && *a.EmployeeID == *l.ManagerApprover) ||
 		(l.SupervisorApprover != nil && *a.EmployeeID == *l.SupervisorApprover)) && l.Status == "pending" {
-		// The other atasan stage is not theirs yet (or any more).
-		return httpx.Forbidden("Bukan giliran Anda memutus pengajuan ini")
+		// The other atasan stage is not theirs yet (or any more) — unless they
+		// also hold HR approve on Pinjaman: then they act as HR below.
+		hr := false
+		if u, err := h.auth.CurrentUser(r); err != nil {
+			return err
+		} else if u != nil {
+			if hr, err = h.auth.HasMenuAction(r.Context(), u, "approve", iam.HrisLoans...); err != nil {
+				return err
+			}
+		}
+		if !hr {
+			return httpx.Forbidden("Bukan giliran Anda memutus pengajuan ini")
+		}
 	}
 	u, err := h.auth.RequireMenuAction(r, "approve", iam.HrisLoans...)
 	if err != nil {

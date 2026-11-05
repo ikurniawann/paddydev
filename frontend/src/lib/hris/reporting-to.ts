@@ -25,12 +25,15 @@ export function isSelfManager(employeeId: string, reportingTo: string | null | u
 }
 
 /** Alasan karyawan aktif masuk laporan "tanpa atasan" (GET /api/hris/employees/without-manager). */
-export type NoManagerReason = "empty" | "self" | "inactive";
+/** EPIC-091: alasan tidak ada penyetuju (atasan terdekat minimal SPV, aktif, berakun). */
+export type NoManagerReason = "empty" | "self" | "inactive" | "no_account" | "below_spv";
 
 export const NO_MANAGER_REASON_LABELS: Record<NoManagerReason, string> = {
   empty: "Atasan belum diisi",
   self: "Atasan = diri sendiri",
   inactive: "Atasan nonaktif",
+  no_account: "Atasan belum punya akun login",
+  below_spv: "Tidak ada atasan minimal SPV",
 };
 
 /** Pilihan Atasan di form karyawan, tanpa karyawan yang sedang diedit (EPIC-063 R9). */
