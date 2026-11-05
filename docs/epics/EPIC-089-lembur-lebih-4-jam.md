@@ -42,6 +42,12 @@ Permintaan user 05-11-2026 merevisi EPIC-085 R3:
 - **R5 Acuan.**
   - `.claude/skills/paddy-hris-acuan/SKILL.md` baris Lembur ditambah: "> 4 jam/hari wajib keterangan; maks. 18 jam/minggu & 72 jam/periode; dokumentasi opsional (EPIC-089)".
   - EPIC-085 mendapat catatan "R3 direvisi EPIC-089".
+- **R6 Lintas hari (review akhir 05-11).** Tanpa batas 12 jam, satu lembur bisa melewati tengah malam sampai jam kerja besok dan terbayar ganda. Lembur pada tanggal D ditolak bila menabrak:
+  - lembur aktif D−1 yang lintas hari: "Lembur bertabrakan dengan lembur {tgl} ({mulai}–{selesai})";
+  - lembur aktif D+1: pesan yang sama;
+  - jam masuk shift pertama D+1: "Lembur melewati jam masuk kerja {tgl} ({HH:MM})".
+
+  Berlaku di pengajuan sendiri, penugasan HR, koreksi atasan, dan koreksi HR (bila jam/tanggal berubah). Libur nasional di D+1 tidak dikecualikan; jadwal yang menentukan.
 - **Di luar cakupan**: fallback route Next lembur (tidak terjangkau selama Go aktif); label "> 4 jam" khusus di antrean atasan (Keterangan sudah tampil).
 
 ## Tasks

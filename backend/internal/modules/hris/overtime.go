@@ -38,6 +38,12 @@ type OvertimeRepo interface {
 	OvertimeForUpdate(ctx context.Context, id string) (*Row, error)
 	// EPIC-085: jadwal, jam terpakai, dan perjalanan dinas untuk aturan TnC.
 	OvertimeShiftEndOn(ctx context.Context, employeeID, date string) (*domain.OvertimeShiftEnd, error)
+	// OvertimeShiftStartOn is the start (HH:MM) of the employee's first shift
+	// on date; "" without a schedule or on a day off (EPIC-089 review).
+	OvertimeShiftStartOn(ctx context.Context, employeeID, date string) (string, error)
+	// OvertimeSpanOn is the employee's pending/approved entry on date,
+	// without excludeID ("" = none); nil when there is none.
+	OvertimeSpanOn(ctx context.Context, employeeID, date, excludeID string) (*domain.OvertimeSpan, error)
 	OvertimeHoursUsed(ctx context.Context, employeeID, from, to, excludeID string) (float64, error)
 	OnApprovedTrip(ctx context.Context, employeeID, date string) (bool, error)
 }
@@ -241,6 +247,9 @@ func (s *Service) CreateOvertime(ctx context.Context, a *Actor, in overtimeInput
 		if err := s.checkOvertimeCaps(ctx, r, *targetID, in.Date, hours, ""); err != nil { // EPIC-085 R3
 			return err
 		}
+		if err := s.checkOvertimeOverlap(ctx, r, *targetID, in.Date, in.StartTime, in.EndTime, ""); err != nil {
+			return err
+		}
 		var err error
 		if row, err = r.InsertOvertime(ctx, f); err != nil || source != "employee" {
 			return err
@@ -395,6 +404,11 @@ func (s *Service) DecideOvertime(ctx context.Context, a *Actor, id, action strin
 			}
 			if start != was.start {
 				if err := s.overtimeStartCheck(ctx, s.repo, ot.Str("employee_id"), dateText(ot, "date"), start, dt); err != nil {
+					return nil, err
+				}
+			}
+			if start != was.start || end != was.end {
+				if err := s.checkOvertimeOverlap(ctx, s.repo, ot.Str("employee_id"), dateText(ot, "date"), start, end, id); err != nil {
 					return nil, err
 				}
 			}

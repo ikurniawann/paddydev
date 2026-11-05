@@ -181,3 +181,29 @@ func TestOvertimeTnCLegacyCorrection(t *testing.T) {
 	// EPIC-089: tanpa batas harian, menambah jam juga boleh selama batas minggu/periode aman.
 	expect(t, h.do(&hrd, "PATCH", path, map[string]any{"end_time": "23:30", "reason": "Menambah jam"}), 200, "")
 }
+
+// Review akhir EPIC-089 (Important 1): lembur lintas hari tidak menabrak jam
+// masuk besok atau lembur hari sebelumnya; berlaku juga untuk koreksi HR.
+func TestOvertimeCrossDayOverlap(t *testing.T) {
+	h, _ := newFileHarness(t)
+	hrd, _ := h.staff("hrd", []string{"hris.kepegawaian.overtime"}, true, emp{name: "Admin Lembur"})
+	staff, own := h.staff("pos", nil, true, emp{name: "Staf Lintas Hari"})
+	h.nsWeek(own, "2026-01-01")
+	post := func(date, start, end, now string) call {
+		t.Helper()
+		h.setNow(now)
+		body := h.otSelfBody(&staff, date, start, end)
+		body["reason"] = "Closing stok akhir bulan"
+		return h.do(&staff, "POST", "/api/hris/overtime", body)
+	}
+	// Senin 18:00 → Selasa 12:00 melewati jam masuk NS 09:00.
+	expect(t, post("2026-11-09", "18:00", "12:00", "2026-11-10 13:00"), 400, "Lembur melewati jam masuk kerja 10 Nov 2026 (09:00)")
+	// Sabtu 20:00 → Minggu 08:00 (Minggu libur) boleh; Minggu 06:00–10:00 menabraknya.
+	expect(t, post("2026-11-14", "20:00", "08:00", "2026-11-15 09:00"), 200, "")
+	expect(t, post("2026-11-15", "06:00", "10:00", "2026-11-15 11:00"), 400, "Lembur bertabrakan dengan lembur 14 Nov 2026 (20:00–08:00)")
+	// Koreksi HR yang menggeser selesai melewati jam masuk besok.
+	mon := post("2026-11-16", "18:00", "22:00", "2026-11-17 09:00")
+	expect(t, mon, 200, "")
+	expect(t, h.do(&hrd, "PATCH", "/api/hris/overtime/"+mon.data()["id"].(string),
+		map[string]any{"end_time": "10:00", "reason": "Jam pulang sebenarnya"}), 400, "Lembur melewati jam masuk kerja 17 Nov 2026 (09:00)")
+}

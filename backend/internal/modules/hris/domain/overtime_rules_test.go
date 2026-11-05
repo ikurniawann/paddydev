@@ -90,3 +90,32 @@ func TestOvertimeReasonError(t *testing.T) {
 		}
 	}
 }
+
+// Review akhir EPIC-089 (Important 1): tanpa batas 12 jam, lembur lintas hari
+// tidak boleh menabrak lembur hari sebelumnya/berikutnya atau jam masuk besok.
+func TestOvertimeOverlapError(t *testing.T) {
+	const date = "2026-11-09"
+	cases := []struct {
+		name       string
+		start, end string
+		prev, next *OvertimeSpan
+		nextShift  string
+		want       string
+	}{
+		{"melewati jam masuk besok", "18:00", "12:00", nil, nil, "09:00",
+			"Lembur melewati jam masuk kerja 10 Nov 2026 (09:00)"},
+		{"selesai sebelum jam masuk", "18:00", "08:30", nil, nil, "09:00", ""},
+		{"tanpa lintas hari", "18:00", "22:00", nil, nil, "09:00", ""},
+		{"menabrak lembur besok", "20:00", "08:00", nil, &OvertimeSpan{Start: "06:00", End: "10:00"}, "",
+			"Lembur bertabrakan dengan lembur 10 Nov 2026 (06:00–10:00)"},
+		{"menabrak lembur kemarin yang lintas hari", "06:00", "10:00", &OvertimeSpan{Start: "20:00", End: "08:00"}, nil, "",
+			"Lembur bertabrakan dengan lembur 8 Nov 2026 (20:00–08:00)"},
+		{"lembur kemarin tidak lintas hari", "06:00", "10:00", &OvertimeSpan{Start: "18:00", End: "22:00"}, nil, "", ""},
+		{"bersambung tepat", "06:00", "10:00", &OvertimeSpan{Start: "22:00", End: "06:00"}, nil, "", ""},
+	}
+	for _, c := range cases {
+		if got := OvertimeOverlapError(date, c.start, c.end, c.prev, c.next, c.nextShift); got != c.want {
+			t.Errorf("%s: got %q, want %q", c.name, got, c.want)
+		}
+	}
+}

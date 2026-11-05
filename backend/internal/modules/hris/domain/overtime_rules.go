@@ -93,3 +93,35 @@ func dayMonth(date string) string {
 	}
 	return date
 }
+
+// OvertimeSpan is an active overtime entry's clock times (HH:MM) on a date.
+type OvertimeSpan struct{ Start, End string }
+
+// OvertimeOverlapError guards a cross-midnight entry now that the daily and
+// 12-hour caps are gone (EPIC-089 review): an entry on date may not run into
+// the previous day's entry, the next day's entry, or past the next day's
+// first shift start (nextShiftStart "" = none). "" when it fits.
+func OvertimeOverlapError(date, start, end string, prev, next *OvertimeSpan, nextShiftStart string) string {
+	s, ok := overtimeClock(start)
+	if !ok {
+		return ""
+	}
+	e := s + OvertimeGrossMinutes(start, end)
+	const day = 24 * 60
+	if prev != nil {
+		if ps, ok := overtimeClock(prev.Start); ok && ps+OvertimeGrossMinutes(prev.Start, prev.End)-day > s {
+			return fmt.Sprintf("Lembur bertabrakan dengan lembur %s (%s–%s)",
+				ShortDateID(AddDaysISO(date, -1)), clockHM(prev.Start), clockHM(prev.End))
+		}
+	}
+	if next != nil {
+		if ns, ok := overtimeClock(next.Start); ok && e > ns+day {
+			return fmt.Sprintf("Lembur bertabrakan dengan lembur %s (%s–%s)",
+				ShortDateID(AddDaysISO(date, 1)), clockHM(next.Start), clockHM(next.End))
+		}
+	}
+	if shift, ok := overtimeClock(nextShiftStart); ok && e > shift+day {
+		return fmt.Sprintf("Lembur melewati jam masuk kerja %s (%s)", ShortDateID(AddDaysISO(date, 1)), clockHM(nextShiftStart))
+	}
+	return ""
+}

@@ -127,6 +127,11 @@ func (s *Service) CorrectOvertime(ctx context.Context, a *Actor, id string, in o
 				return err
 			}
 		}
+		if date != was.date || start != was.start || end != was.end {
+			if err := s.checkOvertimeOverlap(ctx, r, ot.Str("employee_id"), date, start, end, id); err != nil {
+				return err
+			}
+		}
 		label := was.date
 		if emp := ot.Child("employee"); emp != nil {
 			label = emp.Str("full_name") + " · " + label

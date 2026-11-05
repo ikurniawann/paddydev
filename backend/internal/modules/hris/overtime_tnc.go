@@ -69,7 +69,62 @@ func (s *Service) checkOvertimeCaps(ctx context.Context, r Repository, employeeI
 	return nil
 }
 
+// checkOvertimeOverlap is the EPIC-089 review guard: without the daily and
+// 12-hour caps a cross-midnight entry may not run into the previous or next
+// day's entry, nor past the next day's first shift start.
+func (s *Service) checkOvertimeOverlap(ctx context.Context, r Repository, employeeID, date, start, end, excludeID string) error {
+	prev, err := r.OvertimeSpanOn(ctx, employeeID, domain.AddDaysISO(date, -1), excludeID)
+	if err != nil {
+		return err
+	}
+	next, err := r.OvertimeSpanOn(ctx, employeeID, domain.AddDaysISO(date, 1), excludeID)
+	if err != nil {
+		return err
+	}
+	shift, err := r.OvertimeShiftStartOn(ctx, employeeID, domain.AddDaysISO(date, 1))
+	if err != nil {
+		return err
+	}
+	if msg := domain.OvertimeOverlapError(date, start, end, prev, next, shift); msg != "" {
+		return httpx.BadRequest(msg)
+	}
+	return nil
+}
+
 /* ── Storage ─────────────────────────────────────────────────────────── */
+
+// OvertimeShiftStartOn mirrors OvertimeShiftEndOn for the first shift's start.
+func (s *store) OvertimeShiftStartOn(ctx context.Context, employeeID, date string) (string, error) {
+	var start *string
+	err := s.db.QueryRow(ctx, `SELECT to_char(s.start_time, 'HH24:MI')
+		FROM (SELECT es.shift_id FROM hris.v_employee_schedule es
+		      WHERE es.employee_id = $1 AND es.day_of_week = extract(isodow FROM $2::date)::int
+		        AND es.effective_from <= $2::date AND (es.effective_to IS NULL OR es.effective_to >= $2::date)
+		      ORDER BY es.effective_from DESC, es.priority LIMIT 1) sc
+		JOIN hris.shifts s ON s.id = sc.shift_id`, employeeID, date).Scan(&start)
+	if database.IsNoRows(err) || (err == nil && start == nil) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return *start, nil
+}
+
+func (s *store) OvertimeSpanOn(ctx context.Context, employeeID, date, excludeID string) (*domain.OvertimeSpan, error) {
+	var span domain.OvertimeSpan
+	err := s.db.QueryRow(ctx, `SELECT to_char(start_time, 'HH24:MI'), to_char(end_time, 'HH24:MI')
+		FROM hris.overtime_requests
+		WHERE employee_id = $1 AND date = $2::date AND status IN ('pending', 'approved')
+		  AND ($3 = '' OR id <> $3::uuid) LIMIT 1`, employeeID, date, excludeID).Scan(&span.Start, &span.End)
+	if database.IsNoRows(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &span, nil
+}
 
 // OvertimeShiftEndOn is the end of the employee's last shift on date (the
 // second shift on a two-shift day); nil without a schedule or on a day off.
