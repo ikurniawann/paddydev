@@ -204,8 +204,10 @@ func (h handlers) teamApprovals(w http.ResponseWriter, r *http.Request, a *Actor
 
 // stageMember joins the requester (alias m) of a tiered request (alias
 // carries spv_approved_at) when $1 decides its running stage (EPIC-092).
+// request_team is a superset (the stage approver is the nearest SPV or
+// Manager) and computed once, so stage_approver only runs for $1's team.
 func stageMember(alias string) string {
-	return fmt.Sprintf(`JOIN hris.employees m ON m.id = %[1]s.employee_id
+	return fmt.Sprintf(`JOIN hris.employees m ON m.id = %[1]s.employee_id AND m.id IN (SELECT hris.request_team($1::uuid))
 		AND hris.stage_approver(m.id, %[1]s.spv_approved_at IS NOT NULL) = $1::uuid`, alias)
 }
 

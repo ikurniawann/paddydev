@@ -10,6 +10,8 @@ export interface SpvStageFields {
 }
 
 export const SPV_APPROVED_LABEL = "Disetujui SPV — menunggu Manager";
+/** Versi pendek untuk daftar ESS di HP. */
+export const SPV_APPROVED_SHORT_LABEL = "Menunggu Manager";
 /** Pesan server saat SPV (atau HR mewakili) menyetujui tahap SPV. */
 export const SPV_APPROVED_MESSAGE = "Disetujui SPV — menunggu persetujuan Manager";
 export const SPV_APPROVED_CLASS = "bg-indigo-100 text-indigo-800";

@@ -267,9 +267,9 @@ func (s *store) TripList(ctx context.Context, f tripFilter) ([]*Row, error) {
 	}
 	if f.StageApprover != "" {
 		args = append(args, f.StageApprover)
-		where = append(where, fmt.Sprintf(`CASE WHEN t.status = 'pending'
-			THEN hris.stage_approver(t.employee_id, t.spv_approved_at IS NOT NULL) = $%[1]d::uuid
-			ELSE t.employee_id IN (SELECT hris.request_team($%[1]d::uuid)) END`, len(args)))
+		// request_team first (computed once); stage_approver only for the team.
+		where = append(where, fmt.Sprintf(`t.employee_id IN (SELECT hris.request_team($%[1]d::uuid))
+			AND (t.status <> 'pending' OR hris.stage_approver(t.employee_id, t.spv_approved_at IS NOT NULL) = $%[1]d::uuid)`, len(args)))
 	}
 	rows, err := queryRows(ctx, s.db, `SELECT `+tripColumns+` FROM hris.business_trips t WHERE `+
 		strings.Join(where, " AND ")+` ORDER BY t.start_date DESC, t.created_at DESC LIMIT 200`, args...)
