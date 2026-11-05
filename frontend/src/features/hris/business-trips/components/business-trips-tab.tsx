@@ -89,7 +89,7 @@ export function BusinessTripsTab() {
                         <p className="text-xs text-gray-500">{trip.purpose}</p>
                       </td>
                       <td className="p-3">
-                        <TripStatusBadge status={trip.status} />
+                        <TripStatusBadge status={trip.status} spvApprovedAt={trip.spv_approved_at} />
                         {trip.decided_by_name && <p className="mt-1 text-xs text-gray-400">oleh {trip.decided_by_name}</p>}
                         {trip.rejection_reason && <p className="text-xs text-red-600">{trip.rejection_reason}</p>}
                       </td>

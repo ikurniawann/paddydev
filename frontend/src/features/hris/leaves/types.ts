@@ -45,6 +45,9 @@ export interface LeaveItem {
   attachment_return_reason?: string | null;
   manager_approved_name?: string | null;
   attachment_reviewed_name?: string | null;
+  /** EPIC-092: tahap SPV yang sudah lewat (pending = menunggu Manager). */
+  spv_approved_at?: string | null;
+  spv_approved_name?: string | null;
   employee?: {
     full_name: string;
     nip: string;

@@ -18,6 +18,9 @@ export interface LoanRow {
   notes?: string | null;
   rejection_reason: string | null;
   manager_approver_id?: string | null;
+  /** Tahap SPV kasbon/pinjaman (EPIC-091) — terisi saat SPV (atau HR mewakili) menyetujui. */
+  supervisor_approver_id?: string | null;
+  supervisor_approved_at?: string | null;
   created_at: string;
   /** Dokumen pendukung & jaminan (EPIC-076 R8). */
   attachments?: string[];

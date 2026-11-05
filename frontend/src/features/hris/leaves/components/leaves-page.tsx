@@ -14,6 +14,7 @@ import {
 import { AttachmentPreviewButtons } from "@/components/hris/attachment-preview";
 import { RequestDetailDialog } from "@/components/hris/request-detail-dialog";
 import { leaveAttachmentHref } from "@/lib/hris/attachments";
+import { SPV_APPROVED_CLASS, SPV_APPROVED_LABEL, spvApprovedNote, spvStageDone } from "@/lib/hris/tiered-approval";
 import { useHrApproveAccess } from "@/features/hris/approve-access";
 import { useEssMe } from "@/features/hris/ess/queries";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -127,6 +128,9 @@ export function LeavesPage() {
 
   const getLeaveBadge = (leave: LeaveItem) => {
     const stage = leaveReviewStage(leave);
+    if (!stage && spvStageDone(leave)) {
+      return <Badge variant="outline" className={SPV_APPROVED_CLASS}>{SPV_APPROVED_LABEL}</Badge>;
+    }
     if (!stage) return getStatusBadge(leave.status);
     return (
       <Badge variant="outline" className={LEAVE_REVIEW_STAGE_CLASSES[stage]}>
@@ -431,6 +435,7 @@ export function LeavesPage() {
           }}
           notes={
             <>
+              {spvApprovedNote(detail) && <p className="text-xs text-indigo-700">{spvApprovedNote(detail)}</p>}
               {detail.status === "approved" && detail.approver ? (
                 <p className="text-xs text-green-700">Disetujui oleh {detail.approver.full_name}</p>
               ) : detail.status === "rejected" && detail.rejection_reason ? (

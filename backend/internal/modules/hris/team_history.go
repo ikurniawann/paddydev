@@ -65,7 +65,7 @@ func (s *store) TeamLeaveHistory(ctx context.Context, managerID, from string) ([
 	rows, err := queryRows(ctx, s.db, `SELECT l.id, l.employee_id, l.leave_type, l.start_date::text AS start_date,
 		l.end_date::text AS end_date, l.total_days, l.reason, l.attachment_url, l.status, l.attachment_review,
 		l.attachment_return_reason, l.rejection_reason, l.decided_by_name, l.manager_approved_name,
-		l.attachment_reviewed_name, l.created_at, `+teamEmployee+`
+		l.attachment_reviewed_name, l.spv_approved_name, l.spv_approved_at, l.created_at, `+teamEmployee+`
 		FROM hris.leaves l `+teamMember("l")+`
 		WHERE l.end_date >= $2::date
 		ORDER BY l.start_date DESC, l.created_at DESC LIMIT `+strconv.Itoa(teamHistoryLimit), managerID, from)

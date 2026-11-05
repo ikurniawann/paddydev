@@ -55,7 +55,7 @@ export function EssPerjalananDinasPage() {
                   {trip.rejection_reason && <p className="text-xs text-red-600">Ditolak: {trip.rejection_reason}</p>}
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
-                  <TripStatusBadge status={trip.status} />
+                  <TripStatusBadge status={trip.status} spvApprovedAt={trip.spv_approved_at} />
                   {trip.status === "pending" && (
                     <Button size="sm" variant="ghost" disabled={busyId === trip.id} onClick={() => request(trip, "cancel")}>
                       Batalkan

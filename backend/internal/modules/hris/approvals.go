@@ -166,7 +166,8 @@ const teamEmployee = `json_build_object('id', m.id, 'full_name', m.full_name, 'n
 
 func (s *store) TeamPendingLeaves(ctx context.Context, managerID string) ([]*Row, error) {
 	rows, err := queryRows(ctx, s.db, `SELECT l.id, l.employee_id, l.leave_type, l.start_date::text AS start_date,
-		l.end_date::text AS end_date, l.total_days, l.reason, l.attachment_url, l.created_at, `+teamEmployee+`
+		l.end_date::text AS end_date, l.total_days, l.reason, l.attachment_url, l.spv_approved_name, l.spv_approved_at,
+		l.created_at, `+teamEmployee+`
 		FROM hris.leaves l `+stageMember("l")+`
 		WHERE l.status = 'pending' AND l.attachment_review IS NULL
 		ORDER BY l.start_date, l.created_at LIMIT 200`, managerID)

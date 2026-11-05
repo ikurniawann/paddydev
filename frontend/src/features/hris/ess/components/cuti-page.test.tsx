@@ -91,3 +91,12 @@ describe("EssCutiPage: verifikasi lampiran (EPIC-088)", () => {
     expect(screen.queryByRole("button", { name: "Unggah ulang lampiran" })).toBeNull();
   });
 });
+
+describe("EssCutiPage — tahap SPV (EPIC-092 R7)", () => {
+  it("pengajuan yang sudah disetujui SPV berlabel menunggu Manager", () => {
+    me = { employee, leave_balance: balance };
+    myLeaves = [{ ...row, spv_approved_at: "2026-11-05T03:00:00Z", spv_approved_name: "SPV Toko" }];
+    render(<EssCutiPage />);
+    expect(screen.getByText("Disetujui SPV — menunggu Manager")).toBeTruthy();
+  });
+});

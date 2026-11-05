@@ -77,8 +77,23 @@ func TestLeaveTieredApproval(t *testing.T) {
 	if h.leaveQueue(&c.spv) != 0 || h.leaveQueue(&c.mgr) != 1 {
 		t.Fatalf("antrean setelah SPV SPV/Manager = %d/%d", h.leaveQueue(&c.spv), h.leaveQueue(&c.mgr))
 	}
+	// Manager melihat siapa yang sudah menyetujui di tahap SPV (R7).
+	q := h.do(&c.mgr, "GET", "/api/hris/me/team-approvals", nil)
+	if row := q.data()["leaves"].([]any)[0].(map[string]any); row["spv_approved_name"] != "SPV Toko" || row["spv_approved_at"] == nil {
+		t.Fatalf("antrean Manager tanpa jejak SPV: %v", row)
+	}
 	expect(t, decide(&c.spv, a, "approve"), 403, "Bukan giliran Anda memutus pengajuan ini")
 	expect(t, decide(&c.mgr, a, "approve"), 200, "")
+	hist := h.do(&c.spv, "GET", "/api/hris/me/team-history", nil)
+	found := false
+	for _, it := range hist.data()["leaves"].([]any) {
+		if row := it.(map[string]any); row["id"] == a {
+			found = row["spv_approved_name"] == "SPV Toko"
+		}
+	}
+	if !found {
+		t.Fatalf("Riwayat tanpa jejak SPV: %s", hist.raw)
+	}
 	if col(a, "status") != "approved" || col(a, "approved_by") != c.mgrID {
 		t.Fatalf("Manager setuju = %s/%s", col(a, "status"), col(a, "approved_by"))
 	}

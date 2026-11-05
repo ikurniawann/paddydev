@@ -74,6 +74,10 @@ function LoanTableRow({ row, deciding, onDecide }: LoanTableRowProps) {
   const paidPct = loanPaidPercent(row);
   const [showDetail, setShowDetail] = useState(false);
   const awaitingHr = isAwaitingHr(row);
+  // EPIC-092 R5: HR boleh memutus tahap atasan yang sedang berjalan (atasan berhalangan).
+  const atasanStage = row.status === "pending" && !!row.manager_approver_id;
+  const decidable = awaitingHr || atasanStage;
+  const approveLabel = atasanStage ? "Setujui (mewakili atasan)" : "Setujui";
   return (
     <tr className="border-b last:border-0 hover:bg-gray-50/60">
       <td className="px-4 py-3 font-medium text-gray-900">
@@ -127,18 +131,21 @@ function LoanTableRow({ row, deciding, onDecide }: LoanTableRowProps) {
         >
           Detail
         </Button>
-        {awaitingHr ? (
+        {atasanStage && (
+          <span className="mb-1 block text-xs text-gray-400">
+            {row.supervisor_approved_at ? "Disetujui SPV — menunggu Manager" : "Menunggu atasan (SPV/Manager)"}
+          </span>
+        )}
+        {decidable && (
           <div className="flex justify-end gap-2">
             <Button size="sm" disabled={deciding} onClick={() => onDecide(row.id, true)}>
-              Setujui
+              {approveLabel}
             </Button>
             <Button size="sm" variant="outline" disabled={deciding} onClick={() => onDecide(row.id, false)}>
               Tolak
             </Button>
           </div>
-        ) : row.status === "pending" ? (
-          <span className="block text-xs text-gray-400">Menunggu atasan (SPV/Manager)</span>
-        ) : null}
+        )}
         {showDetail && (
           <RequestDetailDialog
             open
@@ -178,7 +185,7 @@ function LoanTableRow({ row, deciding, onDecide }: LoanTableRowProps) {
               ) : undefined
             }
             actions={
-              awaitingHr ? (
+              decidable ? (
                 <>
                   <Button variant="outline" disabled={deciding} onClick={() => {
                     setShowDetail(false);
@@ -190,7 +197,7 @@ function LoanTableRow({ row, deciding, onDecide }: LoanTableRowProps) {
                     setShowDetail(false);
                     onDecide(row.id, true);
                   }}>
-                    Setujui
+                    {approveLabel}
                   </Button>
                 </>
               ) : undefined

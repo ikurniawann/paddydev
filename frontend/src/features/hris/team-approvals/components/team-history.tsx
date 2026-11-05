@@ -10,6 +10,7 @@ import { leaveTypeLabel } from "@/lib/hris/leave-types";
 import { loanAttachmentHref, loanTypeLabel } from "@/lib/hris/loans-view";
 import { overtimeAttachmentHref, overtimeDayTypeLabel, paidOvertimeHours } from "@/lib/hris/overtime-rules";
 import { hhmm } from "@/lib/hris/shifts-view";
+import { SPV_APPROVED_LABEL, spvApprovedNote, spvStageDone } from "@/lib/hris/tiered-approval";
 import { useTeamHistory } from "../queries";
 import type { TeamHistoryLeave, TeamHistoryLoan, TeamHistoryOvertime } from "../types";
 
@@ -41,6 +42,7 @@ function leaveBadge(row: TeamHistoryLeave): Badge {
   if (decided) return decided;
   if (row.attachment_review === "awaiting") return { label: "Menunggu verifikasi HR", className: BADGE.hr };
   if (row.attachment_review === "returned") return { label: "Lampiran dikembalikan", className: BADGE.returned };
+  if (spvStageDone(row)) return { label: SPV_APPROVED_LABEL, className: BADGE.waiting };
   return { label: "Menunggu atasan", className: BADGE.waiting };
 }
 
@@ -94,6 +96,8 @@ function StatusBadge({ badge }: { badge: Badge }) {
 
 function leaveNotes(row: TeamHistoryLeave): string[] {
   const notes: string[] = [];
+  const spv = spvApprovedNote(row);
+  if (spv) notes.push(spv);
   if (row.status === "approved" && row.decided_by_name) notes.push(`Disetujui oleh ${row.decided_by_name}`);
   if (row.status === "rejected") {
     notes.push(`Ditolak${row.decided_by_name ? ` oleh ${row.decided_by_name}` : ""}: ${row.rejection_reason ?? "—"}`);

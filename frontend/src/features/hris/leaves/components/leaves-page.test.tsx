@@ -160,3 +160,14 @@ describe("LeavesPage: pengajuan sendiri (EPIC-072 Review Focus #4)", () => {
     expect(within(screen.getByRole("dialog")).queryByText("tombol-keputusan")).toBeNull();
   });
 });
+
+describe("LeavesPage: tahap SPV (EPIC-092 R7)", () => {
+  it("pending yang sudah disetujui SPV: lencana menunggu Manager dan nama SPV di Detail", () => {
+    grant(true);
+    rows = [{ ...budi, spv_approved_at: "2026-10-26T05:00:00Z", spv_approved_name: "SPV Dapur" }];
+    render(<LeavesPage />);
+    expect(screen.getAllByText("Disetujui SPV — menunggu Manager").length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("button", { name: /Detail.*Budi Santoso/ }));
+    expect(within(screen.getByRole("dialog")).getByText("Disetujui SPV oleh SPV Dapur")).toBeTruthy();
+  });
+});

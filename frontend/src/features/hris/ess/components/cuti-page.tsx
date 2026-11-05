@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { formatDate } from "@/lib/format";
 import { useEssMe, useMyLeaves } from "../queries";
 import { leaveTypeLabel } from "@/lib/hris/leave-types";
+import { SPV_APPROVED_CLASS, SPV_APPROVED_LABEL, spvStageDone } from "@/lib/hris/tiered-approval";
 import { formatDays } from "@/features/hris/leave-balances/balance-math";
 import { CutiRequestDialog } from "./cuti-request-dialog";
 import { LeaveBalanceBreakdown } from "./leave-balance-summary";
@@ -84,7 +85,9 @@ export function EssCutiPage() {
                 const stage = leaveReviewStage(leave);
                 const badge = stage
                   ? { label: LEAVE_REVIEW_STAGE_LABELS[stage], className: LEAVE_REVIEW_STAGE_CLASSES[stage] }
-                  : (LEAVE_STATUS_BADGES[leave.status] ?? LEAVE_STATUS_BADGES.pending);
+                  : spvStageDone(leave)
+                    ? { label: SPV_APPROVED_LABEL, className: SPV_APPROVED_CLASS }
+                    : (LEAVE_STATUS_BADGES[leave.status] ?? LEAVE_STATUS_BADGES.pending);
                 return (
                   <li key={leave.id} className="flex items-start justify-between gap-3 py-2.5">
                     <div className="min-w-0">
