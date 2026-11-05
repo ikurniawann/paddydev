@@ -111,7 +111,11 @@ func (hrisPayrollSQL) TeamLoanHistory(ctx context.Context, q database.Querier, m
 		l.purpose, l.rejection_reason, ma.full_name, l.attachments, l.collateral_attachments,
 		sa.full_name, l.supervisor_approved_at IS NOT NULL
 		FROM hris.loans l
-		JOIN hris.employees m ON m.id = l.employee_id AND hris.request_approver(m.id) = $1::uuid
+		-- EPIC-091: the request approver, the direct atasan (bells link here even
+		-- below SPV), and the stored SPV/Manager approvers all follow the loan.
+		JOIN hris.employees m ON m.id = l.employee_id AND m.id <> $1::uuid
+		  AND (hris.request_approver(m.id) = $1::uuid OR m.reporting_to = $1::uuid
+		       OR l.supervisor_approver_id = $1::uuid OR l.manager_approver_id = $1::uuid)
 		LEFT JOIN hris.employees ma ON ma.id = l.manager_approver_id
 		LEFT JOIN hris.employees sa ON sa.id = l.supervisor_approver_id
 		WHERE l.created_at >= $2::date OR l.status IN ('pending', 'manager_approved')

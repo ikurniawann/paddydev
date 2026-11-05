@@ -37,9 +37,10 @@ type PayrollReads interface {
 	// PeriodRuns are the payroll runs of a year (any status), for the
 	// attendance period closing rules.
 	PeriodRuns(ctx context.Context, q database.Querier, year int) ([]PeriodRun, error)
-	// TeamLoanHistory are the kasbon/pinjaman of managerID's direct reports
-	// filed on or after from, plus any still waiting (pending,
-	// manager_approved), newest first (EPIC-091, Riwayat Persetujuan Tim).
+	// TeamLoanHistory are the kasbon/pinjaman managerID follows — as request
+	// approver, direct atasan, or stored SPV/Manager approver — filed on or
+	// after from, plus any still waiting (pending, manager_approved), newest
+	// first (EPIC-091, Riwayat Persetujuan Tim).
 	TeamLoanHistory(ctx context.Context, q database.Querier, managerID, from string) ([]TeamLoan, error)
 }
 

@@ -255,6 +255,21 @@ func TestTeamLoanHistory(t *testing.T) {
 		t.Fatalf("rows = %+v", rows)
 	}
 	p := rows[1]
+	// Atasan langsung berlevel Staff (bukan penyetuju) dan Manager penyetuju juga
+	// melihatnya (lonceng menautkan ke Riwayat).
+	leader := emp("Store Leader Riwayat", &boss)
+	tx.Exec(ctx, `UPDATE hris.employees SET reporting_to = $2 WHERE id = $1`, worker, leader)
+	tx.Exec(ctx, `UPDATE hris.employees SET user_id = NULL WHERE id = $1`, leader)
+	for who, want := range map[string]int{leader: 2, mgr: 2} { // mgr: pending tim + pending orang lain yang ia setujui
+		got, err := (hrisPayrollSQL{}).TeamLoanHistory(ctx, tx, who, "2026-10-01")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(got) != want {
+			t.Fatalf("riwayat %s = %d, want %d", who, len(got), want)
+		}
+	}
+	tx.Exec(ctx, `UPDATE hris.employees SET reporting_to = $2 WHERE id = $1`, worker, boss)
 	if p.SupervisorName != nil || p.SupervisorApproved {
 		t.Fatalf("tahap SPV tanpa SPV = %+v", p)
 	}
