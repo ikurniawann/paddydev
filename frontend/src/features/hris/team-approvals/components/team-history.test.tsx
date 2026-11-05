@@ -41,7 +41,7 @@ describe("TeamHistoryPanel", () => {
       },
     };
     render(<TeamHistoryPanel />);
-    expect(screen.getByText(/1 Okt – 30 Nov 2026/)).toBeTruthy();
+    expect(screen.getByText((_, el) => el?.tagName === "P" && /sejak 1 Okt 2026/.test(el.textContent ?? ""))).toBeTruthy();
     expect(screen.getByText("Menunggu verifikasi HR")).toBeTruthy();
     expect(screen.getAllByText("Disetujui").length).toBe(2);
     expect(screen.getByText("Ditolak")).toBeTruthy();

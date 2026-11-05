@@ -106,12 +106,13 @@ export function TeamHistoryPanel() {
   return (
     <div className="space-y-6">
       <p className="text-sm text-gray-600">
-        Cuti dan lembur anggota tim periode <span className="font-medium text-gray-800">{period.label}</span>, semua status.
+        Cuti dan lembur anggota tim sejak <span className="font-medium text-gray-800">{formatDate(period.from, "—")}</span>{" "}
+        (awal periode lalu), termasuk yang tanggalnya ke depan, semua status.
       </p>
 
       {leaves.length + overtime.length === 0 && (
         <div className="rounded-xl border border-gray-200/70 bg-white p-6 text-center text-sm text-gray-500 shadow-sm">
-          Belum ada cuti atau lembur tim di periode ini.
+          Belum ada cuti atau lembur tim sejak awal periode lalu.
         </div>
       )}
 

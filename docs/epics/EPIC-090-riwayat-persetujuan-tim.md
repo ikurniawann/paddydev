@@ -13,14 +13,14 @@ QA staging menunjukkan HR sudah bisa melihat semua status, tetapi atasan hanya b
 - **R1 API.** `GET /api/hris/me/team-history` mengembalikan `{ period: { from, to, label }, leaves, overtime }`:
   - isinya cuti/izin dan lembur **bawahan langsung** (`reporting_to` = akun; atasan dirinya sendiri tidak dihitung, seperti EPIC-063 R2);
   - semua status dan sumber;
-  - tanggal (`start_date` / `date`) dalam rentang **awal periode absensi sebelumnya s.d. akhir periode berjalan** (`periodContaining`);
+  - cuti yang `end_date`-nya ≥ **awal periode absensi sebelumnya** (`periodContaining`), dan lembur yang `date`-nya ≥ tanggal itu. **Tanpa batas atas** (review akhir): cuti yang diajukan jauh hari untuk tanggal setelah periode berjalan, dan cuti panjang yang masih berjalan, tetap tampil setelah atasan memutusnya. `period.to` hanya informasi;
   - urut tanggal terbaru dulu, maksimal 300 per jenis.
 
   Akun tanpa data karyawan mendapat daftar kosong. Kolom:
   - cuti: id, leave_type, start/end, total_days, reason, attachment_url, status, attachment_review, attachment_return_reason, rejection_reason, decided_by_name, manager_approved_name, attachment_reviewed_name, created_at, employee;
   - lembur: id, date, start/end, hours, break_minutes, attachments, day_type, reason, source, status, rejection_reason, decided_by_name, created_at, employee.
 - **R2 Tampilan.** Persetujuan Tim mendapat pilihan **"Menunggu" | "Riwayat"**. Isi "Menunggu" tidak berubah.
-  - "Riwayat" menampilkan rentang periode lalu daftar Cuti & Izin dan Lembur dengan lencana status:
+  - "Riwayat" menampilkan "sejak {awal periode lalu}" lalu daftar Cuti & Izin dan Lembur dengan lencana status:
     - Menunggu atasan / Menunggu verifikasi HR / Lampiran dikembalikan;
     - Disetujui / Ditolak / Dibatalkan.
   - Tombol **Detail** membuka dialog baca-saja: data pengajuan, alasan, lampiran/dokumentasi, dan catatan keputusan ("Disetujui oleh …", "Disetujui atasan …", "Diverifikasi HR …", "Alasan penolakan …").
