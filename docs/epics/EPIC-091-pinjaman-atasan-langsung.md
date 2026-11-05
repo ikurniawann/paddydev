@@ -99,4 +99,5 @@ Laporan user 05-11-2026: karyawan tidak bisa mengajukan pinjaman, atau pinjamann
   - Pengajuan pending lama: kasbon Firdaus Eka (28-10) di Dimas, pinjaman Yosianti (04-11) di Regha. Keduanya aktif dan berakun, jadi **tidak menggantung**; total 5 pinjaman pending di prod.
 
     Setelah rilis, pengajuan ini tetap di Manager tersimpan (tanpa tahap SPV, R0b). Bila user ingin SPV ikut memutus pengajuan lama, perlu skrip ops terpisah yang mengisi `supervisor_approver_id` untuk pinjaman pending; skrip itu belum dibuat dan butuh izin.
+- 2026-11-05 — Keputusan user: pinjaman pending lama **tetap di Manager tersimpan** (tanpa skrip pengisian tahap SPV). Hanya pengajuan baru setelah rilis yang mengikuti SPV → Manager → HR.
 
