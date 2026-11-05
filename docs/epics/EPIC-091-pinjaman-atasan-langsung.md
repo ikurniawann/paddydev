@@ -93,4 +93,10 @@ Laporan user 05-11-2026: karyawan tidak bisa mengajukan pinjaman, atau pinjamann
     - Leader melihat Riwayat "Menunggu SPV" + dokumen;
     - 0 error API dan console.
   - Data demo dan berkas dihapus.
+- 2026-11-05 — Cek ulang setelah instruksi lanjutan user.
+  - Gates di HEAD `4336220b` hijau: gofmt bersih, `go vet`, `go test -count=1 -p 1` hris + payroll + app ok, vitest 4594, tsc + eslint.
+  - Penyetuju hasil aturan baru (production, read-only, logika `request_approver` dihitung inline karena fungsi belum ada di prod; staging pakai fungsi): Yosianti → **Alinda (Supervisor)**, Didit → **Farhan (Supervisor)**, Firdaus Eka → **Asriani (Supervisor)**. Sama dengan atasan langsung masing-masing; user menegaskan "minimal Jabatan SPV/supervisor bisa menyetujui karyawan atasannya langsung".
+  - Pengajuan pending lama: kasbon Firdaus Eka (28-10) di Dimas, pinjaman Yosianti (04-11) di Regha. Keduanya aktif dan berakun, jadi **tidak menggantung**; total 5 pinjaman pending di prod.
+
+    Setelah rilis, pengajuan ini tetap di Manager tersimpan (tanpa tahap SPV, R0b). Bila user ingin SPV ikut memutus pengajuan lama, perlu skrip ops terpisah yang mengisi `supervisor_approver_id` untuk pinjaman pending; skrip itu belum dibuat dan butuh izin.
 
