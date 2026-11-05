@@ -534,6 +534,10 @@ func (s *service) decideLoanHR(ctx context.Context, userID, loanID string, appro
 	// atasan (unavailable); the loan moves to the next stage. Rejecting stays
 	// possible at any time.
 	if waitingManager && approve {
+		// Review akhir: nobody steps in for their own atasan (EPIC-092).
+		if approver != nil && *approver == l.EmployeeID {
+			return nil, httpx.Forbidden("Tidak bisa menyetujui " + strings.ToLower(label) + " sendiri mewakili atasan")
+		}
 		return s.decideLoanStageForHR(ctx, userID, approver, loanID, l)
 	}
 	if l.Status != "pending" && l.Status != "manager_approved" {

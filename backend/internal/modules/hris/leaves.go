@@ -99,6 +99,8 @@ type leaveVerdict struct {
 	// Reviewer is set when an attachment verifier approves a leave with an
 	// attachment: the approval is also the verification (EPIC-088 R2).
 	Reviewer *auth.User
+	// ReviewerName is the verifier's own name, never "mewakili" (EPIC-092).
+	ReviewerName string
 	// HRReject: an attachment verifier rejects, which may land on a request
 	// already waiting for HR; any other decision needs no review stage yet,
 	// so a second atasan cannot overturn the first one's approval (EPIC-091).
@@ -590,6 +592,9 @@ func (s *Service) DecideLeave(ctx context.Context, a *Actor, in leaveDecision, m
 	if decidedAs == "" {
 		return nil, httpx.Forbidden(refusal)
 	}
+	// Waiting for HR's attachment review the atasan stages are over: HR acts
+	// as itself there (review akhir EPIC-092).
+	onBehalf = onBehalf && leave.Str("attachment_review") == ""
 	deciderName := actorName(a)
 	if onBehalf {
 		deciderName += " (mewakili " + stageName(emp, stage) + ")"
@@ -625,7 +630,7 @@ func (s *Service) DecideLeave(ctx context.Context, a *Actor, in leaveDecision, m
 	verdict := leaveVerdict{Status: status, ApproverID: a.EmployeeID, Rejection: rejection,
 		DecidedAs: decidedAs, DecidedBy: deciderName}
 	if approve && strings.TrimSpace(leave.Str("attachment_url")) != "" {
-		verdict.Reviewer = userOf(a)
+		verdict.Reviewer, verdict.ReviewerName = userOf(a), actorName(a)
 	}
 	verdict.HRReject = !approve && verifier
 	label := dateText(leave, "start_date") + " s.d. " + dateText(leave, "end_date")

@@ -127,6 +127,21 @@ func TestLeaveTieredApproval(t *testing.T) {
 	if col(d, "status") != "pending" || col(d, "attachment_review") != "awaiting" {
 		t.Fatalf("setelah Manager = %s/%s", col(d, "status"), col(d, "attachment_review"))
 	}
+	// Review akhir: tolakan HR pada tahap verifikasinya sendiri bukan "mewakili".
+	expect(t, decide(&c.hr, d, "reject"), 200, "")
+	if name := col(d, "decided_by_name"); col(d, "status") != "rejected" || strings.Contains(name, "mewakili") {
+		t.Fatalf("HR tolak saat verifikasi = %s %q", col(d, "status"), name)
+	}
+
+	// Review akhir: HR mewakili Manager pada cuti berlampiran — keputusannya
+	// "mewakili", verifikasi lampiran atas nama HR sendiri.
+	g := file("2031-04-01", true)
+	expect(t, decide(&c.spv, g, "approve"), 200, "")
+	expect(t, decide(&c.hr, g, "approve"), 200, "")
+	if col(g, "status") != "approved" || !strings.Contains(col(g, "decided_by_name"), "(mewakili Manager Area)") ||
+		col(g, "attachment_reviewed_name") == "" || strings.Contains(col(g, "attachment_reviewed_name"), "mewakili") {
+		t.Fatalf("HR mewakili Manager berlampiran = %s %q %q", col(g, "status"), col(g, "decided_by_name"), col(g, "attachment_reviewed_name"))
+	}
 }
 
 // EPIC-092 R3/R4: perjalanan dinas berjenjang SPV → Manager; HR mewakili.

@@ -71,3 +71,12 @@ describe("LoansTable — HR mewakili atasan (EPIC-092 R5)", () => {
     expect(onDecide).toHaveBeenCalledWith("k2", true);
   });
 });
+
+describe("LoansTable — pinjaman sendiri (review akhir EPIC-092)", () => {
+  it("HR tidak melihat Setujui (mewakili atasan) pada pinjamannya sendiri", () => {
+    render(<LoansTable rows={[{ ...row, id: "k3", status: "pending", manager_approver_id: "m1" }]} loading={false}
+      decidingId={null} onDecide={vi.fn()} myEmployeeId="e1" />);
+    expect(screen.queryByRole("button", { name: "Setujui (mewakili atasan)" })).toBeNull();
+    expect(screen.getByText("Menunggu atasan (SPV/Manager)")).toBeTruthy();
+  });
+});

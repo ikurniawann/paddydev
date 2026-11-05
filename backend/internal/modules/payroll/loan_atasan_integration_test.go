@@ -236,3 +236,22 @@ func TestLoanHROnBehalfOfStages(t *testing.T) {
 		t.Fatalf("final HR = %s", st)
 	}
 }
+
+// Review akhir EPIC-092: HR tidak bisa "mewakili" atasan pada pinjamannya sendiri.
+func TestLoanHRCannotActOnBehalfForOwnLoan(t *testing.T) {
+	e := setup(t)
+	worker := kasbonWorker(e, "permanent")
+	e.spvChain(worker)
+	id := e.loan(&e.staff, map[string]any{"loan_type": "kasbon", "principal_amount": 1000000, "tenor_months": 2}, 200)["data"].(map[string]any)["id"].(string)
+	hrEmp := e.employee("HR Peminjam", e.hr.UserID, true)
+	e.exec(`UPDATE hris.loans SET employee_id = $2 WHERE id = $1`, id, hrEmp)
+	out := e.call(&e.hr, "POST", "/api/hris/loans/"+id+"/approve", map[string]any{"approved": true}, 403)
+	if msg, _ := out["error"].(string); !strings.Contains(msg, "sendiri") {
+		t.Fatalf("pesan = %v", out)
+	}
+	var status string
+	e.scalar(&status, `SELECT status || '/' || (supervisor_approved_at IS NULL)::text FROM hris.loans WHERE id = $1`, id)
+	if status != "pending/true" {
+		t.Fatalf("status = %s", status)
+	}
+}

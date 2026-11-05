@@ -205,10 +205,11 @@ func (s *store) DecideLeave(ctx context.Context, id string, v leaveVerdict, cred
 		    decided_as = $5, decided_by_name = $6,
 		    attachment_review = CASE WHEN $7::uuid IS NULL THEN attachment_review ELSE 'verified' END,
 		    attachment_reviewed_by = coalesce($7::uuid, attachment_reviewed_by),
-		    attachment_reviewed_name = CASE WHEN $7::uuid IS NULL THEN attachment_reviewed_name ELSE $6 END,
+		    attachment_reviewed_name = CASE WHEN $7::uuid IS NULL THEN attachment_reviewed_name ELSE $9 END,
 		    attachment_reviewed_at = CASE WHEN $7::uuid IS NULL THEN attachment_reviewed_at ELSE now() END
 		WHERE id = $1 AND status = 'pending' AND (attachment_review IS NULL OR $8::bool)`,
-		id, v.Status, v.ApproverID, v.Rejection, v.DecidedAs, v.DecidedBy, reviewer, v.Status == "rejected" && v.HRReject)
+		id, v.Status, v.ApproverID, v.Rejection, v.DecidedAs, v.DecidedBy, reviewer, v.Status == "rejected" && v.HRReject,
+		v.ReviewerName)
 	if err != nil {
 		return err
 	}

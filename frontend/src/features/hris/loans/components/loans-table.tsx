@@ -20,9 +20,11 @@ interface LoansTableProps {
   loading: boolean;
   decidingId: string | null;
   onDecide: (id: string, approved: boolean) => void;
+  /** Karyawan HR yang login: tanpa "mewakili atasan" pada pinjamannya sendiri (EPIC-092). */
+  myEmployeeId?: string | null;
 }
 
-export function LoansTable({ rows, loading, decidingId, onDecide }: LoansTableProps) {
+export function LoansTable({ rows, loading, decidingId, onDecide, myEmployeeId }: LoansTableProps) {
   return (
     <div className="overflow-x-auto rounded-xl border border-gray-200/70 bg-white shadow-sm">
       <table className="w-full text-sm">
@@ -54,7 +56,8 @@ export function LoansTable({ rows, loading, decidingId, onDecide }: LoansTablePr
             </tr>
           ) : (
             rows.map((row) => (
-              <LoanTableRow key={row.id} row={row} deciding={decidingId === row.id} onDecide={onDecide} />
+              <LoanTableRow key={row.id} row={row} deciding={decidingId === row.id} onDecide={onDecide}
+                own={!!myEmployeeId && row.employee_id === myEmployeeId} />
             ))
           )}
         </tbody>
@@ -67,16 +70,17 @@ interface LoanTableRowProps {
   row: LoanRow;
   deciding: boolean;
   onDecide: (id: string, approved: boolean) => void;
+  own: boolean;
 }
 
-function LoanTableRow({ row, deciding, onDecide }: LoanTableRowProps) {
+function LoanTableRow({ row, deciding, onDecide, own }: LoanTableRowProps) {
   const badge = STATUS_BADGES[row.status] ?? STATUS_BADGES.pending;
   const paidPct = loanPaidPercent(row);
   const [showDetail, setShowDetail] = useState(false);
   const awaitingHr = isAwaitingHr(row);
   // EPIC-092 R5: HR boleh memutus tahap atasan yang sedang berjalan (atasan berhalangan).
   const atasanStage = row.status === "pending" && !!row.manager_approver_id;
-  const decidable = awaitingHr || atasanStage;
+  const decidable = awaitingHr || (atasanStage && !own);
   const approveLabel = atasanStage ? "Setujui (mewakili atasan)" : "Setujui";
   return (
     <tr className="border-b last:border-0 hover:bg-gray-50/60">
