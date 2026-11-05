@@ -1,6 +1,8 @@
 package hris
 
 import (
+	"context"
+	"errors"
 	"testing"
 
 	"nuhabit/backend/internal/platform/iam"
@@ -200,5 +202,32 @@ func TestLeaveAttachmentApprovedByVerifier(t *testing.T) {
 	expect(t, done, 200, "")
 	if d := done.data(); d["status"] != "approved" || d["attachment_review"] != "verified" || d["attachment_reviewed_by"] != hrBoss.UserID {
 		t.Fatalf("approve oleh verifikator = %s", done.raw)
+	}
+}
+
+// Review R0c (Minor 1, race): penolakan oleh atasan non-verifikator tidak boleh
+// mendarat di cuti yang sementara itu sudah disetujui atasan lain (menunggu HR).
+func TestLeaveRejectRaceAfterOtherApproverApproved(t *testing.T) {
+	h := newHarness(t)
+	_, bossID := h.staff("pos", nil, true, emp{name: "Atasan Race"})
+	staff, staffID := h.staff("pos", nil, true, emp{name: "Crew Race", boss: &bossID})
+	c := h.do(&staff, "POST", "/api/hris/leaves", attachedLeave("marriage", "2031-03-04", staffID))
+	expect(t, c, 200, "")
+	id := c.data()["id"].(string)
+	h.exec(`UPDATE hris.leaves SET attachment_review = 'awaiting' WHERE id = $1`, id) // atasan lain baru saja setuju
+	why := "Telat"
+	err := h.svc.repo.DecideLeave(context.Background(), id, leaveVerdict{Status: "rejected", ApproverID: &bossID,
+		Rejection: &why, DecidedAs: "manager", DecidedBy: "Atasan Race"}, nil)
+	if !errors.Is(err, errNoRow) {
+		t.Fatalf("reject setelah disetujui atasan lain = %v, want errNoRow", err)
+	}
+	if st := h.scalar(`SELECT status::text FROM hris.leaves WHERE id = $1`, id); st != "pending" {
+		t.Fatalf("status = %s", st)
+	}
+	// HR (verifikator) tetap boleh menolak.
+	err = h.svc.repo.DecideLeave(context.Background(), id, leaveVerdict{Status: "rejected", Rejection: &why,
+		DecidedAs: "hr", DecidedBy: "HR", HRReject: true}, nil)
+	if err != nil {
+		t.Fatalf("HR reject = %v", err)
 	}
 }

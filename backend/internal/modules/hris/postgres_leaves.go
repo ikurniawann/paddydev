@@ -197,7 +197,8 @@ func (s *store) DecideLeave(ctx context.Context, id string, v leaveVerdict, cred
 	if v.Reviewer != nil {
 		reviewer = &v.Reviewer.ID
 	}
-	// An approval never lands on a request waiting for HR (EPIC-088 R4); a
+	// Only an HR reject lands on a request waiting for HR (EPIC-088 R4,
+	// EPIC-091 race between two atasan); a
 	// verifier's approval of a request with an attachment is also its review.
 	tag, err := s.db.Exec(ctx, `UPDATE hris.leaves
 		SET status = $2, approved_by = $3, approved_at = now(), rejection_reason = $4,
@@ -206,8 +207,8 @@ func (s *store) DecideLeave(ctx context.Context, id string, v leaveVerdict, cred
 		    attachment_reviewed_by = coalesce($7::uuid, attachment_reviewed_by),
 		    attachment_reviewed_name = CASE WHEN $7::uuid IS NULL THEN attachment_reviewed_name ELSE $6 END,
 		    attachment_reviewed_at = CASE WHEN $7::uuid IS NULL THEN attachment_reviewed_at ELSE now() END
-		WHERE id = $1 AND status = 'pending' AND (NOT $8::bool OR attachment_review IS NULL)`,
-		id, v.Status, v.ApproverID, v.Rejection, v.DecidedAs, v.DecidedBy, reviewer, v.Status == "approved")
+		WHERE id = $1 AND status = 'pending' AND (attachment_review IS NULL OR $8::bool)`,
+		id, v.Status, v.ApproverID, v.Rejection, v.DecidedAs, v.DecidedBy, reviewer, v.Status == "rejected" && v.HRReject)
 	if err != nil {
 		return err
 	}

@@ -110,4 +110,19 @@ Laporan user 05-11-2026: karyawan tidak bisa mengajukan pinjaman, atau pinjamann
     - Leader Staff 403;
     - Riwayat untuk SPV dan Manager.
   - Gates: Go hris + payroll + app ok, vitest 4594, tsc + eslint.
+- 2026-11-05 — Review R0c (reviewer terpisah): 0 Critical, 0 Important.
+  - **Minor 1** dinaikkan karena berdampak: penolakan atasan kedua bisa mendarat di cuti berlampiran yang baru saja disetujui atasan lain. Diberi guard SQL: hanya penolakan HR yang boleh mendarat saat menunggu HR. Tes `TestLeaveRejectRaceAfterOtherApproverApproved` RED→GREEN.
+  - **Kinerja**: `SubordinateIDs` untuk Manager ±300 bawahan butuh ±0,9 dtk per buka lampiran / daftar lembur-dinas. Diganti `hris.request_team` (delta `20261110090200`), satu penelusuran atas-ke-bawah, 5,6 ms.
+    - Diverifikasi setara `is_request_approver` di data staging: 25 atasan, 934 pasangan, selisih 0 dua arah.
+    - Antrean (`teamMember`) ikut memakai `request_team`.
+  - Ditunda:
+    - `manager_id` ikut dihitung di daftar HR lembur/dinas;
+    - Manager berlevel kosong dilewati oleh `request_manager` (data HR);
+    - lonceng SPV basi bila Manager memutus duluan;
+    - tes GET detail/lampiran oleh Manager;
+    - komentar "dua tahap" di halaman Persetujuan Tim.
+- 2026-11-05 — QA staging setelah R0c (`local-20261105-165917`): 2 atasan 11/11 lulus.
+  - Manager melihat dan menyetujui cuti dari Persetujuan Tim, lalu cuti hilang dari antrean SPV.
+  - SPV menyetujui lembur; Leader Staff tidak punya antrean.
+  - Regresi kasbon/penyetuju 19/19 lulus. Staging: Yosianti → Alinda/Regha, Didit → Farhan/Dimas, Firdaus Eka → Asriani/Dimas.
 

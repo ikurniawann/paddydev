@@ -646,9 +646,11 @@ var overtimeSelect = `*, ` +
 	embedOne("decider", "id, full_name", "hris.employees", "id = overtime_requests.decided_by")
 
 func (s *store) SubordinateIDs(ctx context.Context, managerID string) ([]string, error) {
-	// EPIC-091: the people whose request approver is managerID (nearest
-	// atasan from Supervisor up); never oneself (EPIC-063 R2).
-	rows, err := queryRows(ctx, s.db, `SELECT id FROM hris.employees WHERE hris.is_request_approver(id, $1::uuid)`, managerID)
+	// EPIC-091: the people whose requests managerID may decide (nearest
+	// atasan from Supervisor up, or the Manager above); never oneself
+	// (EPIC-063 R2). hris.request_team walks the tree once (≈ms) instead of two recursive
+	// lookups per employee (≈1 s for a Manager of ~300 people).
+	rows, err := queryRows(ctx, s.db, `SELECT id FROM hris.request_team($1::uuid) AS id`, managerID)
 	if err != nil {
 		return nil, ignoreBadInput(err)
 	}

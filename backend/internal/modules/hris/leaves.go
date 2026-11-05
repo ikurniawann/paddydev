@@ -97,6 +97,10 @@ type leaveVerdict struct {
 	// Reviewer is set when an attachment verifier approves a leave with an
 	// attachment: the approval is also the verification (EPIC-088 R2).
 	Reviewer *auth.User
+	// HRReject: an attachment verifier rejects, which may land on a request
+	// already waiting for HR; any other decision needs no review stage yet,
+	// so a second atasan cannot overturn the first one's approval (EPIC-091).
+	HRReject bool
 }
 
 // leaveFilter is the list/export query.
@@ -616,6 +620,7 @@ func (s *Service) DecideLeave(ctx context.Context, a *Actor, in leaveDecision, m
 	if approve && strings.TrimSpace(leave.Str("attachment_url")) != "" {
 		verdict.Reviewer = userOf(a)
 	}
+	verdict.HRReject = !approve && verifier
 	label := dateText(leave, "start_date") + " s.d. " + dateText(leave, "end_date")
 	if emp != nil {
 		label = emp.Str("full_name") + " · " + label

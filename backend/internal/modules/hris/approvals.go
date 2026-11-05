@@ -159,7 +159,7 @@ func (s *Service) teamPendingTotal(ctx context.Context, managerID string) (int64
 // (EPIC-091: the nearest atasan from Supervisor up, or the Manager above;
 // never oneself, R2).
 func teamMember(alias string) string {
-	return fmt.Sprintf(`JOIN hris.employees m ON m.id = %s.employee_id AND hris.is_request_approver(m.id, $1::uuid)`, alias)
+	return fmt.Sprintf(`JOIN hris.employees m ON m.id = %s.employee_id AND m.id IN (SELECT hris.request_team($1::uuid))`, alias)
 }
 
 const teamEmployee = `json_build_object('id', m.id, 'full_name', m.full_name, 'nip', m.nip) AS employee`
