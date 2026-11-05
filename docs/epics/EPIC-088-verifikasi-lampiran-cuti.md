@@ -101,7 +101,7 @@ Rencana: `docs/superpowers/plans/2026-11-03-verifikasi-lampiran-cuti.md`.
 - [x] HR memverifikasi → cuti disetujui (saldo tahunan terpotong bila Cuti Tahunan); HR mengembalikan → karyawan melihat alasan dan bisa unggah ulang, lalu antrean HR terisi lagi.
 - [x] HR menyetujui langsung pengajuan berlampiran → sekaligus terverifikasi. Pengajuan tanpa lampiran tidak berubah.
 - [x] Gates hijau; QA staging (HR, atasan, karyawan; desktop + HP).
-- [ ] R11: atasan mendapat lonceng saat bawahan mengajukan cuti/izin dan lembur.
+- [x] R11: atasan mendapat lonceng saat bawahan mengajukan cuti/izin dan lembur.
 
 ## Automation Log
 - 2026-11-03 — Pemetaan MOM 29-10 butir 11–12 + 4 jawaban user. Poin 12 sudah live (ES-15). Epic + rencana ditulis. Worktree `.worktrees/epic088`, branch `feat/epic088-verifikasi-lampiran` dari main `614d3694`.
@@ -130,4 +130,13 @@ Rencana: `docs/superpowers/plans/2026-11-03-verifikasi-lampiran-cuti.md`.
     - audit lengkap: `manager_approve`, `attachment_return`, `attachment_resubmit`, `attachment_verify`;
     - 0 error API dan console.
   - Akun demo qa088, cuti, notifikasi, dan berkas lampiran dihapus.
+- 2026-11-05 — **R11** (permintaan user 05-11): lonceng in-app ke atasan langsung saat cuti/izin dan lembur diajukan (`61976bc1`).
+  - Tes `TestManagerNotices`, `TestManagerBellOnRequest` RED→GREEN; suite hris + app hijau.
+  - Staging `local-20261105-125523` (backup `staging-db-before-epic088-r11-20261105-125516.dump`, gabungan lokal EPIC-087 + EPIC-088).
+  - QA lulus:
+    - atasan mendapat "Pengajuan cuti: …" dan "Pengajuan lembur: …" di lonceng (desktop + HP);
+    - HR tetap mendapat "📋 Pengajuan Cuti Baru";
+    - 0 error API dan console.
+  - Data demo dan berkas dihapus.
+  - Catatan: popover lonceng di HP terpotong di tepi kiri (bawaan UI, bukan dari R11).
 
