@@ -39,9 +39,9 @@ func TestRequestApproverMinimumSupervisor(t *testing.T) {
 	if l, o := queue(&spv); l != 1 || o != 1 {
 		t.Fatalf("antrean SPV = %d cuti, %d lembur; want 1, 1", l, o)
 	}
-	// Ralat user 05-11: dua atasan bisa memutus — SPV terdekat atau Manager di atasnya.
-	if l, o := queue(&mgr); l != 1 || o != 1 {
-		t.Fatalf("antrean Manager = %d cuti, %d lembur; want 1, 1", l, o)
+	// EPIC-092: cuti berjenjang (Manager setelah SPV); lembur tetap salah satu (R0c).
+	if l, o := queue(&mgr); l != 0 || o != 1 {
+		t.Fatalf("antrean Manager = %d cuti, %d lembur; want 0, 1", l, o)
 	}
 	// Lonceng pengajuan (EPIC-088 R11) ke SPV, bukan Store Leader.
 	if n := h.scalar(`SELECT count(*)::text FROM public.notifications WHERE user_id = $1 AND title = 'Pengajuan cuti: Crew Toko'`, spv.UserID); n != "1" {
@@ -55,7 +55,8 @@ func TestRequestApproverMinimumSupervisor(t *testing.T) {
 		"Hanya atasan langsung atau HRD yang bisa memproses pengajuan ini")
 	ok := h.do(&spv, "POST", "/api/hris/leaves/approve", decideLeaveBody(id, "approve", ""))
 	expect(t, ok, 200, "")
-	if d := ok.data(); d["decided_as"] != "manager" || d["approved_by"] != spvID {
+	// EPIC-092: ada Manager di atas SPV → tahap SPV dulu, masih menunggu Manager.
+	if d := ok.data(); ok.body["message"] != "Disetujui SPV — menunggu persetujuan Manager" || d["spv_approved_by"] != spvID {
 		t.Fatalf("keputusan SPV = %s", ok.raw)
 	}
 	// Riwayat tim mengikuti penyetuju yang sama (SPV dan Manager).
@@ -66,17 +67,12 @@ func TestRequestApproverMinimumSupervisor(t *testing.T) {
 		}
 	}
 
-	// Manager di atas SPV memutus lebih dulu; SPV yang telat ditolak.
+	// EPIC-092: Manager tidak bisa memutus cuti sebelum SPV.
 	second := h.do(&crew, "POST", "/api/hris/leaves", leaveBody("marriage", "2031-03-11", "2031-03-11"))
 	expect(t, second, 200, "")
-	byMgr := h.do(&mgr, "POST", "/api/hris/leaves/approve", decideLeaveBody(second.data()["id"], "approve", ""))
-	expect(t, byMgr, 200, "")
-	if d := byMgr.data(); d["approved_by"] != mgrID || d["decided_as"] != "manager" {
-		t.Fatalf("keputusan Manager = %s", byMgr.raw)
-	}
-	expect(t, h.do(&spv, "POST", "/api/hris/leaves/approve", decideLeaveBody(second.data()["id"], "approve", "")), 400,
-		"Leave request already approved")
-	// Lembur dan perjalanan dinas: Manager juga bisa memutus.
+	expect(t, h.do(&mgr, "POST", "/api/hris/leaves/approve", decideLeaveBody(second.data()["id"], "approve", "")), 403,
+		"Bukan giliran Anda memutus pengajuan ini")
+	// Lembur tidak berjenjang: Manager bisa memutus; perjalanan dinas berjenjang.
 	ot := h.scalar(`SELECT id::text FROM hris.overtime_requests WHERE employee_id = $1`, crewID)
 	expect(t, h.do(&mgr, "POST", "/api/hris/overtime/decide", map[string]any{"overtime_id": ot, "action": "approve"}), 200, "")
 	trip := h.do(&crew, "POST", "/api/hris/business-trips", map[string]any{"start_date": "2026-10-10",
@@ -85,5 +81,5 @@ func TestRequestApproverMinimumSupervisor(t *testing.T) {
 	expect(t, h.do(&leader, "POST", "/api/hris/business-trips/"+trip.data()["id"].(string)+"/decide",
 		map[string]any{"action": "approve"}), 403, "")
 	expect(t, h.do(&mgr, "POST", "/api/hris/business-trips/"+trip.data()["id"].(string)+"/decide",
-		map[string]any{"action": "approve"}), 200, "")
+		map[string]any{"action": "approve"}), 403, "Bukan giliran Anda memutus pengajuan ini")
 }

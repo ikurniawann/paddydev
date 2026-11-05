@@ -135,7 +135,7 @@ func (s *store) LeaveDetail(ctx context.Context, id string) (*Row, error) {
 
 func (s *store) LeaveForDecision(ctx context.Context, id string) (*Row, error) {
 	row, err := queryRow(ctx, s.db, `SELECT *, `+
-		leaveEmployeeEmbed("employee", "id, full_name, email, phone, reporting_to, hris.request_approver(employees.id) AS approver_id, hris.request_manager(employees.id) AS manager_id, "+
+		leaveEmployeeEmbed("employee", "id, full_name, email, phone, reporting_to, hris.request_approver(employees.id) AS approver_id, hris.request_manager(employees.id) AS manager_id, "+stageNames+", "+
 			embedOne("department", "id, name", "hris.departments", "id = employees.department_id")+", "+
 			embedOne("job_title", "id, title", "hris.positions", "id = employees.job_title_id"))+
 		` FROM hris.leaves WHERE id = $1`, id)

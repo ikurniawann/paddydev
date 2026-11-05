@@ -49,6 +49,8 @@ type LeaveRepo interface {
 	// attachment, which then waits for HR (EPIC-088 R3); errNoRow when it is
 	// no longer pending without a review stage.
 	ManagerApproveLeave(ctx context.Context, id string, v leaveVerdict) error
+	// SpvApproveLeave records the SPV stage of a tiered leave (EPIC-092).
+	SpvApproveLeave(ctx context.Context, id string, by *string, name string) error
 	// ReviewLeaveAttachment verifies (approving, with the annual quota) or
 	// returns a request waiting for HR (R5); errNoRow when it is not waiting.
 	ReviewLeaveAttachment(ctx context.Context, id string, rv attachmentReview, credit *quotaMove) error
@@ -580,15 +582,17 @@ func (s *Service) DecideLeave(ctx context.Context, a *Actor, in leaveDecision, m
 		return nil, httpx.NotFound("Leave request not found")
 	}
 	emp := leave.Child("employee")
-	var reportingTo *string
-	if emp != nil {
-		reportingTo = approverFor(emp, a.EmployeeID) // EPIC-091: SPV terdekat atau Manager di atasnya
-	}
-	// The HR backup holds "approve" on the Cuti leaf (EPIC-067 R11), not IsHR.
-	decidedAs, refusal := domain.DecideAs(domain.Approver{EmployeeID: a.EmployeeID, IsHR: a.CanApprove(iam.LeafCuti)},
-		leave.Str("employee_id"), reportingTo, "cuti")
+	stage := tieredStage(emp, leave.Get("spv_approved_at") != nil)
+	// EPIC-092: SPV then the Manager above; HR (approve on the Cuti leaf,
+	// EPIC-067 R11) may act for the running stage at any time.
+	decidedAs, onBehalf, final, refusal := domain.DecideTiered(domain.Approver{EmployeeID: a.EmployeeID,
+		IsHR: a.CanApprove(iam.LeafCuti)}, leave.Str("employee_id"), stage, "cuti")
 	if decidedAs == "" {
 		return nil, httpx.Forbidden(refusal)
+	}
+	deciderName := actorName(a)
+	if onBehalf {
+		deciderName += " (mewakili " + stageName(emp, stage) + ")"
 	}
 	if status := leave.Str("status"); status != "pending" {
 		return nil, httpx.BadRequest("Leave request already "+status, obj("current_status", status))
@@ -603,6 +607,9 @@ func (s *Service) DecideLeave(ctx context.Context, a *Actor, in leaveDecision, m
 	if in.Action == "reject" && (in.Rejection == nil || *in.Rejection == "") {
 		return nil, httpx.BadRequest("Rejection reason is required")
 	}
+	if approve && !final {
+		return s.spvApproveLeave(ctx, a, leave, emp, onBehalf, deciderName, meta)
+	}
 	if approve && domain.NeedsAttachmentReview(leave.Str("attachment_url"), verifier) {
 		return s.managerApproveLeave(ctx, a, leave, decidedAs, meta)
 	}
@@ -616,7 +623,7 @@ func (s *Service) DecideLeave(ctx context.Context, a *Actor, in leaveDecision, m
 		}
 	}
 	verdict := leaveVerdict{Status: status, ApproverID: a.EmployeeID, Rejection: rejection,
-		DecidedAs: decidedAs, DecidedBy: actorName(a)}
+		DecidedAs: decidedAs, DecidedBy: deciderName}
 	if approve && strings.TrimSpace(leave.Str("attachment_url")) != "" {
 		verdict.Reviewer = userOf(a)
 	}
