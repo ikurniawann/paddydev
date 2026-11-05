@@ -2,11 +2,14 @@ package payroll
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"net/http"
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 
 	"nuhabit/backend/internal/modules/payroll/domain"
 	"nuhabit/backend/internal/platform/database"
@@ -227,13 +230,49 @@ func (s *service) createLoan(ctx context.Context, a *actor, in loanInput) (*obj,
 		return nil, err
 	}
 	now := s.clock()
-	row, err := queryObj(ctx, s.db, `INSERT INTO hris.loans (employee_id, loan_type, principal_amount, interest_rate,
-		tenor_months, monthly_installment, remaining_balance, purpose, notes, status, manager_approver_id,
-		attachments, collateral_attachments, requested_date, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pending', $10, $11, $12, $13, $13, $13) RETURNING *`,
-		target, in.LoanType, numParam(in.Principal), numParam(rate), in.Tenor, numParam(monthly), numParam(total),
-		textOrNil(in.Purpose), textOrNil(in.Notes), approver, nonNil(in.Attachments), nonNil(in.Collateral), now)
+	var row *obj
+	err = database.WithTx(ctx, s.db, func(tx pgx.Tx) error {
+		var err error
+		row, err = queryObj(ctx, tx, `INSERT INTO hris.loans (employee_id, loan_type, principal_amount, interest_rate,
+			tenor_months, monthly_installment, remaining_balance, purpose, notes, status, manager_approver_id,
+			attachments, collateral_attachments, requested_date, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pending', $10, $11, $12, $13, $13, $13) RETURNING *`,
+			target, in.LoanType, numParam(in.Principal), numParam(rate), in.Tenor, numParam(monthly), numParam(total),
+			textOrNil(in.Purpose), textOrNil(in.Notes), approver, nonNil(in.Attachments), nonNil(in.Collateral), now)
+		if err != nil {
+			return err
+		}
+		return notifyLoanRequested(ctx, tx, emp, in.LoanType, in.Principal, in.Tenor, approver)
+	})
 	return row, opaque(err)
+}
+
+// notifyLoanRequested is EPIC-091: the stored Manager approver gets a bell
+// to decide, and the direct atasan (when another person, e.g. a Supervisor
+// skipped by the Manager rule) a bell to follow it in Persetujuan Tim.
+func notifyLoanRequested(ctx context.Context, q database.Querier, emp *EmployeeBrief, loanType string,
+	principal float64, tenor int, approver *string) error {
+	label := loanTypeLabel(loanType)
+	title := "Pengajuan " + label + ": " + emp.FullName
+	what := fmt.Sprintf("%s mengajukan %s %s (%dx cicilan).", emp.FullName, label, domain.FormatRupiah(principal), tenor)
+	decider := "HR"
+	if approver != nil {
+		if _, err := q.Exec(ctx, `SELECT public.notify_user(m.user_id, $2, $3, 'approval', '/dashboard/me/pinjaman')
+			FROM hris.employees m WHERE m.id = $1 AND m.user_id IS NOT NULL`,
+			*approver, title, what+" Menunggu persetujuan Anda di Area Karyawan → Pinjaman."); err != nil {
+			return err
+		}
+		var name string
+		if err := q.QueryRow(ctx, `SELECT full_name FROM hris.employees WHERE id = $1`, *approver).Scan(&name); err != nil {
+			return err
+		}
+		decider = "Manager " + name + " lalu HR"
+	}
+	_, err := q.Exec(ctx, `SELECT public.notify_user(a.user_id, $2, $3, 'approval', '/dashboard/me/persetujuan-tim?tab=riwayat')
+		FROM hris.employees e JOIN hris.employees a ON a.id = e.reporting_to AND a.id <> e.id
+		WHERE e.id = $1 AND a.user_id IS NOT NULL AND ($4::uuid IS NULL OR a.id <> $4::uuid)`,
+		emp.ID, title, what+" Diputuskan oleh "+decider+"; lihat detail di Persetujuan Tim → Riwayat.", approver)
+	return err
 }
 
 // nonNil is paths, or an empty list for a NOT NULL text[] column.

@@ -37,6 +37,21 @@ type PayrollReads interface {
 	// PeriodRuns are the payroll runs of a year (any status), for the
 	// attendance period closing rules.
 	PeriodRuns(ctx context.Context, q database.Querier, year int) ([]PeriodRun, error)
+	// TeamLoanHistory are the kasbon/pinjaman of managerID's direct reports
+	// filed on or after from, plus any still waiting (pending,
+	// manager_approved), newest first (EPIC-091, Riwayat Persetujuan Tim).
+	TeamLoanHistory(ctx context.Context, q database.Querier, managerID, from string) ([]TeamLoan, error)
+}
+
+// TeamLoan is a direct report's loan request. Amounts are numeric text;
+// CreatedAt is RFC 3339 UTC.
+type TeamLoan struct {
+	ID, EmployeeID, EmployeeName                    string
+	EmployeeNIP                                     *string
+	LoanType, Principal, Monthly, Status, CreatedAt string
+	Tenor                                           int
+	Purpose, RejectionReason, ApproverName          *string
+	Attachments, Collateral                         []string
 }
 
 // PeriodRun is a payroll run's month and status (draft, processing,

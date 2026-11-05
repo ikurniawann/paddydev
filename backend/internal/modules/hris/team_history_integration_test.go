@@ -100,3 +100,34 @@ func TestTeamHistoryCutoff20(t *testing.T) {
 		t.Fatalf("leaves = %s", c.raw)
 	}
 }
+
+// EPIC-091: Riwayat juga memuat kasbon/pinjaman bawahan langsung (lewat port payroll).
+func TestTeamHistoryLoans(t *testing.T) {
+	h, _ := newFileHarness(t)
+	h.setNow("2026-11-05 10:00")
+	boss, _ := h.staff("pos", nil, true, emp{name: "SPV Pinjaman"})
+	unlinked, _ := h.staff("pos", nil, false)
+	approver := "Manager Area"
+	purpose := "Biaya sekolah anak"
+	fakeTeamLoans = []TeamLoan{{ID: "11111111-1111-4111-8111-111111111111", EmployeeID: "e1", EmployeeName: "Anggota A",
+		LoanType: "kasbon", Principal: "1000000.00", Monthly: "500000.00", Status: "pending",
+		CreatedAt: "2026-11-04T03:00:00Z", Tenor: 2, Purpose: &purpose, ApproverName: &approver,
+		Attachments: []string{"loan-attachments/e1/1-aaaaaaaaaaaaaaaa.pdf"}, Collateral: []string{}}}
+	t.Cleanup(func() { fakeTeamLoans = nil })
+	c := h.do(&boss, "GET", "/api/hris/me/team-history", nil)
+	expect(t, c, 200, "")
+	loans, _ := c.data()["loans"].([]any)
+	if len(loans) != 1 {
+		t.Fatalf("loans = %s", c.raw)
+	}
+	l := loans[0].(map[string]any)
+	if l["loan_type"] != "kasbon" || l["principal_amount"] != "1000000.00" || l["tenor_months"] != 2.0 ||
+		l["manager_approver_name"] != "Manager Area" || l["purpose"] != purpose ||
+		l["employee"].(map[string]any)["full_name"] != "Anggota A" || len(l["attachments"].([]any)) != 1 {
+		t.Fatalf("loan = %v", l)
+	}
+	empty := h.do(&unlinked, "GET", "/api/hris/me/team-history", nil)
+	if l, _ := empty.data()["loans"].([]any); l == nil || len(l) != 0 {
+		t.Fatalf("unlinked loans = %s", empty.raw)
+	}
+}

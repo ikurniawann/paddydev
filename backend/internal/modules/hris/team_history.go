@@ -29,7 +29,7 @@ func (s *Service) TeamHistory(ctx context.Context, a *Actor) (*Row, error) {
 	}
 	period := obj("from", prev.Start, "to", cur.End, "label", domain.PeriodRangeLabel(prev.Start, cur.End))
 	if a.EmployeeID == nil {
-		return obj("period", period, "leaves", []*Row{}, "overtime", []*Row{}), nil
+		return obj("period", period, "leaves", []*Row{}, "overtime", []*Row{}, "loans", []*Row{}), nil
 	}
 	leaves, err := s.repo.TeamLeaveHistory(ctx, *a.EmployeeID, prev.Start)
 	if err != nil {
@@ -39,7 +39,25 @@ func (s *Service) TeamHistory(ctx context.Context, a *Actor) (*Row, error) {
 	if err != nil {
 		return nil, err
 	}
-	return obj("period", period, "leaves", nonNilRows(leaves), "overtime", nonNilRows(overtime)), nil
+	teamLoans, err := s.payroll.TeamLoanHistory(ctx, q, *a.EmployeeID, prev.Start)
+	if err != nil {
+		return nil, err
+	}
+	loans := make([]*Row, 0, len(teamLoans))
+	for _, l := range teamLoans {
+		loans = append(loans, teamLoanRow(l))
+	}
+	return obj("period", period, "leaves", nonNilRows(leaves), "overtime", nonNilRows(overtime), "loans", loans), nil
+}
+
+// teamLoanRow is a TeamLoan in the shape of the ESS loan rows (EPIC-091).
+func teamLoanRow(l TeamLoan) *Row {
+	return obj("id", l.ID, "employee_id", l.EmployeeID, "loan_type", l.LoanType, "principal_amount", l.Principal,
+		"monthly_installment", l.Monthly, "tenor_months", l.Tenor, "status", l.Status, "purpose", l.Purpose,
+		"rejection_reason", l.RejectionReason, "manager_approver_name", l.ApproverName,
+		"attachments", nonNilStrings(l.Attachments), "collateral_attachments", nonNilStrings(l.Collateral),
+		"created_at", l.CreatedAt,
+		"employee", obj("id", l.EmployeeID, "full_name", l.EmployeeName, "nip", l.EmployeeNIP))
 }
 
 func (s *store) TeamLeaveHistory(ctx context.Context, managerID, from string) ([]*Row, error) {

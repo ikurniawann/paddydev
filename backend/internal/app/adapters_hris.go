@@ -103,6 +103,33 @@ func (hrisPayrollSQL) ManagerPendingLoanCount(ctx context.Context, q database.Qu
 	return n, err
 }
 
+func (hrisPayrollSQL) TeamLoanHistory(ctx context.Context, q database.Querier, managerID, from string) ([]hris.TeamLoan, error) {
+	rows, err := q.Query(ctx, `SELECT l.id::text, l.employee_id::text, m.full_name, m.nip, l.loan_type::text,
+		l.principal_amount::text, coalesce(l.monthly_installment, 0)::text, l.status::text,
+		to_char(l.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'), l.tenor_months,
+		l.purpose, l.rejection_reason, ma.full_name, l.attachments, l.collateral_attachments
+		FROM hris.loans l
+		JOIN hris.employees m ON m.id = l.employee_id AND m.reporting_to = $1::uuid AND m.id <> $1::uuid
+		LEFT JOIN hris.employees ma ON ma.id = l.manager_approver_id
+		WHERE l.created_at >= $2::date OR l.status IN ('pending', 'manager_approved')
+		ORDER BY l.created_at DESC LIMIT 300`, managerID, from)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []hris.TeamLoan
+	for rows.Next() {
+		var l hris.TeamLoan
+		if err := rows.Scan(&l.ID, &l.EmployeeID, &l.EmployeeName, &l.EmployeeNIP, &l.LoanType, &l.Principal, &l.Monthly,
+			&l.Status, &l.CreatedAt, &l.Tenor, &l.Purpose, &l.RejectionReason, &l.ApproverName,
+			&l.Attachments, &l.Collateral); err != nil {
+			return nil, err
+		}
+		out = append(out, l)
+	}
+	return out, rows.Err()
+}
+
 func (hrisPayrollSQL) LoanUpdatesSince(ctx context.Context, q database.Querier, employeeID string, since *time.Time) (int64, error) {
 	var n int64
 	err := q.QueryRow(ctx, `SELECT count(*) FROM hris.loans

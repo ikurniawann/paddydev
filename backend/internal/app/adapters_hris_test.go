@@ -209,3 +209,48 @@ func TestPendingLoanCountFollowsHrStage(t *testing.T) {
 		t.Fatalf("pending delta = %d, want 2", after-before)
 	}
 }
+
+// EPIC-091: kasbon/pinjaman bawahan langsung untuk Riwayat Persetujuan Tim.
+func TestTeamLoanHistory(t *testing.T) {
+	tx := testutil.Tx(t)
+	ctx := context.Background()
+	emp := func(name string, boss *string) string {
+		t.Helper()
+		var id string
+		if err := tx.QueryRow(ctx, `INSERT INTO hris.employees (full_name, nip, email, phone, join_date, reporting_to)
+			VALUES ($1, 'T-'||md5(random()::text), md5(random()::text)||'@hris.test', '', '2026-01-01', $2::uuid) RETURNING id::text`,
+			name, boss).Scan(&id); err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+	boss := emp("SPV Riwayat", nil)
+	mgr := emp("Manager Riwayat", nil)
+	worker := emp("Peminjam Tim", &boss)
+	outsider := emp("Bukan Tim", nil)
+	loan := func(owner, status, created string, approver *string) {
+		t.Helper()
+		if _, err := tx.Exec(ctx, `INSERT INTO hris.loans (employee_id, loan_type, principal_amount, tenor_months,
+			monthly_installment, remaining_balance, status, manager_approver_id, purpose, created_at, attachments)
+			VALUES ($1::uuid, 'kasbon', 1000000, 2, 500000, 1000000, $2, $3::uuid, 'Biaya sekolah anak', $4::timestamptz,
+			ARRAY['loan-attachments/'||$1::text||'/1-aaaaaaaaaaaaaaaa.pdf'])`, owner, status, approver, created); err != nil {
+			t.Fatal(err)
+		}
+	}
+	loan(worker, "pending", "2026-01-05 10:00+07", &mgr)  // lama tapi masih menunggu
+	loan(worker, "rejected", "2026-11-03 10:00+07", nil)  // dalam rentang
+	loan(worker, "approved", "2026-01-06 10:00+07", &mgr) // sudah diputus, sebelum rentang
+	loan(outsider, "pending", "2026-11-03 10:00+07", &mgr)
+	rows, err := (hrisPayrollSQL{}).TeamLoanHistory(ctx, tx, boss, "2026-10-01")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 2 || rows[0].Status != "rejected" || rows[1].Status != "pending" {
+		t.Fatalf("rows = %+v", rows)
+	}
+	p := rows[1]
+	if p.EmployeeName != "Peminjam Tim" || p.ApproverName == nil || *p.ApproverName != "Manager Riwayat" || p.Tenor != 2 ||
+		p.Principal != "1000000.00" || len(p.Attachments) != 1 || p.Purpose == nil || p.CreatedAt == "" {
+		t.Fatalf("pending = %+v", p)
+	}
+}
