@@ -38,6 +38,12 @@ type OvertimeRepo interface {
 	OvertimeForUpdate(ctx context.Context, id string) (*Row, error)
 	// EPIC-085: jadwal, jam terpakai, dan perjalanan dinas untuk aturan TnC.
 	OvertimeShiftEndOn(ctx context.Context, employeeID, date string) (*domain.OvertimeShiftEnd, error)
+	// OvertimeShiftStartOn is the start (HH:MM) of the employee's first shift
+	// on date; "" without a schedule or on a day off (EPIC-089 review).
+	OvertimeShiftStartOn(ctx context.Context, employeeID, date string) (string, error)
+	// OvertimeSpanOn is the employee's pending/approved entry on date,
+	// without excludeID ("" = none); nil when there is none.
+	OvertimeSpanOn(ctx context.Context, employeeID, date, excludeID string) (*domain.OvertimeSpan, error)
 	OvertimeHoursUsed(ctx context.Context, employeeID, from, to, excludeID string) (float64, error)
 	OnApprovedTrip(ctx context.Context, employeeID, date string) (bool, error)
 }
@@ -197,15 +203,18 @@ func (s *Service) CreateOvertime(ctx context.Context, a *Actor, in overtimeInput
 	if in.StartTime == in.EndTime {
 		return nil, httpx.BadRequest("Jam mulai dan selesai tidak boleh sama")
 	}
-	if domain.OvertimeGrossMinutes(in.StartTime, in.EndTime) > 12*60 {
-		return nil, httpx.BadRequest("Durasi lembur maksimal 12 jam")
-	}
+	// EPIC-089 R1: no daily or 12-hour gross cap; 18/week and 72/period remain.
 	hours := domain.PaidOvertimeHours(in.StartTime, in.EndTime, in.BreakMinutes)
 	if hours < 1 {
 		if in.BreakMinutes > 0 {
 			return nil, httpx.BadRequest("Durasi lembur minimal 1 jam setelah dikurangi istirahat")
 		}
 		return nil, httpx.BadRequest("Durasi lembur minimal 1 jam")
+	}
+	if isSelf { // EPIC-089 R2: HR assigning someone is the approver itself
+		if msg := domain.OvertimeReasonError(hours, in.Reason); msg != "" {
+			return nil, httpx.BadRequest(msg)
+		}
 	}
 	dayType, err := s.overtimeDayType(ctx, *targetID, in.Date, in.DayType, !isSelf)
 	if err != nil {
@@ -238,6 +247,9 @@ func (s *Service) CreateOvertime(ctx context.Context, a *Actor, in overtimeInput
 		if err := s.checkOvertimeCaps(ctx, r, *targetID, in.Date, hours, ""); err != nil { // EPIC-085 R3
 			return err
 		}
+		if err := s.checkOvertimeOverlap(ctx, r, *targetID, in.Date, in.StartTime, in.EndTime, ""); err != nil {
+			return err
+		}
 		var err error
 		if row, err = r.InsertOvertime(ctx, f); err != nil || source != "employee" {
 			return err
@@ -265,11 +277,9 @@ func (s *Service) CreateOvertime(ctx context.Context, a *Actor, in overtimeInput
 	return obj("data", row, "message", message), nil
 }
 
-// checkOvertimeAttachments: 1–3 paths uploaded by the owner and still on disk.
+// checkOvertimeAttachments: 0–3 paths uploaded by the owner and still on
+// disk; documentation is optional since EPIC-089 R3.
 func (s *Service) checkOvertimeAttachments(ownerID string, paths []string) error {
-	if len(paths) == 0 {
-		return httpx.BadRequest("Lampirkan minimal 1 dokumentasi lembur")
-	}
 	if len(paths) > maxOvertimeAttachments {
 		return httpx.BadRequest("Maksimal 3 dokumentasi lembur")
 	}
@@ -382,9 +392,6 @@ func (s *Service) DecideOvertime(ctx context.Context, a *Actor, id, action strin
 		if start == end {
 			return nil, httpx.BadRequest("Jam mulai dan selesai tidak boleh sama")
 		}
-		if domain.OvertimeGrossMinutes(start, end) > 12*60 {
-			return nil, httpx.BadRequest("Durasi lembur maksimal 12 jam")
-		}
 		hours := domain.PaidOvertimeHours(start, end, brk)
 		if hours < 1 {
 			return nil, httpx.BadRequest("Durasi lembur minimal 1 jam")
@@ -397,6 +404,11 @@ func (s *Service) DecideOvertime(ctx context.Context, a *Actor, id, action strin
 			}
 			if start != was.start {
 				if err := s.overtimeStartCheck(ctx, s.repo, ot.Str("employee_id"), dateText(ot, "date"), start, dt); err != nil {
+					return nil, err
+				}
+			}
+			if start != was.start || end != was.end {
+				if err := s.checkOvertimeOverlap(ctx, s.repo, ot.Str("employee_id"), dateText(ot, "date"), start, end, id); err != nil {
 					return nil, err
 				}
 			}

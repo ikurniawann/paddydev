@@ -203,9 +203,19 @@ export function overtimeTimeChanges(
   return Object.keys(changes).length > 0 ? changes : undefined;
 }
 
-/** Ringkasan Ketentuan Lembur TnC 03-11 (EPIC-085); server yang menegakkan. */
+/** Ringkasan Ketentuan Lembur TnC 03-11 (EPIC-085, direvisi EPIC-089); server yang menegakkan. */
 export const OVERTIME_RULES_HINT =
-  "Lembur hari kerja dimulai setelah jam kerja selesai · maks. 4 jam/hari, 18 jam/minggu, 72 jam/periode";
+  "Lembur hari kerja dimulai setelah jam kerja selesai · lebih dari 4 jam/hari wajib keterangan · maks. 18 jam/minggu, 72 jam/periode";
+
+/** EPIC-089 R2: lebih dari 4 jam dibayar wajib Keterangan (sama dengan Go OvertimeReasonError). */
+export const OVERTIME_REASON_THRESHOLD_HOURS = 4;
+const OVERTIME_LONG_REASON_MIN = 10;
+const OVERTIME_LONG_REASON_MSG = "Lembur lebih dari 4 jam: isi Keterangan alasannya (minimal 10 karakter)";
+
+export function overtimeReasonError(hours: number, reason: string): string | null {
+  if (hours <= OVERTIME_REASON_THRESHOLD_HOURS) return null;
+  return [...reason.trim()].length >= OVERTIME_LONG_REASON_MIN ? null : OVERTIME_LONG_REASON_MSG;
+}
 
 /** EPIC-085 R1: jabatan Supervisor ke atas tidak berhak lembur. */
 export const OVERTIME_LEADER_REFUSED = "Lembur tidak berlaku untuk jabatan Supervisor ke atas";

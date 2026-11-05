@@ -90,9 +90,6 @@ func (s *Service) CorrectOvertime(ctx context.Context, a *Actor, id string, in o
 		if start == end {
 			return httpx.BadRequest("Jam mulai dan selesai tidak boleh sama")
 		}
-		if domain.OvertimeGrossMinutes(start, end) > 12*60 {
-			return httpx.BadRequest("Durasi lembur maksimal 12 jam")
-		}
 		hours := domain.PaidOvertimeHours(start, end, brk)
 		if hours < 1 {
 			return httpx.BadRequest("Durasi lembur minimal 1 jam")
@@ -127,6 +124,11 @@ func (s *Service) CorrectOvertime(ctx context.Context, a *Actor, id string, in o
 		}
 		if date != was.date || hours > ot.Num("hours") {
 			if err := s.checkOvertimeCaps(ctx, r, ot.Str("employee_id"), date, hours, id); err != nil {
+				return err
+			}
+		}
+		if date != was.date || start != was.start || end != was.end {
+			if err := s.checkOvertimeOverlap(ctx, r, ot.Str("employee_id"), date, start, end, id); err != nil {
 				return err
 			}
 		}
