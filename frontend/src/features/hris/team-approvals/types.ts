@@ -43,3 +43,29 @@ export interface TeamApprovals {
 
 export type TeamRequestKind = "leave" | "overtime";
 export type TeamDecision = "approve" | "reject";
+
+/** GET /api/hris/me/team-history (EPIC-090): semua status, 2 periode absensi. */
+export interface TeamHistoryLeave extends TeamLeaveRequest {
+  status: string;
+  attachment_review: "awaiting" | "returned" | "verified" | null;
+  attachment_return_reason: string | null;
+  rejection_reason: string | null;
+  decided_by_name: string | null;
+  manager_approved_name: string | null;
+  attachment_reviewed_name: string | null;
+}
+
+export interface TeamHistoryOvertime extends TeamOvertimeRequest {
+  status: string;
+  /** employee = diajukan karyawan, company = penugasan HR. */
+  source: string;
+  rejection_reason: string | null;
+  decided_by_name: string | null;
+}
+
+export interface TeamHistory {
+  period: { from: string; to: string; label: string };
+  leaves: TeamHistoryLeave[];
+  overtime: TeamHistoryOvertime[];
+}
+

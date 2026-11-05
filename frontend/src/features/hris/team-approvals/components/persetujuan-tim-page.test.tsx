@@ -27,6 +27,7 @@ vi.mock("@/features/hris/business-trips", () => ({
 vi.mock("../queries", () => ({
   useTeamApprovals: () => ({ data: queue, isLoading: false, isError: queueError }),
 }));
+vi.mock("./team-history", () => ({ TeamHistoryPanel: () => <p>panel-riwayat</p> }));
 vi.mock("../mutations", () => ({
   useDecideTeamRequest: () => ({ mutate: decide, isPending: false, variables: undefined }),
 }));
@@ -235,5 +236,13 @@ describe("EssPersetujuanTimPage", () => {
     rerender(<EssPersetujuanTimPage />);
     expect(screen.queryByRole("dialog")).toBeNull();
   });
-});
 
+  it("tab Riwayat menampilkan riwayat tim (EPIC-090)", () => {
+    render(<EssPersetujuanTimPage />);
+    expect(screen.queryByText("panel-riwayat")).toBeNull();
+    fireEvent.click(screen.getByRole("tab", { name: "Riwayat" }));
+    expect(screen.getByText("panel-riwayat")).toBeTruthy();
+    fireEvent.click(screen.getByRole("tab", { name: "Menunggu" }));
+    expect(screen.queryByText("panel-riwayat")).toBeNull();
+  });
+});

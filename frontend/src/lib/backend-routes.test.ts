@@ -277,7 +277,9 @@ describe("Go route manifest", () => {
       // Aturan checkout otomatis per jabatan dan lokasi (EPIC-080): hanya di Go, tanpa fallback Next.
       "/api/hris/auto-checkout-rules",
       // Verifikasi lampiran cuti oleh HR (EPIC-088): hanya di Go, tanpa fallback Next.
-      "/api/hris/leaves/attachment-review"];
+      "/api/hris/leaves/attachment-review",
+      // Riwayat Persetujuan Tim (EPIC-090): hanya di Go, tanpa fallback Next.
+      "/api/hris/me/team-history"];
     const goNative = (p: string) =>
       goNativePrefixes.some((n) => p === n || p.startsWith(`${n}/`));
     const missing = switched
