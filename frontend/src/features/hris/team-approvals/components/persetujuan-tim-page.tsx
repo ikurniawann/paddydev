@@ -9,6 +9,7 @@ import { AttachmentPreviewButtons } from "@/components/hris/attachment-preview";
 import { RequestDetailDialog } from "@/components/hris/request-detail-dialog";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { leaveAttachmentHref } from "@/lib/hris/attachments";
@@ -27,6 +28,7 @@ import { useDecideTeamRequest } from "../mutations";
 import { useTeamApprovals } from "../queries";
 import type { TeamDecision, TeamLeaveRequest, TeamOvertimeRequest, TeamRequestKind } from "../types";
 import { OvertimeApproveDialog, type OvertimeApproveTimes } from "./overtime-approve-dialog";
+import { TeamHistoryPanel } from "./team-history";
 
 const DONE: Record<TeamRequestKind, Record<TeamDecision, string>> = {
   leave: { approve: "Cuti disetujui", reject: "Cuti ditolak" },
@@ -184,90 +186,104 @@ export function EssPersetujuanTimPage() {
         </p>
       </div>
 
-      {loadFailed && (
-        <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 shadow-sm">
-          Gagal memuat antrean persetujuan. Coba muat ulang.
-        </div>
-      )}
+      {/* EPIC-090: Riwayat agar atasan tetap bisa membuka detail setelah memutus. */}
+      <Tabs defaultValue="pending" className="w-full flex-col gap-4">
+        <TabsList>
+          <TabsTrigger value="pending">Menunggu</TabsTrigger>
+          <TabsTrigger value="history">Riwayat</TabsTrigger>
+        </TabsList>
+        <TabsContent value="pending" className="space-y-6">
 
-      {empty && !loading && !loadFailed && (
-        <div className="rounded-xl border border-gray-200/70 bg-white p-6 text-center text-sm text-gray-500 shadow-sm">
-          Tidak ada pengajuan tim yang menunggu persetujuan Anda.
-        </div>
-      )}
+          {loadFailed && (
+            <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 shadow-sm">
+              Gagal memuat antrean persetujuan. Coba muat ulang.
+            </div>
+          )}
 
-      {leaves.length > 0 && (
-        <section className="rounded-xl border border-gray-200/70 bg-white p-5 shadow-sm">
-          <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-800">
-            <CalendarDaysIcon className="h-4 w-4 text-pink-500" /> Cuti & Izin ({leaves.length})
-          </h3>
-          <ul className="mt-3 divide-y divide-gray-100">
-            {leaves.map((row) => (
-              <li key={row.id} className="flex flex-wrap items-center justify-between gap-3 py-2.5">
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-gray-900">
-                    {row.employee.full_name} · {leaveTypeLabel(row.leave_type)}
-                  </p>
-                  <p className="text-xs text-gray-600">
-                    {leavePeriod(row)} ({Number(row.total_days)} hari)
-                  </p>
-                  <p className="line-clamp-2 break-words text-xs text-gray-600">{row.reason || "—"}</p>
-                </div>
-                <div className="flex shrink-0 flex-wrap items-center gap-3">
-                  {row.attachment_url && (
-                    <AttachmentPreviewButtons
-                      paths={[row.attachment_url]}
-                      hrefFor={leaveAttachmentHref}
-                      label="Lampiran"
-                      context={`cuti ${row.employee.full_name}`}
-                    />
-                  )}
-                  {actions({ kind: "leave", row })}
-                </div>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
+          {empty && !loading && !loadFailed && (
+            <div className="rounded-xl border border-gray-200/70 bg-white p-6 text-center text-sm text-gray-500 shadow-sm">
+              Tidak ada pengajuan tim yang menunggu persetujuan Anda.
+            </div>
+          )}
 
-      {overtime.length > 0 && (
-        <section className="rounded-xl border border-gray-200/70 bg-white p-5 shadow-sm">
-          <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-800">
-            <ClockIcon className="h-4 w-4 text-pink-500" /> Lembur ({overtime.length})
-          </h3>
-          <ul className="mt-3 divide-y divide-gray-100">
-            {overtime.map((row) => (
-              <li key={row.id} className="flex flex-wrap items-center justify-between gap-3 py-2.5">
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-gray-900">
-                    {row.employee.full_name} · {formatDate(row.date, "—")}
-                  </p>
-                  <p className="text-xs text-gray-600">
-                    {overtimeClock(row)} · {overtimeDayTypeLabel(row.day_type)} · istirahat {row.break_minutes ?? 0} menit ·{" "}
-                    {row.attachments?.length ?? 0} dokumentasi
-                  </p>
-                  <p className="line-clamp-2 break-words text-xs text-gray-600">{row.reason || "—"}</p>
-                </div>
-                {actions({ kind: "overtime", row }, () => setApproving(row))}
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
+          {leaves.length > 0 && (
+            <section className="rounded-xl border border-gray-200/70 bg-white p-5 shadow-sm">
+              <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-800">
+                <CalendarDaysIcon className="h-4 w-4 text-pink-500" /> Cuti & Izin ({leaves.length})
+              </h3>
+              <ul className="mt-3 divide-y divide-gray-100">
+                {leaves.map((row) => (
+                  <li key={row.id} className="flex flex-wrap items-center justify-between gap-3 py-2.5">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-gray-900">
+                        {row.employee.full_name} · {leaveTypeLabel(row.leave_type)}
+                      </p>
+                      <p className="text-xs text-gray-600">
+                        {leavePeriod(row)} ({Number(row.total_days)} hari)
+                      </p>
+                      <p className="line-clamp-2 break-words text-xs text-gray-600">{row.reason || "—"}</p>
+                    </div>
+                    <div className="flex shrink-0 flex-wrap items-center gap-3">
+                      {row.attachment_url && (
+                        <AttachmentPreviewButtons
+                          paths={[row.attachment_url]}
+                          hrefFor={leaveAttachmentHref}
+                          label="Lampiran"
+                          context={`cuti ${row.employee.full_name}`}
+                        />
+                      )}
+                      {actions({ kind: "leave", row })}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
 
-      <TeamTripApprovals />
+          {overtime.length > 0 && (
+            <section className="rounded-xl border border-gray-200/70 bg-white p-5 shadow-sm">
+              <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-800">
+                <ClockIcon className="h-4 w-4 text-pink-500" /> Lembur ({overtime.length})
+              </h3>
+              <ul className="mt-3 divide-y divide-gray-100">
+                {overtime.map((row) => (
+                  <li key={row.id} className="flex flex-wrap items-center justify-between gap-3 py-2.5">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-gray-900">
+                        {row.employee.full_name} · {formatDate(row.date, "—")}
+                      </p>
+                      <p className="text-xs text-gray-600">
+                        {overtimeClock(row)} · {overtimeDayTypeLabel(row.day_type)} · istirahat {row.break_minutes ?? 0} menit ·{" "}
+                        {row.attachments?.length ?? 0} dokumentasi
+                      </p>
+                      <p className="line-clamp-2 break-words text-xs text-gray-600">{row.reason || "—"}</p>
+                    </div>
+                    {actions({ kind: "overtime", row }, () => setApproving(row))}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
 
-      {loans.length > 0 && (
-        <Link
-          href="/dashboard/me/pinjaman"
-          className="flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50/70 p-4 text-sm text-amber-900 shadow-sm hover:bg-amber-50"
-        >
-          <span className="flex items-center gap-2">
-            <BanknotesIcon className="h-4 w-4" /> {loans.length} kasbon/pinjaman tim menunggu persetujuan Anda
-          </span>
-          <span className="font-medium">Buka Pinjaman →</span>
-        </Link>
-      )}
+          <TeamTripApprovals />
+
+          {loans.length > 0 && (
+            <Link
+              href="/dashboard/me/pinjaman"
+              className="flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50/70 p-4 text-sm text-amber-900 shadow-sm hover:bg-amber-50"
+            >
+              <span className="flex items-center gap-2">
+                <BanknotesIcon className="h-4 w-4" /> {loans.length} kasbon/pinjaman tim menunggu persetujuan Anda
+              </span>
+              <span className="font-medium">Buka Pinjaman →</span>
+            </Link>
+          )}
+
+        </TabsContent>
+        <TabsContent value="history">
+          <TeamHistoryPanel />
+        </TabsContent>
+      </Tabs>
 
       {approving && (
         <OvertimeApproveDialog

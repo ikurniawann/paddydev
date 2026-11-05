@@ -91,6 +91,7 @@ deploying-dev · ready-for-qa · blocked · done).
 | [EPIC-086](./EPIC-086-data-kerja-massal.md) | Pengisian Massal Data Kerja (Jadwal, Shift, Penempatan) via Template Excel (`MODULE-HRIS`) | review | 2026-11-03 |
 | [EPIC-088](./EPIC-088-verifikasi-lampiran-cuti.md) | Verifikasi Lampiran Cuti/Izin oleh HR (`MODULE-HRIS`, ES-11) | review | 2026-11-05 |
 | [EPIC-089](./EPIC-089-lembur-lebih-4-jam.md) | Lembur Lebih dari 4 Jam dengan Keterangan, Dokumentasi Opsional (`MODULE-HRIS`) | review | 2026-11-05 |
+| [EPIC-090](./EPIC-090-riwayat-persetujuan-tim.md) | Riwayat Persetujuan Tim untuk Atasan (`MODULE-HRIS`) | review | 2026-11-05 |
 
 Aturan:
 - Epic + registry ini adalah sumber kebenaran status pekerjaan (canonical).
