@@ -1,6 +1,6 @@
 # EPIC-092: Approval Berjenjang SPV → Manager + HR Mewakili Atasan (`MODULE-HRIS`, `MODULE-PAYROLL`)
 
-status: backlog
+status: review
 environment: dev
 retries: 0
 
@@ -41,11 +41,26 @@ Di staging, semua jabatan Koordinator/Coordinator (15 jabatan) berlevel **Staff*
   - pengajuan pending lama (tidak punya tahap SPV tercatat, jadi tetap mengikuti tahap berjalan menurut fungsi).
 
 ## Acceptance Criteria
-- [ ] Karyawan dengan atasan langsung Koordinator: penyetuju SPV.
-- [ ] Cuti/dinas: SPV lalu Manager; Manager tidak bisa sebelum SPV; HR bisa mewakili kedua tahap.
-- [ ] Kasbon: HR bisa mewakili tahap SPV/Manager.
-- [ ] Lembur: SPV atau Manager (tidak berubah).
-- [ ] Gates hijau; QA staging.
+- [x] Karyawan dengan atasan langsung Koordinator: penyetuju SPV.
+- [x] Cuti/dinas: SPV lalu Manager; Manager tidak bisa sebelum SPV; HR bisa mewakili kedua tahap.
+- [x] Kasbon: HR bisa mewakili tahap SPV/Manager.
+- [x] Lembur: SPV atau Manager (tidak berubah).
+- [x] Gates hijau; QA staging.
 
 ## Automation Log
 - 2026-11-05 — Spesifikasi dari 3 jawaban user. Worktree `.worktrees/epic092`, branch `feat/epic092-approval-berjenjang`, ditumpuk di atas EPIC-091 (#79).
+- 2026-11-05 — Backend: `02cf0a5b` cuti/dinas berjenjang + HR mewakili (R1–R4, R6), `748717a7` kasbon HR mewakili tahap SPV/Manager (R5). Tes lama yang mengunci aturan lama (HR sebelum Manager → 400) diganti dengan komentar EPIC-092 R5.
+- 2026-11-05 — UI (R7) `289314d0`: Pinjaman HR "Setujui (mewakili atasan)" pada tahap atasan; lencana "Disetujui SPV — menunggu Manager" di HRIS Cuti & Izin, Perjalanan Dinas, Riwayat; Detail + antrean Manager menampilkan "Disetujui SPV oleh …". Helper `frontend/src/lib/hris/tiered-approval.ts`.
+- 2026-11-05 — Review akhir (opus, terpisah). Diperbaiki:
+  - `ed0fbac5` HR yang juga peminjam tidak bisa menyetujui tahap atasan atas pinjamannya sendiri (403, tombol disembunyikan); tes `TestLoanHRCannotActOnBehalfForOwnLoan` RED→GREEN.
+  - `ed0fbac5` saat menunggu verifikasi lampiran, tolakan HR tidak ditulis "mewakili"; nama verifikator lampiran selalu nama HR sendiri; tes di `TestLeaveTieredApproval` RED→GREEN.
+  - `a7021001` antrean/badge berjenjang disaring `request_team` dulu: staging 80 → 20 ms, setara pada 27 atasan × 632 pasangan (0 berbeda).
+  - `a7021001` ESS Cuti memakai label pendek "Menunggu Manager" (QA HP: label panjang memotong tanggal).
+- 2026-11-05 — Ruling: HR yang juga peminjam tetap boleh memutus **tahap HR terakhir** pinjamannya sendiri seperti sebelum EPIC-092; yang ditolak hanya "mewakili atasan". Biaya bila salah: satu pengecekan tambahan di `decideLoanHR`.
+- 2026-11-05 — Minor ditunda (dari review akhir):
+  - SPV yang gilirannya sudah lewat (HR mewakili) masih bisa menolak dari tampilan lama;
+  - bila Manager keluar setelah SPV setuju, tahap kembali ke SPV dan lencana tetap "menunggu Manager";
+  - `supervisor_approved_name`/`manager_approved_name` kasbon hanya terisi di jalur HR mewakili, dan belum tampil di UI;
+  - label "mewakili atasan" tetap tampil bila HR sendiri adalah atasan tahap berjalan;
+  - Manager yang juga HR menerima lonceng dari tindakannya sendiri.
+- 2026-11-05 — Gates: Go `go test -p 1 ./...` hijau; Vitest 6492 lulus; tsc + eslint bersih. Staging: backup `staging-db-before-epic092-20261105-175230.dump` dan `staging-db-before-epic092b-20261105-175743.dump`, deploy `local-20261105-175749` (EPIC-087 + EPIC-092 di atas #79), migrasi `20261110090300` ok, 0 berbeda. QA Playwright 23/23 (HP + desktop): Leader/Koordinator (Staff) 403, Manager sebelum SPV 403 (cuti/dinas), lembur langsung oleh Manager, SPV → Manager cuti, lencana di Riwayat/ESS/HR Cuti/HR Dinas, HR mewakili SPV + Manager (dinas, cuti), HR mewakili SPV kasbon lalu Manager → menunggu HR; 0 respons ≥400, 0 error konsol. Data demo dibersihkan.
