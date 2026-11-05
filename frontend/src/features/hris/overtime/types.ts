@@ -29,8 +29,8 @@ export interface OvertimeRow {
     full_name: string;
     nip: string | null;
     reporting_to?: string | null;
-    /** Atasan langsung aktif; null tanpa atasan. Atasan nonaktif = tanpa atasan (EPIC-063 R9). */
-    reporting_to_active?: boolean | null;
+    /** Penyetuju: atasan terdekat minimal SPV, aktif, berakun (EPIC-091); null = HR. */
+    approver_id?: string | null;
   } | null;
   requester?: { full_name: string } | null;
   decider?: { full_name: string } | null;

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 import { MANAGER_APPROVED_AWAITING_HR } from "@/lib/hris/leave-attachment-review";
@@ -64,13 +65,16 @@ function rejectingOf(detail: Detail): Rejecting {
 
 /**
  * ESS → Persetujuan Tim (/dashboard/me/persetujuan-tim, EPIC-063): antrean
- * atasan langsung untuk cuti, lembur, dan Perjalanan Dinas bawahan langsung.
+ * penyetuju (SPV terdekat atau Manager di atasnya, EPIC-091) untuk cuti,
+ * lembur, dan Perjalanan Dinas anggota timnya.
  * Kasbon tetap diputus di Pinjaman (dua tahap). Anggota tim (reporting_to)
  * dan larangan memutus pengajuan sendiri ditegakkan server; HR tetap bisa
  * memutus sebagai cadangan.
  */
 export function EssPersetujuanTimPage() {
   const { data: me, isLoading } = useEssMe();
+  // Lonceng kasbon/pinjaman ke atasan langsung menautkan ?tab=riwayat (EPIC-091).
+  const historyTab = useSearchParams().get("tab") === "riwayat";
   const queue = useTeamApprovals();
   const tripsQuery = useBusinessTrips({ scope: "approvals", status: "pending" });
   const loansQuery = useTeamLoanApprovals();
@@ -182,12 +186,12 @@ export function EssPersetujuanTimPage() {
       <div className="border-b border-gray-200/70 pb-4">
         <h1 className="text-2xl font-bold text-gray-900">Persetujuan Tim</h1>
         <p className="text-sm text-gray-500">
-          Pengajuan anggota tim yang atasan langsungnya Anda. HR tetap bisa memutus sebagai cadangan.
+          Pengajuan anggota tim yang bisa Anda putus (SPV terdekat atau Manager di atasnya; cukup salah satu). HR tetap bisa memutus sebagai cadangan.
         </p>
       </div>
 
       {/* EPIC-090: Riwayat agar atasan tetap bisa membuka detail setelah memutus. */}
-      <Tabs defaultValue="pending" className="w-full flex-col gap-4">
+      <Tabs defaultValue={historyTab ? "history" : "pending"} className="w-full flex-col gap-4">
         <TabsList>
           <TabsTrigger value="pending">Menunggu</TabsTrigger>
           <TabsTrigger value="history">Riwayat</TabsTrigger>

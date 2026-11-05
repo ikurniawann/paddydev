@@ -97,6 +97,10 @@ type leaveVerdict struct {
 	// Reviewer is set when an attachment verifier approves a leave with an
 	// attachment: the approval is also the verification (EPIC-088 R2).
 	Reviewer *auth.User
+	// HRReject: an attachment verifier rejects, which may land on a request
+	// already waiting for HR; any other decision needs no review stage yet,
+	// so a second atasan cannot overturn the first one's approval (EPIC-091).
+	HRReject bool
 }
 
 // leaveFilter is the list/export query.
@@ -448,7 +452,7 @@ func (s *Service) Leave(ctx context.Context, a *Actor, id string) (*Row, error) 
 	own := a.EmployeeID != nil && row.Str("employee_id") == *a.EmployeeID
 	manager := false
 	if emp := row.Child("employee"); emp != nil && a.EmployeeID != nil {
-		manager = emp.Str("reporting_to") == *a.EmployeeID
+		manager = isApprover(emp, *a.EmployeeID)
 	}
 	if !a.hrReads(iam.LeafCuti) && !own && !manager {
 		return nil, httpx.Forbidden("Insufficient permissions")
@@ -578,7 +582,7 @@ func (s *Service) DecideLeave(ctx context.Context, a *Actor, in leaveDecision, m
 	emp := leave.Child("employee")
 	var reportingTo *string
 	if emp != nil {
-		reportingTo = emp.StrPtr("reporting_to")
+		reportingTo = approverFor(emp, a.EmployeeID) // EPIC-091: SPV terdekat atau Manager di atasnya
 	}
 	// The HR backup holds "approve" on the Cuti leaf (EPIC-067 R11), not IsHR.
 	decidedAs, refusal := domain.DecideAs(domain.Approver{EmployeeID: a.EmployeeID, IsHR: a.CanApprove(iam.LeafCuti)},
@@ -616,6 +620,7 @@ func (s *Service) DecideLeave(ctx context.Context, a *Actor, in leaveDecision, m
 	if approve && strings.TrimSpace(leave.Str("attachment_url")) != "" {
 		verdict.Reviewer = userOf(a)
 	}
+	verdict.HRReject = !approve && verifier
 	label := dateText(leave, "start_date") + " s.d. " + dateText(leave, "end_date")
 	if emp != nil {
 		label = emp.Str("full_name") + " · " + label

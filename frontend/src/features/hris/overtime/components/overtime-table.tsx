@@ -104,13 +104,9 @@ interface OvertimeTableRowProps {
 function OvertimeTableRow({ row, deciding, onDecide, canCorrect, canDecide, onCorrect, myEmployeeId }: OvertimeTableRowProps) {
   const badge = STATUS_BADGES[row.status] ?? STATUS_BADGES.pending;
   const pending = row.status === "pending";
-  // Koreksi jam lembur karyawan yang punya atasan langsung (aktif) adalah hak atasan (EPIC-066);
-  // atasan nonaktif dihitung tanpa atasan (EPIC-063 R9).
-  const managerOwnsCorrection =
-    row.source === "employee" &&
-    !!row.employee?.reporting_to &&
-    row.employee.reporting_to !== row.employee_id &&
-    row.employee.reporting_to_active === true;
+  // Koreksi jam lembur karyawan yang punya penyetuju (atasan terdekat minimal SPV, aktif,
+  // berakun; EPIC-091) adalah hak penyetuju itu (EPIC-066); tanpa penyetuju → HR (EPIC-063 R9).
+  const managerOwnsCorrection = row.source === "employee" && !!row.employee?.approver_id;
   const [dayType, setDayType] = useState<OvertimeDayType>(row.day_type ?? "regular");
   const [showDetail, setShowDetail] = useState(false);
   const decidable = pending && row.source === "employee" && canDecide && row.employee_id !== myEmployeeId;

@@ -120,8 +120,8 @@ type ApprovalRepo interface {
 
 func (s *store) NotifyManager(ctx context.Context, employeeID, title, message, link string) error {
 	_, err := s.db.Exec(ctx, `SELECT public.notify_user(m.user_id, $2, $3, 'approval', $4)
-		FROM hris.employees e JOIN hris.employees m ON m.id = e.reporting_to AND m.id <> e.id
-		WHERE e.id = $1 AND m.user_id IS NOT NULL`, employeeID, title, message, link)
+		FROM hris.employees e JOIN hris.employees m ON m.id = hris.request_approver(e.id)
+		WHERE e.id = $1`, employeeID, title, message, link)
 	return err
 }
 
@@ -155,10 +155,11 @@ func (s *Service) teamPendingTotal(ctx context.Context, managerID string) (int64
 	return n + loans, err
 }
 
-// teamMember joins the requester (alias m) when they report to $1 directly;
-// a reporting_to pointing at oneself (live data) is not a team member (R2).
+// teamMember joins the requester (alias m) when $1 may decide their requests
+// (EPIC-091: the nearest atasan from Supervisor up, or the Manager above;
+// never oneself, R2).
 func teamMember(alias string) string {
-	return fmt.Sprintf(`JOIN hris.employees m ON m.id = %s.employee_id AND m.reporting_to = $1 AND m.id <> $1`, alias)
+	return fmt.Sprintf(`JOIN hris.employees m ON m.id = %s.employee_id AND m.id IN (SELECT hris.request_team($1::uuid))`, alias)
 }
 
 const teamEmployee = `json_build_object('id', m.id, 'full_name', m.full_name, 'nip', m.nip) AS employee`
@@ -198,4 +199,23 @@ func (h handlers) teamApprovals(w http.ResponseWriter, r *http.Request, a *Actor
 		return err
 	}
 	return ok(w, dataOf(out))
+}
+
+// approverFor is the approver of emp (an employee embed with approver_id and
+// manager_id) that actor may act as (EPIC-091, "2 atasan"): the Manager above
+// when that is the actor, otherwise the nearest SPV approver. The decision
+// rules then compare the actor against it.
+func approverFor(emp *Row, actor *string) *string {
+	if emp == nil {
+		return nil
+	}
+	if actor != nil && emp.Str("manager_id") == *actor {
+		return emp.StrPtr("manager_id")
+	}
+	return emp.StrPtr("approver_id")
+}
+
+// isApprover: actor is emp's SPV approver or the Manager above it.
+func isApprover(emp *Row, actor string) bool {
+	return actor != "" && (emp.Str("approver_id") == actor || emp.Str("manager_id") == actor)
 }

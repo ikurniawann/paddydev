@@ -2,11 +2,15 @@ package payroll
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 
 	"nuhabit/backend/internal/modules/payroll/domain"
 	"nuhabit/backend/internal/platform/database"
@@ -67,15 +71,28 @@ func (s *service) listLoans(ctx context.Context, a *actor, employeeParam, status
 	return rows, s.stitch(ctx, s.db, rows, loanListPeople...)
 }
 
-// listLoanApprovals is the manager queue: pending kasbon and loans whose
-// stored approver is the actor, with their attachments. Salary-free columns
-// only (EPIC-060 R8).
+// supervisorStageDone is true when a loan has no SPV stage left: none, the
+// SPV approved, or the stored SPV can no longer decide (inactive or without
+// an account), so the loan moves on to the Manager instead of stalling.
+// Mirror: app.hrisPayrollSQL.ManagerPendingLoanCount.
+const supervisorStageDone = `(supervisor_approver_id IS NULL OR supervisor_approved_at IS NOT NULL OR NOT EXISTS (SELECT 1 FROM hris.employees sx WHERE sx.id = supervisor_approver_id AND sx.is_active AND sx.user_id IS NOT NULL))`
+
+// loanStageOf is the pending loans whose current stage belongs to the
+// employee id param: the SPV stage first, then the Manager (EPIC-091).
+func loanStageOf(param string) string {
+	return `status = 'pending' AND ((supervisor_approver_id = ` + param + ` AND NOT ` + supervisorStageDone + `)
+		OR (manager_approver_id = ` + param + ` AND ` + supervisorStageDone + `))`
+}
+
+// listLoanApprovals is the atasan queue: pending kasbon and loans at the
+// actor's stage (SPV, then Manager), with their attachments. Salary-free
+// columns only (EPIC-060 R8).
 func (s *service) listLoanApprovals(ctx context.Context, a *actor) ([]*obj, error) {
 	if a.EmployeeID == nil {
 		return []*obj{}, nil
 	}
 	rows, err := queryObjs(ctx, s.db, `SELECT id, employee_id, loan_type, principal_amount, tenor_months, monthly_installment,
-		purpose, notes, status, created_at, attachments, collateral_attachments FROM hris.loans WHERE status = 'pending' AND manager_approver_id = $1 ORDER BY created_at`,
+		purpose, notes, status, created_at, attachments, collateral_attachments FROM hris.loans WHERE `+loanStageOf("$1")+` ORDER BY created_at`,
 		*a.EmployeeID)
 	if err != nil {
 		return nil, opaque(err)
@@ -220,20 +237,100 @@ func (s *service) createLoan(ctx context.Context, a *actor, in loanInput) (*obj,
 	if err := s.checkLoanAttachments(target, in.Collateral, !kasbon, "Lampirkan minimal 1 dokumen jaminan (surat berharga)"); err != nil {
 		return nil, err
 	}
-	// Step 1 is the Manager up the reporting chain for both types (EPIC-060
-	// AP-05, EPIC-076 R7); none means HR decides alone.
-	approver, err := s.ports.Employees.LoanApprover(ctx, s.db, target)
+	// EPIC-091: the nearest atasan from Supervisor up decides first, then the
+	// Manager up the chain when that is someone else (EPIC-060 AP-05,
+	// EPIC-076 R7), then HR; none means HR decides alone.
+	nearest, err := s.ports.Employees.RequestApprover(ctx, s.db, target)
 	if err != nil {
 		return nil, err
 	}
+	manager, err := s.ports.Employees.LoanApprover(ctx, s.db, target)
+	if err != nil {
+		return nil, err
+	}
+	supervisor, approver := loanStages(nearest, manager)
 	now := s.clock()
-	row, err := queryObj(ctx, s.db, `INSERT INTO hris.loans (employee_id, loan_type, principal_amount, interest_rate,
-		tenor_months, monthly_installment, remaining_balance, purpose, notes, status, manager_approver_id,
-		attachments, collateral_attachments, requested_date, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pending', $10, $11, $12, $13, $13, $13) RETURNING *`,
-		target, in.LoanType, numParam(in.Principal), numParam(rate), in.Tenor, numParam(monthly), numParam(total),
-		textOrNil(in.Purpose), textOrNil(in.Notes), approver, nonNil(in.Attachments), nonNil(in.Collateral), now)
+	var row *obj
+	err = database.WithTx(ctx, s.db, func(tx pgx.Tx) error {
+		var err error
+		row, err = queryObj(ctx, tx, `INSERT INTO hris.loans (employee_id, loan_type, principal_amount, interest_rate,
+			tenor_months, monthly_installment, remaining_balance, purpose, notes, status, manager_approver_id,
+			attachments, collateral_attachments, requested_date, created_at, updated_at, supervisor_approver_id)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pending', $10, $11, $12, $13, $13, $13, $14) RETURNING *`,
+			target, in.LoanType, numParam(in.Principal), numParam(rate), in.Tenor, numParam(monthly), numParam(total),
+			textOrNil(in.Purpose), textOrNil(in.Notes), approver, nonNil(in.Attachments), nonNil(in.Collateral), now, supervisor)
+		if err != nil {
+			return err
+		}
+		return notifyLoanRequested(ctx, tx, emp, in.LoanType, in.Principal, in.Tenor, supervisor, approver)
+	})
 	return row, opaque(err)
+}
+
+// loanStages splits the approvers (EPIC-091): the nearest atasan from
+// Supervisor up is a separate SPV stage only when a Manager above is someone
+// else; otherwise whoever exists is the single atasan stage.
+func loanStages(nearest, manager *string) (supervisor, approver *string) {
+	switch {
+	case nearest == nil:
+		return nil, manager
+	case manager == nil || *manager == *nearest:
+		return nil, nearest
+	default:
+		return nearest, manager
+	}
+}
+
+// loanTitle is the bell title of a request: "Pengajuan Kasbon: <nama>".
+func loanTitle(loanType, name string) string {
+	return "Pengajuan " + loanTypeLabel(loanType) + ": " + name
+}
+
+func loanWhat(name, loanType string, principal float64, tenor int) string {
+	return fmt.Sprintf("%s mengajukan %s %s (%dx cicilan).", name, loanTypeLabel(loanType), domain.FormatRupiah(principal), tenor)
+}
+
+// notifyApprover rings employeeID's login account (if any) to decide.
+func notifyApprover(ctx context.Context, q database.Querier, employeeID, title, message string) error {
+	_, err := q.Exec(ctx, `SELECT public.notify_user(m.user_id, $2, $3, 'approval', '/dashboard/me/pinjaman')
+		FROM hris.employees m WHERE m.id = $1 AND m.user_id IS NOT NULL`, employeeID, title, message)
+	return err
+}
+
+// notifyLoanRequested is EPIC-091: the first stage approver (SPV, else the
+// Manager) gets a bell to decide; the direct atasan, when not an approver
+// (e.g. a Staff-level Store Leader), a bell to follow it in Persetujuan Tim.
+func notifyLoanRequested(ctx context.Context, q database.Querier, emp *EmployeeBrief, loanType string,
+	principal float64, tenor int, supervisor, approver *string) error {
+	title := loanTitle(loanType, emp.FullName)
+	what := loanWhat(emp.FullName, loanType, principal, tenor)
+	var chain []string
+	for _, id := range []*string{supervisor, approver} {
+		if id == nil {
+			continue
+		}
+		var name string
+		if err := q.QueryRow(ctx, `SELECT full_name FROM hris.employees WHERE id = $1`, *id).Scan(&name); err != nil {
+			return err
+		}
+		chain = append(chain, name)
+	}
+	first := supervisor
+	if first == nil {
+		first = approver
+	}
+	if first != nil {
+		if err := notifyApprover(ctx, q, *first, title, what+" Menunggu persetujuan Anda di Area Karyawan → Pinjaman."); err != nil {
+			return err
+		}
+	}
+	decider := strings.Join(append(chain, "HR"), ", lalu ")
+	_, err := q.Exec(ctx, `SELECT public.notify_user(a.user_id, $2, $3, 'approval', '/dashboard/me/persetujuan-tim?tab=riwayat')
+		FROM hris.employees e JOIN hris.employees a ON a.id = e.reporting_to AND a.id <> e.id
+		WHERE e.id = $1 AND a.user_id IS NOT NULL
+		  AND ($4::uuid IS NULL OR a.id <> $4::uuid) AND ($5::uuid IS NULL OR a.id <> $5::uuid)`,
+		emp.ID, title, what+" Diputuskan oleh "+decider+"; lihat detail di Persetujuan Tim → Riwayat.", supervisor, approver)
+	return err
 }
 
 // nonNil is paths, or an empty list for a NOT NULL text[] column.
@@ -251,14 +348,28 @@ type loanForDecision struct {
 	Tenor                        int
 	ManagerApprover              *string
 	CreatedAt                    time.Time
+	// SupervisorApprover is the SPV stage before the Manager (EPIC-091);
+	// SupervisorDone once it approved.
+	SupervisorApprover *string
+	SupervisorDone     bool
+}
+
+// stageOf is who decides the pending loan now: the SPV until it approved,
+// then the stored Manager (nil: HR only).
+func (l *loanForDecision) stageOf() (approver *string, supervisorStage bool) {
+	if l.SupervisorApprover != nil && !l.SupervisorDone {
+		return l.SupervisorApprover, true
+	}
+	return l.ManagerApprover, false
 }
 
 func (s *service) loanForDecision(ctx context.Context, loanID string) (*loanForDecision, error) {
 	var l loanForDecision
 	err := s.db.QueryRow(ctx, `SELECT employee_id::text, COALESCE(status, ''), COALESCE(loan_type, ''),
-		principal_amount::float8, tenor_months, manager_approver_id::text, COALESCE(created_at, requested_date, now())
+		principal_amount::float8, tenor_months, manager_approver_id::text, COALESCE(created_at, requested_date, now()),
+		supervisor_approver_id::text, `+supervisorStageDone+`
 		FROM hris.loans WHERE id::text = $1`, loanID).Scan(&l.EmployeeID, &l.Status, &l.LoanType,
-		&l.Principal, &l.Tenor, &l.ManagerApprover, &l.CreatedAt)
+		&l.Principal, &l.Tenor, &l.ManagerApprover, &l.CreatedAt, &l.SupervisorApprover, &l.SupervisorDone)
 	if database.IsNoRows(err) {
 		return nil, httpx.NotFound("Pinjaman tidak ditemukan")
 	}
@@ -275,6 +386,7 @@ func (s *service) decideLoanManager(ctx context.Context, approverEmployeeID, loa
 	if approve {
 		row, err = queryObj(ctx, s.db, `UPDATE hris.loans SET status = 'manager_approved', manager_approved_by = $2,
 			manager_approved_at = $3, updated_at = $3 WHERE id::text = $1 AND status = 'pending' AND manager_approver_id = $2
+			AND `+supervisorStageDone+`
 			RETURNING id, employee_id, loan_type, status, tenor_months, manager_approver_id, manager_approved_by, manager_approved_at`,
 			loanID, approverEmployeeID, now)
 	} else {
@@ -284,7 +396,8 @@ func (s *service) decideLoanManager(ctx context.Context, approverEmployeeID, loa
 		}
 		row, err = queryObj(ctx, s.db, `UPDATE hris.loans SET status = 'rejected', rejected_by = $2, rejected_at = $3,
 			rejection_reason = $4, is_active = false, updated_at = $3 WHERE id::text = $1 AND status = 'pending'
-			AND manager_approver_id = $2 RETURNING id, employee_id, loan_type, status, rejection_reason`,
+			AND manager_approver_id = $2 AND `+supervisorStageDone+`
+			RETURNING id, employee_id, loan_type, status, rejection_reason`,
 			loanID, approverEmployeeID, now, why)
 	}
 	if err != nil {
@@ -297,6 +410,55 @@ func (s *service) decideLoanManager(ctx context.Context, approverEmployeeID, loa
 	msg := label + " ditolak"
 	if approve {
 		msg = label + " disetujui Manager — menunggu persetujuan HR"
+	}
+	return &messageData{Data: row, Message: msg}, nil
+}
+
+// decideLoanSupervisor is the SPV stage (EPIC-091): approving leaves the
+// loan pending for the Manager, who is rung; rejecting ends it.
+func (s *service) decideLoanSupervisor(ctx context.Context, approverEmployeeID, loanID string, approve bool, reason *string) (*messageData, error) {
+	now := s.clock()
+	var row *obj
+	err := database.WithTx(ctx, s.db, func(tx pgx.Tx) error {
+		var err error
+		if !approve {
+			why := "Tidak disetujui"
+			if reason != nil && *reason != "" {
+				why = *reason
+			}
+			row, err = queryObj(ctx, tx, `UPDATE hris.loans SET status = 'rejected', rejected_by = $2, rejected_at = $3,
+				rejection_reason = $4, is_active = false, updated_at = $3 WHERE id::text = $1 AND status = 'pending'
+				AND supervisor_approver_id = $2 AND supervisor_approved_at IS NULL
+				RETURNING id, employee_id, loan_type, status, rejection_reason`, loanID, approverEmployeeID, now, why)
+			return err
+		}
+		row, err = queryObj(ctx, tx, `UPDATE hris.loans SET supervisor_approved_by = $2, supervisor_approved_at = $3,
+			updated_at = $3 WHERE id::text = $1 AND status = 'pending' AND supervisor_approver_id = $2
+			AND supervisor_approved_at IS NULL
+			RETURNING id, employee_id, loan_type, status, tenor_months, principal_amount, manager_approver_id,
+			supervisor_approver_id, supervisor_approved_by, supervisor_approved_at`, loanID, approverEmployeeID, now)
+		if err != nil || row == nil || row.Str("manager_approver_id") == "" {
+			return err
+		}
+		var name, spv string
+		if err := tx.QueryRow(ctx, `SELECT e.full_name, s.full_name FROM hris.employees e, hris.employees s
+			WHERE e.id = $1 AND s.id = $2`, row.Str("employee_id"), approverEmployeeID).Scan(&name, &spv); err != nil {
+			return err
+		}
+		principal, _ := strconv.ParseFloat(row.Str("principal_amount"), 64)
+		return notifyApprover(ctx, tx, row.Str("manager_approver_id"), loanTitle(row.Str("loan_type"), name),
+			loanWhat(name, row.Str("loan_type"), principal, row.Int("tenor_months"))+" Disetujui SPV "+spv+". Menunggu persetujuan Anda di Area Karyawan → Pinjaman.")
+	})
+	if err != nil {
+		return nil, opaque(err)
+	}
+	if row == nil {
+		return nil, httpx.Conflict("Pinjaman sudah diproses oleh orang lain")
+	}
+	label := loanTypeLabel(row.Str("loan_type"))
+	msg := label + " ditolak"
+	if approve {
+		msg = label + " disetujui SPV — menunggu persetujuan Manager"
 	}
 	return &messageData{Data: row, Message: msg}, nil
 }
@@ -468,12 +630,32 @@ func (h *handler) decideLoan(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	if l.Status == "pending" && l.ManagerApprover != nil && a.EmployeeID != nil && *a.EmployeeID == *l.ManagerApprover {
-		out, err := h.svc.decideLoanManager(r.Context(), *a.EmployeeID, loanID, approved != nil && *approved, reason)
+	if stage, supervisorStage := l.stageOf(); l.Status == "pending" && stage != nil && a.EmployeeID != nil && *a.EmployeeID == *stage {
+		decide := h.svc.decideLoanManager
+		if supervisorStage {
+			decide = h.svc.decideLoanSupervisor
+		}
+		out, err := decide(r.Context(), *a.EmployeeID, loanID, approved != nil && *approved, reason)
 		if err != nil {
 			return err
 		}
 		return writeJSON(w, out)
+	}
+	if a.EmployeeID != nil && ((l.ManagerApprover != nil && *a.EmployeeID == *l.ManagerApprover) ||
+		(l.SupervisorApprover != nil && *a.EmployeeID == *l.SupervisorApprover)) && l.Status == "pending" {
+		// The other atasan stage is not theirs yet (or any more) — unless they
+		// also hold HR approve on Pinjaman: then they act as HR below.
+		hr := false
+		if u, err := h.auth.CurrentUser(r); err != nil {
+			return err
+		} else if u != nil {
+			if hr, err = h.auth.HasMenuAction(r.Context(), u, "approve", iam.HrisLoans...); err != nil {
+				return err
+			}
+		}
+		if !hr {
+			return httpx.Forbidden("Bukan giliran Anda memutus pengajuan ini")
+		}
 	}
 	u, err := h.auth.RequireMenuAction(r, "approve", iam.HrisLoans...)
 	if err != nil {

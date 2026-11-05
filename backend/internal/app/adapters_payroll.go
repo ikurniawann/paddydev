@@ -100,6 +100,12 @@ func (payrollEmployees) LoanApprover(ctx context.Context, q database.Querier, em
 	return &id, nil
 }
 
+func (payrollEmployees) RequestApprover(ctx context.Context, q database.Querier, employeeID string) (*string, error) {
+	var id *string
+	err := q.QueryRow(ctx, `SELECT hris.request_approver($1::uuid)::text`, employeeID).Scan(&id)
+	return id, err
+}
+
 func (payrollEmployees) IDByEmail(ctx context.Context, q database.Querier, email string) (string, error) {
 	var id string
 	err := q.QueryRow(ctx, `SELECT id::text FROM hris.employees WHERE email = $1 LIMIT 1`, email).Scan(&id)

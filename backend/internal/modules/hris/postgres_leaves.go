@@ -127,7 +127,7 @@ func (s *store) Publish(ctx context.Context, topic, key string, payload any) err
 
 func (s *store) LeaveDetail(ctx context.Context, id string) (*Row, error) {
 	row, err := queryRow(ctx, s.db, `SELECT *, `+
-		leaveEmployeeEmbed("employee", "id, full_name, nip, photo_url, email, phone, reporting_to, "+deptName+", "+
+		leaveEmployeeEmbed("employee", "id, full_name, nip, photo_url, email, phone, reporting_to, hris.request_approver(employees.id) AS approver_id, hris.request_manager(employees.id) AS manager_id, "+deptName+", "+
 			embedOne("job_title", "title", "hris.positions", "id = employees.job_title_id"))+", "+
 		leaveApproverEmbed("id, full_name, nip, email")+` FROM hris.leaves WHERE id = $1`, id)
 	return row, ignoreBadInput(err)
@@ -135,7 +135,7 @@ func (s *store) LeaveDetail(ctx context.Context, id string) (*Row, error) {
 
 func (s *store) LeaveForDecision(ctx context.Context, id string) (*Row, error) {
 	row, err := queryRow(ctx, s.db, `SELECT *, `+
-		leaveEmployeeEmbed("employee", "id, full_name, email, phone, reporting_to, "+
+		leaveEmployeeEmbed("employee", "id, full_name, email, phone, reporting_to, hris.request_approver(employees.id) AS approver_id, hris.request_manager(employees.id) AS manager_id, "+
 			embedOne("department", "id, name", "hris.departments", "id = employees.department_id")+", "+
 			embedOne("job_title", "id, title", "hris.positions", "id = employees.job_title_id"))+
 		` FROM hris.leaves WHERE id = $1`, id)
@@ -197,7 +197,8 @@ func (s *store) DecideLeave(ctx context.Context, id string, v leaveVerdict, cred
 	if v.Reviewer != nil {
 		reviewer = &v.Reviewer.ID
 	}
-	// An approval never lands on a request waiting for HR (EPIC-088 R4); a
+	// Only an HR reject lands on a request waiting for HR (EPIC-088 R4,
+	// EPIC-091 race between two atasan); a
 	// verifier's approval of a request with an attachment is also its review.
 	tag, err := s.db.Exec(ctx, `UPDATE hris.leaves
 		SET status = $2, approved_by = $3, approved_at = now(), rejection_reason = $4,
@@ -206,8 +207,8 @@ func (s *store) DecideLeave(ctx context.Context, id string, v leaveVerdict, cred
 		    attachment_reviewed_by = coalesce($7::uuid, attachment_reviewed_by),
 		    attachment_reviewed_name = CASE WHEN $7::uuid IS NULL THEN attachment_reviewed_name ELSE $6 END,
 		    attachment_reviewed_at = CASE WHEN $7::uuid IS NULL THEN attachment_reviewed_at ELSE now() END
-		WHERE id = $1 AND status = 'pending' AND (NOT $8::bool OR attachment_review IS NULL)`,
-		id, v.Status, v.ApproverID, v.Rejection, v.DecidedAs, v.DecidedBy, reviewer, v.Status == "approved")
+		WHERE id = $1 AND status = 'pending' AND (attachment_review IS NULL OR $8::bool)`,
+		id, v.Status, v.ApproverID, v.Rejection, v.DecidedAs, v.DecidedBy, reviewer, v.Status == "rejected" && v.HRReject)
 	if err != nil {
 		return err
 	}
@@ -269,13 +270,14 @@ func (s *store) LeavesForExport(ctx context.Context, f leaveFilter) ([]*Row, err
 		leaveApproverEmbed("full_name, nip")+` FROM hris.leaves `+where+` ORDER BY created_at DESC`, args...)
 }
 
-// ManagerContact is the active direct manager of an employee.
+// ManagerContact is the employee's request approver (EPIC-091: nearest
+// atasan from Supervisor up, active, with an account).
 func (s *store) ManagerContact(ctx context.Context, employeeID string) (string, *string, bool, error) {
 	var name string
 	var phone *string
 	err := s.db.QueryRow(ctx, `SELECT a.full_name, a.phone
 		FROM hris.employees e
-		JOIN hris.employees a ON a.id = e.reporting_to AND a.is_active = true AND a.id <> e.id
+		JOIN hris.employees a ON a.id = hris.request_approver(e.id)
 		WHERE e.id = $1`, employeeID).Scan(&name, &phone)
 	if database.IsNoRows(err) {
 		return "", nil, false, nil

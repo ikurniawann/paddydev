@@ -92,6 +92,7 @@ deploying-dev · ready-for-qa · blocked · done).
 | [EPIC-088](./EPIC-088-verifikasi-lampiran-cuti.md) | Verifikasi Lampiran Cuti/Izin oleh HR (`MODULE-HRIS`, ES-11) | review | 2026-11-05 |
 | [EPIC-089](./EPIC-089-lembur-lebih-4-jam.md) | Lembur Lebih dari 4 Jam dengan Keterangan, Dokumentasi Opsional (`MODULE-HRIS`) | review | 2026-11-05 |
 | [EPIC-090](./EPIC-090-riwayat-persetujuan-tim.md) | Riwayat Persetujuan Tim untuk Atasan (`MODULE-HRIS`) | review | 2026-11-05 |
+| [EPIC-091](./EPIC-091-pinjaman-atasan-langsung.md) | Penyetuju Minimal SPV untuk Semua Pengajuan + Kasbon/Pinjaman Tiga Tahap (`MODULE-HRIS`, `MODULE-PAYROLL`) | review | 2026-11-05 |
 
 Aturan:
 - Epic + registry ini adalah sumber kebenaran status pekerjaan (canonical).
