@@ -1,6 +1,6 @@
 # EPIC-090: Riwayat Persetujuan Tim untuk Atasan (`MODULE-HRIS`)
 
-status: backlog
+status: review
 environment: dev
 retries: 0
 
@@ -28,9 +28,28 @@ QA staging menunjukkan HR sudah bisa melihat semua status, tetapi atasan hanya b
 - **Di luar cakupan**: bawahan tidak langsung, filter/pencarian, rentang lebih dari 2 periode, ekspor.
 
 ## Acceptance Criteria
-- [ ] Atasan melihat cuti & lembur bawahan langsung semua status (2 periode) dan bisa membuka Detail beserta lampirannya.
-- [ ] Bukan bawahan dan di luar rentang tidak tampil.
-- [ ] Gates hijau; QA staging (HP + desktop).
+- [x] Atasan melihat cuti & lembur bawahan langsung semua status (2 periode) dan bisa membuka Detail beserta lampirannya.
+- [x] Bukan bawahan dan di luar rentang tidak tampil.
+- [x] Gates hijau; QA staging (HP + desktop).
 
 ## Automation Log
 - 2026-11-05 — Spesifikasi ditulis setelah QA detail (26/26 untuk pengajuan menunggu). Worktree `.worktrees/epic090`, branch `feat/epic090-riwayat-tim`, ditumpuk di atas EPIC-089 (#77).
+- 2026-11-05 — Implementasi (`b1a30196` API, `d7def126` tab Riwayat).
+  - Gates: `go test -p 1 ./internal/modules/hris/... ./internal/app/` ok, vet bersih, vitest 4521 lulus, tsc + eslint bersih.
+- 2026-11-05 — Review akhir (reviewer terpisah): 0 Critical, 2 Important, 5 Minor.
+  - **Important 1**: rentang ber-batas atas menyembunyikan cuti yang diajukan jauh hari (tanggal setelah periode berjalan) setelah diputus. Diperbaiki: tanpa batas atas, cuti dihitung dari `end_date` (`9850d1a2`), R1 diperbarui.
+  - **Important 2**: tes cutoff 20 dan atasan dirinya sendiri ditambah (`TestTeamHistoryCutoff20`).
+  - Ditunda:
+    - akun tanpa karyawan tetap menghitung periode sebelum dikembalikan kosong;
+    - batas 300 baris tanpa penanda terpotong;
+    - `fetchTeamHistory` tanpa fallback data kosong;
+    - "Disetujui atasan" tidak tampil bila HR kemudian menolak cuti yang menunggu verifikasi.
+- 2026-11-05 — **Staging** `local-20261105-145019` (gabungan lokal EPIC-087 + EPIC-090, yang memuat #76 dan #77; merge `bf7999aa` tidak di-push).
+  - Backup `staging-db-before-epic090b-20261105-145018.dump`.
+  - QA lulus 19/19 (atasan desktop + HP):
+    - setelah atasan menyetujui, tab Riwayat menampilkan cuti "Menunggu verifikasi HR", cuti 25 Nov (setelah periode berjalan), dan lembur "Disetujui";
+    - Detail baca-saja memuat alasan, catatan keputusan, dan lampiran (200);
+    - setelah HR verifikasi, HP menampilkan "Disetujui oleh … / Lampiran diverifikasi HR: …";
+    - 0 error API dan console.
+  - Data demo dan berkas dihapus.
+
