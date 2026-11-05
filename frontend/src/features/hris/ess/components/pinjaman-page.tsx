@@ -380,8 +380,8 @@ export function EssPinjamanPage() {
                   (tanpa bunga).{" "}
                 </>
               )}
-              Dipotong mulai payroll <strong>{loanPayrollPeriodLabel(todayWib())}</strong> setelah disetujui Manager
-              dan HR (pengajuan tgl 1–20 → payroll bulan ini; tgl 21–akhir bulan → payroll bulan berikutnya).
+              Dipotong mulai payroll <strong>{loanPayrollPeriodLabel(todayWib())}</strong> setelah disetujui atasan
+              (SPV, lalu Manager bila ada) dan HR (pengajuan tgl 1–20 → payroll bulan ini; tgl 21–akhir bulan → payroll bulan berikutnya).
             </p>
           </div>
           <DialogFooter>

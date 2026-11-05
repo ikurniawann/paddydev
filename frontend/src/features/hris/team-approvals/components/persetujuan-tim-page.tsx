@@ -65,7 +65,8 @@ function rejectingOf(detail: Detail): Rejecting {
 
 /**
  * ESS → Persetujuan Tim (/dashboard/me/persetujuan-tim, EPIC-063): antrean
- * atasan langsung untuk cuti, lembur, dan Perjalanan Dinas bawahan langsung.
+ * penyetuju (atasan terdekat minimal SPV, EPIC-091) untuk cuti, lembur, dan
+ * Perjalanan Dinas anggota timnya.
  * Kasbon tetap diputus di Pinjaman (dua tahap). Anggota tim (reporting_to)
  * dan larangan memutus pengajuan sendiri ditegakkan server; HR tetap bisa
  * memutus sebagai cadangan.
@@ -185,7 +186,7 @@ export function EssPersetujuanTimPage() {
       <div className="border-b border-gray-200/70 pb-4">
         <h1 className="text-2xl font-bold text-gray-900">Persetujuan Tim</h1>
         <p className="text-sm text-gray-500">
-          Pengajuan anggota tim yang atasan langsungnya Anda. HR tetap bisa memutus sebagai cadangan.
+          Pengajuan anggota tim yang penyetujunya Anda (atasan terdekat minimal SPV). HR tetap bisa memutus sebagai cadangan.
         </p>
       </div>
 

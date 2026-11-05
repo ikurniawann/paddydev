@@ -137,7 +137,7 @@ function LoanTableRow({ row, deciding, onDecide }: LoanTableRowProps) {
             </Button>
           </div>
         ) : row.status === "pending" ? (
-          <span className="block text-xs text-gray-400">Menunggu Manager</span>
+          <span className="block text-xs text-gray-400">Menunggu atasan (SPV/Manager)</span>
         ) : null}
         {showDetail && (
           <RequestDetailDialog

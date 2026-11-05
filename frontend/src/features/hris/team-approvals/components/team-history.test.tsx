@@ -38,6 +38,10 @@ describe("TeamHistoryPanel", () => {
             tenor_months: 2, status: "pending", purpose: "Biaya sekolah anak", rejection_reason: null,
             manager_approver_name: "Manager Area", attachments: ["loan-attachments/e1/1-aaaaaaaaaaaaaaaa.pdf"],
             collateral_attachments: [], created_at: "2026-11-04T03:00:00Z", employee: emp },
+          { id: "k3", employee_id: "e1", loan_type: "kasbon", principal_amount: "500000.00", monthly_installment: "500000.00",
+            tenor_months: 1, status: "pending", purpose: "Berobat", rejection_reason: null,
+            manager_approver_name: "Manager Area", supervisor_approver_name: "SPV Toko", supervisor_approved: false,
+            attachments: [], collateral_attachments: [], created_at: "2026-11-04T02:00:00Z", employee: emp },
           { id: "k2", employee_id: "e1", loan_type: "loan", principal_amount: "3000000.00", monthly_installment: "1000000.00",
             tenor_months: 3, status: "rejected", purpose: "Renovasi", rejection_reason: "Masa kerja kurang",
             manager_approver_name: null, attachments: [], collateral_attachments: [], created_at: "2026-10-04T03:00:00Z", employee: emp },
@@ -73,8 +77,9 @@ describe("TeamHistoryPanel", () => {
 
     // EPIC-091: kasbon/pinjaman tim, Manager tetap penyetuju.
     expect(screen.getByText("Menunggu Manager: Manager Area")).toBeTruthy();
+    expect(screen.getByText("Menunggu SPV: SPV Toko")).toBeTruthy();
     expect(screen.getAllByText("Ditolak").length).toBe(2);
-    fireEvent.click(screen.getByRole("button", { name: "Detail kasbon Anggota A" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Detail kasbon Anggota A" })[0]);
     const loan = screen.getByRole("dialog");
     expect(within(loan).getByText("Biaya sekolah anak")).toBeTruthy();
     expect(within(loan).getByText(/2x/)).toBeTruthy();

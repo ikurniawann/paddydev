@@ -74,8 +74,11 @@ export interface TeamHistoryLoan {
   status: string;
   purpose: string | null;
   rejection_reason: string | null;
-  /** Manager penyetuju tahap 1; null = langsung HR. */
+  /** Manager penyetuju; null = tanpa Manager (atasan terdekat/HR). */
   manager_approver_name: string | null;
+  /** Tahap SPV sebelum Manager (EPIC-091); null = tanpa tahap SPV. */
+  supervisor_approver_name?: string | null;
+  supervisor_approved?: boolean;
   attachments: string[];
   collateral_attachments: string[];
   created_at: string;

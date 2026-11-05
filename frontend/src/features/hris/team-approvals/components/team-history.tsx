@@ -51,10 +51,13 @@ function overtimeBadge(row: TeamHistoryOvertime): Badge {
   return { label: "Menunggu atasan", className: BADGE.waiting };
 }
 
-// EPIC-091: Manager tetap penyetuju tahap 1; atasan langsung hanya melihat.
+// EPIC-091: atasan terdekat minimal SPV, lalu Manager (bila ada), lalu HR.
 function loanBadge(row: TeamHistoryLoan): Badge {
   switch (row.status) {
     case "pending":
+      if (row.supervisor_approver_name && !row.supervisor_approved) {
+        return { label: `Menunggu SPV: ${row.supervisor_approver_name}`, className: BADGE.waiting };
+      }
       return row.manager_approver_name
         ? { label: `Menunggu Manager: ${row.manager_approver_name}`, className: BADGE.waiting }
         : { label: "Menunggu HR", className: BADGE.hr };
@@ -75,7 +78,12 @@ function loanBadge(row: TeamHistoryLoan): Badge {
 const loanNoun = (type: string) => (type === "kasbon" ? "kasbon" : loanTypeLabel(type).toLowerCase());
 
 function loanNotes(row: TeamHistoryLoan): string[] {
-  const notes = [`Penyetuju: ${row.manager_approver_name ? `Manager ${row.manager_approver_name}, lalu HR` : "HR"}`];
+  const chain = [
+    row.supervisor_approver_name ? `SPV ${row.supervisor_approver_name}${row.supervisor_approved ? " (sudah setuju)" : ""}` : null,
+    row.manager_approver_name ? `Manager ${row.manager_approver_name}` : null,
+    "HR",
+  ].filter(Boolean);
+  const notes = [`Penyetuju: ${chain.join(", lalu ")}`];
   if (row.status === "rejected") notes.push(`Alasan penolakan: ${row.rejection_reason ?? "—"}`);
   return notes;
 }
