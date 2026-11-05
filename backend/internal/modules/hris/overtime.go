@@ -197,15 +197,18 @@ func (s *Service) CreateOvertime(ctx context.Context, a *Actor, in overtimeInput
 	if in.StartTime == in.EndTime {
 		return nil, httpx.BadRequest("Jam mulai dan selesai tidak boleh sama")
 	}
-	if domain.OvertimeGrossMinutes(in.StartTime, in.EndTime) > 12*60 {
-		return nil, httpx.BadRequest("Durasi lembur maksimal 12 jam")
-	}
+	// EPIC-089 R1: no daily or 12-hour gross cap; 18/week and 72/period remain.
 	hours := domain.PaidOvertimeHours(in.StartTime, in.EndTime, in.BreakMinutes)
 	if hours < 1 {
 		if in.BreakMinutes > 0 {
 			return nil, httpx.BadRequest("Durasi lembur minimal 1 jam setelah dikurangi istirahat")
 		}
 		return nil, httpx.BadRequest("Durasi lembur minimal 1 jam")
+	}
+	if isSelf { // EPIC-089 R2: HR assigning someone is the approver itself
+		if msg := domain.OvertimeReasonError(hours, in.Reason); msg != "" {
+			return nil, httpx.BadRequest(msg)
+		}
 	}
 	dayType, err := s.overtimeDayType(ctx, *targetID, in.Date, in.DayType, !isSelf)
 	if err != nil {
@@ -265,11 +268,9 @@ func (s *Service) CreateOvertime(ctx context.Context, a *Actor, in overtimeInput
 	return obj("data", row, "message", message), nil
 }
 
-// checkOvertimeAttachments: 1–3 paths uploaded by the owner and still on disk.
+// checkOvertimeAttachments: 0–3 paths uploaded by the owner and still on
+// disk; documentation is optional since EPIC-089 R3.
 func (s *Service) checkOvertimeAttachments(ownerID string, paths []string) error {
-	if len(paths) == 0 {
-		return httpx.BadRequest("Lampirkan minimal 1 dokumentasi lembur")
-	}
 	if len(paths) > maxOvertimeAttachments {
 		return httpx.BadRequest("Maksimal 3 dokumentasi lembur")
 	}
@@ -381,9 +382,6 @@ func (s *Service) DecideOvertime(ctx context.Context, a *Actor, id, action strin
 		}
 		if start == end {
 			return nil, httpx.BadRequest("Jam mulai dan selesai tidak boleh sama")
-		}
-		if domain.OvertimeGrossMinutes(start, end) > 12*60 {
-			return nil, httpx.BadRequest("Durasi lembur maksimal 12 jam")
 		}
 		hours := domain.PaidOvertimeHours(start, end, brk)
 		if hours < 1 {

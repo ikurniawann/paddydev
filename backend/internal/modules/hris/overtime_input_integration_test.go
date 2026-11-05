@@ -39,7 +39,8 @@ func TestOvertimeInputAfterFinished(t *testing.T) {
 
 	h.setNow("2026-10-03 10:00") // EPIC-084 R6: lembur 02-10 masih dalam batas H+1
 	noFile := map[string]any{"date": "2026-10-02", "start_time": "17:00", "end_time": "19:00"}
-	expect(t, post(noFile), 400, "Lampirkan minimal 1 dokumentasi lembur")
+	// EPIC-089 R3: dokumentasi opsional (karyawan lain, agar tanggal ini tetap kosong untuk kasus di bawah).
+	expect(t, h.do(&other, "POST", "/api/hris/overtime", noFile), 200, "")
 	tooShort := h.otSelfBody(&staff, "2026-10-02", "17:00", "18:00")
 	tooShort["break_minutes"] = 30
 	expect(t, post(tooShort), 400, "Durasi lembur minimal 1 jam setelah dikurangi istirahat")
