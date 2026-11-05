@@ -72,6 +72,7 @@ func (h handlers) routes() []module.Route {
 		r("GET /api/hris/leaves", h.withActor(h.listLeaves)),
 		r("POST /api/hris/leaves", h.withActor(h.createLeave)),
 		r("POST /api/hris/leaves/approve", h.withActor(h.decideLeave)),
+		r("POST /api/hris/leaves/attachment-review", h.withActor(h.reviewLeaveAttachment)),
 		r("GET /api/hris/leaves/export", h.withMenu(iam.HrisWorkforce, h.exportLeaves)),
 		r("GET /api/hris/leaves/{id}", h.withActor(h.getLeave)),
 		r("PUT /api/hris/leaves/{id}", h.withActor(h.updateLeave)),
