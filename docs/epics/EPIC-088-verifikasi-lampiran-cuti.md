@@ -1,6 +1,6 @@
 # EPIC-088: Verifikasi Lampiran Cuti/Izin oleh HR (`MODULE-HRIS`, ES-11)
 
-status: backlog
+status: review
 environment: dev
 retries: 0
 
@@ -92,10 +92,36 @@ Poin 12 (Izin Leader 1x/bulan, hangus, SPV ke atas, tanpa potong THP = ES-15) **
 Rencana: `docs/superpowers/plans/2026-11-03-verifikasi-lampiran-cuti.md`.
 
 ## Acceptance Criteria
-- [ ] Atasan menyetujui cuti berlampiran → status tetap menunggu, HR dinotifikasi, pengajuan hilang dari antrean atasan, saldo belum terpotong.
-- [ ] HR memverifikasi → cuti disetujui (saldo tahunan terpotong bila Cuti Tahunan); HR mengembalikan → karyawan melihat alasan dan bisa unggah ulang, lalu antrean HR terisi lagi.
-- [ ] HR menyetujui langsung pengajuan berlampiran → sekaligus terverifikasi. Pengajuan tanpa lampiran tidak berubah.
-- [ ] Gates hijau; QA staging (HR, atasan, karyawan; desktop + HP).
+- [x] Atasan menyetujui cuti berlampiran → status tetap menunggu, HR dinotifikasi, pengajuan hilang dari antrean atasan, saldo belum terpotong.
+- [x] HR memverifikasi → cuti disetujui (saldo tahunan terpotong bila Cuti Tahunan); HR mengembalikan → karyawan melihat alasan dan bisa unggah ulang, lalu antrean HR terisi lagi.
+- [x] HR menyetujui langsung pengajuan berlampiran → sekaligus terverifikasi. Pengajuan tanpa lampiran tidak berubah.
+- [x] Gates hijau; QA staging (HR, atasan, karyawan; desktop + HP).
 
 ## Automation Log
 - 2026-11-03 — Pemetaan MOM 29-10 butir 11–12 + 4 jawaban user. Poin 12 sudah live (ES-15). Epic + rencana ditulis. Worktree `.worktrees/epic088`, branch `feat/epic088-verifikasi-lampiran` dari main `614d3694`.
+- 2026-11-05 — Implementasi native, 3 task (`00f72872` delta + domain, `b5e40ab4` backend, `86d67718` frontend).
+  - Gates: `go test -p 1 ./internal/modules/hris/ ./internal/app/` ok, `go vet` + `gofmt` bersih, vitest 4630 lulus, `tsc` + eslint bersih.
+  - Ruling: kind notifikasi `approval`/`status_change` (CHECK `public.notifications.type`); audit persetujuan atasan `leave.manager_approve`; penjaga fallback Next `assertFallbackCanDecide`.
+- 2026-11-05 — Review akhir (reviewer terpisah): 0 Critical, 1 Important, 10 Minor. Diperbaiki dengan tes (`c96ce9c3`):
+  - audit lampiran yang dikembalikan (`before.attachment_url`) + audit baru `leave.attachment_resubmit`;
+  - verifikasi tidak lagi mengirim notifikasi kedua (trigger sudah mengirim "✅ Cuti Disetujui"; R5 diubah);
+  - baris "Lampiran dikembalikan" mendapat tombol Tolak agar tidak menggantung.
+
+  Ditunda:
+  - `notify_hrd` hanya ke akun `users.role='hrd'`; verifikator ber-role lain (mis. admin_hris) tidak mendapat lonceng. Cek akun HR prod saat QA;
+  - badge dan `decideLeave` fallback Next belum mengenal tahap awaiting;
+  - toast error umum di tombol keputusan;
+  - filter `?review=` hanya dibaca saat halaman dibuka;
+  - badge/ringkasan ESS tidak menampilkan "dikembalikan";
+  - audit persetujuan langsung verifikator tanpa `attachment_review`.
+- 2026-11-05 — **Staging** `local-20261105-115424` = gabungan lokal EPIC-087 (`2a2d301d`) + EPIC-088 (`c96ce9c3`), merge `8e349e45` tidak di-push, agar foto profil tetap ada di staging.
+  - Backup `staging-db-before-epic088-20261105-115358.dump`. Migrasi `20261109090000` ok, verify 10774 objek, 0 berbeda.
+  - QA Playwright 18/18 lulus (karyawan HP, atasan dan HR desktop):
+    - atasan setuju → toast "menunggu verifikasi HR", antrean atasan kosong, `pending/awaiting`, saldo belum terpotong, HR dapat 2 notifikasi;
+    - tanpa lampiran langsung disetujui;
+    - HR (`?review=awaiting`) mengembalikan → karyawan melihat alasan → unggah ulang di HP → kembali `awaiting`;
+    - HR verifikasi → `approved/verified`, saldo tahunan terpotong 1, karyawan 1 notifikasi per cuti;
+    - audit lengkap: `manager_approve`, `attachment_return`, `attachment_resubmit`, `attachment_verify`;
+    - 0 error API dan console.
+  - Akun demo qa088, cuti, notifikasi, dan berkas lampiran dihapus.
+
