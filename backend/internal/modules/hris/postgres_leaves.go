@@ -127,7 +127,7 @@ func (s *store) Publish(ctx context.Context, topic, key string, payload any) err
 
 func (s *store) LeaveDetail(ctx context.Context, id string) (*Row, error) {
 	row, err := queryRow(ctx, s.db, `SELECT *, `+
-		leaveEmployeeEmbed("employee", "id, full_name, nip, photo_url, email, phone, reporting_to, "+deptName+", "+
+		leaveEmployeeEmbed("employee", "id, full_name, nip, photo_url, email, phone, reporting_to, hris.request_approver(employees.id) AS approver_id, "+deptName+", "+
 			embedOne("job_title", "title", "hris.positions", "id = employees.job_title_id"))+", "+
 		leaveApproverEmbed("id, full_name, nip, email")+` FROM hris.leaves WHERE id = $1`, id)
 	return row, ignoreBadInput(err)
@@ -135,7 +135,7 @@ func (s *store) LeaveDetail(ctx context.Context, id string) (*Row, error) {
 
 func (s *store) LeaveForDecision(ctx context.Context, id string) (*Row, error) {
 	row, err := queryRow(ctx, s.db, `SELECT *, `+
-		leaveEmployeeEmbed("employee", "id, full_name, email, phone, reporting_to, "+
+		leaveEmployeeEmbed("employee", "id, full_name, email, phone, reporting_to, hris.request_approver(employees.id) AS approver_id, "+
 			embedOne("department", "id, name", "hris.departments", "id = employees.department_id")+", "+
 			embedOne("job_title", "id, title", "hris.positions", "id = employees.job_title_id"))+
 		` FROM hris.leaves WHERE id = $1`, id)
@@ -269,13 +269,14 @@ func (s *store) LeavesForExport(ctx context.Context, f leaveFilter) ([]*Row, err
 		leaveApproverEmbed("full_name, nip")+` FROM hris.leaves `+where+` ORDER BY created_at DESC`, args...)
 }
 
-// ManagerContact is the active direct manager of an employee.
+// ManagerContact is the employee's request approver (EPIC-091: nearest
+// atasan from Supervisor up, active, with an account).
 func (s *store) ManagerContact(ctx context.Context, employeeID string) (string, *string, bool, error) {
 	var name string
 	var phone *string
 	err := s.db.QueryRow(ctx, `SELECT a.full_name, a.phone
 		FROM hris.employees e
-		JOIN hris.employees a ON a.id = e.reporting_to AND a.is_active = true AND a.id <> e.id
+		JOIN hris.employees a ON a.id = hris.request_approver(e.id)
 		WHERE e.id = $1`, employeeID).Scan(&name, &phone)
 	if database.IsNoRows(err) {
 		return "", nil, false, nil

@@ -625,16 +625,17 @@ func (s *Service) DeleteShift(ctx context.Context, id string) (string, error) {
 
 /* ── Overtime SQL ────────────────────────────────────────────────────── */
 
-// managerActiveCol is whether the employee's direct manager is active; NULL
-// without one. An inactive manager counts as none (EPIC-063 R9, EPIC-066).
-const managerActiveCol = `(SELECT m.is_active FROM hris.employees m WHERE m.id = employees.reporting_to) AS reporting_to_active`
+// managerActiveCol is the employee's request approver (EPIC-091: nearest
+// atasan from Supervisor up, active, with an account; NULL without one,
+// as an inactive manager counted as none before, EPIC-063 R9, EPIC-066).
+const managerActiveCol = `hris.request_approver(employees.id) AS approver_id`
 
-// overtimeManager is the owner's reporting_to and whether that manager is active.
+// overtimeManager is the owner's request approver and whether there is one.
 func overtimeManager(emp *Row) (reportingTo *string, active bool) {
 	if emp == nil {
 		return nil, false
 	}
-	return emp.StrPtr("reporting_to"), emp.Bool("reporting_to_active")
+	return emp.StrPtr("approver_id"), emp.Str("approver_id") != ""
 }
 
 var overtimeSelect = `*, ` +
@@ -644,9 +645,9 @@ var overtimeSelect = `*, ` +
 	embedOne("decider", "id, full_name", "hris.employees", "id = overtime_requests.decided_by")
 
 func (s *store) SubordinateIDs(ctx context.Context, managerID string) ([]string, error) {
-	// A reporting_to pointing at oneself (live data) is not a direct report
-	// (EPIC-063 R2): the manager's queues never hold their own requests.
-	rows, err := queryRows(ctx, s.db, `SELECT id FROM hris.employees WHERE reporting_to = $1 AND id <> $1`, managerID)
+	// EPIC-091: the people whose request approver is managerID (nearest
+	// atasan from Supervisor up); never oneself (EPIC-063 R2).
+	rows, err := queryRows(ctx, s.db, `SELECT id FROM hris.employees WHERE hris.request_approver(id) = $1::uuid`, managerID)
 	if err != nil {
 		return nil, ignoreBadInput(err)
 	}

@@ -109,7 +109,7 @@ func (hrisPayrollSQL) TeamLoanHistory(ctx context.Context, q database.Querier, m
 		to_char(l.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'), l.tenor_months,
 		l.purpose, l.rejection_reason, ma.full_name, l.attachments, l.collateral_attachments
 		FROM hris.loans l
-		JOIN hris.employees m ON m.id = l.employee_id AND m.reporting_to = $1::uuid AND m.id <> $1::uuid
+		JOIN hris.employees m ON m.id = l.employee_id AND hris.request_approver(m.id) = $1::uuid
 		LEFT JOIN hris.employees ma ON ma.id = l.manager_approver_id
 		WHERE l.created_at >= $2::date OR l.status IN ('pending', 'manager_approved')
 		ORDER BY l.created_at DESC LIMIT 300`, managerID, from)

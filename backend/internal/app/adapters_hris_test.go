@@ -225,6 +225,12 @@ func TestTeamLoanHistory(t *testing.T) {
 		return id
 	}
 	boss := emp("SPV Riwayat", nil)
+	// EPIC-091: penyetuju harus punya akun login.
+	if _, err := tx.Exec(ctx, `WITH u AS (INSERT INTO auth.users (id, email, password_hash) VALUES (gen_random_uuid(), md5(random()::text)||'@hris.test', 'x') RETURNING id, email),
+		c AS (INSERT INTO configuration.users (id, full_name, role, email, status) SELECT id, 'SPV Riwayat', 'employee', email, 'active' FROM u RETURNING id)
+		UPDATE hris.employees SET user_id = (SELECT id FROM c) WHERE id = $1`, boss); err != nil {
+		t.Fatal(err)
+	}
 	mgr := emp("Manager Riwayat", nil)
 	worker := emp("Peminjam Tim", &boss)
 	outsider := emp("Bukan Tim", nil)

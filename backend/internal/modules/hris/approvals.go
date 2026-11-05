@@ -120,8 +120,8 @@ type ApprovalRepo interface {
 
 func (s *store) NotifyManager(ctx context.Context, employeeID, title, message, link string) error {
 	_, err := s.db.Exec(ctx, `SELECT public.notify_user(m.user_id, $2, $3, 'approval', $4)
-		FROM hris.employees e JOIN hris.employees m ON m.id = e.reporting_to AND m.id <> e.id
-		WHERE e.id = $1 AND m.user_id IS NOT NULL`, employeeID, title, message, link)
+		FROM hris.employees e JOIN hris.employees m ON m.id = hris.request_approver(e.id)
+		WHERE e.id = $1`, employeeID, title, message, link)
 	return err
 }
 
@@ -155,10 +155,10 @@ func (s *Service) teamPendingTotal(ctx context.Context, managerID string) (int64
 	return n + loans, err
 }
 
-// teamMember joins the requester (alias m) when they report to $1 directly;
-// a reporting_to pointing at oneself (live data) is not a team member (R2).
+// teamMember joins the requester (alias m) when $1 is their request approver
+// (EPIC-091: nearest atasan from Supervisor up; never oneself, R2).
 func teamMember(alias string) string {
-	return fmt.Sprintf(`JOIN hris.employees m ON m.id = %s.employee_id AND m.reporting_to = $1 AND m.id <> $1`, alias)
+	return fmt.Sprintf(`JOIN hris.employees m ON m.id = %s.employee_id AND hris.request_approver(m.id) = $1::uuid`, alias)
 }
 
 const teamEmployee = `json_build_object('id', m.id, 'full_name', m.full_name, 'nip', m.nip) AS employee`

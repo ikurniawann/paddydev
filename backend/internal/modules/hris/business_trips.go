@@ -163,7 +163,7 @@ func (s *Service) DecideTrip(ctx context.Context, a *Actor, id, action string, r
 	}
 	var reportingTo *string
 	if emp := trip.Child("employee"); emp != nil {
-		reportingTo = emp.StrPtr("reporting_to")
+		reportingTo = emp.StrPtr("approver_id") // EPIC-091: atasan terdekat minimal SPV
 	}
 	allowed, reason := domain.CanDecideBusinessTrip(domain.TripActor{EmployeeID: a.EmployeeID, IsHR: a.CanApprove(iam.LeafAbsensi)},
 		domain.TripRef{EmployeeID: trip.Str("employee_id"), ReportingTo: reportingTo, Status: status}, action)
@@ -225,7 +225,7 @@ func (s *Service) auditTrip(ctx context.Context, r Repository, a *Actor, action 
 var tripColumns = `t.id, t.employee_id, t.start_date::text AS start_date, t.end_date::text AS end_date,
 	t.destination, t.purpose, t.status, t.requested_by, t.decided_by, t.decided_by_name, t.decided_at,
 	t.rejection_reason, t.created_at, t.updated_at, ` +
-	embedOne("employee", "id, full_name, nip, reporting_to", "hris.employees", "id = t.employee_id")
+	embedOne("employee", "id, full_name, nip, reporting_to, hris.request_approver(employees.id) AS approver_id", "hris.employees", "id = t.employee_id")
 
 func (s *store) TripList(ctx context.Context, f tripFilter) ([]*Row, error) {
 	where := []string{"true"}

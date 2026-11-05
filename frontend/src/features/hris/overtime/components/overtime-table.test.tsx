@@ -63,12 +63,12 @@ describe("OvertimeTable — istirahat, dokumentasi, koreksi (EPIC-066)", () => {
     expect(screen.getByTitle("Dokumentasi 1").getAttribute("src")).toBe(
       "/api/hris/overtime/attachment/overtime-attachments/e1/1-aaaaaaaaaaaaaaaa.pdf");
   });
-  it("tombol Koreksi disembunyikan untuk lembur karyawan yang punya atasan langsung", () => {
-    render(table({ ...base, employee: { ...base.employee!, reporting_to: "m1", reporting_to_active: true } }, vi.fn(), true));
+  it("tombol Koreksi disembunyikan untuk lembur karyawan yang punya penyetuju (EPIC-091)", () => {
+    render(table({ ...base, employee: { ...base.employee!, reporting_to: "m1", approver_id: "m1" } }, vi.fn(), true));
     expect(screen.queryByRole("button", { name: "Koreksi" })).toBeNull();
   });
-  it("tombol Koreksi tampil bila atasan langsung nonaktif (EPIC-063 R9)", () => {
-    render(table({ ...base, employee: { ...base.employee!, reporting_to: "m1", reporting_to_active: false } }, vi.fn(), true));
+  it("tombol Koreksi tampil bila tidak ada penyetuju, mis. atasan nonaktif (EPIC-063 R9, EPIC-091)", () => {
+    render(table({ ...base, employee: { ...base.employee!, reporting_to: "m1", approver_id: null } }, vi.fn(), true));
     expect(screen.getByRole("button", { name: "Koreksi" })).toBeTruthy();
   });
   it("tombol Koreksi tetap ada tanpa atasan, atau bila atasan = diri sendiri, atau sumber perusahaan", () => {
