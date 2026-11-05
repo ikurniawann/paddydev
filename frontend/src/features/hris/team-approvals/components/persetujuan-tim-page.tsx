@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 import { MANAGER_APPROVED_AWAITING_HR } from "@/lib/hris/leave-attachment-review";
@@ -71,6 +72,8 @@ function rejectingOf(detail: Detail): Rejecting {
  */
 export function EssPersetujuanTimPage() {
   const { data: me, isLoading } = useEssMe();
+  // Lonceng kasbon/pinjaman ke atasan langsung menautkan ?tab=riwayat (EPIC-091).
+  const historyTab = useSearchParams().get("tab") === "riwayat";
   const queue = useTeamApprovals();
   const tripsQuery = useBusinessTrips({ scope: "approvals", status: "pending" });
   const loansQuery = useTeamLoanApprovals();
@@ -187,7 +190,7 @@ export function EssPersetujuanTimPage() {
       </div>
 
       {/* EPIC-090: Riwayat agar atasan tetap bisa membuka detail setelah memutus. */}
-      <Tabs defaultValue="pending" className="w-full flex-col gap-4">
+      <Tabs defaultValue={historyTab ? "history" : "pending"} className="w-full flex-col gap-4">
         <TabsList>
           <TabsTrigger value="pending">Menunggu</TabsTrigger>
           <TabsTrigger value="history">Riwayat</TabsTrigger>

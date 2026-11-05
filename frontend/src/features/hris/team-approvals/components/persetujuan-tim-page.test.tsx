@@ -28,6 +28,8 @@ vi.mock("../queries", () => ({
   useTeamApprovals: () => ({ data: queue, isLoading: false, isError: queueError }),
 }));
 vi.mock("./team-history", () => ({ TeamHistoryPanel: () => <p>panel-riwayat</p> }));
+let search = "";
+vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams(search) }));
 vi.mock("../mutations", () => ({
   useDecideTeamRequest: () => ({ mutate: decide, isPending: false, variables: undefined }),
 }));
@@ -244,5 +246,12 @@ describe("EssPersetujuanTimPage", () => {
     expect(screen.getByText("panel-riwayat")).toBeTruthy();
     fireEvent.click(screen.getByRole("tab", { name: "Menunggu" }));
     expect(screen.queryByText("panel-riwayat")).toBeNull();
+  });
+
+  it("?tab=riwayat dari notifikasi langsung membuka Riwayat (EPIC-091)", () => {
+    search = "tab=riwayat";
+    render(<EssPersetujuanTimPage />);
+    expect(screen.getByText("panel-riwayat")).toBeTruthy();
+    search = "";
   });
 });

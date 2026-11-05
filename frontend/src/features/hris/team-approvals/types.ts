@@ -63,9 +63,29 @@ export interface TeamHistoryOvertime extends TeamOvertimeRequest {
   decided_by_name: string | null;
 }
 
+/** EPIC-091: kasbon/pinjaman bawahan langsung (Manager tetap penyetuju). */
+export interface TeamHistoryLoan {
+  id: string;
+  employee_id: string;
+  loan_type: string;
+  principal_amount: string | number;
+  monthly_installment: string | number;
+  tenor_months: number;
+  status: string;
+  purpose: string | null;
+  rejection_reason: string | null;
+  /** Manager penyetuju tahap 1; null = langsung HR. */
+  manager_approver_name: string | null;
+  attachments: string[];
+  collateral_attachments: string[];
+  created_at: string;
+  employee: TeamMemberRef;
+}
+
 export interface TeamHistory {
   period: { from: string; to: string; label: string };
   leaves: TeamHistoryLeave[];
   overtime: TeamHistoryOvertime[];
+  loans?: TeamHistoryLoan[];
 }
 

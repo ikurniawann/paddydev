@@ -1,16 +1,17 @@
 "use client";
 
 import { useState } from "react";
-import { CalendarDaysIcon, ClockIcon } from "@heroicons/react/24/outline";
+import { BanknotesIcon, CalendarDaysIcon, ClockIcon } from "@heroicons/react/24/outline";
 import { RequestDetailDialog } from "@/components/hris/request-detail-dialog";
 import { Button } from "@/components/ui/button";
-import { formatDate, formatDateTime } from "@/lib/format";
+import { formatDate, formatDateTime, formatRupiah } from "@/lib/format";
 import { leaveAttachmentHref } from "@/lib/hris/attachments";
 import { leaveTypeLabel } from "@/lib/hris/leave-types";
+import { loanAttachmentHref, loanTypeLabel } from "@/lib/hris/loans-view";
 import { overtimeAttachmentHref, overtimeDayTypeLabel, paidOvertimeHours } from "@/lib/hris/overtime-rules";
 import { hhmm } from "@/lib/hris/shifts-view";
 import { useTeamHistory } from "../queries";
-import type { TeamHistoryLeave, TeamHistoryOvertime } from "../types";
+import type { TeamHistoryLeave, TeamHistoryLoan, TeamHistoryOvertime } from "../types";
 
 /**
  * Riwayat Persetujuan Tim (EPIC-090): cuti/izin dan lembur bawahan langsung
@@ -50,6 +51,35 @@ function overtimeBadge(row: TeamHistoryOvertime): Badge {
   return { label: "Menunggu atasan", className: BADGE.waiting };
 }
 
+// EPIC-091: Manager tetap penyetuju tahap 1; atasan langsung hanya melihat.
+function loanBadge(row: TeamHistoryLoan): Badge {
+  switch (row.status) {
+    case "pending":
+      return row.manager_approver_name
+        ? { label: `Menunggu Manager: ${row.manager_approver_name}`, className: BADGE.waiting }
+        : { label: "Menunggu HR", className: BADGE.hr };
+    case "manager_approved":
+      return { label: "Disetujui Manager — menunggu HR", className: BADGE.hr };
+    case "approved":
+      return { label: "Berjalan", className: BADGE.approved };
+    case "paid_off":
+      return { label: "Lunas", className: BADGE.cancelled };
+    case "rejected":
+      return { label: "Ditolak", className: BADGE.rejected };
+    default:
+      return { label: row.status, className: BADGE.cancelled };
+  }
+}
+
+// "kasbon" / "pinjaman karyawan" untuk judul dan label tombol.
+const loanNoun = (type: string) => (type === "kasbon" ? "kasbon" : loanTypeLabel(type).toLowerCase());
+
+function loanNotes(row: TeamHistoryLoan): string[] {
+  const notes = [`Penyetuju: ${row.manager_approver_name ? `Manager ${row.manager_approver_name}, lalu HR` : "HR"}`];
+  if (row.status === "rejected") notes.push(`Alasan penolakan: ${row.rejection_reason ?? "—"}`);
+  return notes;
+}
+
 function StatusBadge({ badge }: { badge: Badge }) {
   return <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${badge.className}`}>{badge.label}</span>;
 }
@@ -85,7 +115,10 @@ const leavePeriod = (row: TeamHistoryLeave) =>
 const overtimeClock = (row: TeamHistoryOvertime) =>
   `${hhmm(row.start_time)}–${hhmm(row.end_time)} (${String(Number(row.hours)).replace(".", ",")} jam)`;
 
-type Shown = { kind: "leave"; row: TeamHistoryLeave } | { kind: "overtime"; row: TeamHistoryOvertime };
+type Shown =
+  | { kind: "leave"; row: TeamHistoryLeave }
+  | { kind: "overtime"; row: TeamHistoryOvertime }
+  | { kind: "loan"; row: TeamHistoryLoan };
 
 export function TeamHistoryPanel() {
   const history = useTeamHistory();
@@ -102,6 +135,7 @@ export function TeamHistoryPanel() {
     return <p className="py-6 text-center text-sm text-gray-500">Memuat riwayat…</p>;
   }
   const { period, leaves, overtime } = history.data;
+  const loans = history.data.loans ?? [];
 
   return (
     <div className="space-y-6">
@@ -110,7 +144,7 @@ export function TeamHistoryPanel() {
         (awal periode lalu), termasuk yang tanggalnya ke depan, semua status.
       </p>
 
-      {leaves.length + overtime.length === 0 && (
+      {leaves.length + overtime.length + loans.length === 0 && (
         <div className="rounded-xl border border-gray-200/70 bg-white p-6 text-center text-sm text-gray-500 shadow-sm">
           Belum ada cuti atau lembur tim sejak awal periode lalu.
         </div>
@@ -174,7 +208,65 @@ export function TeamHistoryPanel() {
         </section>
       )}
 
-      {shown && (
+      {loans.length > 0 && (
+        <section className="rounded-xl border border-gray-200/70 bg-white p-5 shadow-sm">
+          <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-800">
+            <BanknotesIcon className="h-4 w-4 text-pink-500" /> Kasbon & Pinjaman ({loans.length})
+          </h3>
+          <ul className="mt-3 divide-y divide-gray-100">
+            {loans.map((row) => (
+              <li key={row.id} className="flex flex-wrap items-center justify-between gap-3 py-2.5">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-gray-900">
+                    {row.employee.full_name} · {loanTypeLabel(row.loan_type)}
+                  </p>
+                  <p className="text-xs text-gray-600">
+                    {formatRupiah(row.principal_amount)} · {row.tenor_months}x cicilan · diajukan {formatDate(row.created_at, "—")}
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  <StatusBadge badge={loanBadge(row)} />
+                  <Button size="sm" variant="ghost"
+                    aria-label={`Detail ${loanNoun(row.loan_type)} ${row.employee.full_name}`}
+                    onClick={() => setShown({ kind: "loan", row })}>
+                    Detail
+                  </Button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {shown?.kind === "loan" && (
+        <RequestDetailDialog
+          open
+          onOpenChange={(o) => !o && setShown(null)}
+          title={`Detail ${loanNoun(shown.row.loan_type)}`}
+          employee={{ name: shown.row.employee.full_name, nip: shown.row.employee.nip }}
+          status={<StatusBadge badge={loanBadge(shown.row)} />}
+          fields={[
+            { label: "Jenis", value: loanTypeLabel(shown.row.loan_type) },
+            { label: "Pokok", value: formatRupiah(shown.row.principal_amount) },
+            { label: "Cicilan", value: `${shown.row.tenor_months}x ${formatRupiah(shown.row.monthly_installment)}` },
+            { label: "Diajukan", value: formatDateTime(shown.row.created_at, "—") },
+          ]}
+          reason={{ label: "Keperluan", text: shown.row.purpose }}
+          attachments={[
+            { paths: shown.row.attachments ?? [], hrefFor: loanAttachmentHref, label: "Dokumen", title: "Dokumen pendukung" },
+            { paths: shown.row.collateral_attachments ?? [], hrefFor: loanAttachmentHref, label: "Jaminan", title: "Jaminan" },
+          ]}
+          notes={
+            <div className="space-y-0.5 text-xs text-gray-700">
+              {loanNotes(shown.row).map((n) => (
+                <p key={n} className="whitespace-pre-line break-words">{n}</p>
+              ))}
+            </div>
+          }
+        />
+      )}
+
+      {shown && shown.kind !== "loan" && (
         <RequestDetailDialog
           open
           onOpenChange={(o) => !o && setShown(null)}
