@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
+import { MANAGER_APPROVED_AWAITING_HR } from "@/lib/hris/leave-attachment-review";
 import { BanknotesIcon, CalendarDaysIcon, ClockIcon } from "@heroicons/react/24/outline";
 import { AttachmentPreviewButtons } from "@/components/hris/attachment-preview";
 import { RequestDetailDialog } from "@/components/hris/request-detail-dialog";
@@ -91,7 +92,9 @@ export function EssPersetujuanTimPage() {
     decide.mutate(
       { kind, id, action, rejectionReason, times },
       {
-        onSuccess: () => toast.success(DONE[kind][action]),
+        // Cuti berlampiran masih menunggu verifikasi HR (EPIC-088 R3): pesan server.
+        onSuccess: (res) =>
+          toast.success(res?.message === MANAGER_APPROVED_AWAITING_HR ? res.message : DONE[kind][action]),
         onError: (e) => toast.error(e.message || "Gagal memproses"),
       }
     );

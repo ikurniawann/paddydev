@@ -17,8 +17,12 @@ import { useApproveLeave } from "@/features/hris/leaves/mutations";
 
 const WA_NOTICE = "Membuka WhatsApp untuk memberi tahu karyawan…";
 
-/** Tombol setujui/tolak untuk pengajuan cuti yang masih pending. */
-export function ApprovalButtons({ leaveId }: { leaveId: string }) {
+/**
+ * Tombol setujui/tolak untuk pengajuan cuti yang masih pending. rejectOnly:
+ * pengajuan menunggu verifikasi lampiran HR hanya bisa ditolak di sini
+ * (menyetujui lewat Verifikasi, EPIC-088 R4).
+ */
+export function ApprovalButtons({ leaveId, rejectOnly = false }: { leaveId: string; rejectOnly?: boolean }) {
   const [showRejectDialog, setShowRejectDialog] = useState(false);
   const [rejectionReason, setRejectionReason] = useState("");
   const approve = useApproveLeave();
@@ -69,21 +73,23 @@ export function ApprovalButtons({ leaveId }: { leaveId: string }) {
   return (
     <>
       <div className="flex gap-2">
-        <Button
-          onClick={handleApprove}
-          disabled={isLoading}
-          className="bg-green-600 hover:bg-green-700"
-          size="sm"
-        >
-          {isLoading ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
-          ) : (
-            <>
-              <CheckCircle2 className="w-4 h-4 mr-1" />
-              Setujui
-            </>
-          )}
-        </Button>
+        {!rejectOnly && (
+          <Button
+            onClick={handleApprove}
+            disabled={isLoading}
+            className="bg-green-600 hover:bg-green-700"
+            size="sm"
+          >
+            {isLoading ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <>
+                <CheckCircle2 className="w-4 h-4 mr-1" />
+                Setujui
+              </>
+            )}
+          </Button>
+        )}
 
         <Button
           onClick={handleRejectClick}

@@ -275,7 +275,9 @@ describe("Go route manifest", () => {
       // Pratinjau hari cuti dari roster (EPIC-079 R4): hanya di Go, tanpa fallback Next.
       "/api/hris/me/leave-days",
       // Aturan checkout otomatis per jabatan dan lokasi (EPIC-080): hanya di Go, tanpa fallback Next.
-      "/api/hris/auto-checkout-rules"];
+      "/api/hris/auto-checkout-rules",
+      // Verifikasi lampiran cuti oleh HR (EPIC-088): hanya di Go, tanpa fallback Next.
+      "/api/hris/leaves/attachment-review"];
     const goNative = (p: string) =>
       goNativePrefixes.some((n) => p === n || p.startsWith(`${n}/`));
     const missing = switched

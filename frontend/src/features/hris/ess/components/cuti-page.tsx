@@ -10,6 +10,12 @@ import { formatDays } from "@/features/hris/leave-balances/balance-math";
 import { CutiRequestDialog } from "./cuti-request-dialog";
 import { LeaveBalanceBreakdown } from "./leave-balance-summary";
 import { EssLoading, EssNotLinked } from "./ess-states";
+import { LeaveResubmit } from "./leave-resubmit";
+import {
+  LEAVE_REVIEW_STAGE_CLASSES,
+  LEAVE_REVIEW_STAGE_LABELS,
+  leaveReviewStage,
+} from "@/lib/hris/leave-attachment-review";
 
 /**
  * ESS → Izin & Cuti (/dashboard/me/cuti): kuota tahunan, riwayat pengajuan,
@@ -32,6 +38,7 @@ export function EssCutiPage() {
   if (!me?.employee) return <EssNotLinked feature="Pengajuan izin/cuti" />;
 
   const balance = me.leave_balance;
+  const employeeId = me.employee.id;
 
   return (
     <div className="space-y-6">
@@ -73,9 +80,13 @@ export function EssCutiPage() {
           ) : (
             <ul className="mt-3 divide-y divide-gray-100">
               {leaves.map((leave) => {
-                const badge = LEAVE_STATUS_BADGES[leave.status] ?? LEAVE_STATUS_BADGES.pending;
+                // Tahap verifikasi lampiran HR menggantikan "Menunggu" (EPIC-088 R8).
+                const stage = leaveReviewStage(leave);
+                const badge = stage
+                  ? { label: LEAVE_REVIEW_STAGE_LABELS[stage], className: LEAVE_REVIEW_STAGE_CLASSES[stage] }
+                  : (LEAVE_STATUS_BADGES[leave.status] ?? LEAVE_STATUS_BADGES.pending);
                 return (
-                  <li key={leave.id} className="flex items-center justify-between gap-3 py-2.5">
+                  <li key={leave.id} className="flex items-start justify-between gap-3 py-2.5">
                     <div className="min-w-0">
                       <p className="text-sm font-medium text-gray-900">
                         {leaveTypeLabel(leave.leave_type)} · {leave.total_days} hari
@@ -86,6 +97,14 @@ export function EssCutiPage() {
                           ? ` · Alasan ditolak: ${leave.rejection_reason}`
                           : ""}
                       </p>
+                      {stage === "returned" && (
+                        <>
+                          <p className="mt-1 whitespace-pre-line break-words text-xs text-orange-700">
+                            Dikembalikan HR: {leave.attachment_return_reason}
+                          </p>
+                          <LeaveResubmit leaveId={leave.id} employeeId={employeeId} />
+                        </>
+                      )}
                     </div>
                     <span
                       className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${badge.className}`}

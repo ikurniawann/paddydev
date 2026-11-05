@@ -69,6 +69,15 @@ describe("EssPersetujuanTimPage", () => {
     expect(toastSuccess).toHaveBeenCalledWith("Cuti disetujui");
   });
 
+  it("cuti berlampiran: toast memakai pesan server bila menunggu verifikasi HR (EPIC-088)", () => {
+    queue = { leaves: [{ ...leave, attachment_url: "leave-attachments/e1/surat.png" }], overtime: [] };
+    decide.mockImplementation((_v, opts) =>
+      opts.onSuccess({ message: "Disetujui atasan — menunggu verifikasi lampiran oleh HR" }));
+    render(<EssPersetujuanTimPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Setujui cuti Anggota A" }));
+    expect(toastSuccess).toHaveBeenCalledWith("Disetujui atasan — menunggu verifikasi lampiran oleh HR");
+  });
+
   it("lembur: ringkasan menampilkan istirahat & dokumentasi; Setujui tanpa perubahan tidak mengirim jam (EPIC-066)", () => {
     queue = { leaves: [], overtime: [overtime] };
     decide.mockImplementation((_v, opts) => opts.onSuccess());

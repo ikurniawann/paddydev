@@ -274,6 +274,17 @@ export async function deleteLeave(id: string) {
 }
 
 /**
+ * EPIC-088 R9: pengajuan berlampiran disetujui atasan lalu diverifikasi HR di
+ * backend Go. Jalur fallback ini tidak mengenal tahap itu, jadi tidak boleh
+ * menyetujuinya.
+ */
+export function assertFallbackCanDecide(attachmentUrl: string | null | undefined, action: "approve" | "reject") {
+  if (action === "approve" && (attachmentUrl ?? "").trim() !== "") {
+    throw new ApiError(503, "Pengajuan berlampiran diproses oleh layanan utama, coba lagi sebentar");
+  }
+}
+
+/**
  * Approve/reject oleh HRD, admin, atau ATASAN LANGSUNG (reporting_to).
  * approved_by ber-FK ke hris.employees: diisi record karyawan approver (null
  * untuk akun tanpa karyawan). Mengembalikan link WhatsApp untuk approver.
@@ -314,6 +325,7 @@ export async function decideLeave(actor: WorkforceActor, input: z.infer<typeof l
   if (input.action === "reject" && !input.rejection_reason) {
     throw ApiError.badRequest("Rejection reason is required");
   }
+  assertFallbackCanDecide(leave.attachment_url, input.action);
 
   const isApprove = input.action === "approve";
   const status = isApprove ? "approved" : "rejected";

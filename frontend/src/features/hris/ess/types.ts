@@ -95,6 +95,9 @@ export interface EssLeaveRow {
   status: string;
   reason: string;
   rejection_reason: string | null;
+  /** EPIC-088: tahap verifikasi lampiran oleh HR (status tetap pending). */
+  attachment_review?: "awaiting" | "returned" | "verified" | null;
+  attachment_return_reason?: string | null;
 }
 
 export interface EssLeaveForm {
