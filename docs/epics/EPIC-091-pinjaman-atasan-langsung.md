@@ -89,7 +89,7 @@ Laporan user 05-11-2026: karyawan tidak bisa mengajukan pinjaman, atau pinjamann
 - 2026-11-05 — **Staging** `local-20261105-162804` (gabungan lokal EPIC-087 + EPIC-091, yang memuat #76–#78; merge `10254196` tidak di-push).
   - Backup `staging-db-before-epic091b-20261105-162803.dump`. Migrasi `20261110090000` ok, verify 10780 objek, 0 berbeda.
   - Data staging: 4 karyawan berganti penyetuju (atasan langsung berlevel Staff), 2 karyawan tanpa penyetuju (ke HR).
-  - QA 19/19 lulus (karyawan → Leader Staff → SPV → Manager; HP + desktop):
+  - QA 18/18 lulus (karyawan → Leader Staff → SPV → Manager; HP + desktop; sebelumnya keliru ditulis 19/19):
     - cuti: lonceng ke SPV, bukan Leader; Leader 403; SPV menyetujui dari Persetujuan Tim;
     - kasbon: tahap SPV lalu Manager; Manager 403 sebelum SPV;
     - lonceng Manager setelah SPV; status `manager_approved`;
@@ -121,8 +121,12 @@ Laporan user 05-11-2026: karyawan tidak bisa mengajukan pinjaman, atau pinjamann
     - lonceng SPV basi bila Manager memutus duluan;
     - tes GET detail/lampiran oleh Manager;
     - komentar "dua tahap" di halaman Persetujuan Tim.
-- 2026-11-05 — QA staging setelah R0c (`local-20261105-165917`): 2 atasan 11/11 lulus.
+- 2026-11-05 — QA staging setelah R0c (`local-20261105-165917`): 2 atasan 10/10 lulus.
   - Manager melihat dan menyetujui cuti dari Persetujuan Tim, lalu cuti hilang dari antrean SPV.
   - SPV menyetujui lembur; Leader Staff tidak punya antrean.
-  - Regresi kasbon/penyetuju 19/19 lulus. Staging: Yosianti → Alinda/Regha, Didit → Farhan/Dimas, Firdaus Eka → Asriani/Dimas.
+  - Regresi kasbon/penyetuju 18/18 lulus. Staging: Yosianti → Alinda/Regha, Didit → Farhan/Dimas, Firdaus Eka → Asriani/Dimas.
+- 2026-11-05 — **Staging final** `local-20261105-170736` (merge lokal `2d1808a1`; backup `staging-db-before-epic091d-20261105-170728.dump`).
+  - Migrasi `20261110090200` ok, verify 10783 objek, 0 berbeda.
+  - QA ulang di data bersih: kasbon/penyetuju 18/18 dan dua atasan 10/10, 0 error API dan console. Satu kali cek gagal karena timing toast di run pertama, lulus saat diulang.
+  - Data demo qa091 dan berkasnya dihapus.
 
