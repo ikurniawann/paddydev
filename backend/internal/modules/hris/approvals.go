@@ -116,6 +116,10 @@ type ApprovalRepo interface {
 	// (EPIC-088 R11); nothing without a manager, a reporting_to pointing at
 	// the employee, or a manager without a login account.
 	NotifyManager(ctx context.Context, employeeID, title, message, link string) error
+	// NotifyRequestApprovers is the in-app bell of employeeID's approver and
+	// manager (request_approver + request_manager), once per account and
+	// never the employee's own (EPIC-094 R5).
+	NotifyRequestApprovers(ctx context.Context, employeeID, kind, title, message, link string) (int, error)
 }
 
 func (s *store) NotifyManager(ctx context.Context, employeeID, title, message, link string) error {

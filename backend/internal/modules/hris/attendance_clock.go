@@ -172,6 +172,9 @@ func (s *Service) ClockIn(ctx context.Context, a *Actor, in clockInput) (row *Ro
 	f.add("clock_in_geofence", geo.status())
 	f.add("clock_in_distance_m", geo.distance())
 	row, err = s.repo.InsertAttendance(ctx, f)
+	if err == nil && row.Bool("is_late") {
+		s.notifyLate(ctx, *employeeID, date, int(row.Num("late_minutes")))
+	}
 	return row, nil, periodWriteError(err)
 }
 
