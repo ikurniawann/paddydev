@@ -74,3 +74,7 @@ Lihat rencana `docs/superpowers/plans/2026-11-06-jadwal-semua-toko.md`.
   - HR mencabut centang: tersisa 1 toko jadwal, grid PPBA → 403. Di desktop tanpa centang catatan tidak tampil.
   - 0 error konsol, 0 API ≥ 400 di luar 403 yang diharapkan.
   - Akun demo `qa093-*` dihapus (0 tersisa). 3 baris audit tetap (append-only). Bukti di `.share/qa093/`.
+- 2026-11-06: **Dua temuan minor dirapikan sebelum production** atas permintaan user (`3f22ca8e`):
+  - Centang dicabut saat toko lain terbuka: pilihan toko kini kembali ke toko wilayah, tidak lagi kosong dengan pesan 403. Tes `centang dicabut saat toko lain terbuka …` gagal di kode lama (pilihan `''`) dan lulus sesudahnya.
+  - Teks untuk pengatur bercentang: kartu Beranda "Atur jadwal kerja karyawan di semua toko, penempatan di N toko Anda" (tanpa hak penempatan: "… di semua toko"); subjudul Jadwal Toko "Atur jadwal kerja karyawan di semua toko. …".
+  - Bukti: frontend `pnpm test` 888 file / 6471 tes lulus; `tsc` + `lint` bersih.
