@@ -4,6 +4,7 @@ import { CalendarDaysIcon } from "@heroicons/react/24/outline";
 import { AttendanceCalendar } from "@/components/hris/AttendanceCalendar";
 import { EssAttendanceRequests } from "@/features/hris/attendance-requests";
 import { MyLatenessCard } from "@/features/hris/lateness";
+import { MyLettersSection } from "@/features/hris/disciplinary-letters";
 import { TherapistAttendanceDay, TherapistAttendanceLegend } from "@/features/spa/components/therapist-attendance-day";
 import { useEssMe } from "../queries";
 import { EssClockPanel } from "./ess-clock-panel";
@@ -50,8 +51,11 @@ export function EssAbsensiPage() {
         </div>
       </div>
 
-      {/* EPIC-077: jumlah terlambat per periode + tingkat teguran/SP sesuai ketentuan. */}
+      {/* EPIC-077: jumlah terlambat per periode (EPIC-094: tanpa tingkat teguran/SP). */}
       <MyLatenessCard hasSchedule={me.has_schedule} />
+
+      {/* EPIC-094: Surat Teguran/SP yang diterbitkan HR (tidak tampil bila tidak ada). */}
+      <MyLettersSection />
 
       {/* EPIC-065 (MOM AB-04/AB-06): absen terlewat + pengajuan absen manual/koreksi ke HR. */}
       <EssAttendanceRequests />

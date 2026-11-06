@@ -5,3 +5,4 @@ export * from "./queries";
 export * from "./mutations";
 export { DisciplinaryLettersPage } from "./components/disciplinary-letters-page";
 export { LettersTable } from "./components/letters-table";
+export { MyLettersSection } from "./components/my-letters-section";
