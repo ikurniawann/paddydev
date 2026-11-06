@@ -1,6 +1,7 @@
 package hris
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -42,8 +43,10 @@ func TestClockInLateNotifiesEmployeeApproversHR(t *testing.T) {
 			t.Errorf("%s bell = %q", name, got)
 		}
 	}
-	if got := h.notice(c.hr.UserID, "Crew Toko terlambat hari ini"); got != "alert|/dashboard/hris/attendance|"+msg {
-		t.Errorf("HR bell = %q", got)
+	// HR already gets the legacy "⏰ Karyawan Terlambat" bell from the attendance
+	// trigger: exactly one bell per late clock-in, never two (final review).
+	if got := h.scalar(`SELECT count(*)::text FROM public.notifications WHERE user_id = $1 AND link = '/dashboard/hris/attendance'`, c.hr.UserID); got != "1" {
+		t.Errorf("HR bells = %s, want 1", got)
 	}
 	// The coordinator (Staff) is not an approver.
 	if got := h.notice(c.koor.UserID, "Crew Toko terlambat hari ini"); got != "" {
@@ -77,5 +80,25 @@ func TestLateNoticeApproverDedup(t *testing.T) {
 	got := h.notice(c.mgr.UserID, "Admin Area terlambat hari ini")
 	if got != "alert|/dashboard/me/absensi-tim|Admin Area terlambat 20 menit hari ini (2 kali di periode ini)." {
 		t.Fatalf("Manager bells = %q, want exactly one", got)
+	}
+}
+
+// HR recording a past day's clock-in is a correction: no "hari ini" bells (R3).
+func TestHRBackfillClockInNoNotice(t *testing.T) {
+	h, _ := newFileHarness(t)
+	h.exec(`UPDATE hris.attendance_settings SET cutoff_day = 0, closing_offset_days = 3`)
+	c := h.tieredChain()
+	h.lateShift(c.crewID, "2026-10-05")
+	h.setNow("2026-10-06 10:00")
+	body := clockInBody(dataURL("image/png", pngBytes(t)), nil, "")
+	body["employee_id"], body["date"] = c.crewID, "2026-10-05"
+	in := h.do(&c.hr, "POST", "/api/hris/attendance", body)
+	expect(t, in, 200, "")
+	if d, _ := in.data()["date"].(string); !strings.HasPrefix(d, "2026-10-05") || in.data()["is_late"] != true {
+		t.Fatalf("backfill row = %s", in.raw)
+	}
+	if got := h.scalar(`SELECT count(*)::text FROM public.notifications WHERE user_id = ANY($1::uuid[]) AND title LIKE '%terlambat hari ini'`,
+		[]string{c.crew.UserID, c.spv.UserID, c.mgr.UserID}); got != "0" {
+		t.Fatalf("backfill bells = %s, want 0", got)
 	}
 }

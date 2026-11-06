@@ -1,4 +1,4 @@
-import { cleanup, screen } from "@testing-library/react";
+import { cleanup, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MyLettersSection } from "./my-letters-section";
 import { letter, renderWithClient } from "./test-setup";
@@ -27,5 +27,16 @@ describe("MyLettersSection (EPIC-094 R12)", () => {
       "/api/hris/disciplinary-letters/attachment/disciplinary-letters/e1/1-abcdef0123456789.pdf"
     );
     expect(document.getElementById("surat")).toBeTruthy();
+  });
+
+  it("tautan lonceng #surat: menggulir ke bagian ini sekali setelah data tampil", async () => {
+    api.fetchMyLetters.mockResolvedValue([letter()]);
+    const scroll = vi.fn();
+    Element.prototype.scrollIntoView = scroll;
+    window.location.hash = "#surat";
+    renderWithClient(<MyLettersSection />);
+    await screen.findByText("Surat dari HR");
+    await waitFor(() => expect(scroll).toHaveBeenCalledTimes(1));
+    window.location.hash = "";
   });
 });

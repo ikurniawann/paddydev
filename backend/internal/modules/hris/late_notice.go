@@ -6,13 +6,14 @@ import (
 	"nuhabit/backend/internal/modules/hris/domain"
 )
 
-// EPIC-094: lonceng peringatan saat clock-in terlambat, ke karyawan,
-// penyetujunya (request_approver + request_manager) dan HR. Tanpa WhatsApp.
+// EPIC-094: lonceng peringatan saat clock-in terlambat, ke karyawan dan
+// penyetujunya (request_approver + request_manager). Tanpa WhatsApp. HR sudah
+// mendapat "⏰ Karyawan Terlambat" dari trigger absensi
+// (public.fn_notify_attendance_changes), jadi tidak dikirim dua kali.
 const (
 	lateNoticeKind     = "alert"
 	lateNoticeSelfLink = "/dashboard/me/absensi#keterlambatan"
 	lateNoticeTeamLink = "/dashboard/me/absensi-tim"
-	lateNoticeHRLink   = "/dashboard/hris/attendance"
 )
 
 // NotifyRequestApprovers is the in-app bell of employeeID's approver
@@ -34,8 +35,12 @@ func (s *store) NotifyRequestApprovers(ctx context.Context, employeeID, kind, ti
 
 // notifyLate rings the bells of a late clock-in of employeeID on date (R5).
 // The count is the late days of the attendance period holding date (R6). A
-// failure is logged and never fails the clock-in (R4).
+// failure is logged and never fails the clock-in (R4). A day other than
+// today (HR recording a past day) is a correction and rings nothing (R3).
 func (s *Service) notifyLate(ctx context.Context, employeeID, date string, minutes int) {
+	if date != domain.TodayWIB(s.now()) {
+		return
+	}
 	warn := func(step string, err error) {
 		s.log.WarnContext(ctx, "lonceng terlambat gagal: "+step, "employee", employeeID, "date", date, "err", err)
 	}
@@ -61,8 +66,5 @@ func (s *Service) notifyLate(ctx context.Context, employeeID, date string, minut
 	}
 	if _, err := s.repo.NotifyRequestApprovers(ctx, employeeID, lateNoticeKind, teamTitle, teamMsg, lateNoticeTeamLink); err != nil {
 		warn("penyetuju", err)
-	}
-	if err := s.repo.NotifyHR(ctx, lateNoticeKind, teamTitle, teamMsg, lateNoticeHRLink); err != nil {
-		warn("HR", err)
 	}
 }

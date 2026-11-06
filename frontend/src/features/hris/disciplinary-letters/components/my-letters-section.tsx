@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { FileWarning, Paperclip } from "lucide-react";
 import { formatLetterDate, letterAttachmentUrl } from "../api";
 import { useMyLetters } from "../queries";
@@ -11,9 +12,19 @@ import { useMyLetters } from "../queries";
  */
 export function MyLettersSection() {
   const letters = useMyLetters().data ?? [];
-  if (letters.length === 0) return null;
+  const ref = useRef<HTMLElement>(null);
+  const scrolled = useRef(false);
+  // Tautan lonceng "#surat": lompat sekali setelah data pertama tampil
+  // (lompatan hash bawaan browser terjadi sebelum bagian ini ada).
+  const shown = letters.length > 0;
+  useEffect(() => {
+    if (!shown || scrolled.current) return;
+    scrolled.current = true;
+    if (window.location.hash === "#surat") ref.current?.scrollIntoView({ block: "start" });
+  }, [shown]);
+  if (!shown) return null;
   return (
-    <section id="surat" className="scroll-mt-24 space-y-3 rounded-2xl border border-gray-200/70 bg-white p-4 shadow-sm sm:p-5">
+    <section ref={ref} id="surat" className="scroll-mt-24 space-y-3 rounded-2xl border border-gray-200/70 bg-white p-4 shadow-sm sm:p-5">
       <h2 className="flex items-center gap-2 text-base font-semibold text-gray-900">
         <FileWarning className="h-5 w-5 text-amber-600" />
         Surat dari HR
