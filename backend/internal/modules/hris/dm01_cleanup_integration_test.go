@@ -117,11 +117,11 @@ func TestDM01Cleanup(t *testing.T) {
 			VALUES ($1, $2::date, $2::date + time '08:00', 'present', NULLIF($3, ''), NULLIF($4, '')) RETURNING id::text`,
 			e, date, in, out)
 	}
-	att0915 := att("2026-08-15", "attendance/"+f("0915-in.jpg"), "")
-	att1020 := att("2026-09-30", "attendance/"+f("1020-in.jpg"), "attendance/"+f("1020-out.jpg"))
-	att1021 := att("2026-10-01", "attendance/"+f("1021-in.jpg"), "")
+	att0915 := att("2026-09-15", "attendance/"+f("0915-in.jpg"), "")
+	att1020 := att("2026-10-20", "attendance/"+f("1020-in.jpg"), "attendance/"+f("1020-out.jpg"))
+	att1021 := att("2026-10-21", "attendance/"+f("1021-in.jpg"), "")
 	h.exec(`INSERT INTO hris.attendance_periods (period_year, period_month, start_date, end_date, closing_date, status, closed_at)
-		VALUES (2026, 8, '2026-08-01', '2026-08-31', '2026-09-03', 'closed', now())`)
+		VALUES (2026, 9, '2026-09-01', '2026-09-30', '2026-10-03', 'closed', now())`)
 	// The guard is live: a plain delete in the closed period is refused.
 	h.exec("SAVEPOINT dm01_guard")
 	if _, err := h.tx.Exec(context.Background(), `DELETE FROM hris.attendance WHERE id = $1`, att0915); err == nil ||
@@ -135,24 +135,24 @@ func TestDM01Cleanup(t *testing.T) {
 			VALUES ($1, $2, 'correction', '08:00', 'Koreksi jam masuk', $3, NULLIF($4, '')) RETURNING id::text`,
 			e, date, attendanceID, file)
 	}
-	request("2026-09-29", att1021, "attendance-requests/"+f("1019.jpg"))
-	req1022 := request("2026-10-02", att1020, "")
+	request("2026-10-19", att1021, "attendance-requests/"+f("1019.jpg"))
+	req1022 := request("2026-10-22", att1020, "")
 
 	leave := func(start, end, status, file string) string {
 		return h.scalar(`INSERT INTO hris.leaves (employee_id, leave_type, start_date, end_date, total_days, reason, status, attachment_url)
 			VALUES ($1, 'annual', $2, $3, 1, 'Cuti uji DM-01', $4, NULLIF($5, '')) RETURNING id::text`, e, start, end, status, file)
 	}
-	leave("2026-09-01", "2026-09-03", "approved", "leave-attachments/"+f("1001.jpg"))
-	lv1822 := leave("2026-09-28", "2026-10-02", "approved", "")
-	lv1025 := leave("2026-10-05", "2026-10-05", "pending", "")
+	leave("2026-10-01", "2026-10-03", "approved", "leave-attachments/"+f("1001.jpg"))
+	lv1822 := leave("2026-10-18", "2026-10-22", "approved", "")
+	lv1025 := leave("2026-10-25", "2026-10-25", "pending", "")
 
 	overtime := func(date string, files ...string) string {
 		return h.scalar(`INSERT INTO hris.overtime_requests (employee_id, date, start_time, end_time, hours, reason, attachments)
 			VALUES ($1, $2, '18:00', '20:00', 2, 'Lembur uji', $3) RETURNING id::text`, e, date, files)
 	}
 	shared := "overtime-attachments/" + f("shared.pdf")
-	overtime("2026-09-30", "overtime-attachments/"+f("1020.pdf"), shared)
-	ot1021 := overtime("2026-10-01", shared)
+	overtime("2026-10-20", "overtime-attachments/"+f("1020.pdf"), shared)
+	ot1021 := overtime("2026-10-21", shared)
 
 	loan := func(requested, status string, remaining *int, files, collateral []string) string {
 		return h.scalar(`INSERT INTO hris.loans (employee_id, loan_type, principal_amount, tenor_months, monthly_installment,
@@ -162,12 +162,13 @@ func TestDM01Cleanup(t *testing.T) {
 	}
 	zero, half := 0, 500000
 	none := []string{}
-	loan("2026-09-01 09:00+07", "approved", &zero, []string{"loan-attachments/" + f("paid.pdf")},
+	// R2' (keputusan user 06-11-2026): pinjaman/kasbon tidak dibersihkan sama sekali.
+	lnPaid := loan("2026-10-01 09:00+07", "approved", &zero, []string{"loan-attachments/" + f("paid.pdf")},
 		[]string{"loan-attachments/" + f("paid-col.pdf")})
-	lnRunning := loan("2026-09-01 09:00+07", "approved", &half, []string{"loan-attachments/" + f("running.pdf")}, none)
-	loan("2026-09-01 09:00+07", "pending", &half, none, none)
-	loan("2026-09-01 09:00+07", "rejected", &half, none, none)
-	lnLate := loan("2026-10-05 09:00+07", "approved", &half, none, none)
+	lnRunning := loan("2026-10-01 09:00+07", "approved", &half, []string{"loan-attachments/" + f("running.pdf")}, none)
+	lnPending := loan("2026-10-01 09:00+07", "pending", &half, none, none)
+	lnRejected := loan("2026-10-01 09:00+07", "rejected", &half, none, none)
+	lnLate := loan("2026-10-25 09:00+07", "approved", &half, none, none)
 
 	checksum := h.scalar(dm01Checksum)
 	balance := h.scalar(`SELECT concat_ws('/', annual_leave_total, annual_leave_used, sick_leave_used, updated_at)
@@ -180,27 +181,27 @@ func TestDM01Cleanup(t *testing.T) {
 
 	preview := h.dm01Preview()
 	want := map[string]string{"attendance_requests": "1", "attendance": "2", "leaves": "1",
-		"overtime_requests": "1", "business_trips": "0", "loans": "3"}
+		"overtime_requests": "1", "business_trips": "0", "loans": "0"}
 	for _, table := range dm01Tables {
 		if got := dm01Count(preview, "HAPUS", table); got != want[table] {
 			t.Errorf("preview HAPUS %s = %q, want %s\n%s", table, got, want[table], strings.Join(preview, "\n"))
 		}
 	}
 	wantKept := map[string]string{"attendance_requests": "1", "attendance": "1", "leaves": "2",
-		"overtime_requests": "1", "business_trips": "0", "loans": "2"}
+		"overtime_requests": "1", "business_trips": "0", "loans": "5"}
 	for _, table := range dm01Tables {
 		if got := dm01Count(preview, "TETAP", table); got != wantKept[table] {
 			t.Errorf("preview TETAP %s = %q, want %s", table, got, wantKept[table])
 		}
 	}
-	if got := dm01Count(preview, "STATUS", "loans\thapus\tapproved"); got != "1" {
-		t.Errorf("preview STATUS loans hapus approved = %q, want 1", got)
+	if got := dm01Count(preview, "STATUS", "loans\thapus\tapproved"); got != "" {
+		t.Errorf("preview STATUS loans hapus approved = %q, want none", got)
 	}
 	if got := dm01Count(preview, "PENGECUALIAN", "leaves\tmelintasi 21 Okt"); got != "1" {
 		t.Errorf("preview PENGECUALIAN leaves = %q, want 1", got)
 	}
-	if got := dm01Count(preview, "PENGECUALIAN", "loans\tberjalan (approved, sisa > 0)"); got != "1" {
-		t.Errorf("preview PENGECUALIAN loans = %q, want 1", got)
+	if got := dm01Count(preview, "PENGECUALIAN", "loans\tpinjaman tidak dibersihkan (keputusan user 06-11)"); got != "4" {
+		t.Errorf("preview PENGECUALIAN loans = %q, want 4 (requested ≤ 20 Okt)", got)
 	}
 	if got := dm01Count(preview, "CHECKSUM", "leave_balances"); got != strings.Replace(checksum, ":", "\t", 1) {
 		t.Errorf("preview CHECKSUM = %q, want %q", got, checksum)
@@ -210,7 +211,6 @@ func TestDM01Cleanup(t *testing.T) {
 		"attendance-requests/" + f("1019.jpg"),
 		"attendance/" + f("0915-in.jpg"), "attendance/" + f("1020-in.jpg"), "attendance/" + f("1020-out.jpg"),
 		"leave-attachments/" + f("1001.jpg"),
-		"loan-attachments/" + f("paid-col.pdf"), "loan-attachments/" + f("paid.pdf"),
 		"overtime-attachments/" + f("1020.pdf"),
 	}
 	slices.Sort(files)
@@ -225,8 +225,8 @@ func TestDM01Cleanup(t *testing.T) {
 	h.dm01Core()
 
 	dates := h.scalar(`SELECT string_agg(date::text, ',' ORDER BY date) FROM hris.attendance WHERE employee_id = $1`, e)
-	if dates != "2026-10-01" {
-		t.Errorf("attendance left = %s, want 2026-10-01", dates)
+	if dates != "2026-10-21" {
+		t.Errorf("attendance left = %s, want 2026-10-21", dates)
 	}
 	if got := h.scalar(`SELECT string_agg(id::text || '/' || COALESCE(attendance_id::text, 'null'), ',')
 		FROM hris.attendance_requests WHERE employee_id = $1`, e); got != req1022+"/null" {
@@ -244,8 +244,8 @@ func TestDM01Cleanup(t *testing.T) {
 	if got := ids("overtime_requests"); !slices.Equal(got, sorted(ot1021)) {
 		t.Errorf("overtime left = %v, want 21 Oct", got)
 	}
-	if got := ids("loans"); !slices.Equal(got, sorted(lnRunning, lnLate)) {
-		t.Errorf("loans left = %v, want running and 25 Oct", got)
+	if got := ids("loans"); !slices.Equal(got, sorted(lnPaid, lnRunning, lnPending, lnRejected, lnLate)) {
+		t.Errorf("loans left = %v, want all five (R2')", got)
 	}
 	if got := h.scalar(dm01Checksum); got != checksum {
 		t.Errorf("leave_balances checksum %s, want %s", got, checksum)
@@ -276,17 +276,17 @@ func TestDM01Cleanup(t *testing.T) {
 	// The closed-period guard is back for the rest of the transaction.
 	h.exec("SAVEPOINT dm01_guard_after")
 	if _, err := h.tx.Exec(context.Background(), `INSERT INTO hris.attendance (employee_id, date, status)
-		VALUES ($1, '2026-08-16', 'present')`, e); err == nil {
+		VALUES ($1, '2026-09-16', 'present')`, e); err == nil {
 		t.Errorf("closed-period insert after the cleanup succeeded, want the guard error")
 	}
 	h.exec("ROLLBACK TO SAVEPOINT dm01_guard_after")
 	// The attendance trigger fires again, on its own condition only.
 	h.exec(`INSERT INTO hris.attendance (employee_id, date, clock_in, status, is_late, late_minutes)
-		VALUES ($1, '2026-10-03', '2026-10-03 08:30+07', 'late', true, 30)`, e)
+		VALUES ($1, '2026-10-23', '2026-10-23 08:30+07', 'late', true, 30)`, e)
 	if got := hrNotifications(); got != plusOne(t, hrBefore) {
 		t.Errorf("HR notifications after a late clock-in = %s, want %s + 1", got, hrBefore)
 	}
-	h.exec(`INSERT INTO hris.attendance (employee_id, date, clock_in, status) VALUES ($1, '2026-10-04', '2026-10-04 07:55+07', 'present')`, e)
+	h.exec(`INSERT INTO hris.attendance (employee_id, date, clock_in, status) VALUES ($1, '2026-10-24', '2026-10-24 07:55+07', 'present')`, e)
 	if got := hrNotifications(); got != plusOne(t, hrBefore) {
 		t.Errorf("HR notifications after an on-time clock-in = %s, want %s + 1", got, hrBefore)
 	}
@@ -323,38 +323,48 @@ func TestDM01CleanupEdges(t *testing.T) {
 			VALUES ($1, 'kasbon', 1000000, 2, 500000, $2, $3, $4::timestamptz, $5) RETURNING id::text`,
 			e, remaining, status, requested, active)
 	}
+	// R2' (keputusan user 06-11-2026): tidak ada pinjaman yang dihapus, apa pun statusnya.
 	zero, half := 0, 500000
-	loan("2026-09-05 09:00+07", "paid_off", &zero, false)        // lunas lewat payroll → hapus
-	loan("2026-09-05 09:00+07", "approved", nil, true)           // approved tanpa sisa → hapus
-	loan("2026-09-05 09:00+07", "cancelled", &half, false)       // → hapus
-	loan("2026-09-30 23:59+07", "pending", &half, true)          // 30 Sep WIB → hapus
-	loan("2026-09-05 09:00+07", "manager_approved", &half, true) // menunggu HR = pending → hapus
-	keptInactive := loan("2026-09-05 09:00+07", "approved", &half, false)
-	keptWIB := loan("2026-10-01 01:00+07", "pending", &half, true) // 30 Sep 18:00 UTC, 1 Okt WIB
-	keptNoDate := loan("2026-09-05 09:00+07", "pending", &half, true)
+	var keptLoans []string
+	for _, l := range []struct {
+		requested, status string
+		remaining         *int
+		active            bool
+	}{
+		{"2026-10-05 09:00+07", "paid_off", &zero, false},
+		{"2026-10-05 09:00+07", "approved", nil, true},
+		{"2026-10-05 09:00+07", "cancelled", &half, false},
+		{"2026-10-20 23:59+07", "pending", &half, true}, // 20 Okt WIB
+		{"2026-10-05 09:00+07", "manager_approved", &half, true},
+		{"2026-10-05 09:00+07", "approved", &half, false},
+		{"2026-10-21 01:00+07", "pending", &half, true}, // 20 Okt 18:00 UTC, 21 Okt WIB
+	} {
+		keptLoans = append(keptLoans, loan(l.requested, l.status, l.remaining, l.active))
+	}
+	keptNoDate := loan("2026-10-05 09:00+07", "pending", &half, true)
 	h.exec(`UPDATE hris.loans SET requested_date = NULL WHERE id = $1`, keptNoDate)
+	keptLoans = append(keptLoans, keptNoDate)
 
 	trip := func(start, end string) string {
 		return h.scalar(`INSERT INTO hris.business_trips (employee_id, start_date, end_date, destination, purpose, status)
 			VALUES ($1, $2, $3, 'Bandung', 'Audit toko', 'approved') RETURNING id::text`, e, start, end)
 	}
-	trip("2026-09-05", "2026-09-06")
-	keptTrip := trip("2026-09-29", "2026-10-02")
+	trip("2026-10-05", "2026-10-06")
+	keptTrip := trip("2026-10-19", "2026-10-22")
 	h.exec(`INSERT INTO hris.leaves (employee_id, leave_type, start_date, end_date, total_days, reason, status)
-		VALUES ($1, 'sick', '2026-09-30', '2026-09-30', 1, 'Sakit uji DM-01', 'rejected')`, e)
+		VALUES ($1, 'sick', '2026-10-20', '2026-10-20', 1, 'Sakit uji DM-01', 'rejected')`, e)
 
 	preview := h.dm01Preview()
 	want := map[string]string{"attendance_requests": "0", "attendance": "0", "leaves": "1",
-		"overtime_requests": "0", "business_trips": "1", "loans": "5"}
+		"overtime_requests": "0", "business_trips": "1", "loans": "0"}
 	for _, table := range dm01Tables {
 		if got := dm01Count(preview, "HAPUS", table); got != want[table] {
 			t.Errorf("preview HAPUS %s = %q, want %s\n%s", table, got, want[table], strings.Join(preview, "\n"))
 		}
 	}
 	for key, n := range map[string]string{
-		"loans\tberjalan (approved, sisa > 0)": "1",
-		"loans\ttanpa requested_date":          "1",
-		"business_trips\tmelintasi 21 Okt":     "1",
+		"loans\tpinjaman tidak dibersihkan (keputusan user 06-11)": "6", // requested ≤ 20 Okt WIB
+		"business_trips\tmelintasi 21 Okt":                         "1",
 	} {
 		if got := dm01Count(preview, "PENGECUALIAN", key); got != n {
 			t.Errorf("preview PENGECUALIAN %s = %q, want %s", key, got, n)
@@ -365,7 +375,7 @@ func TestDM01CleanupEdges(t *testing.T) {
 
 	got := strings.Split(h.scalar(`SELECT string_agg(id::text, ',') FROM hris.loans WHERE employee_id = $1`, e), ",")
 	slices.Sort(got)
-	wantLoans := []string{keptInactive, keptWIB, keptNoDate}
+	wantLoans := slices.Clone(keptLoans)
 	slices.Sort(wantLoans)
 	if !slices.Equal(got, wantLoans) {
 		t.Errorf("loans left = %v, want %v", got, wantLoans)
@@ -420,7 +430,7 @@ func TestDM01CoreNeedsTransaction(t *testing.T) {
 func TestDM01CoreRefusesChangedTriggers(t *testing.T) {
 	h := newHarness(t)
 	e := h.employee(emp{name: "DM01 Trigger"})
-	h.exec(`INSERT INTO hris.attendance (employee_id, date, status) VALUES ($1, '2026-09-10', 'present')`, e)
+	h.exec(`INSERT INTO hris.attendance (employee_id, date, status) VALUES ($1, '2026-10-10', 'present')`, e)
 	h.exec(`ALTER TABLE hris.leaves DISABLE TRIGGER trg_notify_leave_changes`)
 
 	h.exec("SAVEPOINT dm01_triggers")
@@ -452,11 +462,11 @@ func TestDM01PreviewFileSafety(t *testing.T) {
 	foreignFolder := "employee-documents/" + other + "/ktp.pdf"
 	foreignOwner := "leave-attachments/" + other + "/1002.jpg"
 	own := "leave-attachments/" + e + "/1003.jpg"
-	leave("2026-09-01", foreignFolder)
-	leave("2026-09-02", foreignOwner)
-	leave("2026-09-03", own)
-	leave("2026-09-04", "/srv/storage/private/leave-attachments/"+e+"/abs.jpg")
-	leave("2026-09-05", "leave-attachments/"+e+"/../"+other+"/x.jpg")
+	leave("2026-10-01", foreignFolder)
+	leave("2026-10-02", foreignOwner)
+	leave("2026-10-03", own)
+	leave("2026-10-04", "/srv/storage/private/leave-attachments/"+e+"/abs.jpg")
+	leave("2026-10-05", "leave-attachments/"+e+"/../"+other+"/x.jpg")
 
 	preview := h.dm01Preview()
 	if got := dm01Lines(preview, "FILE"); !slices.Equal(got, []string{own}) {
@@ -488,8 +498,8 @@ func TestDM01SameCutoff(t *testing.T) {
 			}
 			found = append(found, date.FindAllString(line, -1)...)
 		}
-		if !slices.Equal(found, []string{"'2026-09-30'"}) {
-			t.Errorf("%s date literals = %v, want exactly one '2026-09-30'", name, found)
+		if !slices.Equal(found, []string{"'2026-10-20'"}) {
+			t.Errorf("%s date literals = %v, want exactly one '2026-10-20'", name, found)
 		}
 	}
 }
@@ -501,9 +511,9 @@ func TestDM01SameCutoff(t *testing.T) {
 func TestDM01CoreChecksExpectations(t *testing.T) {
 	h := newHarness(t)
 	e := h.employee(emp{name: "DM01 Angka"})
-	h.exec(`INSERT INTO hris.attendance (employee_id, date, status) VALUES ($1, '2026-09-10', 'present')`, e)
+	h.exec(`INSERT INTO hris.attendance (employee_id, date, status) VALUES ($1, '2026-10-10', 'present')`, e)
 	h.exec(`INSERT INTO hris.leaves (employee_id, leave_type, start_date, end_date, total_days, reason, status)
-		VALUES ($1, 'annual', '2026-09-12', '2026-09-12', 1, 'Cuti uji angka', 'approved')`, e)
+		VALUES ($1, 'annual', '2026-10-12', '2026-10-12', 1, 'Cuti uji angka', 'approved')`, e)
 	core := dm01Script(t, "2026-11-03_dm01_cleanup_core.sql")
 	left := func() string {
 		return h.scalar(`SELECT (SELECT count(*) FROM hris.attendance WHERE employee_id = $1)::text || '/' ||

@@ -165,3 +165,29 @@ FK `attendance_requests.attendance_id` → `attendance` (SET NULL).
     - `/login` dan `/api/ready` 200, 0 error API.
   - Pemulihan bila perlu: `DM01_RESTORE_APPROVED=yes bash ~/dm01-src/tools/ops/dm01-cleanup.sh restore ~/backups/dm01-20261103-143956-eksekusi` (runbook §9).
 
+- 2026-11-06: **Eksekusi kedua direncanakan** (permintaan user: "clean data absensi, pinjaman, pengajuan lainnya untuk tanggal 20 oktober ke bawah karena sudah konfirmasi HR kalo dihitung payroll dari tanggal 21 Oktober", lalu diralat: "jangan semua tapi semua pengajuan dan absensi saja").
+  - **Keputusan user:**
+    - batas ≤ 20 Okt;
+    - pinjaman tidak disentuh;
+    - cuti yang melintasi 21 Okt (sakit 19–23 Okt) tetap utuh;
+    - saldo cuti tetap;
+    - ringkasan closing periode Oktober dinolkan seperti Jan–Sep;
+    - eksekusi malam ini 23.30 WIB dengan konfirmasi akhir.
+  - **Pratinjau production read-only 06-11 15.3x WIB.** Akan dihapus:
+    - 3.229 absensi;
+    - 13 pengajuan absensi (semua pending);
+    - 94 cuti/izin (79 approved, 12 pending, 3 rejected);
+    - 236 lembur (191 approved, 35 pending, 2 cancelled, 8 rejected);
+    - 0 perjalanan dinas;
+    - 34 berkas.
+  - **Kondisi payroll dan periode.** Periode absensi Oktober = 1–20 Okt (tertutup); November = 21 Okt–21 Nov (terbuka). Run payroll draft November mulai 21 Okt, jadi gerbang DRAFT lolos. PAYROLL_BELUM periode Oktober di-ACK atas konfirmasi HR.
+  - **Kode** (branch `fix/dm01-cleanup-20-okt`):
+    - runner, SQL, dan tes dikembalikan ke versi 20 Okt yang teruji (`57aa4cf4`, membatalkan perubahan batas di `ec7c4f95`);
+    - pinjaman dikeluarkan dari core dan pratinjau (R2');
+    - script baru `2026-11-06_dm01_periode_oktober.sql`.
+    - Tes Go DM-01 dan tes runner (96 cek) lulus.
+  - **Gladi di salinan production pada VPS 06-11 15.49 WIB** (runbook §4, kode branch di `~/dm01b-src`): preview, lalu execute (`DM01_PAYROLL_ACK=yes`), lalu `2026-11-06_dm01_periode_oktober.sql`, lalu files, lalu restore. Semua rc=0.
+    - Durasi: execute 19 dtk (termasuk backup dan uji restore), core 208 ms (perkiraan lama kunci tulis).
+    - Sesudah execute: sisa ≤ 20 Okt 0/0/0/0 (absensi, cuti, lembur, pengajuan absensi), pinjaman 22 utuh, `close_summary` Oktober semua 0.
+    - Uji restore: 3.229 / 94 / 236 / 13 kembali persis.
+    - Container, volume, dump, dan folder gladi dibersihkan.

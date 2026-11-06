@@ -1,4 +1,8 @@
-# Runbook DM-01 — cleanup data HRIS ≤ 30 September 2026 (EPIC-083)
+# Runbook DM-01 — cleanup data HRIS (EPIC-083)
+
+> **Eksekusi kedua 06-11-2026 (keputusan user):** batas kembali ke **≤ 20 Oktober 2026**, karena HR mengonfirmasi payroll dihitung mulai 21 Oktober. Cakupannya **hanya absensi dan pengajuan** (pengajuan absensi, cuti/izin, lembur, perjalanan dinas). **Pinjaman/kasbon tidak dihapus** (`HAPUS loans` selalu 0, dan yang bertanggal ≤ 20 Okt muncul di PENGECUALIAN "pinjaman tidak dibersihkan"). Saldo cuti tetap. Sesudah execute, jalankan `backend/database/sql/fixes/2026-11-06_dm01_periode_oktober.sql` (`psql -1`) untuk menolkan ringkasan closing periode Oktober (1–20 Okt). Gerbang PAYROLL_BELUM untuk periode 1–20 Okt di-ACK (`DM01_PAYROLL_ACK=yes`) atas konfirmasi HR bahwa payroll mulai 21 Okt.
+>
+> **Pemulihan eksekusi 03-11 (≤ 30 Sep) dengan runner ini:** predikat restore kini ≤ 20 Okt, jadi restore folder `dm01-20261103-143956-eksekusi` juga mengembalikan baris 1–20 Okt dari dump 03-11. Untuk mengembalikan hanya ≤ 30 Sep, pakai runner dari commit `ec7c4f95`.
 
 > **Perubahan 03-11-2026 (keputusan user):** batas dimundurkan dari ≤ 30 Sepober ke **≤ 30 September 2026**. Data mulai 1 Oktober tidak disentuh. Pinjaman pending ≤ 30 Sep ikut dihapus ("oke delete aja"). Contoh keluaran di bawah masih memakai angka gladi 20 Okt.
 
