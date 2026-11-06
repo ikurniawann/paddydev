@@ -11,10 +11,12 @@ import {
   CalendarDaysIcon,
   ClockIcon,
   DocumentTextIcon,
+  ExclamationTriangleIcon,
   UserCircleIcon,
 } from "@heroicons/react/24/outline";
 import { Button } from "@/components/ui/button";
 import { EmployeePlacementsTab } from "@/features/hris/placements";
+import { LettersTable } from "@/features/hris/disciplinary-letters";
 import { useIamAccess } from "@/components/iam/iam-access-provider";
 import { IAM } from "@/lib/iam/prefixes";
 import { EMPLOYEES_ROUTES } from "../constants";
@@ -47,6 +49,7 @@ const TABS = [
   { key: "documents", label: "Dokumen", icon: DocumentTextIcon },
   { key: "attendance", label: "Attendance", icon: ClockIcon },
   { key: "leave", label: "Leave Balance", icon: CalendarDaysIcon },
+  { key: "letters", label: "Surat Peringatan", icon: ExclamationTriangleIcon },
 ] as const;
 
 type Tab = (typeof TABS)[number]["key"];
@@ -69,7 +72,11 @@ export function UserDetailPage({ params }: { params: Promise<{ id: string }> }) 
   const [scheduleTypeOpen, setScheduleTypeOpen] = useState(false);
   const [resignOpen, setResignOpen] = useState(false);
   const [rehireOpen, setRehireOpen] = useState(false);
-  const isHR = useIamAccess().hasPrefix(IAM.hrisKepegawaian);
+  const access = useIamAccess();
+  const isHR = access.hasPrefix(IAM.hrisKepegawaian);
+  // EPIC-094: tab Surat Peringatan hanya untuk pemegang menunya; aksi tetap dijaga server.
+  const lettersHR = access.hasPrefix(IAM.hrisDisciplinaryLetters);
+  const tabs = TABS.filter((t) => t.key !== "letters" || lettersHR);
 
   const { data: employee, isLoading, refetch: refetchEmployee } = useHRISEmployeeDetail(id);
 
@@ -103,6 +110,11 @@ export function UserDetailPage({ params }: { params: Promise<{ id: string }> }) 
     documents: <EmployeeDocumentsTab employeeId={id} />,
     attendance: <EmployeeAttendanceTab employeeId={id} />,
     leave: <LeaveBalanceTab employeeId={id} />,
+    letters: lettersHR ? (
+      <LettersTable employeeId={id} employeeName={employee.full_name} canIssue canRevoke />
+    ) : (
+      <p className="py-10 text-center text-sm text-gray-400">Khusus HR.</p>
+    ),
   };
 
   return (
@@ -166,7 +178,7 @@ export function UserDetailPage({ params }: { params: Promise<{ id: string }> }) 
 
       <div className="border-b border-gray-200">
         <div className="flex gap-1 overflow-x-auto">
-          {TABS.map((tab) => (
+          {tabs.map((tab) => (
             <button
               key={tab.key}
               onClick={() => setActiveTab(tab.key)}

@@ -94,6 +94,7 @@ deploying-dev · ready-for-qa · blocked · done).
 | [EPIC-090](./EPIC-090-riwayat-persetujuan-tim.md) | Riwayat Persetujuan Tim untuk Atasan (`MODULE-HRIS`) | review | 2026-11-05 |
 | [EPIC-091](./EPIC-091-pinjaman-atasan-langsung.md) | Penyetuju Minimal SPV untuk Semua Pengajuan + Kasbon/Pinjaman Tiga Tahap (`MODULE-HRIS`, `MODULE-PAYROLL`) | review | 2026-11-05 |
 | [EPIC-092](./EPIC-092-approval-berjenjang.md) | Approval Berjenjang SPV → Manager + HR Mewakili Atasan (`MODULE-HRIS`, `MODULE-PAYROLL`) | review | 2026-11-05 |
+| [EPIC-094](./EPIC-094-disiplin-keterlambatan.md) | Keterlambatan Tanpa Potongan + Peringatan Lonceng + Surat Teguran/SP oleh HR (`MODULE-HRIS`, `MODULE-PAYROLL`) | review | 2026-11-06 |
 
 Aturan:
 - Epic + registry ini adalah sumber kebenaran status pekerjaan (canonical).

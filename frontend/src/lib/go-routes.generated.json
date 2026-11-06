@@ -1967,6 +1967,36 @@
   {
     "module": "hris",
     "method": "GET",
+    "path": "/api/hris/disciplinary-letters"
+  },
+  {
+    "module": "hris",
+    "method": "POST",
+    "path": "/api/hris/disciplinary-letters"
+  },
+  {
+    "module": "hris",
+    "method": "GET",
+    "path": "/api/hris/disciplinary-letters/attachment/{path...}"
+  },
+  {
+    "module": "hris",
+    "method": "POST",
+    "path": "/api/hris/disciplinary-letters/attachments"
+  },
+  {
+    "module": "hris",
+    "method": "GET",
+    "path": "/api/hris/disciplinary-letters/lateness"
+  },
+  {
+    "module": "hris",
+    "method": "POST",
+    "path": "/api/hris/disciplinary-letters/{id}/revoke"
+  },
+  {
+    "module": "hris",
+    "method": "GET",
     "path": "/api/hris/employee-placements"
   },
   {
@@ -2498,6 +2528,11 @@
     "module": "hris",
     "method": "GET",
     "path": "/api/hris/me/beranda"
+  },
+  {
+    "module": "hris",
+    "method": "GET",
+    "path": "/api/hris/me/disciplinary-letters"
   },
   {
     "module": "hris",

@@ -87,6 +87,9 @@ export function formatLateMinutes(minutes: number): string {
 
 export const LATENESS_DISCLAIMER = "Informasi pengingat. Surat peringatan resmi diterbitkan oleh HR.";
 
+/** Pengingat ESS karyawan pengganti tingkat teguran/SP (EPIC-094 R2). */
+export const LATENESS_REMINDER = "Hati-hati, keterlambatan yang berlanjut dapat berujung teguran dari HR.";
+
 /** Ketentuan perusahaan 02-11-2026, apa adanya. */
 export const LATENESS_POLICY = {
   title: "KETERLAMBATAN DAN ABSENSI",
