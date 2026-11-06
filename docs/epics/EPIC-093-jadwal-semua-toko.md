@@ -39,10 +39,10 @@ Keputusan user (06-11):
 Lihat rencana `docs/superpowers/plans/2026-11-06-jadwal-semua-toko.md`.
 
 ## Acceptance Criteria
-- [ ] HR mencentang "Boleh atur jadwal semua toko" pada seorang pengatur. Kolom "Jadwal semua toko" menampilkan Ya, dan audit memuat nilainya.
-- [ ] Pengatur bercentang membuka Jadwal Toko di HP. Daftar toko memuat toko lain, dan tokonya sendiri terpilih otomatis.
-- [ ] Pengatur bercentang mengubah jadwal di toko lain. Jadwal langsung tersimpan tanpa persetujuan, dan tercatat di audit.
-- [ ] Penempatan dan checkout otomatis tetap hanya toko wilayah. API penempatan untuk toko lain → 403.
+- [x] HR mencentang "Boleh atur jadwal semua toko" pada seorang pengatur. Kolom "Jadwal semua toko" menampilkan Ya, dan audit memuat nilainya.
+- [x] Pengatur bercentang membuka Jadwal Toko di HP. Daftar toko memuat toko lain, dan tokonya sendiri terpilih otomatis.
+- [x] Pengatur bercentang mengubah jadwal di toko lain. Jadwal langsung tersimpan tanpa persetujuan, dan tercatat di audit.
+- [x] Penempatan dan checkout otomatis tetap hanya toko wilayah. API penempatan untuk toko lain → 403.
 - [x] Pengatur tanpa centang berperilaku persis seperti EPIC-071 (tes lama hijau).
 - [ ] `go test`, `pnpm test`, `pnpm lint`, dan `tsc` hijau; CI hijau; QA staging lulus.
 
@@ -61,3 +61,16 @@ Lihat rencana `docs/superpowers/plans/2026-11-06-jadwal-semua-toko.md`.
   - teks Beranda "di 1 toko Anda" tidak menyebut akses jadwal semua toko;
   - doc comment `withScheduleScope` belum menyebut `AllowsScheduleBranch`;
   - satu query cabang aktif tambahan per permintaan pengatur bercentang (45 baris).
+- 2026-11-06: **PR #81** dibuka (base `main`).
+- 2026-11-06 13:18: **Deploy staging**.
+  - Backup `~/Desktop/paddydev-backups/staging-db-before-epic093-20261106-131816.dump`.
+  - Merge ke tumpukan staging `00fb08ce` (EPIC-087..092) menjadi `44cb8747`. Konflik baris registry README diselesaikan dengan mempertahankan keduanya.
+  - Image `local-20261106-131841`, 1 migrasi diterapkan, verify 0 berbeda, container healthy.
+- 2026-11-06: **QA staging 18/18 lulus** (Playwright, HR desktop + koordinator HP 360 px). Skenario yang diuji:
+  - HR mencentang lewat dialog Ubah: kolom "Ya", DB true, audit after true.
+  - Koordinator HP: catatan biru tampil dan PPAY langsung terpilih. Ke-52 toko aktif staging ada di daftar jadwal, wilayahnya tetap 1. Grid PPBA memuat karyawan PPBA.
+  - Simpan kotak PPBA 200/200: jadwal langsung tersimpan dan tampil di grid HR.
+  - Penempatan dan cari penempatan PPBA → 403. Checkout otomatis hanya PPAY.
+  - HR mencabut centang: tersisa 1 toko jadwal, grid PPBA → 403. Di desktop tanpa centang catatan tidak tampil.
+  - 0 error konsol, 0 API ≥ 400 di luar 403 yang diharapkan.
+  - Akun demo `qa093-*` dihapus (0 tersisa). 3 baris audit tetap (append-only). Bukti di `.share/qa093/`.
