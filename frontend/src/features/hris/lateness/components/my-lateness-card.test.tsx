@@ -40,19 +40,18 @@ afterEach(() => {
 });
 
 describe("MyLatenessCard (EPIC-077 R8)", () => {
-  it("3 kali terlambat: badge SP 1, petunjuk tingkat berikutnya, hari terlambat, catatan HR", () => {
+  it("3 kali terlambat: jumlah, hari, dan pengingat tanpa label Teguran/SP (EPIC-094)", () => {
     hook.data = myLateness("sp1", [lateDay("2026-10-02"), lateDay("2026-10-05", 20), lateDay("2026-10-09", 45)], {
       code: "sp2", label: "Surat Peringatan 2", at: 5, remaining: 2,
     });
     render(<MyLatenessCard />);
     expect(screen.getByText("3")).toBeTruthy();
     expect(screen.getByText("kali terlambat")).toBeTruthy();
-    expect(screen.getByText("Surat Peringatan 1")).toBeTruthy();
-    expect(screen.getByText("2 kali terlambat lagi → Surat Peringatan 2")).toBeTruthy();
     expect(screen.getByText("Hari terlambat (3)")).toBeTruthy();
     expect(screen.getByText("+45 mnt")).toBeTruthy();
     expect(screen.getByText("Total terlambat 1 jam 17 mnt")).toBeTruthy();
-    expect(screen.getByText(/Surat peringatan resmi diterbitkan oleh HR/)).toBeTruthy();
+    expect(screen.getByText("Hati-hati, keterlambatan yang berlanjut dapat berujung teguran dari HR.")).toBeTruthy();
+    expect(screen.queryByText(/Surat Peringatan|SP ?\d|Teguran|kali terlambat lagi/)).toBeNull();
     expect(screen.queryByText(/potong/i)).toBeNull();
   });
 
@@ -78,12 +77,13 @@ describe("MyLatenessCard (EPIC-077 R8)", () => {
   it("ketentuan perusahaan bisa dibuka", () => {
     hook.data = myLateness("none", []);
     render(<MyLatenessCard />);
-    const toggle = screen.getByRole("button", { name: /Jam Kerja & Ketentuan Keterlambatan/ });
+    const toggle = screen.getByRole("button", { name: /Jam Kerja & Ketentuan Absensi/ });
     expect(toggle.getAttribute("aria-expanded")).toBe("false");
     fireEvent.click(toggle);
     expect(toggle.getAttribute("aria-expanded")).toBe("true");
     expect(screen.getByText(/klik “check-in” saat jam masuk/)).toBeTruthy();
-    expect(screen.getByText(/surat peringatan 3 dan\/atau Pemutusan Hubungan Kerja/)).toBeTruthy();
+    // EPIC-094: tingkat teguran/SP tidak lagi ditampilkan ke karyawan.
+    expect(screen.queryByText(/surat peringatan|teguran lisan/i)).toBeNull();
     // EPIC-078: jam kerja HQ dan Operations tampil apa adanya.
     const hq = screen.getByRole("region", { name: "Karyawan Headquarter" });
     expect(hq.textContent).toContain("08.00 – 09.00 WIB");
