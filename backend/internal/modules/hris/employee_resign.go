@@ -58,6 +58,14 @@ func (s *Service) ResignEmployee(ctx context.Context, actor *auth.User, id strin
 	var out map[string]any
 	err := s.repo.InTx(ctx, func(r Repository) error {
 		q := r.querier()
+		// Lock the employee before reading the pending schedule, so two
+		// concurrent requests cannot both pass the R5 check (review I1).
+		var exists bool
+		if err := q.QueryRow(ctx, `SELECT true FROM hris.employees WHERE id = $1 FOR UPDATE`, id).Scan(&exists); database.IsNoRows(err) {
+			return httpx.NotFound("Karyawan tidak ditemukan")
+		} else if err != nil {
+			return err
+		}
 		pending, err := pendingResignDate(ctx, q, id)
 		if err != nil {
 			return err

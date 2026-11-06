@@ -2,12 +2,15 @@ package hris
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/http"
 	"time"
 
 	"nuhabit/backend/internal/modules/hris/domain"
 	"nuhabit/backend/internal/platform/auth"
 	"nuhabit/backend/internal/platform/database"
+	"nuhabit/backend/internal/platform/httpx"
 )
 
 // EPIC-095: menjalankan resign terjadwal sehari setelah hari terakhir kerja.
@@ -75,11 +78,25 @@ func (s *Service) RunScheduledResigns(ctx context.Context, now time.Time) (appli
 				outcome = "cancelled"
 				return nil
 			}
-			if _, err := s.applyResign(ctx, q, scheduledResignActor, createdBy, emp,
-				resignInput{EffectiveDate: date, Type: typ, Reason: reason}); err != nil {
+			// applied_at first: the deactivation trigger only cancels schedules
+			// still pending, so it leaves the one being applied alone.
+			if _, err := q.Exec(ctx, `UPDATE hris.scheduled_resignations SET applied_at = now() WHERE id = $1`, id); err != nil {
 				return err
 			}
-			if _, err := q.Exec(ctx, `UPDATE hris.scheduled_resignations SET applied_at = now() WHERE id = $1`, id); err != nil {
+			_, err = s.applyResign(ctx, q, scheduledResignActor, createdBy, emp,
+				resignInput{EffectiveDate: date, Type: typ, Reason: reason})
+			var he *httpx.Error
+			if errors.As(err, &he) && he.Status < http.StatusInternalServerError {
+				// Validation refused it before anything was written (review I2):
+				// cancel with that message instead of retrying every tick.
+				if _, err := q.Exec(ctx, `UPDATE hris.scheduled_resignations
+					SET applied_at = NULL, cancelled_at = now(), cancel_reason = $2 WHERE id = $1`, id, he.Message); err != nil {
+					return err
+				}
+				outcome = "cancelled"
+				return nil
+			}
+			if err != nil {
 				return err
 			}
 			outcome = "applied"

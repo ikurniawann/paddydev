@@ -27,3 +27,23 @@ CREATE INDEX IF NOT EXISTS scheduled_resignations_due
 
 COMMENT ON TABLE hris.scheduled_resignations IS
   'Resign terjadwal (EPIC-095): dijalankan otomatis sehari setelah effective_date (hari terakhir kerja).';
+
+-- Jadwal yang masih menunggu dibatalkan saat karyawan dinonaktifkan lewat jalur
+-- apa pun (hapus, edit, akun, impor), supaya rehire sesudahnya tidak ikut
+-- di-resign oleh job (review akhir C1). Job menandai applied_at sebelum
+-- menjalankan resign, jadi trigger ini tidak membatalkan jadwal yang sedang
+-- dijalankan. Nama tabel lengkap: role DB production tidak menyetel search_path.
+CREATE OR REPLACE FUNCTION hris.cancel_scheduled_resign_on_deactivate() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+  UPDATE hris.scheduled_resignations
+  SET cancelled_at = now(), cancel_reason = 'Karyawan dinonaktifkan'
+  WHERE employee_id = NEW.id AND applied_at IS NULL AND cancelled_at IS NULL;
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS trg_cancel_scheduled_resign ON hris.employees;
+CREATE TRIGGER trg_cancel_scheduled_resign
+  AFTER UPDATE OF is_active ON hris.employees
+  FOR EACH ROW WHEN (OLD.is_active AND NOT NEW.is_active)
+  EXECUTE FUNCTION hris.cancel_scheduled_resign_on_deactivate();

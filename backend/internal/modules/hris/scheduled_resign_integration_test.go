@@ -73,15 +73,56 @@ func TestRunScheduledResignsInactive(t *testing.T) {
 	h := newHarness(t)
 	f := newResignFixture(h)
 	expect(t, h.do(&f.hr, http.MethodPost, resignURL(f.e), map[string]any{"effective_date": "2026-11-20", "resign_type": "resign"}), http.StatusOK, "")
+	// The deactivation trigger cancels the schedule at once (review C1); the
+	// job's own R7 check stays as a guard for rows written around it.
 	h.exec(`UPDATE hris.employees SET is_active = false WHERE id = $1`, f.e)
 	applied, cancelled, err := h.svc.RunScheduledResigns(context.Background(), wib(t, "2026-11-21 00:05"))
-	if err != nil || applied != 0 || cancelled != 1 {
-		t.Fatalf("applied %d cancelled %d err %v, want 0/1", applied, cancelled, err)
+	if err != nil || applied != 0 || cancelled != 0 {
+		t.Fatalf("applied %d cancelled %d err %v, want 0/0 (already cancelled)", applied, cancelled, err)
 	}
-	if got := h.scalar(`SELECT coalesce(cancel_reason, '') FROM hris.scheduled_resignations WHERE employee_id = $1`, f.e); got != "Karyawan sudah nonaktif" {
+	if got := h.scalar(`SELECT coalesce(cancel_reason, '') FROM hris.scheduled_resignations WHERE employee_id = $1`, f.e); got != "Karyawan dinonaktifkan" {
 		t.Fatalf("cancel_reason = %q", got)
 	}
 	if got := h.scalar(`SELECT count(*)::text FROM audit.audit_log WHERE entity_id = $1 AND action = 'employee.resign'`, f.e); got != "0" {
 		t.Fatalf("resign audit = %s, want 0", got)
+	}
+}
+
+// Review C1: a schedule must not survive the employee being deactivated by
+// another path; after a rehire the job must leave the employee alone.
+func TestScheduledResignCancelledOnDeactivateThenRehire(t *testing.T) {
+	h := newHarness(t)
+	f := newResignFixture(h)
+	expect(t, h.do(&f.hr, http.MethodPost, resignURL(f.e), map[string]any{"effective_date": "2026-11-20", "resign_type": "resign"}), http.StatusOK, "")
+	h.exec(`UPDATE hris.employees SET is_active = false WHERE id = $1`, f.e)
+	if got := h.scalar(`SELECT coalesce(cancel_reason, '') FROM hris.scheduled_resignations WHERE employee_id = $1`, f.e); got != "Karyawan dinonaktifkan" {
+		t.Fatalf("cancel_reason after deactivation = %q", got)
+	}
+	h.exec(`UPDATE hris.employees SET is_active = true WHERE id = $1`, f.e) // rehire
+	applied, cancelled, err := h.svc.RunScheduledResigns(context.Background(), wib(t, "2026-11-21 00:05"))
+	if err != nil || applied != 0 || cancelled != 0 {
+		t.Fatalf("applied %d cancelled %d err %v, want 0/0", applied, cancelled, err)
+	}
+	if got := h.scalar(`SELECT is_active::text FROM hris.employees WHERE id = $1`, f.e); got != "true" {
+		t.Fatalf("rehired employee is_active = %s, want true", got)
+	}
+}
+
+// Review I2: a due schedule that can no longer be applied (validation) is
+// cancelled with the reason instead of retrying every 5 minutes.
+func TestScheduledResignInvalidIsCancelled(t *testing.T) {
+	h := newHarness(t)
+	f := newResignFixture(h)
+	expect(t, h.do(&f.hr, http.MethodPost, resignURL(f.e), map[string]any{"effective_date": "2026-11-20", "resign_type": "resign"}), http.StatusOK, "")
+	h.exec(`UPDATE hris.employees SET join_date = '2026-11-25' WHERE id = $1`, f.e)
+	applied, cancelled, err := h.svc.RunScheduledResigns(context.Background(), wib(t, "2026-11-21 00:05"))
+	if err != nil || applied != 0 || cancelled != 1 {
+		t.Fatalf("applied %d cancelled %d err %v, want 0/1", applied, cancelled, err)
+	}
+	if got := h.scalar(`SELECT coalesce(cancel_reason, '') FROM hris.scheduled_resignations WHERE employee_id = $1`, f.e); got != "Tanggal efektif tidak boleh sebelum tanggal masuk (25/11/2026)" {
+		t.Fatalf("cancel_reason = %q", got)
+	}
+	if got := h.scalar(`SELECT is_active::text FROM hris.employees WHERE id = $1`, f.e); got != "true" {
+		t.Fatalf("is_active = %s, want true", got)
 	}
 }
