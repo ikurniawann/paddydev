@@ -162,6 +162,20 @@ describe("goBackendTarget", () => {
   });
 
   it.each([
+    ["GET", "/api/hris/disciplinary-letters"],
+    ["POST", "/api/hris/disciplinary-letters"],
+    ["POST", "/api/hris/disciplinary-letters/00000000-0000-4000-8000-000000000001/revoke"],
+    ["GET", "/api/hris/disciplinary-letters/lateness"],
+    ["POST", "/api/hris/disciplinary-letters/attachments"],
+    ["GET", "/api/hris/disciplinary-letters/attachment/disciplinary-letters/x/1-a.pdf"],
+    ["GET", "/api/hris/me/disciplinary-letters"],
+  ])("forwards the EPIC-094 endpoint %s %s to Go", (method, pathname) => {
+    expect(goBackendTarget(pathname, method, { env })).toBe(
+      `http://go-api:8080${pathname}`,
+    );
+  });
+
+  it.each([
     ["GET", "/api/hris/me/lateness"],
     ["GET", "/api/hris/me/team-lateness"],
     ["GET", "/api/hris/me/leave-days"],
@@ -279,7 +293,9 @@ describe("Go route manifest", () => {
       // Verifikasi lampiran cuti oleh HR (EPIC-088): hanya di Go, tanpa fallback Next.
       "/api/hris/leaves/attachment-review",
       // Riwayat Persetujuan Tim (EPIC-090): hanya di Go, tanpa fallback Next.
-      "/api/hris/me/team-history"];
+      "/api/hris/me/team-history",
+      // Surat Teguran/SP oleh HR (EPIC-094): hanya di Go, tanpa fallback Next.
+      "/api/hris/disciplinary-letters", "/api/hris/me/disciplinary-letters"];
     const goNative = (p: string) =>
       goNativePrefixes.some((n) => p === n || p.startsWith(`${n}/`));
     const missing = switched
