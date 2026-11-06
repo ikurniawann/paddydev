@@ -186,3 +186,8 @@ FK `attendance_requests.attendance_id` → `attendance` (SET NULL).
     - pinjaman dikeluarkan dari core dan pratinjau (R2');
     - script baru `2026-11-06_dm01_periode_oktober.sql`.
     - Tes Go DM-01 dan tes runner (96 cek) lulus.
+  - **Gladi di salinan production pada VPS 06-11 15.49 WIB** (runbook §4, kode branch di `~/dm01b-src`): preview, lalu execute (`DM01_PAYROLL_ACK=yes`), lalu `2026-11-06_dm01_periode_oktober.sql`, lalu files, lalu restore. Semua rc=0.
+    - Durasi: execute 19 dtk (termasuk backup dan uji restore), core 208 ms (perkiraan lama kunci tulis).
+    - Sesudah execute: sisa ≤ 20 Okt 0/0/0/0 (absensi, cuti, lembur, pengajuan absensi), pinjaman 22 utuh, `close_summary` Oktober semua 0.
+    - Uji restore: 3.229 / 94 / 236 / 13 kembali persis.
+    - Container, volume, dump, dan folder gladi dibersihkan.
