@@ -48,6 +48,7 @@ Detail lengkap ada di `docs/hris/acuan-mom-20261019/`:
 | Subsidi BPJS Kes | Rp100.000 bila masa kerja > 1 tahun pada tanggal cutoff |
 | Saklar PPh 21 & BPJS | `pph21_enabled`, `bpjs_tk_enabled`, `bpjs_kes_enabled` di Pengaturan Payroll (live: false sejak EPIC-082, keputusan user 02-11 "tidak dipakai dulu"). Nonaktif: PPh 21 = 0 (termasuk Pasal 17 Desember), BPJS karyawan **dan** iuran perusahaan = 0, baris disembunyikan di slip; Subsidi BPJS Kes tidak terpengaruh; berlaku untuk run yang dihitung setelah saklar diubah |
 | Time-off | Approver atasan langsung; SPV ke atasannya |
+| Lampiran cuti/izin | Atasan langsung lalu HR verifikasi lampiran; dikembalikan = unggah ulang (ES-11, EPIC-088) |
 
 ## Kesalahan umum
 

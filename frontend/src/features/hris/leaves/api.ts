@@ -25,7 +25,17 @@ export const deleteLeave = (id: string, reason: string) =>
   apiDelete(withReasonQuery(`${BASE}/${id}`, reason));
 
 export const approveLeave = (body: ApproveLeavePayload) =>
-  apiPost<{ data: LeaveItem; wa_link?: string | null }>(`${BASE}/approve`, body);
+  apiPost<{ data: LeaveItem; wa_link?: string | null; message?: string }>(`${BASE}/approve`, body);
+
+export type ReviewLeaveAttachmentPayload = {
+  leave_id: string;
+  action: "verify" | "return";
+  reason?: string;
+};
+
+/** EPIC-088 R5: HR memverifikasi atau mengembalikan lampiran. */
+export const reviewLeaveAttachment = (body: ReviewLeaveAttachmentPayload) =>
+  apiPost<{ data: LeaveItem; message?: string }>(`${BASE}/attachment-review`, body);
 
 export const fetchLeaveEmployees = () =>
   apiGet<{ data: LeaveEmployeeLite[] }>("/api/hris/employees?is_active=true&limit=500&sort_by=full_name&sort_order=asc").then(

@@ -108,6 +108,17 @@ type ApprovalRepo interface {
 	TeamPendingCount(ctx context.Context, managerID string) (int64, error)
 	// EmployeesWithoutManager is the reporting_to data quality report (R9).
 	EmployeesWithoutManager(ctx context.Context) ([]*Row, error)
+	// NotifyManager is the in-app bell of employeeID's direct manager
+	// (EPIC-088 R11); nothing without a manager, a reporting_to pointing at
+	// the employee, or a manager without a login account.
+	NotifyManager(ctx context.Context, employeeID, title, message, link string) error
+}
+
+func (s *store) NotifyManager(ctx context.Context, employeeID, title, message, link string) error {
+	_, err := s.db.Exec(ctx, `SELECT public.notify_user(m.user_id, $2, $3, 'approval', $4)
+		FROM hris.employees e JOIN hris.employees m ON m.id = e.reporting_to AND m.id <> e.id
+		WHERE e.id = $1 AND m.user_id IS NOT NULL`, employeeID, title, message, link)
+	return err
 }
 
 // TeamApprovals is GET /api/hris/me/team-approvals: pending leave and
@@ -152,7 +163,7 @@ func (s *store) TeamPendingLeaves(ctx context.Context, managerID string) ([]*Row
 	rows, err := queryRows(ctx, s.db, `SELECT l.id, l.employee_id, l.leave_type, l.start_date::text AS start_date,
 		l.end_date::text AS end_date, l.total_days, l.reason, l.attachment_url, l.created_at, `+teamEmployee+`
 		FROM hris.leaves l `+teamMember("l")+`
-		WHERE l.status = 'pending'
+		WHERE l.status = 'pending' AND l.attachment_review IS NULL
 		ORDER BY l.start_date, l.created_at LIMIT 200`, managerID)
 	return rows, ignoreBadInput(err)
 }
@@ -169,7 +180,7 @@ func (s *store) TeamPendingOvertime(ctx context.Context, managerID string) ([]*R
 func (s *store) TeamPendingCount(ctx context.Context, managerID string) (int64, error) {
 	var n int64
 	err := s.db.QueryRow(ctx, `SELECT
-		  (SELECT count(*) FROM hris.leaves l `+teamMember("l")+` WHERE l.status = 'pending')
+		  (SELECT count(*) FROM hris.leaves l `+teamMember("l")+` WHERE l.status = 'pending' AND l.attachment_review IS NULL)
 		+ (SELECT count(*) FROM hris.overtime_requests o `+teamMember("o")+` WHERE o.status = 'pending' AND o.source = 'employee')
 		+ (SELECT count(*) FROM hris.business_trips t `+teamMember("t")+` WHERE t.status = 'pending')`,
 		managerID).Scan(&n)

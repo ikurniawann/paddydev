@@ -42,6 +42,9 @@ func (f leaveFilter) where() (string, []any) {
 	if f.LeaveType != nil && *f.LeaveType != "" {
 		add("leave_type = $%d", *f.LeaveType)
 	}
+	if f.Review != nil && (*f.Review == domain.AttachmentAwaiting || *f.Review == domain.AttachmentReturned) {
+		add("status = 'pending' AND attachment_review = $%d", *f.Review)
+	}
 	if f.StartDate != nil && *f.StartDate != "" && f.EndDate != nil && *f.EndDate != "" {
 		add("start_date >= $%d", *f.StartDate)
 		add("end_date <= $%d", *f.EndDate)
@@ -190,10 +193,21 @@ func (s *store) DeleteLeave(ctx context.Context, id string) error {
 // DecideLeave records the decision and consumes the quota (call inside a
 // transaction).
 func (s *store) DecideLeave(ctx context.Context, id string, v leaveVerdict, credit *quotaMove) error {
+	var reviewer *string
+	if v.Reviewer != nil {
+		reviewer = &v.Reviewer.ID
+	}
+	// An approval never lands on a request waiting for HR (EPIC-088 R4); a
+	// verifier's approval of a request with an attachment is also its review.
 	tag, err := s.db.Exec(ctx, `UPDATE hris.leaves
 		SET status = $2, approved_by = $3, approved_at = now(), rejection_reason = $4,
-		    decided_as = $5, decided_by_name = $6
-		WHERE id = $1 AND status = 'pending'`, id, v.Status, v.ApproverID, v.Rejection, v.DecidedAs, v.DecidedBy)
+		    decided_as = $5, decided_by_name = $6,
+		    attachment_review = CASE WHEN $7::uuid IS NULL THEN attachment_review ELSE 'verified' END,
+		    attachment_reviewed_by = coalesce($7::uuid, attachment_reviewed_by),
+		    attachment_reviewed_name = CASE WHEN $7::uuid IS NULL THEN attachment_reviewed_name ELSE $6 END,
+		    attachment_reviewed_at = CASE WHEN $7::uuid IS NULL THEN attachment_reviewed_at ELSE now() END
+		WHERE id = $1 AND status = 'pending' AND (NOT $8::bool OR attachment_review IS NULL)`,
+		id, v.Status, v.ApproverID, v.Rejection, v.DecidedAs, v.DecidedBy, reviewer, v.Status == "approved")
 	if err != nil {
 		return err
 	}

@@ -7,39 +7,104 @@ const grant = (leaves: boolean) => {
   access = { data: { attendance: false, leaves, overtime: false } };
 };
 
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
+let search = "";
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn() }),
+  useSearchParams: () => new URLSearchParams(search),
+}));
+const review = vi.fn();
+vi.mock("@/features/hris/leaves/mutations", () => ({
+  useReviewLeaveAttachment: () => ({ mutate: review, isPending: false }),
+}));
 vi.mock("@/features/hris/approve-access", () => ({ useHrApproveAccess: () => access }));
 vi.mock("@/components/hris/ApprovalButtons", () => ({
-  ApprovalButtons: () => <button>tombol-keputusan</button>,
+  ApprovalButtons: ({ rejectOnly }: { rejectOnly?: boolean }) => (
+    <button>{rejectOnly ? "tombol-tolak" : "tombol-keputusan"}</button>
+  ),
 }));
 vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 let myEmployeeId = "hr-1";
 vi.mock("@/features/hris/ess/queries", () => ({ useEssMe: () => ({ data: { employee: { id: myEmployeeId } } }) }));
+let listParams: Record<string, unknown> = {};
+let rows: Record<string, unknown>[] = [];
+const budi = {
+  id: "l1",
+  employee_id: "e1",
+  status: "pending",
+  leave_type: "annual",
+  start_date: "2026-10-27",
+  end_date: "2026-10-28",
+  total_days: 2,
+  reason: "Acara keluarga di Garut.\nBerangkat Senin pagi.",
+  attachment_url: "leave-attachments/e1/undangan.png",
+  created_at: "2026-10-26T01:00:00Z",
+  employee: { full_name: "Budi Santoso", nip: "N01", department: { name: "Dapur" } },
+};
 vi.mock("../queries", () => ({
-  useLeaveList: () => ({
-    isLoading: false,
-    data: [
-      {
-        id: "l1",
-        employee_id: "e1",
-        status: "pending",
-        leave_type: "annual",
-        start_date: "2026-10-27",
-        end_date: "2026-10-28",
-        total_days: 2,
-        reason: "Acara keluarga di Garut.\nBerangkat Senin pagi.",
-        attachment_url: "leave-attachments/e1/undangan.png",
-        created_at: "2026-10-26T01:00:00Z",
-        employee: { full_name: "Budi Santoso", nip: "N01", department: { name: "Dapur" } },
-      },
-    ],
-  }),
+  useLeaveList: (params: Record<string, unknown>) => {
+    listParams = params;
+    return { isLoading: false, data: rows.length ? rows : [budi] };
+  },
 }));
+
 
 afterEach(() => {
   cleanup();
   access = {};
   myEmployeeId = "hr-1";
+  rows = [];
+  search = "";
+  review.mockReset();
+});
+
+describe("LeavesPage: verifikasi lampiran (EPIC-088)", () => {
+  const awaiting = {
+    ...budi,
+    id: "l2",
+    attachment_review: "awaiting",
+    manager_approved_name: "Atasan Budi",
+  };
+
+  it("baris menunggu HR: badge, Verifikasi, dan Tolak saja (tanpa Setujui)", () => {
+    grant(true);
+    rows = [awaiting];
+    render(<LeavesPage />);
+    expect(screen.getAllByText("Menunggu verifikasi HR").length).toBeGreaterThan(0);
+    expect(screen.queryByText("tombol-keputusan")).toBeNull();
+    expect(screen.getByText("tombol-tolak")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Verifikasi lampiran Budi Santoso" }));
+    expect(review).toHaveBeenCalledWith({ leave_id: "l2", action: "verify" }, expect.anything());
+  });
+
+  it("Kembalikan wajib alasan lewat dialog", () => {
+    grant(true);
+    rows = [awaiting];
+    render(<LeavesPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Kembalikan lampiran Budi Santoso" }));
+    const dialog = screen.getByRole("dialog");
+    const send = within(dialog).getByRole("button", { name: "Kembalikan ke karyawan" });
+    expect((send as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(within(dialog).getByRole("textbox"), { target: { value: "Surat buram" } });
+    fireEvent.click(send);
+    expect(review).toHaveBeenCalledWith({ leave_id: "l2", action: "return", reason: "Surat buram" }, expect.anything());
+  });
+
+  it("baris dikembalikan: badge, hanya Tolak (review akhir: tidak macet selamanya)", () => {
+    grant(true);
+    rows = [{ ...budi, id: "l3", attachment_review: "returned", attachment_return_reason: "Surat buram" }];
+    render(<LeavesPage />);
+    expect(screen.getAllByText("Lampiran dikembalikan").length).toBeGreaterThan(0);
+    expect(screen.queryByText("tombol-keputusan")).toBeNull();
+    expect(screen.getByText("tombol-tolak")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Verifikasi lampiran/ })).toBeNull();
+  });
+
+  it("?review=awaiting dari notifikasi menjadi filter awal", () => {
+    grant(true);
+    search = "review=awaiting";
+    render(<LeavesPage />);
+    expect(listParams).toMatchObject({ review: "awaiting", status: undefined });
+  });
 });
 
 describe("LeavesPage: tombol keputusan mengikuti akses approve (EPIC-067 R14)", () => {

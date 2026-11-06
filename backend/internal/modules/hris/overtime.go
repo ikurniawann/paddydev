@@ -242,6 +242,10 @@ func (s *Service) CreateOvertime(ctx context.Context, a *Actor, in overtimeInput
 		if row, err = r.InsertOvertime(ctx, f); err != nil || source != "employee" {
 			return err
 		}
+		title, message := domain.OvertimeManagerNotice(target.Str("full_name"), in.Date, in.StartTime, in.EndTime, hours)
+		if err := r.NotifyManager(ctx, *targetID, title, message, domain.TeamApprovalsLink); err != nil {
+			return err
+		}
 		reason := in.Reason
 		return r.Publish(ctx, TopicOvertimeRequested, *targetID, contracts.OvertimeRequested{
 			OvertimeID: row.Str("id"), EmployeeID: *targetID, EmployeeName: target.Str("full_name"),
