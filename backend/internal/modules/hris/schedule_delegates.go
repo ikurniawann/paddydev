@@ -28,10 +28,14 @@ import (
 // employee, whether they may also place, and the active stores they cover
 // (sorted by store code). A delegate with no active store is not returned
 // by loadDelegateAccess at all, so BranchIDs is never empty.
+// ScheduleBranchIDs are the stores whose schedule they arrange (EPIC-093):
+// every active store when HR ticked ScheduleAll, else the same as BranchIDs.
 type delegateAccess struct {
-	EmployeeID, Name string
-	CanPlace         bool
-	BranchIDs        []string
+	EmployeeID, Name  string
+	CanPlace          bool
+	ScheduleAll       bool
+	BranchIDs         []string
+	ScheduleBranchIDs []string
 }
 
 // storeScope is who is acting on store schedules. Delegate == nil means HR,
@@ -40,13 +44,24 @@ type storeScope struct {
 	Delegate *delegateAccess
 }
 
-// AllowsBranch reports whether the scope may act on store id: always for
-// HR; for a delegate only when id is one of their stores ("" never is).
+// AllowsBranch reports whether the scope may act on store id in its area
+// (placements, auto-checkout): always for HR; for a delegate only when id
+// is one of their stores ("" never is).
 func (s storeScope) AllowsBranch(id string) bool {
 	if s.Delegate == nil {
 		return true
 	}
 	return id != "" && slices.Contains(s.Delegate.BranchIDs, id)
+}
+
+// AllowsScheduleBranch is AllowsBranch for the schedule routes (grid,
+// template, upload, cells): a delegate with ScheduleAll may use every
+// active store (EPIC-093 R2/R7).
+func (s storeScope) AllowsScheduleBranch(id string) bool {
+	if s.Delegate == nil {
+		return true
+	}
+	return id != "" && slices.Contains(s.Delegate.ScheduleBranchIDs, id)
 }
 
 // errOutsideScope is the 403 for a store outside the delegate's area (R4).
@@ -108,12 +123,12 @@ func (h handlers) withScheduleScope(action string, prefixes []string, needPlace 
 func loadDelegateAccess(ctx context.Context, q database.Querier, userID string) (*delegateAccess, error) {
 	var d delegateAccess
 	err := q.QueryRow(ctx, `
-		SELECT e.id::text, e.full_name, sd.can_place
+		SELECT e.id::text, e.full_name, sd.can_place, sd.schedule_all_branches
 		FROM hris.schedule_delegates sd
 		JOIN hris.employees e ON e.id = sd.employee_id
 		WHERE e.is_active AND e.user_id = $1
 		ORDER BY e.id
-		LIMIT 1`, userID).Scan(&d.EmployeeID, &d.Name, &d.CanPlace)
+		LIMIT 1`, userID).Scan(&d.EmployeeID, &d.Name, &d.CanPlace, &d.ScheduleAll)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -135,6 +150,16 @@ func loadDelegateAccess(ctx context.Context, q database.Querier, userID string) 
 	}
 	if len(d.BranchIDs) == 0 {
 		return nil, nil
+	}
+	d.ScheduleBranchIDs = slices.Clone(d.BranchIDs)
+	if d.ScheduleAll {
+		rows, err := q.Query(ctx, `SELECT id::text FROM configuration.branches WHERE is_active ORDER BY code, id`)
+		if err != nil {
+			return nil, err
+		}
+		if d.ScheduleBranchIDs, err = pgx.CollectRows(rows, pgx.RowTo[string]); err != nil {
+			return nil, err
+		}
 	}
 	return &d, nil
 }
@@ -206,7 +231,8 @@ func delegateBranches(ctx context.Context, q database.Querier, ids []string) ([]
 }
 
 // GET /api/hris/me/schedule-access: whether the signed-in account is a store
-// schedule delegate, whether it may also place, and its active stores. Anyone
+// schedule delegate, whether it may also place, and its active stores; with
+// schedule_branches the stores of its schedule tab (EPIC-093). Anyone
 // else gets is_delegate false (the ESS menu is granted to every role). hr and
 // hr_can_place (EPIC-073 R3) say the account opens Jadwal Toko in HR mode:
 // "update" on Jadwal Kerja (the schedule write routes' check) and the
@@ -225,14 +251,18 @@ func (h handlers) myScheduleAccess(w http.ResponseWriter, r *http.Request, a *Ac
 	}
 	if d == nil {
 		return ok(w, dataOf(obj("is_delegate", false, "can_place", false, "branches", []*Row{},
-			"hr", hr, "hr_can_place", hrPlace)))
+			"schedule_all_branches", false, "schedule_branches", []*Row{}, "hr", hr, "hr_can_place", hrPlace)))
 	}
 	branches, err := delegateBranches(r.Context(), q, d.BranchIDs)
 	if err != nil {
 		return err
 	}
+	scheduleBranches, err := delegateBranches(r.Context(), q, d.ScheduleBranchIDs)
+	if err != nil {
+		return err
+	}
 	return ok(w, dataOf(obj("is_delegate", true, "can_place", d.CanPlace, "branches", branches,
-		"hr", hr, "hr_can_place", hrPlace)))
+		"schedule_all_branches", d.ScheduleAll, "schedule_branches", scheduleBranches, "hr", hr, "hr_can_place", hrPlace)))
 }
 
 /* ── HR: kelola pengatur (R9) ───────────────────────────────────────── */

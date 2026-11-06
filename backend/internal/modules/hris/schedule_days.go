@@ -782,7 +782,7 @@ func scheduleDiff(ctx context.Context, q database.Querier, c domain.ScheduleUplo
 
 func (h handlers) getSchedules(w http.ResponseWriter, r *http.Request, _ *auth.User, sc storeScope) error {
 	q := r.URL.Query()
-	if !sc.AllowsBranch(q.Get("branch_id")) {
+	if !sc.AllowsScheduleBranch(q.Get("branch_id")) {
 		return httpx.Forbidden(errOutsideScope)
 	}
 	data, err := h.svc.ScheduleGrid(r.Context(), q.Get("branch_id"), q.Get("from"), q.Get("to"))
@@ -804,7 +804,7 @@ func writeFile(w http.ResponseWriter, f *exportFile) error {
 
 func (h handlers) getScheduleTemplate(w http.ResponseWriter, r *http.Request, _ *auth.User, sc storeScope) error {
 	q := r.URL.Query()
-	if !sc.AllowsBranch(q.Get("branch_id")) {
+	if !sc.AllowsScheduleBranch(q.Get("branch_id")) {
 		return httpx.Forbidden(errOutsideScope)
 	}
 	f, err := h.svc.ScheduleTemplate(r.Context(), q.Get("branch_id"), q.Get("from"), q.Get("to"))
@@ -818,7 +818,7 @@ func (h handlers) importSchedules(w http.ResponseWriter, r *http.Request, u *aut
 	if err := r.ParseMultipartForm(16 << 20); err != nil {
 		return httpx.BadRequest("Unggah file .xlsx dari template Jadwal Kerja")
 	}
-	if !sc.AllowsBranch(r.FormValue("branch_id")) {
+	if !sc.AllowsScheduleBranch(r.FormValue("branch_id")) {
 		return httpx.Forbidden(errOutsideScope)
 	}
 	file, header, err := r.FormFile("file")
@@ -1119,7 +1119,7 @@ func (h handlers) saveScheduleCells(w http.ResponseWriter, r *http.Request, u *a
 	if err := formErr(f, ""); err != nil {
 		return err
 	}
-	if !sc.AllowsBranch(*branch) {
+	if !sc.AllowsScheduleBranch(*branch) {
 		return httpx.Forbidden(errOutsideScope)
 	}
 	g, err := h.clearGuardScoped(r, u, strings.TrimSpace(strOr(reason)), sc)
