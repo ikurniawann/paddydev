@@ -78,3 +78,8 @@ Lihat rencana `docs/superpowers/plans/2026-11-06-jadwal-semua-toko.md`.
   - Centang dicabut saat toko lain terbuka: pilihan toko kini kembali ke toko wilayah, tidak lagi kosong dengan pesan 403. Tes `centang dicabut saat toko lain terbuka …` gagal di kode lama (pilihan `''`) dan lulus sesudahnya.
   - Teks untuk pengatur bercentang: kartu Beranda "Atur jadwal kerja karyawan di semua toko, penempatan di N toko Anda" (tanpa hak penempatan: "… di semua toko"); subjudul Jadwal Toko "Atur jadwal kerja karyawan di semua toko. …".
   - Bukti: frontend `pnpm test` 888 file / 6471 tes lulus; `tsc` + `lint` bersih.
+- 2026-11-06 13:38: **Deploy staging ulang** dengan kedua perbaikan.
+  - Backup `staging-db-before-epic093b-20261106-133808.dump`; deploy-e071 `fd9e49f3`; image `local-20261106-133815`; migrasi sudah lengkap, verify 0 berbeda.
+  - **QA ulang 21/21 lulus**: 18 skenario sebelumnya ditambah subjudul "semua toko", kartu Beranda "… di semua toko, penempatan di 1 toko Anda", dan pencabutan centang saat PPBA terbuka di HP (pindah minggu → pilihan kembali ke PPAY tanpa pesan 403 tertinggal).
+  - Data demo dihapus (0 tersisa; 10 pengatur uji coba staging utuh). Bukti `.share/qa093/` (`t2.log`, `2b-…`, `5-…`).
+  - Siap production: menunggu izin user untuk merge PR #81 + deploy, lalu izin terpisah untuk centang 9 pengatur Coordinator (R8).
