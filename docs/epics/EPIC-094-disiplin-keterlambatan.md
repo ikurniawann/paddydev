@@ -115,3 +115,23 @@ Lihat rencana `docs/superpowers/plans/2026-11-06-disiplin-keterlambatan.md`.
   - berkas unggahan yang batal dipakai tidak dibersihkan;
   - cabang `showLevel=true` di `LatenessSummary` kini tanpa pemanggil;
   - `/me/lateness` masih mengirim `level`/`next` di JSON (R1).
+- 2026-11-06: **PR #82** dibuka (base `feat/epic092-approval-berjenjang`, ditumpuk di atas #80).
+- 2026-11-06 15:16: **Deploy staging**.
+  - Backup `~/Desktop/paddydev-backups/staging-db-before-epic094-20261106-151553.dump`.
+  - Merge ke tumpukan staging (EPIC-087..093) menjadi `4fb11002`. Konflik baris registry README diurutkan 092/093/094; manifest rute hasil merge sama dengan generator.
+  - Image `local-20261106-151626`, 2 migrasi, verify 0 berbeda. Staging kini `late_deduction_mode = off`.
+- 2026-11-06: **QA staging lulus** (Playwright; karyawan di HP 360 px, SPV/HR/Manager desktop; akun demo `qa094-*`).
+  - **Lonceng terlambat.** Karyawan clock-in terlambat 500 mnt; lonceng karyawan, SPV, dan Manager memakai teks persis. HR menerima tepat 1 lonceng ("⏰ Karyawan Terlambat").
+  - **ESS karyawan.** Beranda dan Absensi tanpa label Teguran/SP; jumlah, hari, dan pengingat tampil. Absensi Tim SPV masih menampilkan badge Teguran.
+  - **Surat SP1 dari menu HR.** HR menerbitkan SP1 dengan PDF dari menu (dialog menampilkan info keterlambatan); lonceng ke karyawan + SPV + Manager + HR.
+  - **Surat dari tab profil.** Surat Teguran diterbitkan dari tab profil; 2 baris audit terbit.
+  - **ESS Surat dari HR.** Bagian tampil dan tergulir ke `#surat`. Lampiran: pemilik 200, SPV 200, orang lain 403.
+  - **Pembatalan.** HR membatalkan Surat Teguran dengan alasan; surat hilang dari ESS.
+  - **Payroll.** Setting potongan telat `off`.
+  - **SLA.** Tahunan H-2 → 400 "paling lambat H-3"; Haji H-29 → 400 "H-30"; Sakit besok → 400; Sakit hari ini → 200.
+  - 0 error konsol, 0 API ≥ 400 di luar penolakan yang diuji.
+  - Catatan QA:
+    - Dua kegagalan di putaran pertama ternyata bug skrip: hitungan lonceng HR ikut menangkap "Karyawan Baru Ditambahkan", dan alasan cuti < 10 karakter.
+    - Bila karyawan sedang membuka Absensi lalu mengetuk lonceng surat (navigasi hash di halaman yang sama), daftar surat belum dimuat ulang sampai halaman dimuat ulang. Dicatat sebagai minor.
+  - Data demo dihapus (0 tersisa; 3 baris audit tetap, append-only). Bukti: `.share/qa094/`.
+- **Siap production** setelah tumpukan #75–#80, dengan izin user. Sesudah deploy, hitung ulang run payroll draft periode berjalan.
