@@ -1,10 +1,8 @@
--- EPIC-083 / DM-01 — PRATINJAU baca-saja cleanup data ≤ 30 September 2026. Tidak menulis apa pun.
--- PERUBAHAN 03-11-2026 (keputusan user): batas dimundurkan ke ≤ 30 September 2026 (semula 20 Oktober);
---   pinjaman pending ikut dihapus ("oke delete aja"). Data 1 Oktober ke atas tidak disentuh.
+-- EPIC-083 / DM-01 — PRATINJAU baca-saja cleanup data per 20 Oktober 2026. Tidak menulis apa pun.
 --
 -- Dasar: MOM 29 Oktober 2026 (WIT × Paddy) §2 No. 6, DM-01 ("database cleanup per tanggal
 -- 20 Oktober 2026 … didahului backup") dan K-22. Jawaban user 02-11-2026:
---   - cakupan: data bertanggal ≤ 30 September 2026 (absensi, pengajuan absensi, cuti & izin,
+--   - cakupan: data bertanggal ≤ 20 Oktober 2026 (absensi, pengajuan absensi, cuti & izin,
 --     lembur, perjalanan dinas, pinjaman/kasbon);
 --   - hapus permanen, didahului backup penuh database dan file lampiran;
 --   - pinjaman yang masih berjalan (approved, sisa > 0) tidak dihapus;
@@ -19,7 +17,7 @@
 --   HAPUS        <tabel> <n>                       baris yang akan dihapus
 --   TETAP        <tabel> <n>                       baris yang tetap ada (seluruh tabel)
 --   STATUS       <tabel> hapus|tetap <status> <n>  rincian status
---   PENGECUALIAN <tabel> <alasan> <n>              bertanggal ≤ 30 Sep tetapi TIDAK dihapus
+--   PENGECUALIAN <tabel> <alasan> <n>              bertanggal ≤ 20 Okt tetapi TIDAK dihapus
 --   CHECKSUM     leave_balances <jumlah baris> <md5>  harus sama sebelum dan sesudah eksekusi
 --   BERKAS       <kolom> referensi_hapus|dipakai_baris_tetap|di_luar_folder_baris|tidak_valid <n>
 --   FILE_LAIN    <nilai>   nilai lampiran di luar folder milik barisnya (tidak dihapus otomatis;
@@ -38,16 +36,15 @@
 --
 -- Batas tanggal (R1, inklusif): attendance.date, attendance_requests.date, overtime_requests.date;
 -- leaves.end_date dan business_trips.end_date (yang melintasi 21 Okt tetap ada); loans.requested_date
--- (timestamptz, dibaca sebagai tanggal WIB). Pinjaman (R2) dihapus hanya bila status pending /
--- manager_approved (masih menunggu HR) / rejected / cancelled / paid_off, atau approved dengan
--- sisa ≤ 0; status lain dan requested_date kosong tetap ada dan muncul di PENGECUALIAN.
+-- (timestamptz, dibaca sebagai tanggal WIB). Keputusan user 06-11-2026 (R2'): pinjaman/kasbon
+-- TIDAK dibersihkan; yang bertanggal ≤ 20 Okt muncul di PENGECUALIAN.
 \set QUIET on
 \set ON_ERROR_STOP on
 \pset tuples_only on
 \pset format unaligned
 BEGIN READ ONLY;
 
-WITH cutoff AS (SELECT DATE '2026-09-30' AS d),
+WITH cutoff AS (SELECT DATE '2026-10-20' AS d),
 tabel (urut, nama) AS (
   VALUES (1, 'attendance_requests'), (2, 'attendance'), (3, 'leaves'),
          (4, 'overtime_requests'), (5, 'business_trips'), (6, 'loans')
@@ -75,23 +72,14 @@ bt AS (
          CASE WHEN b.end_date > c.d AND b.start_date <= c.d THEN 'melintasi 21 Okt' END AS alasan
   FROM hris.business_trips b, cutoff c
 ),
-ln0 AS (
-  SELECT l.*, (l.requested_date AT TIME ZONE 'Asia/Jakarta')::date <= c.d AS bertanggal,
-         (l.status IN ('pending', 'manager_approved', 'rejected', 'cancelled', 'paid_off')
-          OR (l.status = 'approved' AND COALESCE(l.remaining_balance, 0) <= 0)) AS boleh_hapus
-  FROM hris.loans l, cutoff c
-),
+-- R2' (keputusan user 06-11-2026): pinjaman/kasbon tidak dibersihkan; yang bertanggal ≤ batas
+-- tetap dihitung di PENGECUALIAN supaya terlihat di pratinjau.
 ln AS (
-  SELECT employee_id, status, COALESCE(bertanggal AND boleh_hapus, false) AS hapus,
-         CASE
-           WHEN requested_date IS NULL THEN 'tanpa requested_date'
-           WHEN NOT bertanggal THEN NULL
-           WHEN COALESCE(boleh_hapus, false) THEN NULL
-           WHEN status = 'approved' THEN 'berjalan (approved, sisa > 0)'
-           ELSE 'status ' || COALESCE(status, '(kosong)') || ' (tidak dihapus)'
-         END AS alasan,
-         attachments, collateral_attachments
-  FROM ln0
+  SELECT l.employee_id, l.status, false AS hapus,
+         CASE WHEN (l.requested_date AT TIME ZONE 'Asia/Jakarta')::date <= c.d
+              THEN 'pinjaman tidak dibersihkan (keputusan user 06-11)' END AS alasan,
+         l.attachments, l.collateral_attachments
+  FROM hris.loans l, cutoff c
 ),
 baris AS (
   SELECT 'attendance' AS tabel, status, hapus, NULL::text AS alasan FROM att

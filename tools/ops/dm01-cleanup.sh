@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# EPIC-083 / DM-01 — runner cleanup data HRIS bertanggal ≤ 30 September 2026.
-# PERUBAHAN 03-11-2026 (keputusan user): batas ≤ 30 September 2026 (semula 20 Oktober); data 1 Oktober ke atas tidak disentuh.
+# EPIC-083 / DM-01 — runner cleanup data HRIS bertanggal ≤ 20 Oktober 2026.
 #
 # Dasar: MOM 29 Oktober 2026 §2 No. 6, DM-01 ("database cleanup per tanggal 20 Oktober 2026 …
 # didahului backup") dan K-22; ruling R1–R11 di docs/epics/EPIC-083-cleanup-data-20-oktober.md.
@@ -22,8 +21,8 @@
 #   3. DM01_APPROVED=yes DM01_PREVIEW_DIR=<folder pratinjau yang disetujui> tools/ops/dm01-cleanup.sh execute
 #        Menolak bila: DM01_APPROVED bukan "yes"; DM01_PREVIEW_DIR kosong; pratinjau lebih tua dari
 #        36 jam; SHA-256 beda dari DM01_PREVIEW_SHA256 (bila diisi); target beda; ada payroll run
-#        draft yang mencakup ≤ 30 Sep; ada perusahaan bergaji aktif tanpa payroll final atau periode
-#        absensi ≤ 30 Sep yang belum ditutup (kecuali DM01_PAYROLL_ACK=yes); angka saat ini beda
+#        draft yang mencakup ≤ 20 Okt; ada perusahaan bergaji aktif tanpa payroll final atau periode
+#        absensi ≤ 20 Okt yang belum ditutup (kecuali DM01_PAYROLL_ACK=yes); angka saat ini beda
 #        dari pratinjau; ruang disk kurang (folder backup ≥ ukuran DB + 2 GiB, volume data Postgres
 #        ≥ 1,2 × ukuran DB + 2 GiB, dicek sebelum dan sesudah dump).
 #        Lalu: pg_dump -Fc → db.dump, pg_restore -l, restore ke DB sementara paddydev_dm01_check
@@ -64,14 +63,14 @@
 #
 # Gerbang payroll (keputusan):
 #   - DRAFT (selalu menolak): hris.payroll_runs status 'draft' dengan periode ≤ 2026-10 ATAU
-#     tanggal mulai periodenya ≤ 2026-09-30.
+#     tanggal mulai periodenya ≤ 2026-10-20.
 #   - PAYROLL_BELUM (menolak kecuali DM01_PAYROLL_ACK=yes): untuk tiap periode payroll yang
-#     beririsan dengan [tanggal tertua data yang dihapus, 2026-09-30] — dari absensi, pengajuan
+#     beririsan dengan [tanggal tertua data yang dihapus, 2026-10-20] — dari absensi, pengajuan
 #     absensi, cuti, lembur, perjalanan dinas; pinjaman tidak dihitung — setiap perusahaan yang
 #     punya employee_salary aktif pada periode itu tetapi tidak punya payroll run selain draft
 #     (run tanpa perusahaan = run lama untuk semua perusahaan).
 #   - PERIODE_TERBUKA (menolak kecuali DM01_PAYROLL_ACK=yes): baris hris.attendance_periods dengan
-#     start_date ≤ 2026-09-30 yang status-nya bukan 'closed'.
+#     start_date ≤ 2026-10-20 yang status-nya bukan 'closed'.
 #   Periode = start/end_date di hris.attendance_periods bila barisnya ada, selain itu dihitung dari
 #   hris.attendance_settings.cutoff_day seperti domain.ComputePeriod (0 = bulan kalender; 1–28 =
 #   tanggal cutoff+1 bulan sebelumnya s.d. tanggal cutoff).
@@ -94,7 +93,7 @@ PREVIEW_SQL="$SQL_DIR/2026-11-03_dm01_preview.sql"
 CORE_SQL="$SQL_DIR/2026-11-03_dm01_cleanup_core.sql"
 CHECK_DB=paddydev_dm01_check
 SCRATCH_DB=paddydev_dm01_restore
-CUTOFF=2026-09-30
+CUTOFF=2026-10-20
 MAX_AGE_SECONDS=$((36 * 3600))
 GIB=1073741824
 TABLES=(attendance_requests attendance leaves overtime_requests business_trips loans)
@@ -225,7 +224,7 @@ ORDER BY 1;
 SQL
 }
 
-# Payroll run draft yang periodenya mencakup ≤ 30 Sep (lihat kepala skrip).
+# Payroll run draft yang periodenya mencakup ≤ 20 Okt (lihat kepala skrip).
 payroll_draft_sql() {
   cat <<SQL
 SELECT format(E'PAYROLL_DRAFT\t%s\t%s-%s\tmulai %s', r.run_name, r.period_year, lpad(r.period_month::text, 2, '0'), m.mulai)
@@ -239,7 +238,7 @@ CROSS JOIN LATERAL (
                        ELSE (make_date(r.period_year, r.period_month, 1) - interval '1 month')::date + s.cut END) AS mulai
 ) m
 WHERE r.status = 'draft'
-  AND (m.mulai <= DATE '$CUTOFF' OR (r.period_year, r.period_month) <= (2026, 9))
+  AND (m.mulai <= DATE '$CUTOFF' OR (r.period_year, r.period_month) <= (2026, 10))
 ORDER BY r.period_year, r.period_month, r.run_name;
 SQL
 }
@@ -335,7 +334,7 @@ count_of() { # <pola> <berkas> → jumlah baris cocok
 }
 lines_of() { grep_ok -E "^$1"$'\t' "$2"; }
 
-# Bagian pratinjau yang harus sama dengan yang disetujui HR (data ≤ 30 Sep dan struktur);
+# Bagian pratinjau yang harus sama dengan yang disetujui HR (data ≤ 20 Okt dan struktur);
 # TETAP, STATUS tetap, CHECKSUM dan gerbang payroll ikut berubah oleh aktivitas harian sehingga
 # tidak dibandingkan (gerbang payroll dicek ulang langsung saat execute).
 core_lines() {
@@ -344,26 +343,26 @@ core_lines() {
 
 summary() { # <pratinjau.txt>
   local p=$1
-  echo "Akan dihapus (≤ 30 Sep 2026):"
+  echo "Akan dihapus (≤ 20 Okt 2026):"
   lines_of HAPUS "$p" | awk -F'\t' '{printf "  %-22s %s\n", $2, $3}'
   echo "Tetap ada (seluruh tabel):"
   lines_of TETAP "$p" | awk -F'\t' '{printf "  %-22s %s\n", $2, $3}'
   if [ -n "$(lines_of PENGECUALIAN "$p")" ]; then
-    echo "Pengecualian (≤ 30 Sep tetapi TIDAK dihapus):"
+    echo "Pengecualian (≤ 20 Okt tetapi TIDAK dihapus):"
     lines_of PENGECUALIAN "$p" | awk -F'\t' '{printf "  %-22s %s: %s\n", $2, $3, $4}'
   fi
   echo "Berkas: $(lines_of FILE "$p" | wc -l) FILE dihapus otomatis, $(lines_of FILE_LAIN "$p" | wc -l) FILE_LAIN ditinjau manual"
   echo "Inventaris: $(lines_of FK "$p" | wc -l) FK merujuk enam tabel, $(lines_of TRIGGER "$p" | wc -l) trigger"
   if [ -n "$(lines_of PAYROLL_DRAFT "$p")" ]; then
-    echo "PERINGATAN: payroll draft yang mencakup ≤ 30 Sep (execute akan menolak):"
+    echo "PERINGATAN: payroll draft yang mencakup ≤ 20 Okt (execute akan menolak):"
     lines_of PAYROLL_DRAFT "$p" | awk -F'\t' '{printf "  %s (%s, %s)\n", $2, $3, $4}'
   fi
   if [ -n "$(lines_of PAYROLL_BELUM "$p")" ]; then
-    echo "PERINGATAN: perusahaan bergaji aktif tanpa payroll final pada periode ≤ 30 Sep (execute menolak kecuali DM01_PAYROLL_ACK=yes):"
+    echo "PERINGATAN: perusahaan bergaji aktif tanpa payroll final pada periode ≤ 20 Okt (execute menolak kecuali DM01_PAYROLL_ACK=yes):"
     lines_of PAYROLL_BELUM "$p" | awk -F'\t' '{printf "  %s %s (%s)\n", $3, $2, $4}'
   fi
   if [ -n "$(lines_of PERIODE_TERBUKA "$p")" ]; then
-    echo "PERINGATAN: periode absensi ≤ 30 Sep yang belum ditutup (execute menolak kecuali DM01_PAYROLL_ACK=yes):"
+    echo "PERINGATAN: periode absensi ≤ 20 Okt yang belum ditutup (execute menolak kecuali DM01_PAYROLL_ACK=yes):"
     lines_of PERIODE_TERBUKA "$p" | awk -F'\t' '{printf "  %s %s (%s)\n", $2, $3, $4}'
   fi
 }
@@ -395,7 +394,7 @@ check_payroll_drafts() {
   drafts=$(payroll_draft_sql | psql_db "$DB_NAME" -qAt -f -) || die "cek payroll draft gagal"
   if [ -n "$drafts" ]; then
     echo "$drafts" | awk -F'\t' '{printf "  %s (%s, %s)\n", $2, $3, $4}' >&2
-    die "ada payroll run berstatus draft yang periodenya mencakup ≤ 30 Sep 2026 (di atas). Selesaikan atau hapus run itu dulu: hitung ulangnya akan membaca data yang dihapus."
+    die "ada payroll run berstatus draft yang periodenya mencakup ≤ 20 Okt 2026 (di atas). Selesaikan atau hapus run itu dulu: hitung ulangnya akan membaca data yang dihapus."
   fi
 }
 
@@ -407,7 +406,7 @@ check_payroll_gate() {
   echo "$gate" | awk -F'\t' '$1 == "PAYROLL_BELUM" {printf "  payroll belum final: %s %s (%s)\n", $3, $2, $4}
     $1 == "PERIODE_TERBUKA" {printf "  periode absensi belum ditutup: %s %s (%s)\n", $2, $3, $4}' >&2
   if [ "${DM01_PAYROLL_ACK:-}" != yes ]; then
-    die "ada payroll belum final atau periode absensi ≤ 30 Sep yang belum ditutup (di atas). Finalkan payroll / tutup periode dulu, atau — bila HR menyatakan tertulis bahwa data itu sudah tercatat di luar sistem — jalankan ulang dengan DM01_PAYROLL_ACK=yes."
+    die "ada payroll belum final atau periode absensi ≤ 20 Okt yang belum ditutup (di atas). Finalkan payroll / tutup periode dulu, atau — bila HR menyatakan tertulis bahwa data itu sudah tercatat di luar sistem — jalankan ulang dengan DM01_PAYROLL_ACK=yes."
   fi
   cat >&2 <<'EOF'
 ################################################################################

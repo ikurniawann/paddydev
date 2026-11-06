@@ -1,14 +1,16 @@
--- EPIC-083 / DM-01 — HAPUS PERMANEN data transaksi HRIS bertanggal ≤ 30 September 2026.
--- PERUBAHAN 03-11-2026 (keputusan user): batas dimundurkan ke ≤ 30 September 2026 (semula 20 Oktober);
---   pinjaman pending ikut dihapus ("oke delete aja"). Data 1 Oktober ke atas tidak disentuh.
+-- EPIC-083 / DM-01 — HAPUS PERMANEN data transaksi HRIS bertanggal ≤ 20 Oktober 2026.
 --
 -- Dasar: MOM 29 Oktober 2026 (WIT × Paddy) §2 No. 6, DM-01 ("database cleanup per tanggal
 -- 20 Oktober 2026 … didahului backup") dan K-22. Jawaban user 02-11-2026:
---   - cakupan: data bertanggal ≤ 30 September 2026 (absensi, pengajuan absensi, cuti & izin,
+--   - cakupan: data bertanggal ≤ 20 Oktober 2026 (absensi, pengajuan absensi, cuti & izin,
 --     lembur, perjalanan dinas, pinjaman/kasbon);
 --   - hapus permanen, didahului backup penuh database dan file lampiran;
 --   - pinjaman yang masih berjalan (approved, sisa > 0) tidak dihapus;
 --   - saldo cuti (hris.leave_balances) tidak diubah.
+-- Keputusan user 06-11-2026 (eksekusi kedua, setelah ≤ 30 Sep pada 03-11): batas kembali ke
+-- ≤ 20 Oktober 2026 karena payroll dihitung mulai 21 Oktober (konfirmasi HR), dan cakupannya
+-- HANYA absensi dan pengajuan (pengajuan absensi, cuti & izin, lembur, perjalanan dinas):
+-- pinjaman/kasbon tidak dihapus sama sekali (R2'; jumlahnya selalu 0).
 --
 -- WAJIB sebelum menjalankan: backup pg_dump -Fc + tar lampiran, pratinjau
 -- (2026-11-03_dm01_preview.sql), dan — di production — persetujuan tertulis HR atas angka
@@ -22,7 +24,7 @@
 --        :'expect_<tabel>', true) untuk keenam tabel, lalu \i 2026-11-03_dm01_cleanup_core.sql>
 --
 -- Isi (ruling EPIC-083):
---   R1 batas inklusif 30 Sep: attendance.date, attendance_requests.date, overtime_requests.date;
+--   R1 batas inklusif 20 Okt: attendance.date, attendance_requests.date, overtime_requests.date;
 --      leaves.end_date, business_trips.end_date (yang melintasi 21 Okt tetap ada);
 --      loans.requested_date (timestamptz, dibaca sebagai tanggal WIB).
 --   R2 pinjaman dihapus hanya bila status pending / manager_approved (masih menunggu HR, sama
@@ -49,7 +51,7 @@
 -- tidak menyetel search_path, sedangkan fungsi trigger memakai nama tabel tanpa schema.
 SET LOCAL search_path = public, iam, configuration, hris, performance, recruitment, item, purchasing, inventory, manufacturing, pos, crm, accounting, auth;
 SET LOCAL lock_timeout = '10s';
-SET LOCAL dm01.cutoff = '2026-09-30';
+SET LOCAL dm01.cutoff = '2026-10-20';
 
 -- Di luar transaksi (psql tanpa -1) SET LOCAL tidak berlaku: berhenti sebelum apa pun berubah.
 DO $$
@@ -127,14 +129,8 @@ WITH d AS (
 )
 SELECT set_config('dm01.n_business_trips', count(*)::text, true) AS business_trips_dihapus FROM d;
 
-WITH d AS (
-  DELETE FROM hris.loans
-  WHERE (requested_date AT TIME ZONE 'Asia/Jakarta')::date <= current_setting('dm01.cutoff')::date
-    AND (status IN ('pending', 'manager_approved', 'rejected', 'cancelled', 'paid_off')
-         OR (status = 'approved' AND COALESCE(remaining_balance, 0) <= 0))
-  RETURNING 1
-)
-SELECT set_config('dm01.n_loans', count(*)::text, true) AS loans_dihapus FROM d;
+-- R2' (keputusan user 06-11-2026): pinjaman/kasbon tidak dibersihkan.
+SELECT set_config('dm01.n_loans', '0', true) AS loans_dihapus;
 
 -- Jumlah terhapus harus sama dengan angka yang disetujui; beda → seluruh transaksi dibatalkan.
 DO $$
@@ -170,4 +166,4 @@ SELECT NULL, 'Sistem (cleanup DM-01)', 'data_cleanup.dm01', 'hris', 'dm01',
          'overtime_requests', current_setting('dm01.n_overtime_requests')::int,
          'business_trips', current_setting('dm01.n_business_trips')::int,
          'loans', current_setting('dm01.n_loans')::int),
-       'MOM 29 Okt 2026 DM-01/K-22; jawaban user 02-11-2026 (hapus permanen ≤ 30 Sep, pinjaman berjalan dan saldo cuti tetap)';
+       'MOM 29 Okt 2026 DM-01/K-22; keputusan user 06-11-2026 (hapus permanen absensi dan pengajuan ≤ 20 Okt; pinjaman dan saldo cuti tetap)';
