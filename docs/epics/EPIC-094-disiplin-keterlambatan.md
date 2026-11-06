@@ -1,6 +1,6 @@
 # EPIC-094: Keterlambatan Tanpa Potongan + Peringatan Lonceng + Surat Teguran/SP oleh HR (`MODULE-HRIS`, `MODULE-PAYROLL`)
 
-status: backlog
+status: review
 environment: dev
 retries: 0
 
@@ -21,7 +21,7 @@ Keputusan user setelah ditanya:
 Kondisi kode dan data (06-11):
 - **ESS Absensi (`MyLatenessCard`).** Tampil badge tingkat, tangga 5 tingkat, petunjuk tingkat berikutnya, dan teks ketentuan SP (EPIC-077 R8).
 - **Beranda (`LatenessBerandaCard`).** Tampil badge dan petunjuk (R9).
-- **Notifikasi keterlambatan.** Belum ada sama sekali.
+- **Notifikasi keterlambatan.** Hanya ke HR: trigger `public.fn_notify_attendance_changes` sudah mengirim "⏰ Karyawan Terlambat" ke akun HR untuk setiap clock-in terlambat. Karyawan dan atasan belum mendapat apa pun. (Koreksi dari review akhir; semula ditulis "belum ada sama sekali".)
 - **Payroll production.** `late_deduction_mode = tier` (4–6 = 1 hari THP, 7–9 = 2 hari pokok, 10+ = 3 hari pokok). Satu-satunya run (Nov 2026) masih draft tanpa detail, jadi belum ada slip yang terpotong. Staging juga `tier`.
 - **Tabel payslip acuan.** Tidak punya baris potongan telat (`docs/hris/acuan-mom-20261019/aturan-payroll.md`).
 - **Potongan Izin Sakit dan Izin Pribadi sudah ada.**
@@ -46,7 +46,7 @@ Kondisi kode dan data (06-11):
 - **R5 — Penerima peringatan dan surat:**
   - karyawan sendiri;
   - `hris.request_approver` dan `hris.request_manager` milik karyawan (tanpa duplikat, tidak termasuk dirinya sendiri);
-  - semua akun `role = hrd` (`public.notify_hrd`).
+  - semua akun `role = hrd` (`public.notify_hrd`). Untuk peringatan terlambat, HR memakai lonceng trigger yang sudah ada ("⏰ Karyawan Terlambat"), jadi tidak dikirim dua kali. Untuk surat, HR mendapat lonceng baru.
   - Jenis notifikasi `alert`.
 - **R6 — Hitungan "x kali di periode ini"** memakai periode absensi yang sama dengan kartu keterlambatan (`periodContaining`), termasuk baris yang baru dicatat.
 - **R7 — Potongan telat dimatikan lewat migrasi data** `late_deduction_mode = 'off'`.
@@ -75,15 +75,43 @@ Kondisi kode dan data (06-11):
 Lihat rencana `docs/superpowers/plans/2026-11-06-disiplin-keterlambatan.md`.
 
 ## Acceptance Criteria
-- [ ] ESS Beranda dan Absensi karyawan tidak menampilkan Teguran/SP (badge, tangga, petunjuk, teks ketentuan). Jumlah, menit, dan hari terlambat tetap tampil. Absensi Tim atasan tidak berubah.
-- [ ] Clock-in terlambat → lonceng ke karyawan ("Anda terlambat … Hati-hati …"), penyetuju + Manager, dan HR. Clock-in tepat waktu tidak mengirim lonceng.
-- [ ] HR menerbitkan Surat Teguran/SP1/SP2/SP3 (dengan atau tanpa PDF) dari menu Surat Peringatan atau profil karyawan → lonceng ke karyawan, penyetuju, dan HR. Karyawan melihat surat di ESS Absensi.
-- [ ] HR membatalkan surat dengan alasan → surat hilang dari ESS karyawan dan tercatat di audit.
-- [ ] Payroll tidak lagi memotong keterlambatan. Baris "Potongan Keterlambatan" tidak tampil bila nol. Potongan Izin Sakit dan Izin Pribadi tetap.
-- [ ] SLA: Cuti Tahunan < H-3 ditolak, Haji/Umrah < H-30 ditolak, Sakit selain hari H ditolak.
+- [x] ESS Beranda dan Absensi karyawan tidak menampilkan Teguran/SP (badge, tangga, petunjuk, teks ketentuan). Jumlah, menit, dan hari terlambat tetap tampil. Absensi Tim atasan tidak berubah.
+- [x] Clock-in terlambat → lonceng ke karyawan ("Anda terlambat … Hati-hati …"), penyetuju + Manager, dan HR. Clock-in tepat waktu tidak mengirim lonceng.
+- [x] HR menerbitkan Surat Teguran/SP1/SP2/SP3 (dengan atau tanpa PDF) dari menu Surat Peringatan atau profil karyawan → lonceng ke karyawan, penyetuju, dan HR. Karyawan melihat surat di ESS Absensi.
+- [x] HR membatalkan surat dengan alasan → surat hilang dari ESS karyawan dan tercatat di audit.
+- [x] Payroll tidak lagi memotong keterlambatan. Baris "Potongan Keterlambatan" tidak tampil bila nol. Potongan Izin Sakit dan Izin Pribadi tetap.
+- [x] SLA: Cuti Tahunan < H-3 ditolak, Haji/Umrah < H-30 ditolak, Sakit selain hari H ditolak.
 - [ ] `go test`, `pnpm test`, `pnpm lint`, dan `tsc` hijau; CI hijau; QA staging lulus.
 
 ## Automation Log
 - 2026-11-06: **Permintaan user** (4 butir) + dua putaran tanya-jawab (keputusan di Goal).
   - Kode dipetakan; data production dibaca read-only (setting telat `tier`, 1 run draft tanpa detail, ±490 terlambat per 30 hari, 1 akun HR).
   - Rencana ditulis; status `backlog`, menunggu review user.
+- 2026-11-06: **User menyetujui rencana** ("eksekusi aja dengan native"). Implementasi inline di branch `feat/epic094-disiplin-keterlambatan` (base `e09fee9e` = EPIC-092):
+  - **T1** `da400268`: `domain.LateNotice`, `NotifyRequestApprovers` (request_approver ∪ request_manager, tanpa duplikat), `notifyLate` sesudah `ClockIn`.
+  - **T2** `e6dff2ae`: `LatenessSummary showLevel={false}` di Beranda dan Absensi karyawan. Tangga dan blok tingkat SP di ketentuan dihapus; judul jadi "Jam Kerja & Ketentuan Absensi"; pengingat R2. Kartu tim tidak berubah.
+  - **T3** `6158fefa`: migrasi `20261112090100_late_deduction_off.sql`. Halaman, PDF, dan dialog slip sudah menyembunyikan baris telat nol (tes regresi ditambah).
+  - **T4** `bb8d4f39` + `c5dbccda`: tabel `hris.disciplinary_letters` + menu `hris.workforce.disciplinary-letters` (migrasi `20261112090000`), API terbit/batal/daftar/lampiran/hint keterlambatan/ESS, audit `disciplinary_letter.issue|revoke`, rute hanya di Go.
+  - **T5** `10b104bc`: halaman HR `/dashboard/hris/surat-peringatan`, dialog terbitkan (hint keterlambatan, unggah lampiran), tabel dengan batal beralasan, tab profil "Surat Peringatan".
+  - **T6** `51ca7bf0`: bagian ESS "Surat dari HR" (`#surat`), `TestLeaveSLACatalog` (regresi; langsung hijau sesuai R14).
+  - Ruling implementasi:
+    - `LatenessPolicy` tetap (jam kerja + langkah absensi), hanya blok SP dihapus; `lateness-ladder.tsx` dihapus.
+    - HR yang clock-in atas nama karyawan pada hari itu juga memicu lonceng.
+    - Tab profil menampilkan tombol terbit/batal untuk pemegang menu, dan server menegakkan aksinya.
+    - Pemilih karyawan memakai pencarian penempatan.
+    - Lampiran menerima PDF/JPG/PNG/WebP.
+    - Migrasi diterapkan ke DB uji lewat psql karena ledger DB uji belum mencatat EPIC-088..092.
+- 2026-11-06: **Review akhir seluruh branch** (reviewer segar): Critical 0, Important 2, satu Minor dinaikkan. Diperbaiki dalam satu gelombang (`4e69bbf1`):
+  - HR menerima dua lonceng per keterlambatan (trigger lama + lonceng baru). Lonceng HR baru dihapus. Tes menghitung semua lonceng HR = 1 (RED 2 → GREEN 1).
+  - Clock-in HR untuk tanggal lampau mengirim lonceng "hari ini". Kini hanya untuk tanggal hari ini (WIB). `TestHRBackfillClockInNoNotice` RED 3 → GREEN 0.
+  - Tautan lonceng `#surat` tidak menggulir karena bagian dirender sesudah data. Kini menggulir sekali sesudah data tampil (tes RED → GREEN).
+- **Minor ditunda:**
+  - pembatalan surat tidak mengirim lonceng ke karyawan;
+  - lampiran yang dibatalkan masih bisa terbuka dari cache browser hingga 1 jam (`max-age=3600`);
+  - unggah lampiran sambil mengganti karyawan menampilkan galat "unggah ulang";
+  - hint keterlambatan selalu periode berjalan, termasuk untuk surat bertanggal mundur;
+  - penyetuju belum punya tampilan untuk membuka lampiran surat (akses API ada);
+  - daftar HR dibatasi 500 baris tanpa paging;
+  - berkas unggahan yang batal dipakai tidak dibersihkan;
+  - cabang `showLevel=true` di `LatenessSummary` kini tanpa pemanggil;
+  - `/me/lateness` masih mengirim `level`/`next` di JSON (R1).
