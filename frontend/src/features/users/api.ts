@@ -360,7 +360,33 @@ export const applyFixedSchedule = (body: { branch_id?: string; employee_ids?: st
 export const resignEmployee = (
   id: string,
   body: { effective_date: string; resign_type: string; reason: string | null }
-) => apiPost<{ data: unknown; message?: string }>(`/api/hris/employees/${id}/resign`, body);
+) => apiPost<{ data: { scheduled?: boolean } | null; message?: string }>(`/api/hris/employees/${id}/resign`, body);
+
+/** Resign terjadwal yang belum dijalankan (EPIC-095). */
+export interface ScheduledResign {
+  id: string;
+  /** Hari terakhir kerja (YYYY-MM-DD). */
+  effective_date: string;
+  resign_type: string;
+  reason: string | null;
+  created_by_name: string | null;
+  created_at: string;
+}
+
+export const fetchScheduledResign = (id: string) =>
+  apiGet<{ data: ScheduledResign | null }>(`/api/hris/employees/${id}/resign`).then((res) => res.data ?? null);
+
+/** Batalkan resign terjadwal; alasan opsional. */
+export async function cancelScheduledResign(id: string, reason: string | null) {
+  const res = await fetch(`/api/hris/employees/${id}/resign`, {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ reason }),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json?.error || "Gagal membatalkan jadwal resign");
+  return json as { message?: string };
+}
 
 export interface RehireBody {
   effective_date: string;
