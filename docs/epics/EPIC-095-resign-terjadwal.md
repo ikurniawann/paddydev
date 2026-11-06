@@ -69,3 +69,14 @@ Lihat rencana `docs/superpowers/plans/2026-11-06-resign-terjadwal.md`.
   - **I1:** baris karyawan dikunci sebelum cek jadwal ganda.
   - Suite hris, payroll, dan configuration hijau.
   - Minor ditunda: pembatalan otomatis tanpa baris audit; tombol Resign tersembunyi saat data jadwal gagal dimuat; prop `canCancel` redundan; `fetch` manual untuk DELETE; handler GET membaca DB langsung.
+- 2026-11-06: **PR #84** dibuka (base `main`).
+- 2026-11-06 17:29: **Deploy staging**.
+  - Backup `staging-db-before-epic095-20261106-172928.dump`.
+  - Merge ke tumpukan staging, menjadi `6f928935`.
+  - Image `local-20261106-172946`, 1 migrasi, verify 0 berbeda.
+- 2026-11-06: **QA staging 15/15 lulus** (HR desktop, akun demo `qa095-*`).
+  - **Dialog jadwal.** Tanggal +14 hari menampilkan catatan biru. "Jadwalkan resign" memunculkan toast "Resign dijadwalkan efektif 20-11-2026" dan banner di profil. Tombol Resign tersembunyi, dan karyawan masih aktif serta bisa login.
+  - **Batal.** "Batalkan jadwal" → "Ya, batalkan" → banner hilang, tombol Resign kembali.
+  - **Job.** Jadwal kedua dibuat jatuh tempo lewat SQL demo, lalu job menjalankannya pada tick berikutnya (17:37, log `hris resign terjadwal applied=1`). Hasilnya: nonaktif, `end_date` = hari terakhir kerja, status resigned, login diblokir dan ditolak di halaman masuk, audit oleh "Sistem (resign terjadwal)".
+  - **Resign langsung.** Resign dengan tanggal hari ini tetap langsung, tanpa baris jadwal.
+  - Data demo dihapus. Bukti di `.share/qa095/`.
