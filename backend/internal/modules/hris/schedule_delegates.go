@@ -279,12 +279,12 @@ func delegateRows(ctx context.Context, q database.Querier, employeeID string) ([
 		id, nip, name       string
 		position, updatedBy *string
 		hasLogin, canPlace  bool
-		active              bool
+		active, schedAll    bool
 		reports             int
 		updatedAt           time.Time
 	}
 	rows, err := q.Query(ctx, `
-		SELECT e.id::text, e.nip, e.full_name, pos.title, e.user_id IS NOT NULL, sd.can_place,
+		SELECT e.id::text, e.nip, e.full_name, pos.title, e.user_id IS NOT NULL, sd.can_place, sd.schedule_all_branches,
 		       (SELECT count(*) FROM hris.employees r WHERE r.reporting_to = e.id AND r.is_active),
 		       e.is_active, sd.updated_at, u.full_name
 		FROM hris.schedule_delegates sd
@@ -298,7 +298,7 @@ func delegateRows(ctx context.Context, q database.Querier, employeeID string) ([
 	}
 	recs, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (rec, error) {
 		var x rec
-		err := r.Scan(&x.id, &x.nip, &x.name, &x.position, &x.hasLogin, &x.canPlace, &x.reports, &x.active, &x.updatedAt, &x.updatedBy)
+		err := r.Scan(&x.id, &x.nip, &x.name, &x.position, &x.hasLogin, &x.canPlace, &x.schedAll, &x.reports, &x.active, &x.updatedAt, &x.updatedBy)
 		return x, err
 	})
 	if err != nil {
@@ -336,7 +336,7 @@ func delegateRows(ctx context.Context, q database.Querier, employeeID string) ([
 			br = []*Row{}
 		}
 		out = append(out, obj("employee_id", x.id, "nip", x.nip, "full_name", x.name, "position_title", x.position,
-			"has_login", x.hasLogin, "can_place", x.canPlace, "direct_reports", x.reports, "is_active", x.active,
+			"has_login", x.hasLogin, "can_place", x.canPlace, "schedule_all_branches", x.schedAll, "direct_reports", x.reports, "is_active", x.active,
 			"branches", br, "updated_at", x.updatedAt, "updated_by_name", x.updatedBy))
 	}
 	return out, nil
@@ -392,15 +392,16 @@ func (h handlers) suggestDelegateBranches(w http.ResponseWriter, r *http.Request
 }
 
 // delegateAuditState is the before/after of a set/revoke audit row.
-func delegateAuditState(canPlace bool, branchIDs []string) map[string]any {
-	return map[string]any{"can_place": canPlace, "branch_ids": branchIDs}
+func delegateAuditState(canPlace, scheduleAll bool, branchIDs []string) map[string]any {
+	return map[string]any{"can_place": canPlace, "schedule_all_branches": scheduleAll, "branch_ids": branchIDs}
 }
 
 // storedDelegate reads an appointment as stored (every appointed store, active
 // or not, by id). nil when there is none.
 func storedDelegate(ctx context.Context, q database.Querier, employeeID string) (map[string]any, error) {
-	var canPlace bool
-	err := q.QueryRow(ctx, `SELECT can_place FROM hris.schedule_delegates WHERE employee_id = $1`, employeeID).Scan(&canPlace)
+	var canPlace, scheduleAll bool
+	err := q.QueryRow(ctx, `SELECT can_place, schedule_all_branches FROM hris.schedule_delegates
+		WHERE employee_id = $1`, employeeID).Scan(&canPlace, &scheduleAll)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -419,12 +420,12 @@ func storedDelegate(ctx context.Context, q database.Querier, employeeID string) 
 	if ids == nil {
 		ids = []string{}
 	}
-	return delegateAuditState(canPlace, ids), nil
+	return delegateAuditState(canPlace, scheduleAll, ids), nil
 }
 
-// PUT /api/hris/schedule-delegates/{employee_id} { branch_ids[1..100], can_place }:
-// appoints the employee, or replaces their stores and flag, in one transaction
-// with the audit row.
+// PUT /api/hris/schedule-delegates/{employee_id} { branch_ids[1..100], can_place,
+// schedule_all_branches }: appoints the employee, or replaces their stores and
+// flags, in one transaction with the audit row. A flag left out is false.
 func (h handlers) setScheduleDelegate(w http.ResponseWriter, r *http.Request, u *auth.User) error {
 	id, err := requireUUID(r.PathValue("employee_id"), "ID karyawan tidak valid")
 	if err != nil {
@@ -436,6 +437,7 @@ func (h handlers) setScheduleDelegate(w http.ResponseWriter, r *http.Request, u 
 	}
 	branchIDs := f.Strings("branch_ids", nullish, maxDelegateBranches, validate.StrOpts{Check: validate.UUIDCheck})
 	canPlace := f.BoolDefault("can_place", false)
+	scheduleAll := f.BoolDefault("schedule_all_branches", false)
 	if err := formErr(f, ""); err != nil {
 		return err
 	}
@@ -478,10 +480,11 @@ func (h handlers) setScheduleDelegate(w http.ResponseWriter, r *http.Request, u 
 			before = cur
 		}
 		if _, err := q.Exec(ctx, `
-			INSERT INTO hris.schedule_delegates (employee_id, can_place, created_by, updated_by)
-			VALUES ($1, $2, $3, $3)
+			INSERT INTO hris.schedule_delegates (employee_id, can_place, schedule_all_branches, created_by, updated_by)
+			VALUES ($1, $2, $3, $4, $4)
 			ON CONFLICT (employee_id) DO UPDATE SET can_place = EXCLUDED.can_place,
-				updated_by = EXCLUDED.updated_by, updated_at = now()`, id, canPlace, u.ID); err != nil {
+				schedule_all_branches = EXCLUDED.schedule_all_branches,
+				updated_by = EXCLUDED.updated_by, updated_at = now()`, id, canPlace, scheduleAll, u.ID); err != nil {
 			return err
 		}
 		if _, err := q.Exec(ctx, `DELETE FROM hris.schedule_delegate_branches WHERE employee_id = $1`, id); err != nil {
@@ -491,7 +494,7 @@ func (h handlers) setScheduleDelegate(w http.ResponseWriter, r *http.Request, u 
 			SELECT $1, unnest($2::uuid[])`, id, branchIDs); err != nil {
 			return err
 		}
-		return writeEmployeeAudit(ctx, q, u, "schedule_delegate.set", id, name, before, delegateAuditState(canPlace, branchIDs))
+		return writeEmployeeAudit(ctx, q, u, "schedule_delegate.set", id, name, before, delegateAuditState(canPlace, scheduleAll, branchIDs))
 	})
 	if err != nil {
 		return err
