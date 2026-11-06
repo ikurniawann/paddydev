@@ -65,7 +65,9 @@ export function SchedulesPage({
   // Pengatur dengan satu toko wilayah langsung melihat toko itu.
   const ownBranch = areaBranches?.length === 1 ? areaBranches[0].id : "";
   const autoBranch = store && ownBranch && branchList?.some((b) => b.id === ownBranch) ? ownBranch : "";
-  const branchId = pickedBranchId || autoBranch;
+  // Toko yang tidak lagi ada di daftar (centang semua toko dicabut HR) kembali ke toko wilayah.
+  const pickedValid = !store || !branchList || branchList.some((b) => b.id === pickedBranchId);
+  const branchId = (pickedValid && pickedBranchId) || autoBranch;
   // Penempatan hanya untuk toko wilayah (EPIC-093 R4).
   const placementsHere = !store || !!areaBranches?.some((b) => b.id === branchId);
   const place = store ? "toko" : "cabang";
