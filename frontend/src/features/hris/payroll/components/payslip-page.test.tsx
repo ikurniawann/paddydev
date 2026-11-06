@@ -114,3 +114,18 @@ describe("PayslipPage baris potongan nonaktif (EPIC-082 R5)", () => {
     expect(screen.queryByText(/Koreksi Desember/)).toBeNull();
   });
 });
+
+describe("PayslipPage tanpa potongan keterlambatan (EPIC-094 R8)", () => {
+  it("baris Potongan Keterlambatan tidak tampil bila nol; Izin Pribadi tetap", () => {
+    detail = slip({ late_days: 7, late_deduction: 0, personal_leave_deduction: 200_000, total_deductions: 200_000 });
+    render(<PayslipPage />);
+    expect(screen.queryByText("Potongan Keterlambatan")).toBeNull();
+    expect(screen.getByText("Potongan Izin Pribadi")).toBeTruthy();
+  });
+
+  it("slip lama yang masih memuat potongan telat tetap menampilkannya", () => {
+    detail = slip({ late_deduction: 15_000, total_deductions: 15_000 });
+    render(<PayslipPage />);
+    expect(screen.getByText("Potongan Keterlambatan")).toBeTruthy();
+  });
+});
