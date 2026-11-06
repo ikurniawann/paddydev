@@ -67,6 +67,7 @@ function DelegateFormBody({ delegate, onOpenChange }: DelegateFormDialogProps) {
   // null = belum diubah HR: toko mengikuti baris pengatur yang ada, lalu saran server (karyawan baru).
   const [chosen, setChosen] = useState<string[] | null>(null);
   const [canPlaceChoice, setCanPlaceChoice] = useState<boolean | null>(null);
+  const [scheduleAllChoice, setScheduleAllChoice] = useState<boolean | null>(null);
   const [storeFilter, setStoreFilter] = useState("");
   const [error, setError] = useState("");
 
@@ -81,6 +82,7 @@ function DelegateFormBody({ delegate, onOpenChange }: DelegateFormDialogProps) {
 
   const selectedIds = chosen ?? base?.branches.map((b) => b.id) ?? suggest.data?.branch_ids ?? [];
   const canPlace = canPlaceChoice ?? base?.can_place ?? false;
+  const scheduleAll = scheduleAllChoice ?? base?.schedule_all_branches ?? false;
   const selected = new Set(selectedIds);
 
   const options = useMemo(() => {
@@ -107,6 +109,7 @@ function DelegateFormBody({ delegate, onOpenChange }: DelegateFormDialogProps) {
     setPicked(options.find((o) => o.value === id) ?? null);
     setChosen(null);
     setCanPlaceChoice(null);
+    setScheduleAllChoice(null);
     setError("");
   }
 
@@ -126,7 +129,7 @@ function DelegateFormBody({ delegate, onOpenChange }: DelegateFormDialogProps) {
     }
     setError("");
     save.mutate(
-      { employeeId, payload: { branch_ids: selectedIds, can_place: canPlace } },
+      { employeeId, payload: { branch_ids: selectedIds, can_place: canPlace, schedule_all_branches: scheduleAll } },
       {
         onSuccess: () => {
           toast.success(editing ? "Pengatur jadwal toko diperbarui" : "Pengatur jadwal toko ditambahkan");
@@ -245,6 +248,20 @@ function DelegateFormBody({ delegate, onOpenChange }: DelegateFormDialogProps) {
           <span>Boleh atur penempatan karyawan</span>
         </label>
         <p className="text-xs text-gray-500">Pengatur hanya bisa mengubah jadwal dan penempatan di toko yang dipilih</p>
+
+        <label className="flex items-start gap-2 text-sm text-gray-700">
+          <input
+            type="checkbox"
+            className="mt-0.5 shrink-0"
+            aria-label="Boleh atur jadwal semua toko"
+            checked={scheduleAll}
+            onChange={(e) => setScheduleAllChoice(e.target.checked)}
+          />
+          <span>Boleh atur jadwal semua toko</span>
+        </label>
+        <p className="text-xs text-gray-500">
+          Jadwal toko lain langsung berlaku tanpa persetujuan. Penempatan tetap hanya di toko yang diatur di atas.
+        </p>
 
         {listFailed && (
           <p className="text-sm text-red-600">Daftar pengatur gagal dimuat. Tutup lalu buka lagi dialog ini.</p>

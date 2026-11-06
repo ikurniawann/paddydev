@@ -14,6 +14,8 @@ export interface ScheduleDelegate {
   has_login: boolean;
   /** Boleh memindah/menambah/mengakhiri penempatan di tokonya. */
   can_place: boolean;
+  /** EPIC-093: boleh atur jadwal semua toko aktif (penempatan tetap toko di atas). */
+  schedule_all_branches: boolean;
   /** Jumlah bawahan aktif. */
   direct_reports: number;
   /** false = karyawan sudah nonaktif, aksesnya otomatis tidak berlaku. */
@@ -24,10 +26,11 @@ export interface ScheduleDelegate {
   updated_by_name: string | null;
 }
 
-/** Body PUT; `can_place` selalu dikirim (server menganggap kosong sebagai false). */
+/** Body PUT; kedua centang selalu dikirim (server menganggap kosong sebagai false). */
 export interface ScheduleDelegatePayload {
   branch_ids: string[];
   can_place: boolean;
+  schedule_all_branches: boolean;
 }
 
 /** GET /api/hris/schedule-delegates/suggest. */

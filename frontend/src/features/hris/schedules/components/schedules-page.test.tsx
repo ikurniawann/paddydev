@@ -215,3 +215,59 @@ it("mode toko: tidak meminta cabang HR, keadaan grid kosong tanpa tautan halaman
   expectNoHrBranchRequest(fetchSpy);
   fetchSpy.mockRestore();
 });
+
+// EPIC-093: pengatur bercentang "jadwal semua toko".
+const KPO = { id: "s1", code: "KPO", name: "KPO - Paddy Kopo" };
+const BTR = { id: "s2", code: "BTR", name: "BTR - Paddy Batununggal" };
+const CWD = { id: "s3", code: "CWD", name: "CWD - Paddy Ciwalk" };
+const ALL_STORES_NOTE = "Anda bisa mengatur jadwal semua toko. Penempatan dan checkout otomatis hanya untuk toko wilayah Anda.";
+
+it("pengatur semua toko melihat semua toko jadwal dan toko wilayahnya terpilih", async () => {
+  accessApi.fetchScheduleAccess.mockResolvedValue({
+    is_delegate: true,
+    can_place: true,
+    branches: [KPO],
+    schedule_all_branches: true,
+    schedule_branches: [BTR, CWD, KPO],
+  });
+  renderPage({ mode: "store" });
+  await screen.findByLabelText("Pilih Ana");
+  expect(api.fetchScheduleGrid).toHaveBeenCalledWith({ branch_id: "s1", from: "2026-11-02", to: "2026-11-08" });
+  const select = screen.getByLabelText("Pilih toko") as HTMLSelectElement;
+  expect([...select.options].map((o) => o.value)).toEqual(["", "s2", "s3", "s1"]);
+  expect(screen.getByText(ALL_STORES_NOTE)).toBeTruthy();
+});
+
+it("tautan Penempatan tidak tampil di toko non-wilayah", async () => {
+  accessApi.fetchScheduleAccess.mockResolvedValue({
+    is_delegate: true,
+    can_place: true,
+    branches: [KPO],
+    schedule_all_branches: true,
+    schedule_branches: [BTR, KPO],
+  });
+  api.fetchScheduleGrid.mockImplementation(async (p: { from: string; to: string }) => ({
+    data: { ...grid(p.from, p.to), employees: [] },
+  }));
+  renderPage({ mode: "store", onOpenPlacements: vi.fn() });
+  expect(await screen.findByRole("button", { name: "Tempatkan karyawan di tab Penempatan" })).toBeTruthy();
+  fireEvent.change(screen.getByLabelText("Pilih toko"), { target: { value: "s2" } });
+  await waitFor(() => expect(api.fetchScheduleGrid).toHaveBeenLastCalledWith({ branch_id: "s2", from: "2026-11-02", to: "2026-11-08" }));
+  expect(await screen.findByText("Belum ada karyawan Shift yang ditempatkan di toko ini.")).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "Tempatkan karyawan di tab Penempatan" })).toBeNull();
+});
+
+it("tanpa centang daftar toko tetap wilayah", async () => {
+  accessApi.fetchScheduleAccess.mockResolvedValue({
+    is_delegate: true,
+    can_place: false,
+    branches: [KPO],
+    schedule_all_branches: false,
+    schedule_branches: [KPO],
+  });
+  renderPage({ mode: "store" });
+  await screen.findByLabelText("Pilih Ana");
+  const select = screen.getByLabelText("Pilih toko") as HTMLSelectElement;
+  expect([...select.options].map((o) => o.value)).toEqual(["", "s1"]);
+  expect(screen.queryByText(ALL_STORES_NOTE)).toBeNull();
+});

@@ -17,7 +17,9 @@ export function JadwalTokoShortcut() {
   if (!hr && !delegate) return null;
   const sub = hr
     ? "Mode HR: atur jadwal kerja semua toko"
-    : `Atur jadwal kerja${data.can_place ? " dan penempatan" : ""} karyawan di ${data.branches.length} toko Anda`;
+    : data.schedule_all_branches
+      ? `Atur jadwal kerja karyawan di semua toko${data.can_place ? `, penempatan di ${data.branches.length} toko Anda` : ""}`
+      : `Atur jadwal kerja${data.can_place ? " dan penempatan" : ""} karyawan di ${data.branches.length} toko Anda`;
   return (
     <Link
       href="/dashboard/me/jadwal-toko"

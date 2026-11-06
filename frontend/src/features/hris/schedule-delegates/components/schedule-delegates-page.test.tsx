@@ -32,6 +32,7 @@ const rows: ScheduleDelegate[] = [
     full_name: "Ani Wijaya",
     position_title: "Area Manager",
     can_place: true,
+    schedule_all_branches: false,
     direct_reports: 5,
     branches: [b("PVJ"), b("KPO"), b("PIK"), b("PAI"), b("PSM")],
   },
@@ -42,6 +43,7 @@ const rows: ScheduleDelegate[] = [
     full_name: "Budi Santoso",
     position_title: "Shopkeeper",
     can_place: false,
+    schedule_all_branches: true,
     direct_reports: 0,
     is_active: false,
     branches: [b("PVJ")],
@@ -77,8 +79,12 @@ describe("ScheduleDelegatesPage (EPIC-071)", () => {
     expect(within(ani).getByText("5")).toBeTruthy();
     expect(within(ani).queryByText("Nonaktif")).toBeNull();
 
+    expect(screen.getByRole("columnheader", { name: "Jadwal semua toko" })).toBeTruthy();
+    // Ani: penempatan Ya, jadwal semua toko Tidak; Budi kebalikannya (EPIC-093).
+    expect(within(ani).getByText("Tidak")).toBeTruthy();
     const budi = screen.getByText("Budi Santoso").closest("tr")!;
     expect(within(budi).getByText("Tidak")).toBeTruthy();
+    expect(within(budi).getByText("Ya")).toBeTruthy();
     expect(within(budi).getByText("Nonaktif")).toBeTruthy();
   });
 
