@@ -1,6 +1,6 @@
 # EPIC-095: Resign Terjadwal — Tanggal Efektif di Masa Depan (`MODULE-HRIS`)
 
-status: backlog
+status: review
 environment: dev
 retries: 0
 
@@ -36,6 +36,7 @@ HR perlu mencatat resign begitu karyawan mengajukan, dengan tanggal efektif di m
   - Alasan opsional; tercatat di audit `employee.resign_schedule_cancel`.
   - Baris jadwal tetap ada dengan `cancelled_at` terisi.
 - **R7 — Kasus tepi saat job berjalan.**
+  - (Review akhir) Jadwal yang masih menunggu dibatalkan oleh trigger `trg_cancel_scheduled_resign` begitu karyawan dinonaktifkan lewat jalur apa pun (alasan "Karyawan dinonaktifkan"), supaya rehire sesudahnya tidak ikut di-resign. Jadwal yang sudah jatuh tempo tetapi ditolak validasi (mis. tanggal masuk diubah) dibatalkan dengan pesan validasinya, tidak diulang.
   - Karyawan sudah nonaktif lewat cara lain sebelum jadwal dijalankan → jadwal ditandai batal dengan alasan "Karyawan sudah nonaktif", tanpa perubahan lain.
   - Satu jadwal yang gagal tidak menghentikan jadwal lain; galatnya di-log.
 - **R8 — UI.**
@@ -49,11 +50,22 @@ HR perlu mencatat resign begitu karyawan mengajukan, dengan tanggal efektif di m
 Lihat rencana `docs/superpowers/plans/2026-11-06-resign-terjadwal.md`.
 
 ## Acceptance Criteria
-- [ ] HR memilih tanggal efektif mendatang (mis. 20 Nov) → tersimpan sebagai jadwal; karyawan tetap aktif dan bisa login serta absen sampai tanggal itu.
-- [ ] Sehari setelah tanggal efektif, karyawan otomatis nonaktif, login diblokir, serta penempatan dan jadwal sesudah tanggal itu ditutup, sama dengan resign langsung.
-- [ ] Profil menampilkan jadwal resign; HR bisa membatalkannya.
-- [ ] Resign dengan tanggal hari ini atau lampau tetap berjalan seperti sebelumnya (tes lama hijau).
+- [x] HR memilih tanggal efektif mendatang (mis. 20 Nov) → tersimpan sebagai jadwal; karyawan tetap aktif dan bisa login serta absen sampai tanggal itu.
+- [x] Sehari setelah tanggal efektif, karyawan otomatis nonaktif, login diblokir, serta penempatan dan jadwal sesudah tanggal itu ditutup, sama dengan resign langsung.
+- [x] Profil menampilkan jadwal resign; HR bisa membatalkannya.
+- [x] Resign dengan tanggal hari ini atau lampau tetap berjalan seperti sebelumnya (tes lama hijau).
 - [ ] `go test`, `pnpm test`, `pnpm lint`, dan `tsc` hijau; CI hijau; QA staging lulus.
 
 ## Automation Log
 - 2026-11-06: **Laporan bug user.** Penyebab dipetakan (validasi server EPIC-056 I8 + `max` di dialog). Rencana ditulis; status `backlog`, menunggu review user.
+- 2026-11-06: **User menyetujui rencana** ("Sesuai, Native"). Implementasi inline di branch `fix/resign-terjadwal`:
+  - T1 `a0387a93`: tabel `hris.scheduled_resignations`, resign tanggal mendatang jadi jadwal (≤ 180 hari), GET/DELETE jadwal, `applyResign` dipisah.
+  - T2: job `ScheduledResignLoop` (5 menit), dijalankan sehari setelah hari terakhir kerja.
+  - T3 `d1b8657d`: dialog ("Jadwalkan resign", catatan biru, batas 180 hari) dan banner profil dengan tombol "Batalkan jadwal".
+- 2026-11-06: **Gerbang**: go hris ok; `pnpm test` 889 file / 6466 tes; `tsc` + lint bersih.
+- 2026-11-06: **Review akhir** (reviewer segar): Critical 1, Important 2, diperbaiki dalam satu gelombang:
+  - **C1:** karyawan yang dinonaktifkan lalu di-rehire bisa ikut di-resign oleh job. Diperbaiki dengan trigger pembatal jadwal saat nonaktif, dan `applied_at` diisi sebelum resign dijalankan. Tes RED → GREEN.
+  - **I2:** jadwal yang ditolak validasi diulang tiap 5 menit. Kini dibatalkan dengan pesannya. Tes RED → GREEN.
+  - **I1:** baris karyawan dikunci sebelum cek jadwal ganda.
+  - Suite hris, payroll, dan configuration hijau.
+  - Minor ditunda: pembatalan otomatis tanpa baris audit; tombol Resign tersembunyi saat data jadwal gagal dimuat; prop `canCancel` redundan; `fetch` manual untuk DELETE; handler GET membaca DB langsung.
