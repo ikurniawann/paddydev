@@ -1,6 +1,6 @@
 # EPIC-093: Koordinator Mengatur Jadwal Semua Toko (`MODULE-HRIS`)
 
-status: backlog
+status: review
 environment: dev
 retries: 0
 
@@ -43,8 +43,21 @@ Lihat rencana `docs/superpowers/plans/2026-11-06-jadwal-semua-toko.md`.
 - [ ] Pengatur bercentang membuka Jadwal Toko di HP. Daftar toko memuat toko lain, dan tokonya sendiri terpilih otomatis.
 - [ ] Pengatur bercentang mengubah jadwal di toko lain. Jadwal langsung tersimpan tanpa persetujuan, dan tercatat di audit.
 - [ ] Penempatan dan checkout otomatis tetap hanya toko wilayah. API penempatan untuk toko lain → 403.
-- [ ] Pengatur tanpa centang berperilaku persis seperti EPIC-071 (tes lama hijau).
+- [x] Pengatur tanpa centang berperilaku persis seperti EPIC-071 (tes lama hijau).
 - [ ] `go test`, `pnpm test`, `pnpm lint`, dan `tsc` hijau; CI hijau; QA staging lulus.
 
 ## Automation Log
 - 2026-11-06: **Permintaan user** (revisi Koordinator). Kode dipetakan (`withScheduleScope`, `AllowsBranch` di 4 rute jadwal, penempatan, checkout otomatis). Data production dibaca read-only (tabel di Goal). User memilih centang per pengatur oleh HR dan cakupan jadwal saja. Rencana ditulis; status `backlog` menunggu review user.
+- 2026-11-06: **User menyetujui rencana** ("Sesuai, Native"). Implementasi inline di branch `feat/epic093-jadwal-semua-toko`:
+  - **T1** `2c9c772b`: migrasi `20261111090000_schedule_delegate_all_branches.sql`; `delegateAccess.ScheduleBranchIDs` (semua toko aktif bila dicentang); `storeScope.AllowsScheduleBranch` di 4 rute jadwal (grid, template, unggah, kotak); schedule-access mengirim `schedule_all_branches` + `schedule_branches`. Penempatan dan checkout otomatis tetap `AllowsBranch` (R4).
+  - **T2** `99af942b`: API HR pengatur menyimpan/menampilkan `schedule_all_branches`; PUT tanpa field = mati; audit before/after memuat nilainya.
+  - **T3** `efaba7ec`: tab Jadwal memakai `schedule_branches`, toko wilayah tunggal tetap terpilih otomatis, tautan Penempatan hanya di toko wilayah, catatan biru untuk pengatur bercentang (R6).
+  - **T4** `67b7035f`: centang "Boleh atur jadwal semua toko" + petunjuk di dialog HR, kolom "Jadwal semua toko" di tabel.
+  - Ruling implementasi: migrasi diterapkan ke DB uji bersama lewat `cmd/migrate -apply`; tes audit memilih baris lewat `before IS NOT NULL` (satu transaksi uji); `SchedulesPage` fallback `schedule_branches ?? branches`; petunjuk lama di dialog tetap, petunjuk baru di bawah centang; "semua toko aktif" = semua cabang aktif (sama dengan mode HR).
+- 2026-11-06: **Gerbang lokal**: `go vet` + `gofmt` bersih; `go test -p 1 ./internal/modules/hris/...` ok; `make -C backend generate` tanpa diff; frontend `pnpm test` 888 file / 6467 tes lulus, `tsc` + `lint` bersih.
+- 2026-11-06: **Review akhir seluruh branch** (reviewer segar): Critical 0, Important 0. Minor ditunda:
+  - tes toko nonaktif hanya grid; bulk-end dan create/patch/delete checkout otomatis non-wilayah tidak dites untuk pengatur bercentang (cek yang sama sudah dites);
+  - bila centang dicabut saat toko lain terbuka, pilihan toko tampak kosong dengan pesan 403;
+  - teks Beranda "di 1 toko Anda" tidak menyebut akses jadwal semua toko;
+  - doc comment `withScheduleScope` belum menyebut `AllowsScheduleBranch`;
+  - satu query cabang aktif tambahan per permintaan pengatur bercentang (45 baris).
