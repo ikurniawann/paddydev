@@ -248,6 +248,8 @@ export interface EssRecentRequest {
 export interface EssBeranda {
   employee: {
     full_name: string;
+    /** Foto karyawan (salinan foto profil akun, EPIC-087). */
+    photo_url?: string | null;
     nip: string | null;
     join_date: string | null;
     employment_status: string;

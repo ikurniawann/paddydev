@@ -89,6 +89,7 @@ deploying-dev · ready-for-qa · blocked · done).
 | [EPIC-084](./EPIC-084-ketentuan-cuti-izin.md) | Ketentuan Cuti & Izin + SLA Pengajuan terhadap Payroll (`MODULE-HRIS`) | ready-for-qa | 2026-11-03 |
 | [EPIC-085](./EPIC-085-ketentuan-lembur.md) | Ketentuan Lembur + Batas 72 Jam per Cut Off (`MODULE-HRIS`) | ready-for-qa | 2026-11-03 |
 | [EPIC-086](./EPIC-086-data-kerja-massal.md) | Pengisian Massal Data Kerja (Jadwal, Shift, Penempatan) via Template Excel (`MODULE-HRIS`) | review | 2026-11-03 |
+| [EPIC-087](./EPIC-087-foto-profil.md) | Upload Foto Profil Akun (`MODULE-IDENTITY`) | review | 2026-11-03 |
 
 Aturan:
 - Epic + registry ini adalah sumber kebenaran status pekerjaan (canonical).

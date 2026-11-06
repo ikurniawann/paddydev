@@ -27,7 +27,7 @@ type noStalls struct{ identity.Stalls }
 
 func newModule(t *testing.T) (module.Deps, http.Handler) {
 	deps := testutil.Deps(t, nil)
-	return deps, testutil.Mux(identity.New(deps, noStalls{}))
+	return deps, testutil.Mux(identity.New(deps, noStalls{}, nil))
 }
 
 func exec(t *testing.T, deps module.Deps, sql string, args ...any) {
@@ -79,7 +79,7 @@ func TestAuthMe(t *testing.T) {
 	}
 
 	rec, _ = testutil.Do(t, mux, testutil.AsStaff(testutil.Request("GET", "/api/auth/me", nil), staff))
-	want := `{"success":true,"data":{"id":"` + staff.UserID + `","full_name":"Ayu Test","role":"admin","brand_id":null,"email":"` + staff.Email + `"}}`
+	want := `{"success":true,"data":{"id":"` + staff.UserID + `","full_name":"Ayu Test","role":"admin","brand_id":null,"email":"` + staff.Email + `","avatar_url":null}}`
 	if rec.Code != 200 || rec.Body.String() != want {
 		t.Fatalf("signed in: %d\n got %s\nwant %s", rec.Code, rec.Body.String(), want)
 	}

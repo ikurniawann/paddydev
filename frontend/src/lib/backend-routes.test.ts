@@ -252,6 +252,8 @@ describe("Go route manifest", () => {
       "/api/hris/employees/import", "/api/hris/employees/import-template", "/api/users/email-owner",
       // Kuota bulanan Izin Pribadi / Izin Leader (EPIC-058).
       "/api/hris/leave-quota",
+      // Foto profil akun (EPIC-087): hanya di Go, tanpa fallback Next.
+      "/api/auth/me/avatar",
       // Hak Akses HRIS (EPIC-061): hanya di Go, tanpa fallback Next.
       "/api/hris/access",
       // Perjalanan Dinas (EPIC-062).
