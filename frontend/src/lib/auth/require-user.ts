@@ -17,6 +17,9 @@ import {
 import { CENTRAL_CASHIER_MENU } from "@/lib/pos/central-cashier";
 
 const PROFILE_SELECT =
+  "full_name, role, brand_id, business_scope, can_switch_stall, can_central_checkout, default_warehouse_id, avatar_url";
+/** Sebelum delta EPIC-087 diterapkan: tanpa avatar_url, can_central_checkout tetap terbaca. */
+const PROFILE_SELECT_NO_AVATAR =
   "full_name, role, brand_id, business_scope, can_switch_stall, can_central_checkout, default_warehouse_id";
 const PROFILE_SELECT_LEGACY =
   "full_name, role, brand_id, business_scope, can_switch_stall, default_warehouse_id";
@@ -45,6 +48,8 @@ export interface AuthUser {
   role: UserRole;
   email: string;
   brand_id: string | null;
+  /** Foto profil akun (EPIC-087); null = avatar inisial. */
+  avatar_url: string | null;
   company_name: string | null;
   branch_id: string | null;
   branch_name: string | null;
@@ -76,6 +81,14 @@ export const getUser = cache(async (): Promise<{
     .select(PROFILE_SELECT)
     .eq("id", user.id)
     .single();
+
+  if (isMissingColumnError(profileError)) {
+    const noAvatar = await db.from("users").select(PROFILE_SELECT_NO_AVATAR).eq("id", user.id).single();
+    if (!isMissingColumnError(noAvatar.error)) {
+      profile = noAvatar.data ? { ...noAvatar.data, avatar_url: null } : noAvatar.data;
+      profileError = noAvatar.error;
+    }
+  }
 
   if (isMissingColumnError(profileError)) {
     const fallback = await db
@@ -188,6 +201,7 @@ export const getUser = cache(async (): Promise<{
       role: profile.role as UserRole,
       email: user.email ?? "",
       brand_id: profile.brand_id,
+      avatar_url: (profile as { avatar_url?: string | null }).avatar_url ?? null,
       company_name,
       branch_id: scope?.branch_id ?? null,
       branch_name,

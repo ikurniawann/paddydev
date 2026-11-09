@@ -16,7 +16,7 @@ import (
 // here with committed fixtures (the routes read through the pool).
 func TestIdentityStallRoutes(t *testing.T) {
 	deps := testutil.Deps(t, nil)
-	mux := testutil.Mux(identity.New(deps, identityStalls{db: deps.DB}))
+	mux := testutil.Mux(identity.New(deps, identityStalls{db: deps.DB}, identityEmployeePhotos{db: deps.DB}))
 	ctx := context.Background()
 	sfx := testutil.RandomHex(4)
 	id := func(sql string, args ...any) string {
@@ -141,7 +141,7 @@ func TestIdentityStallRoutes(t *testing.T) {
 // branch has its own "Main Storage", so rows must say which branch they are.
 func TestIdentityStallOptionsLabelsAcrossBranches(t *testing.T) {
 	deps := testutil.Deps(t, nil)
-	mux := testutil.Mux(identity.New(deps, identityStalls{db: deps.DB}))
+	mux := testutil.Mux(identity.New(deps, identityStalls{db: deps.DB}, identityEmployeePhotos{db: deps.DB}))
 	ctx := context.Background()
 	sfx := testutil.RandomHex(4)
 	id := func(sql string, args ...any) string {
