@@ -11,7 +11,8 @@ const trip: BusinessTrip = {
   created_at: "2026-10-30T02:00:00Z", employee: { id: "e1", full_name: "Anggota D", nip: "N04", reporting_to: "boss" },
 };
 
-vi.mock("../queries", () => ({ useBusinessTrips: () => ({ data: [trip] }) }));
+let rows: BusinessTrip[] = [trip];
+vi.mock("../queries", () => ({ useBusinessTrips: () => ({ data: rows }) }));
 vi.mock("../use-trip-decision", () => ({
   useTripDecision: () => ({ request, busyId: null, dialog: null }),
 }));
@@ -19,6 +20,7 @@ vi.mock("../use-trip-decision", () => ({
 afterEach(() => {
   cleanup();
   request.mockReset();
+  rows = [trip];
 });
 
 describe("TeamTripApprovals (EPIC-072)", () => {
@@ -31,5 +33,13 @@ describe("TeamTripApprovals (EPIC-072)", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "Tolak" }));
     expect(request).toHaveBeenCalledWith(trip, "reject");
     expect(screen.queryByRole("dialog")).toBeNull();
+  });
+});
+
+describe("TeamTripApprovals — tahap SPV (EPIC-092 R7)", () => {
+  it("Manager melihat siapa yang sudah menyetujui di tahap SPV", () => {
+    rows = [{ ...trip, spv_approved_at: "2026-10-31T02:00:00Z", spv_approved_name: "SPV Regional" }];
+    render(<TeamTripApprovals />);
+    expect(screen.getByText("Disetujui SPV oleh SPV Regional")).toBeTruthy();
   });
 });

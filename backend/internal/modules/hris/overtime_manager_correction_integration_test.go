@@ -81,8 +81,9 @@ func TestOvertimeHRCorrectsWhenManagerInactive(t *testing.T) {
 	}
 	list := h.do(&hr, "GET", "/api/hris/overtime?employee_id="+staffID, nil)
 	expect(t, list, 200, "")
-	if !strings.Contains(list.raw, `"reporting_to_active":false`) {
-		t.Fatalf("daftar lembur tanpa reporting_to_active = %s", list.raw)
+	// EPIC-091: atasan nonaktif → tanpa penyetuju (approver_id null), HR yang mengoreksi.
+	if !strings.Contains(list.raw, `"approver_id":null`) {
+		t.Fatalf("daftar lembur tanpa approver_id = %s", list.raw)
 	}
 }
 

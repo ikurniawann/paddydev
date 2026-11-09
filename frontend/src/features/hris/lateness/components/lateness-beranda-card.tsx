@@ -27,7 +27,7 @@ export function LatenessBerandaCard() {
           Detail <ChevronRight className="h-4 w-4" />
         </span>
       </span>
-      <LatenessSummary stats={data} compact />
+      <LatenessSummary stats={data} compact showLevel={false} />
     </Link>
   );
 }

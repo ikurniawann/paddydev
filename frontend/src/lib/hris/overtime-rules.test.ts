@@ -10,8 +10,7 @@ import {
   overtimeDayTypeLabel,
   overtimeStartsInPast,
   type OvertimeDecisionActor,
-  type OvertimeDecisionRequest,
-} from "./overtime-rules";
+  type OvertimeDecisionRequest, overtimeReasonError } from "./overtime-rules";
 
 const EMPLOYEE = "emp-1";
 const MANAGER = "mgr-1";
@@ -196,10 +195,21 @@ describe("overtimeAttachmentHref & overtimeTimeChanges (EPIC-066)", () => {
   });
 });
 
-describe("OVERTIME_RULES_HINT (EPIC-085)", () => {
-  it("merangkum jam mulai dan batas 4/18/72 jam", () => {
+describe("OVERTIME_RULES_HINT (EPIC-085, direvisi EPIC-089)", () => {
+  it("merangkum jam mulai, keterangan > 4 jam, dan batas 18/72 jam", () => {
     expect(OVERTIME_RULES_HINT).toBe(
-      "Lembur hari kerja dimulai setelah jam kerja selesai · maks. 4 jam/hari, 18 jam/minggu, 72 jam/periode"
+      "Lembur hari kerja dimulai setelah jam kerja selesai · lebih dari 4 jam/hari wajib keterangan · maks. 18 jam/minggu, 72 jam/periode"
     );
+  });
+});
+
+describe("overtimeReasonError (EPIC-089 R2)", () => {
+  const msg = "Lembur lebih dari 4 jam: isi Keterangan alasannya (minimal 10 karakter)";
+  it("tepat 4 jam tidak wajib; lebih dari 4 jam wajib minimal 10 karakter setelah trim", () => {
+    expect(overtimeReasonError(4, "")).toBeNull();
+    expect(overtimeReasonError(4.5, "")).toBe(msg);
+    expect(overtimeReasonError(4.5, "   ")).toBe(msg);
+    expect(overtimeReasonError(4.5, " 123456789 ")).toBe(msg);
+    expect(overtimeReasonError(4.5, "Stok opname akhir")).toBeNull();
   });
 });

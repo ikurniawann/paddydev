@@ -39,7 +39,7 @@ func coerceInt(f *validate.Form, key string, lo, hi *float64, def int) int {
 func leaveFilterOf(f *validate.Form) leaveFilter {
 	s := func(k string) *string { return f.Str(k, optional, validate.StrOpts{}) }
 	return leaveFilter{EmployeeID: s("employee_id"), Status: s("status"), LeaveType: s("leave_type"),
-		StartDate: s("start_date"), EndDate: s("end_date")}
+		StartDate: s("start_date"), EndDate: s("end_date"), Review: s("review")}
 }
 
 func (h handlers) listLeaves(w http.ResponseWriter, r *http.Request, a *Actor) error {
@@ -101,7 +101,7 @@ func (h handlers) updateLeave(w http.ResponseWriter, r *http.Request, a *Actor) 
 	if err := formErr(f, ""); err != nil {
 		return err
 	}
-	out, err := h.svc.UpdateLeave(r.Context(), a, r.PathValue("id"), in)
+	out, err := h.svc.UpdateLeave(r.Context(), a, r.PathValue("id"), in, auditMeta(r))
 	if err != nil {
 		return err
 	}

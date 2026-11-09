@@ -16,6 +16,9 @@ export interface TeamLeaveRequest {
   total_days: string | number;
   reason: string | null;
   attachment_url: string | null;
+  /** EPIC-092: tahap SPV yang sudah lewat (pending = menunggu Manager). */
+  spv_approved_at?: string | null;
+  spv_approved_name?: string | null;
   created_at: string;
   employee: TeamMemberRef;
 }
@@ -43,3 +46,52 @@ export interface TeamApprovals {
 
 export type TeamRequestKind = "leave" | "overtime";
 export type TeamDecision = "approve" | "reject";
+
+/** GET /api/hris/me/team-history (EPIC-090): semua status, 2 periode absensi. */
+export interface TeamHistoryLeave extends TeamLeaveRequest {
+  status: string;
+  attachment_review: "awaiting" | "returned" | "verified" | null;
+  attachment_return_reason: string | null;
+  rejection_reason: string | null;
+  decided_by_name: string | null;
+  manager_approved_name: string | null;
+  attachment_reviewed_name: string | null;
+}
+
+export interface TeamHistoryOvertime extends TeamOvertimeRequest {
+  status: string;
+  /** employee = diajukan karyawan, company = penugasan HR. */
+  source: string;
+  rejection_reason: string | null;
+  decided_by_name: string | null;
+}
+
+/** EPIC-091: kasbon/pinjaman bawahan langsung (Manager tetap penyetuju). */
+export interface TeamHistoryLoan {
+  id: string;
+  employee_id: string;
+  loan_type: string;
+  principal_amount: string | number;
+  monthly_installment: string | number;
+  tenor_months: number;
+  status: string;
+  purpose: string | null;
+  rejection_reason: string | null;
+  /** Manager penyetuju; null = tanpa Manager (atasan terdekat/HR). */
+  manager_approver_name: string | null;
+  /** Tahap SPV sebelum Manager (EPIC-091); null = tanpa tahap SPV. */
+  supervisor_approver_name?: string | null;
+  supervisor_approved?: boolean;
+  attachments: string[];
+  collateral_attachments: string[];
+  created_at: string;
+  employee: TeamMemberRef;
+}
+
+export interface TeamHistory {
+  period: { from: string; to: string; label: string };
+  leaves: TeamHistoryLeave[];
+  overtime: TeamHistoryOvertime[];
+  loans?: TeamHistoryLoan[];
+}
+

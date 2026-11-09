@@ -27,6 +27,7 @@ var (
 	HrisKaryawan            = []string{"hris.kepegawaian.users"}
 	HrisWorkforce           = []string{"hris.workforce"}
 	HrisLeaveBalances       = []string{"hris.workforce.leave-balances"}
+	HrisDisciplinaryLetters = []string{"hris.workforce.disciplinary-letters"}
 	HrisCompensation        = []string{"hris.compensation"}
 	HrisPlacements          = []string{"hris.master.placements"}
 	HrisPerformance         = []string{"hris.performance"}
@@ -125,6 +126,7 @@ var ByKey = map[string][]string{
 	"hrisKaryawan":            HrisKaryawan,
 	"hrisWorkforce":           HrisWorkforce,
 	"hrisLeaveBalances":       HrisLeaveBalances,
+	"hrisDisciplinaryLetters": HrisDisciplinaryLetters,
 	"hrisCompensation":        HrisCompensation,
 	"hrisPlacements":          HrisPlacements,
 	"hrisPerformance":         HrisPerformance,

@@ -22,6 +22,16 @@ func TestEmployeeCannotReportToSelf(t *testing.T) {
 	h.employee(emp{name: "Tanpa Atasan Uji"})
 	gone := h.employee(emp{name: "Atasan Keluar Uji", inactive: true})
 	h.employee(emp{name: "Anak Atasan Keluar", boss: &gone})
+	// EPIC-091: laporan mengikuti penyetuju (atasan terdekat minimal SPV, aktif, berakun).
+	_, staffBoss := h.staff("pos", nil, true, emp{name: "Leader Staff Uji"})
+	h.leaderPosition(staffBoss, "Staff")
+	h.employee(emp{name: "Anak Leader Staff", boss: &staffBoss})
+	noAcc := h.employee(emp{name: "Atasan Tanpa Akun Uji"})
+	h.employee(emp{name: "Anak Atasan Tanpa Akun", boss: &noAcc})
+	_, spvOK := h.staff("pos", nil, true, emp{name: "SPV Aktif Uji"})
+	h.leaderPosition(spvOK, "Supervisor")
+	gone2 := h.employee(emp{name: "Atasan Keluar Dua", inactive: true, boss: &spvOK})
+	h.employee(emp{name: "Anak Keluar Ada SPV", boss: &gone2})
 
 	rep := h.do(&hr, "GET", "/api/hris/employees/without-manager", nil)
 	expect(t, rep, 200, "")
@@ -31,8 +41,12 @@ func TestEmployeeCannotReportToSelf(t *testing.T) {
 		reasons[row["full_name"].(string)] = row["reason"]
 	}
 	if reasons["Loop Uji Atasan"] != "self" || reasons["Tanpa Atasan Uji"] != "empty" ||
-		reasons["Anak Atasan Keluar"] != "inactive" {
+		reasons["Anak Atasan Keluar"] != "inactive" || reasons["Anak Leader Staff"] != "below_spv" ||
+		reasons["Anak Atasan Tanpa Akun"] != "no_account" {
 		t.Fatalf("reasons = %v", reasons)
+	}
+	if _, listed := reasons["Anak Keluar Ada SPV"]; listed {
+		t.Fatal("atasan nonaktif tapi ada SPV di atasnya: ada penyetuju, tidak masuk laporan")
 	}
 	if _, listed := reasons["Atasan Keluar Uji"]; listed {
 		t.Fatal("karyawan nonaktif tidak masuk laporan")

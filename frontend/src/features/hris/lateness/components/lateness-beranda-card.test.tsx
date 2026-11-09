@@ -19,8 +19,10 @@ describe("LatenessBerandaCard (EPIC-077 R9)", () => {
     const link = screen.getByRole("link");
     expect(link.getAttribute("href")).toBe("/dashboard/me/absensi#keterlambatan");
     expect(screen.getByText("Keterlambatan periode ini")).toBeTruthy();
-    expect(screen.getByText("Teguran lisan dan tertulis")).toBeTruthy();
-    expect(screen.getByText("2 kali terlambat lagi → Surat Peringatan 1")).toBeTruthy();
+    // EPIC-094: tanpa label Teguran/SP, jumlah dan pengingat tetap ada.
+    expect(screen.getByText("1")).toBeTruthy();
+    expect(screen.getByText("Hati-hati, keterlambatan yang berlanjut dapat berujung teguran dari HR.")).toBeTruthy();
+    expect(screen.queryByText(/Surat Peringatan|Teguran lisan|kali terlambat lagi/)).toBeNull();
   });
 
   it("belum dimuat: tidak dirender", () => {

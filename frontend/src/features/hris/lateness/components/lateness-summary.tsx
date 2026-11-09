@@ -1,11 +1,23 @@
 import { cn } from "@/lib/utils";
-import { formatLateMinutes, LATENESS_TONE, nextLevelHint } from "@/lib/hris/lateness-view";
+import { formatLateMinutes, LATENESS_REMINDER, LATENESS_TONE, nextLevelHint } from "@/lib/hris/lateness-view";
 import type { LatenessStats } from "../types";
 import { LatenessLevelBadge } from "./lateness-level-badge";
 
-/** Angka besar + tingkat sesuai ketentuan + petunjuk tingkat berikutnya. */
-export function LatenessSummary({ stats, compact }: { stats: LatenessStats; compact?: boolean }) {
-  const tone = LATENESS_TONE[stats.level.code];
+/**
+ * Angka besar + tingkat sesuai ketentuan + petunjuk tingkat berikutnya.
+ * `showLevel={false}` (ESS karyawan, EPIC-094): tanpa tingkat teguran/SP,
+ * diganti pengingat bila ada keterlambatan.
+ */
+export function LatenessSummary({
+  stats,
+  compact,
+  showLevel = true,
+}: {
+  stats: LatenessStats;
+  compact?: boolean;
+  showLevel?: boolean;
+}) {
+  const tone = LATENESS_TONE[showLevel ? stats.level.code : stats.count > 0 ? "teguran" : "none"];
   // Yang tepat waktu tidak diberi "1 kali terlambat lagi → Teguran" (terbaca seperti ancaman).
   const hint = stats.count > 0 ? nextLevelHint(stats.next) : null;
   return (
@@ -23,9 +35,17 @@ export function LatenessSummary({ stats, compact }: { stats: LatenessStats; comp
         <span className="mt-1 text-[10px] font-medium leading-tight text-gray-600 sm:text-[11px]">kali terlambat</span>
       </div>
       <div className="min-w-0 flex-1 space-y-1.5">
-        <p className="text-xs text-gray-500">{stats.count === 0 ? "Status" : "Sesuai ketentuan"}</p>
-        <LatenessLevelBadge level={stats.level} />
-        {hint ? <p className="text-xs leading-snug text-gray-600">{hint}</p> : null}
+        {showLevel ? (
+          <>
+            <p className="text-xs text-gray-500">{stats.count === 0 ? "Status" : "Sesuai ketentuan"}</p>
+            <LatenessLevelBadge level={stats.level} />
+            {hint ? <p className="text-xs leading-snug text-gray-600">{hint}</p> : null}
+          </>
+        ) : stats.count > 0 ? (
+          <p className="text-xs leading-snug text-amber-800">{LATENESS_REMINDER}</p>
+        ) : (
+          <p className="text-sm font-medium text-emerald-700">Tidak ada keterlambatan</p>
+        )}
         {!compact && stats.total_minutes > 0 ? (
           <p className="text-xs text-gray-500">Total terlambat {formatLateMinutes(stats.total_minutes)}</p>
         ) : null}

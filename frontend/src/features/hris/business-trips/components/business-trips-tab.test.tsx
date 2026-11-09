@@ -113,3 +113,13 @@ describe("BusinessTripsTab — Detail (EPIC-072)", () => {
     expect(within(dialog).getByText("Stock opname")).toBeTruthy();
   });
 });
+
+describe("BusinessTripsTab — tahap SPV (EPIC-092 R7)", () => {
+  it("pending yang sudah disetujui SPV: lencana menunggu Manager, nama SPV di Detail", () => {
+    rows.push(trip({ spv_approved_at: "2099-03-01T05:00:00Z", spv_approved_name: "SPV Toko" }));
+    render(<BusinessTripsTab />);
+    expect(screen.getByText("Disetujui SPV — menunggu Manager")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Detail perjalanan dinas Budi Santoso" }));
+    expect(within(screen.getByRole("dialog")).getByText("Disetujui SPV oleh SPV Toko")).toBeTruthy();
+  });
+});

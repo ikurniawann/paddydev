@@ -10,6 +10,7 @@ import {
   submitClock,
   submitLoan,
   submitMyLeave,
+  resubmitMyLeaveAttachment,
   submitOvertime,
 } from "./api";
 import type {
@@ -47,6 +48,15 @@ export function useSubmitMyLeave() {
       qc.invalidateQueries({ queryKey: essQueryKeys.leaves() });
       qc.invalidateQueries({ queryKey: ["hris", "leaves", "quota"] });
     },
+  });
+}
+
+export function useResubmitLeaveAttachment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, path }: { id: string; path: string }) => resubmitMyLeaveAttachment(id, path),
+    retry: false,
+    onSuccess: () => qc.invalidateQueries({ queryKey: essQueryKeys.leaves() }),
   });
 }
 

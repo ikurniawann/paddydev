@@ -38,6 +38,12 @@ type OvertimeRepo interface {
 	OvertimeForUpdate(ctx context.Context, id string) (*Row, error)
 	// EPIC-085: jadwal, jam terpakai, dan perjalanan dinas untuk aturan TnC.
 	OvertimeShiftEndOn(ctx context.Context, employeeID, date string) (*domain.OvertimeShiftEnd, error)
+	// OvertimeShiftStartOn is the start (HH:MM) of the employee's first shift
+	// on date; "" without a schedule or on a day off (EPIC-089 review).
+	OvertimeShiftStartOn(ctx context.Context, employeeID, date string) (string, error)
+	// OvertimeSpanOn is the employee's pending/approved entry on date,
+	// without excludeID ("" = none); nil when there is none.
+	OvertimeSpanOn(ctx context.Context, employeeID, date, excludeID string) (*domain.OvertimeSpan, error)
 	OvertimeHoursUsed(ctx context.Context, employeeID, from, to, excludeID string) (float64, error)
 	OnApprovedTrip(ctx context.Context, employeeID, date string) (bool, error)
 }
@@ -197,15 +203,18 @@ func (s *Service) CreateOvertime(ctx context.Context, a *Actor, in overtimeInput
 	if in.StartTime == in.EndTime {
 		return nil, httpx.BadRequest("Jam mulai dan selesai tidak boleh sama")
 	}
-	if domain.OvertimeGrossMinutes(in.StartTime, in.EndTime) > 12*60 {
-		return nil, httpx.BadRequest("Durasi lembur maksimal 12 jam")
-	}
+	// EPIC-089 R1: no daily or 12-hour gross cap; 18/week and 72/period remain.
 	hours := domain.PaidOvertimeHours(in.StartTime, in.EndTime, in.BreakMinutes)
 	if hours < 1 {
 		if in.BreakMinutes > 0 {
 			return nil, httpx.BadRequest("Durasi lembur minimal 1 jam setelah dikurangi istirahat")
 		}
 		return nil, httpx.BadRequest("Durasi lembur minimal 1 jam")
+	}
+	if isSelf { // EPIC-089 R2: HR assigning someone is the approver itself
+		if msg := domain.OvertimeReasonError(hours, in.Reason); msg != "" {
+			return nil, httpx.BadRequest(msg)
+		}
 	}
 	dayType, err := s.overtimeDayType(ctx, *targetID, in.Date, in.DayType, !isSelf)
 	if err != nil {
@@ -238,8 +247,15 @@ func (s *Service) CreateOvertime(ctx context.Context, a *Actor, in overtimeInput
 		if err := s.checkOvertimeCaps(ctx, r, *targetID, in.Date, hours, ""); err != nil { // EPIC-085 R3
 			return err
 		}
+		if err := s.checkOvertimeOverlap(ctx, r, *targetID, in.Date, in.StartTime, in.EndTime, ""); err != nil {
+			return err
+		}
 		var err error
 		if row, err = r.InsertOvertime(ctx, f); err != nil || source != "employee" {
+			return err
+		}
+		title, message := domain.OvertimeManagerNotice(target.Str("full_name"), in.Date, in.StartTime, in.EndTime, hours)
+		if err := r.NotifyManager(ctx, *targetID, title, message, domain.TeamApprovalsLink); err != nil {
 			return err
 		}
 		reason := in.Reason
@@ -261,11 +277,9 @@ func (s *Service) CreateOvertime(ctx context.Context, a *Actor, in overtimeInput
 	return obj("data", row, "message", message), nil
 }
 
-// checkOvertimeAttachments: 1–3 paths uploaded by the owner and still on disk.
+// checkOvertimeAttachments: 0–3 paths uploaded by the owner and still on
+// disk; documentation is optional since EPIC-089 R3.
 func (s *Service) checkOvertimeAttachments(ownerID string, paths []string) error {
-	if len(paths) == 0 {
-		return httpx.BadRequest("Lampirkan minimal 1 dokumentasi lembur")
-	}
 	if len(paths) > maxOvertimeAttachments {
 		return httpx.BadRequest("Maksimal 3 dokumentasi lembur")
 	}
@@ -315,7 +329,7 @@ func (s *Service) DecideOvertime(ctx context.Context, a *Actor, id, action strin
 		return nil, httpx.BadRequest("Pengajuan sudah "+status, obj("current_status", status))
 	}
 	emp := ot.Child("employee")
-	reportingTo, managerActive := overtimeManager(emp)
+	reportingTo, managerActive := overtimeManager(emp, a.EmployeeID)
 	// The HR side of the decision holds "approve" on the Lembur leaf
 	// (EPIC-067 R11): backup/override, day type, time correction, cancelling
 	// a company assignment.
@@ -378,9 +392,6 @@ func (s *Service) DecideOvertime(ctx context.Context, a *Actor, id, action strin
 		if start == end {
 			return nil, httpx.BadRequest("Jam mulai dan selesai tidak boleh sama")
 		}
-		if domain.OvertimeGrossMinutes(start, end) > 12*60 {
-			return nil, httpx.BadRequest("Durasi lembur maksimal 12 jam")
-		}
 		hours := domain.PaidOvertimeHours(start, end, brk)
 		if hours < 1 {
 			return nil, httpx.BadRequest("Durasi lembur minimal 1 jam")
@@ -393,6 +404,11 @@ func (s *Service) DecideOvertime(ctx context.Context, a *Actor, id, action strin
 			}
 			if start != was.start {
 				if err := s.overtimeStartCheck(ctx, s.repo, ot.Str("employee_id"), dateText(ot, "date"), start, dt); err != nil {
+					return nil, err
+				}
+			}
+			if start != was.start || end != was.end {
+				if err := s.checkOvertimeOverlap(ctx, s.repo, ot.Str("employee_id"), dateText(ot, "date"), start, end, id); err != nil {
 					return nil, err
 				}
 			}
@@ -609,16 +625,18 @@ func (s *Service) DeleteShift(ctx context.Context, id string) (string, error) {
 
 /* ── Overtime SQL ────────────────────────────────────────────────────── */
 
-// managerActiveCol is whether the employee's direct manager is active; NULL
-// without one. An inactive manager counts as none (EPIC-063 R9, EPIC-066).
-const managerActiveCol = `(SELECT m.is_active FROM hris.employees m WHERE m.id = employees.reporting_to) AS reporting_to_active`
+// managerActiveCol is the employee's request approver (EPIC-091: nearest
+// atasan from Supervisor up, active, with an account; NULL without one,
+// as an inactive manager counted as none before, EPIC-063 R9, EPIC-066).
+const managerActiveCol = `hris.request_approver(employees.id) AS approver_id, hris.request_manager(employees.id) AS manager_id`
 
-// overtimeManager is the owner's reporting_to and whether that manager is active.
-func overtimeManager(emp *Row) (reportingTo *string, active bool) {
+// overtimeManager is the owner's approver actor may act as (see approverFor)
+// and whether there is one.
+func overtimeManager(emp *Row, actor *string) (reportingTo *string, active bool) {
 	if emp == nil {
 		return nil, false
 	}
-	return emp.StrPtr("reporting_to"), emp.Bool("reporting_to_active")
+	return approverFor(emp, actor), emp.Str("approver_id") != ""
 }
 
 var overtimeSelect = `*, ` +
@@ -628,9 +646,11 @@ var overtimeSelect = `*, ` +
 	embedOne("decider", "id, full_name", "hris.employees", "id = overtime_requests.decided_by")
 
 func (s *store) SubordinateIDs(ctx context.Context, managerID string) ([]string, error) {
-	// A reporting_to pointing at oneself (live data) is not a direct report
-	// (EPIC-063 R2): the manager's queues never hold their own requests.
-	rows, err := queryRows(ctx, s.db, `SELECT id FROM hris.employees WHERE reporting_to = $1 AND id <> $1`, managerID)
+	// EPIC-091: the people whose requests managerID may decide (nearest
+	// atasan from Supervisor up, or the Manager above); never oneself
+	// (EPIC-063 R2). hris.request_team walks the tree once (≈ms) instead of two recursive
+	// lookups per employee (≈1 s for a Manager of ~300 people).
+	rows, err := queryRows(ctx, s.db, `SELECT id FROM hris.request_team($1::uuid) AS id`, managerID)
 	if err != nil {
 		return nil, ignoreBadInput(err)
 	}

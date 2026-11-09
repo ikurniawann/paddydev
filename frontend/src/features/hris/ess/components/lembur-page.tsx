@@ -23,6 +23,8 @@ import {
   overtimeEndLabel,
   overtimeNotFinished,
   paidOvertimeHours,
+  overtimeReasonError,
+  OVERTIME_REASON_THRESHOLD_HOURS,
   type OvertimeDayType,
 } from "@/lib/hris/overtime-rules";
 import { splitOvertime } from "@/lib/hris/ess-view";
@@ -70,6 +72,9 @@ export function EssLemburPage() {
   const decideMutation = useDecideOvertime();
   const [dialog, setDialog] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
+  // EPIC-089 R2: lebih dari 4 jam dibayar → Keterangan wajib.
+  const longOvertime =
+    paidOvertimeHours(form.start_time, form.end_time, Number(form.break_minutes || 0)) > OVERTIME_REASON_THRESHOLD_HOURS;
   // Generasi form (EPIC-066): unggahan yang selesai setelah form direset tidak
   // ditambahkan ke form baru; Kirim nonaktif selama dokumentasi diunggah.
   const generation = useRef(0);
@@ -96,12 +101,15 @@ export function EssLemburPage() {
       toast.error("Istirahat 0–720 menit");
       return;
     }
-    if (paidOvertimeHours(form.start_time, form.end_time, breakMinutes) < 1) {
+    const paidHours = paidOvertimeHours(form.start_time, form.end_time, breakMinutes);
+    if (paidHours < 1) {
       toast.error("Durasi lembur minimal 1 jam setelah dikurangi istirahat");
       return;
     }
-    if (form.attachments.length === 0) {
-      toast.error("Lampirkan minimal 1 dokumentasi lembur");
+    // EPIC-089: dokumentasi opsional; lebih dari 4 jam wajib Keterangan.
+    const reasonError = overtimeReasonError(paidHours, form.reason);
+    if (reasonError) {
+      toast.error(reasonError);
       return;
     }
     submitMutation.mutate({ ...form, day_type: dayType }, {
@@ -340,17 +348,17 @@ export function EssLemburPage() {
             </div>
             <div>
               <label htmlFor="ot-reason" className="mb-1 block text-xs font-medium text-gray-600">
-                Keterangan (opsional)
+                {longOvertime ? "Keterangan (wajib — lebih dari 4 jam)" : "Keterangan (opsional)"}
               </label>
               <Input
                 id="ot-reason"
-                placeholder="cth. closing stok bulanan"
+                placeholder={longOvertime ? "Jelaskan kenapa lembur lebih dari 4 jam" : "cth. closing stok bulanan"}
                 value={form.reason}
                 onChange={(e) => setForm((f) => ({ ...f, reason: e.target.value }))}
               />
             </div>
             <p className="rounded-lg bg-sky-50 px-3 py-2 text-xs text-sky-700">
-              Lembur diinput setelah selesai, dengan dokumentasi. Lembur yang disetujui atasan dibayar
+              Lembur diinput setelah selesai; dokumentasi opsional. Lembur yang disetujui atasan dibayar
               sesuai jam setelah dikurangi istirahat.
             </p>
           </div>

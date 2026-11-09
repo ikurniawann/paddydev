@@ -1,11 +1,14 @@
 import { apiGet, apiPost } from "@/lib/api-client";
 import type { OvertimeTimes } from "@/lib/hris/overtime-rules";
-import type { TeamApprovals, TeamDecision, TeamRequestKind } from "./types";
+import type { TeamApprovals, TeamDecision, TeamHistory, TeamRequestKind } from "./types";
 
 const EMPTY: TeamApprovals = { leaves: [], overtime: [] };
 
 export const fetchTeamApprovals = () =>
   apiGet<{ data: TeamApprovals }>("/api/hris/me/team-approvals").then((res) => res.data ?? EMPTY);
+
+export const fetchTeamHistory = () =>
+  apiGet<{ data: TeamHistory }>("/api/hris/me/team-history").then((res) => res.data);
 
 /** Keputusan memakai endpoint yang sama dengan HRIS; server menentukan atasan/HR. */
 export function decideTeamRequest(

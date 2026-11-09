@@ -210,6 +210,13 @@ func (fakePayroll) PendingLoanCount(context.Context, database.Querier) (int64, e
 // stage (tests set it).
 var fakeManagerLoans int64
 
+// fakeTeamLoans is what the fake port returns as the team's loans (EPIC-091).
+var fakeTeamLoans []TeamLoan
+
+func (fakePayroll) TeamLoanHistory(context.Context, database.Querier, string, string) ([]TeamLoan, error) {
+	return fakeTeamLoans, nil
+}
+
 func (fakePayroll) ManagerPendingLoanCount(context.Context, database.Querier, string) (int64, error) {
 	return fakeManagerLoans, nil
 }

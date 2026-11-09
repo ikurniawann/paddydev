@@ -1,4 +1,4 @@
-import { ApiError, apiGet, apiPost } from "@/lib/api-client";
+import { ApiError, apiGet, apiPost, apiPut } from "@/lib/api-client";
 import { todayWib } from "@/lib/dates";
 import { geofenceNoteRequired, type GeofenceNoteInfo } from "@/lib/hris/geofence";
 import type {
@@ -77,6 +77,10 @@ export async function submitMyLeave(form: EssLeaveForm, attachmentDataUrl?: stri
   }
   return apiPost<{ data: unknown }>("/api/hris/leaves", { ...form, attachment_url: attachmentUrl });
 }
+
+/** EPIC-088 R6: lampiran baru untuk pengajuan yang dikembalikan HR. */
+export const resubmitMyLeaveAttachment = (id: string, path: string) =>
+  apiPut<{ message?: string }>(`/api/hris/leaves/${id}`, { attachment_url: path });
 
 export const fetchMyOvertime = () => softGet<EssOvertimeRow[]>("/api/hris/overtime?employee_id=me", []);
 

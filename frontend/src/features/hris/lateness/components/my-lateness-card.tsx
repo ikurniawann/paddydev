@@ -5,10 +5,8 @@ import { AlarmClock, CheckCircle2, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { LATENESS_DISCLAIMER } from "@/lib/hris/lateness-view";
 import { useMyLateness } from "../queries";
 import { LatenessDaysList } from "./lateness-days-list";
-import { LatenessLadder } from "./lateness-ladder";
 import { LatenessPeriodSelect } from "./lateness-period-select";
 import { LatenessPolicy } from "./lateness-policy";
 import { LatenessSummary } from "./lateness-summary";
@@ -73,8 +71,8 @@ export function MyLatenessCard({ hasSchedule = true }: { hasSchedule?: boolean }
         </div>
       ) : (
         <div className={cn("space-y-4 transition-opacity", switching && "opacity-50")} aria-busy={switching}>
-          <LatenessSummary stats={data} />
-          <LatenessLadder code={data.level.code} />
+          {/* EPIC-094: tingkat teguran/SP tidak ditampilkan ke karyawan. */}
+          <LatenessSummary stats={data} showLevel={false} />
 
           {/* Tanpa jadwal tidak ada penilaian terlambat; hari terlambat lama (jadwal dicabut) tetap tampil. */}
           {!hasSchedule && data.count === 0 ? (
@@ -99,7 +97,6 @@ export function MyLatenessCard({ hasSchedule = true }: { hasSchedule?: boolean }
       )}
 
       <LatenessPolicy />
-      <p className="text-xs text-gray-500">{LATENESS_DISCLAIMER}</p>
     </section>
   );
 }

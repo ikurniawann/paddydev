@@ -108,6 +108,25 @@ type ApprovalRepo interface {
 	TeamPendingCount(ctx context.Context, managerID string) (int64, error)
 	// EmployeesWithoutManager is the reporting_to data quality report (R9).
 	EmployeesWithoutManager(ctx context.Context) ([]*Row, error)
+	// TeamLeaveHistory / TeamOvertimeHistory are managerID's direct reports'
+	// requests of every status still running on or after from (EPIC-090).
+	TeamLeaveHistory(ctx context.Context, managerID, from string) ([]*Row, error)
+	TeamOvertimeHistory(ctx context.Context, managerID, from string) ([]*Row, error)
+	// NotifyManager is the in-app bell of employeeID's direct manager
+	// (EPIC-088 R11); nothing without a manager, a reporting_to pointing at
+	// the employee, or a manager without a login account.
+	NotifyManager(ctx context.Context, employeeID, title, message, link string) error
+	// NotifyRequestApprovers is the in-app bell of employeeID's approver and
+	// manager (request_approver + request_manager), once per account and
+	// never the employee's own (EPIC-094 R5).
+	NotifyRequestApprovers(ctx context.Context, employeeID, kind, title, message, link string) (int, error)
+}
+
+func (s *store) NotifyManager(ctx context.Context, employeeID, title, message, link string) error {
+	_, err := s.db.Exec(ctx, `SELECT public.notify_user(m.user_id, $2, $3, 'approval', $4)
+		FROM hris.employees e JOIN hris.employees m ON m.id = hris.request_approver(e.id)
+		WHERE e.id = $1`, employeeID, title, message, link)
+	return err
 }
 
 // TeamApprovals is GET /api/hris/me/team-approvals: pending leave and
@@ -140,19 +159,21 @@ func (s *Service) teamPendingTotal(ctx context.Context, managerID string) (int64
 	return n + loans, err
 }
 
-// teamMember joins the requester (alias m) when they report to $1 directly;
-// a reporting_to pointing at oneself (live data) is not a team member (R2).
+// teamMember joins the requester (alias m) when $1 may decide their requests
+// (EPIC-091: the nearest atasan from Supervisor up, or the Manager above;
+// never oneself, R2).
 func teamMember(alias string) string {
-	return fmt.Sprintf(`JOIN hris.employees m ON m.id = %s.employee_id AND m.reporting_to = $1 AND m.id <> $1`, alias)
+	return fmt.Sprintf(`JOIN hris.employees m ON m.id = %s.employee_id AND m.id IN (SELECT hris.request_team($1::uuid))`, alias)
 }
 
 const teamEmployee = `json_build_object('id', m.id, 'full_name', m.full_name, 'nip', m.nip) AS employee`
 
 func (s *store) TeamPendingLeaves(ctx context.Context, managerID string) ([]*Row, error) {
 	rows, err := queryRows(ctx, s.db, `SELECT l.id, l.employee_id, l.leave_type, l.start_date::text AS start_date,
-		l.end_date::text AS end_date, l.total_days, l.reason, l.attachment_url, l.created_at, `+teamEmployee+`
-		FROM hris.leaves l `+teamMember("l")+`
-		WHERE l.status = 'pending'
+		l.end_date::text AS end_date, l.total_days, l.reason, l.attachment_url, l.spv_approved_name, l.spv_approved_at,
+		l.created_at, `+teamEmployee+`
+		FROM hris.leaves l `+stageMember("l")+`
+		WHERE l.status = 'pending' AND l.attachment_review IS NULL
 		ORDER BY l.start_date, l.created_at LIMIT 200`, managerID)
 	return rows, ignoreBadInput(err)
 }
@@ -169,9 +190,9 @@ func (s *store) TeamPendingOvertime(ctx context.Context, managerID string) ([]*R
 func (s *store) TeamPendingCount(ctx context.Context, managerID string) (int64, error) {
 	var n int64
 	err := s.db.QueryRow(ctx, `SELECT
-		  (SELECT count(*) FROM hris.leaves l `+teamMember("l")+` WHERE l.status = 'pending')
+		  (SELECT count(*) FROM hris.leaves l `+stageMember("l")+` WHERE l.status = 'pending' AND l.attachment_review IS NULL)
 		+ (SELECT count(*) FROM hris.overtime_requests o `+teamMember("o")+` WHERE o.status = 'pending' AND o.source = 'employee')
-		+ (SELECT count(*) FROM hris.business_trips t `+teamMember("t")+` WHERE t.status = 'pending')`,
+		+ (SELECT count(*) FROM hris.business_trips t `+stageMember("t")+` WHERE t.status = 'pending')`,
 		managerID).Scan(&n)
 	return n, ignoreBadInput(err)
 }
@@ -183,4 +204,32 @@ func (h handlers) teamApprovals(w http.ResponseWriter, r *http.Request, a *Actor
 		return err
 	}
 	return ok(w, dataOf(out))
+}
+
+// stageMember joins the requester (alias m) of a tiered request (alias
+// carries spv_approved_at) when $1 decides its running stage (EPIC-092).
+// request_team is a superset (the stage approver is the nearest SPV or
+// Manager) and computed once, so stage_approver only runs for $1's team.
+func stageMember(alias string) string {
+	return fmt.Sprintf(`JOIN hris.employees m ON m.id = %[1]s.employee_id AND m.id IN (SELECT hris.request_team($1::uuid))
+		AND hris.stage_approver(m.id, %[1]s.spv_approved_at IS NOT NULL) = $1::uuid`, alias)
+}
+
+// approverFor is the approver of emp (an employee embed with approver_id and
+// manager_id) that actor may act as (EPIC-091, "2 atasan"): the Manager above
+// when that is the actor, otherwise the nearest SPV approver. The decision
+// rules then compare the actor against it.
+func approverFor(emp *Row, actor *string) *string {
+	if emp == nil {
+		return nil
+	}
+	if actor != nil && emp.Str("manager_id") == *actor {
+		return emp.StrPtr("manager_id")
+	}
+	return emp.StrPtr("approver_id")
+}
+
+// isApprover: actor is emp's SPV approver or the Manager above it.
+func isApprover(emp *Row, actor string) bool {
+	return actor != "" && (emp.Str("approver_id") == actor || emp.Str("manager_id") == actor)
 }

@@ -1,3 +1,5 @@
+import type { LeaveAttachmentReview } from "@/lib/hris/leave-attachment-review";
+
 /** GET /api/hris/leave-quota (EPIC-058): kuota bulanan, hari saja (tanpa angka gaji). */
 export interface LeaveQuota {
   employee_id: string;
@@ -38,6 +40,14 @@ export interface LeaveItem {
   rejection_reason?: string | null;
   status: string;
   created_at: string;
+  /** EPIC-088: tahap verifikasi lampiran oleh HR (status tetap pending). */
+  attachment_review?: LeaveAttachmentReview | null;
+  attachment_return_reason?: string | null;
+  manager_approved_name?: string | null;
+  attachment_reviewed_name?: string | null;
+  /** EPIC-092: tahap SPV yang sudah lewat (pending = menunggu Manager). */
+  spv_approved_at?: string | null;
+  spv_approved_name?: string | null;
   employee?: {
     full_name: string;
     nip: string;
@@ -50,6 +60,8 @@ export interface LeaveItem {
 
 export type LeaveListParams = {
   status?: string;
+  /** EPIC-088: awaiting / returned (pengajuan pending pada tahap HR). */
+  review?: string;
   leave_type?: string;
   limit?: number;
 };

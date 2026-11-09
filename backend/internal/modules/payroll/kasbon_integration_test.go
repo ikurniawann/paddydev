@@ -80,9 +80,9 @@ func TestKasbonTwoStepApproval(t *testing.T) {
 		t.Fatalf("manager_approver_id = %v, want %s", loan["manager_approver_id"], mgr)
 	}
 
-	// HR sebelum manager → ditolak.
-	wantErr(t, e.call(&e.hr, "POST", "/api/hris/loans/"+id+"/approve", map[string]any{"approved": true}, 400),
-		"Kasbon menunggu persetujuan Manager Departemen")
+	// EPIC-092 R5 menggantikan "HR sebelum manager → ditolak": HR kini boleh
+	// mewakili tahap Manager (TestLoanHROnBehalfOfStages); di sini Manager
+	// sendiri yang memutus.
 	// Antrean manager memuat kasbon ini, tanpa angka gaji.
 	queue := e.call(&mgrStaff, "GET", "/api/hris/loans?scope=approvals", nil, 200)["data"].([]any)
 	if len(queue) != 1 || queue[0].(map[string]any)["id"] != id {
@@ -167,8 +167,6 @@ func TestKasbonHRCanRejectWhileWaitingManager(t *testing.T) {
 	loan := e.loan(&e.staff, map[string]any{"loan_type": "kasbon",
 		"principal_amount": 500000, "tenor_months": 1}, 200)["data"].(map[string]any)
 	id := loan["id"].(string)
-	wantErr(t, e.call(&e.hr, "POST", "/api/hris/loans/"+id+"/approve", map[string]any{"approved": true}, 400),
-		"Kasbon menunggu persetujuan Manager Departemen")
 	rej := e.call(&e.hr, "POST", "/api/hris/loans/"+id+"/approve",
 		map[string]any{"approved": false, "rejection_reason": "Manager tidak merespons"}, 200)["data"].(map[string]any)
 	if rej["status"] != "rejected" || rej["rejection_reason"] != "Manager tidak merespons" {

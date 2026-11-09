@@ -103,6 +103,12 @@ func (f *fakeEmployees) IDByUser(_ context.Context, _ database.Querier, userID s
 	return f.byUser[userID], nil
 }
 
+func (f *fakeEmployees) RequestApprover(ctx context.Context, q database.Querier, employeeID string) (*string, error) {
+	var id *string
+	err := q.QueryRow(ctx, `SELECT hris.request_approver($1::uuid)::text`, employeeID).Scan(&id)
+	return id, err
+}
+
 func (f *fakeEmployees) LoanApprover(ctx context.Context, q database.Querier, employeeID string) (*string, error) {
 	var id string
 	err := q.QueryRow(ctx, LoanApproverSQL, employeeID).Scan(&id)

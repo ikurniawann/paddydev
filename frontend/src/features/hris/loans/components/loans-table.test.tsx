@@ -43,3 +43,40 @@ describe("LoansTable — lampiran & bulan potong (EPIC-076)", () => {
     expect(within(dialog).getByRole("button", { name: /Dokumen 1/ })).toBeTruthy();
   });
 });
+
+describe("LoansTable — HR mewakili atasan (EPIC-092 R5)", () => {
+  const pending: LoanRow = { ...row, id: "k2", status: "pending", manager_approver_id: "m1" };
+
+  it("pengajuan di tahap atasan: HR bisa Setujui (mewakili atasan) dan Tolak", () => {
+    const onDecide = vi.fn();
+    render(<LoansTable rows={[pending]} loading={false} decidingId={null} onDecide={onDecide} />);
+    expect(screen.getByText("Menunggu atasan (SPV/Manager)")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Setujui (mewakili atasan)" }));
+    expect(onDecide).toHaveBeenCalledWith("k2", true);
+    fireEvent.click(screen.getByRole("button", { name: "Tolak" }));
+    expect(onDecide).toHaveBeenLastCalledWith("k2", false);
+  });
+
+  it("SPV sudah setuju: label menunggu Manager", () => {
+    render(<LoansTable rows={[{ ...pending, supervisor_approver_id: "s1", supervisor_approved_at: "2026-11-05T03:00:00Z" }]}
+      loading={false} decidingId={null} onDecide={vi.fn()} />);
+    expect(screen.getByText("Disetujui SPV — menunggu Manager")).toBeTruthy();
+  });
+
+  it("Detail tahap atasan: tombol mewakili ikut tampil", () => {
+    const onDecide = vi.fn();
+    render(<LoansTable rows={[pending]} loading={false} decidingId={null} onDecide={onDecide} />);
+    fireEvent.click(screen.getByRole("button", { name: "Detail pinjaman Peminjam K" }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Setujui (mewakili atasan)" }));
+    expect(onDecide).toHaveBeenCalledWith("k2", true);
+  });
+});
+
+describe("LoansTable — pinjaman sendiri (review akhir EPIC-092)", () => {
+  it("HR tidak melihat Setujui (mewakili atasan) pada pinjamannya sendiri", () => {
+    render(<LoansTable rows={[{ ...row, id: "k3", status: "pending", manager_approver_id: "m1" }]} loading={false}
+      decidingId={null} onDecide={vi.fn()} myEmployeeId="e1" />);
+    expect(screen.queryByRole("button", { name: "Setujui (mewakili atasan)" })).toBeNull();
+    expect(screen.getByText("Menunggu atasan (SPV/Manager)")).toBeTruthy();
+  });
+});

@@ -9,6 +9,7 @@ import { formatRupiah } from "@/lib/format";
 import { loanSummary } from "@/lib/hris/loans-view";
 import { useDecideLoan } from "../mutations";
 import { useLoans } from "../queries";
+import { useEssMe } from "@/features/hris/ess/queries";
 import { LoanFormDialog } from "./loan-form-dialog";
 import { LoansTable } from "./loans-table";
 
@@ -33,6 +34,7 @@ export function LoansPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const { data: rows = [], isLoading } = useLoans(statusFilter);
   const decide = useDecideLoan();
+  const myEmployeeId = useEssMe().data?.employee?.id ?? null;
   const { pendingCount, activeTotal } = loanSummary(rows);
 
   function handleDecide(id: string, approved: boolean) {
@@ -88,6 +90,7 @@ export function LoansPage() {
         loading={isLoading}
         decidingId={decide.isPending ? (decide.variables?.id ?? null) : null}
         onDecide={handleDecide}
+        myEmployeeId={myEmployeeId}
       />
 
       <LoanFormDialog open={dialogOpen} onOpenChange={setDialogOpen} />

@@ -209,3 +209,72 @@ func TestPendingLoanCountFollowsHrStage(t *testing.T) {
 		t.Fatalf("pending delta = %d, want 2", after-before)
 	}
 }
+
+// EPIC-091: kasbon/pinjaman bawahan langsung untuk Riwayat Persetujuan Tim.
+func TestTeamLoanHistory(t *testing.T) {
+	tx := testutil.Tx(t)
+	ctx := context.Background()
+	emp := func(name string, boss *string) string {
+		t.Helper()
+		var id string
+		if err := tx.QueryRow(ctx, `INSERT INTO hris.employees (full_name, nip, email, phone, join_date, reporting_to)
+			VALUES ($1, 'T-'||md5(random()::text), md5(random()::text)||'@hris.test', '', '2026-01-01', $2::uuid) RETURNING id::text`,
+			name, boss).Scan(&id); err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+	boss := emp("SPV Riwayat", nil)
+	// EPIC-091: penyetuju harus punya akun login.
+	if _, err := tx.Exec(ctx, `WITH u AS (INSERT INTO auth.users (id, email, password_hash) VALUES (gen_random_uuid(), md5(random()::text)||'@hris.test', 'x') RETURNING id, email),
+		c AS (INSERT INTO configuration.users (id, full_name, role, email, status) SELECT id, 'SPV Riwayat', 'employee', email, 'active' FROM u RETURNING id)
+		UPDATE hris.employees SET user_id = (SELECT id FROM c) WHERE id = $1`, boss); err != nil {
+		t.Fatal(err)
+	}
+	mgr := emp("Manager Riwayat", nil)
+	worker := emp("Peminjam Tim", &boss)
+	outsider := emp("Bukan Tim", nil)
+	loan := func(owner, status, created string, approver *string) {
+		t.Helper()
+		if _, err := tx.Exec(ctx, `INSERT INTO hris.loans (employee_id, loan_type, principal_amount, tenor_months,
+			monthly_installment, remaining_balance, status, manager_approver_id, purpose, created_at, attachments)
+			VALUES ($1::uuid, 'kasbon', 1000000, 2, 500000, 1000000, $2, $3::uuid, 'Biaya sekolah anak', $4::timestamptz,
+			ARRAY['loan-attachments/'||$1::text||'/1-aaaaaaaaaaaaaaaa.pdf'])`, owner, status, approver, created); err != nil {
+			t.Fatal(err)
+		}
+	}
+	loan(worker, "pending", "2026-01-05 10:00+07", &mgr)  // lama tapi masih menunggu
+	loan(worker, "rejected", "2026-11-03 10:00+07", nil)  // dalam rentang
+	loan(worker, "approved", "2026-01-06 10:00+07", &mgr) // sudah diputus, sebelum rentang
+	loan(outsider, "pending", "2026-11-03 10:00+07", &mgr)
+	rows, err := (hrisPayrollSQL{}).TeamLoanHistory(ctx, tx, boss, "2026-10-01")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 2 || rows[0].Status != "rejected" || rows[1].Status != "pending" {
+		t.Fatalf("rows = %+v", rows)
+	}
+	p := rows[1]
+	// Atasan langsung berlevel Staff (bukan penyetuju) dan Manager penyetuju juga
+	// melihatnya (lonceng menautkan ke Riwayat).
+	leader := emp("Store Leader Riwayat", &boss)
+	tx.Exec(ctx, `UPDATE hris.employees SET reporting_to = $2 WHERE id = $1`, worker, leader)
+	tx.Exec(ctx, `UPDATE hris.employees SET user_id = NULL WHERE id = $1`, leader)
+	for who, want := range map[string]int{leader: 2, mgr: 2} { // mgr: pending tim + pending orang lain yang ia setujui
+		got, err := (hrisPayrollSQL{}).TeamLoanHistory(ctx, tx, who, "2026-10-01")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(got) != want {
+			t.Fatalf("riwayat %s = %d, want %d", who, len(got), want)
+		}
+	}
+	tx.Exec(ctx, `UPDATE hris.employees SET reporting_to = $2 WHERE id = $1`, worker, boss)
+	if p.SupervisorName != nil || p.SupervisorApproved {
+		t.Fatalf("tahap SPV tanpa SPV = %+v", p)
+	}
+	if p.EmployeeName != "Peminjam Tim" || p.ApproverName == nil || *p.ApproverName != "Manager Riwayat" || p.Tenor != 2 ||
+		p.Principal != "1000000.00" || len(p.Attachments) != 1 || p.Purpose == nil || p.CreatedAt == "" {
+		t.Fatalf("pending = %+v", p)
+	}
+}

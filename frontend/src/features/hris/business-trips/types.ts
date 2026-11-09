@@ -14,6 +14,9 @@ export interface BusinessTrip {
   decided_by_name: string | null;
   decided_at: string | null;
   rejection_reason: string | null;
+  /** EPIC-092: tahap SPV yang sudah lewat (pending = menunggu Manager). */
+  spv_approved_at?: string | null;
+  spv_approved_name?: string | null;
   created_at: string;
   employee: { id: string; full_name: string; nip: string | null; reporting_to: string | null } | null;
 }

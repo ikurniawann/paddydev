@@ -99,8 +99,42 @@ func (hrisPayrollSQL) PendingLoanCount(ctx context.Context, q database.Querier) 
 func (hrisPayrollSQL) ManagerPendingLoanCount(ctx context.Context, q database.Querier, managerID string) (int64, error) {
 	var n int64
 	err := q.QueryRow(ctx, `SELECT count(*) FROM hris.loans
-		WHERE status = 'pending' AND manager_approver_id = $1`, managerID).Scan(&n)
+		WHERE status = 'pending' AND ((supervisor_approver_id = $1 AND NOT `+supervisorStageDone+`)
+		   OR (manager_approver_id = $1 AND `+supervisorStageDone+`))`, managerID).Scan(&n)
 	return n, err
+}
+
+func (hrisPayrollSQL) TeamLoanHistory(ctx context.Context, q database.Querier, managerID, from string) ([]hris.TeamLoan, error) {
+	rows, err := q.Query(ctx, `SELECT l.id::text, l.employee_id::text, m.full_name, m.nip, l.loan_type::text,
+		l.principal_amount::text, coalesce(l.monthly_installment, 0)::text, l.status::text,
+		to_char(l.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'), l.tenor_months,
+		l.purpose, l.rejection_reason, ma.full_name, l.attachments, l.collateral_attachments,
+		sa.full_name, l.supervisor_approved_at IS NOT NULL
+		FROM hris.loans l
+		-- EPIC-091: the request approver, the direct atasan (bells link here even
+		-- below SPV), and the stored SPV/Manager approvers all follow the loan.
+		JOIN hris.employees m ON m.id = l.employee_id AND m.id <> $1::uuid
+		  AND (hris.request_approver(m.id) = $1::uuid OR m.reporting_to = $1::uuid
+		       OR l.supervisor_approver_id = $1::uuid OR l.manager_approver_id = $1::uuid)
+		LEFT JOIN hris.employees ma ON ma.id = l.manager_approver_id
+		LEFT JOIN hris.employees sa ON sa.id = l.supervisor_approver_id
+		WHERE l.created_at >= $2::date OR l.status IN ('pending', 'manager_approved')
+		ORDER BY l.created_at DESC LIMIT 300`, managerID, from)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []hris.TeamLoan
+	for rows.Next() {
+		var l hris.TeamLoan
+		if err := rows.Scan(&l.ID, &l.EmployeeID, &l.EmployeeName, &l.EmployeeNIP, &l.LoanType, &l.Principal, &l.Monthly,
+			&l.Status, &l.CreatedAt, &l.Tenor, &l.Purpose, &l.RejectionReason, &l.ApproverName,
+			&l.Attachments, &l.Collateral, &l.SupervisorName, &l.SupervisorApproved); err != nil {
+			return nil, err
+		}
+		out = append(out, l)
+	}
+	return out, rows.Err()
 }
 
 func (hrisPayrollSQL) LoanUpdatesSince(ctx context.Context, q database.Querier, employeeID string, since *time.Time) (int64, error) {
@@ -336,3 +370,7 @@ func (w *hrisWhatsApp) SendText(ctx context.Context, target, message string) (bo
 	res := gateway.SendText(ctx, target, message)
 	return res.Success, res.TimedOut, res.Reason
 }
+
+// supervisorStageDone mirrors payroll.supervisorStageDone (EPIC-091): the SPV
+// stage is over when absent, approved, or its SPV can no longer decide.
+const supervisorStageDone = `(supervisor_approver_id IS NULL OR supervisor_approved_at IS NOT NULL OR NOT EXISTS (SELECT 1 FROM hris.employees sx WHERE sx.id = supervisor_approver_id AND sx.is_active AND sx.user_id IS NOT NULL))`

@@ -29,6 +29,7 @@ export const IAM = {
   hrisWorkforce: ["hris.workforce"],
   /** HRIS → Workforce → Saldo Cuti (EPIC-068): daftar, ubah, impor saldo cuti tahunan. */
   hrisLeaveBalances: ["hris.workforce.leave-balances"],
+  hrisDisciplinaryLetters: ["hris.workforce.disciplinary-letters"],
   hrisCompensation: ["hris.compensation"],
   /** HRIS → Master Data → Penempatan Karyawan (karyawan multi-toko, 2026-10-15). */
   hrisPlacements: ["hris.master.placements"],
