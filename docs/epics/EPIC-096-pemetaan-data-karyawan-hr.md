@@ -1,6 +1,6 @@
 # EPIC-096: Pemetaan Data Karyawan dari File HR ke Production (`MODULE-HRIS`)
 
-status: review
+status: done
 environment: dev
 retries: 0
 
@@ -61,9 +61,9 @@ Kolomnya NIK, Nama, Join Date, Branch, Departemen, Level Jabatan, Posisi, Approv
 Lihat `docs/superpowers/plans/2026-11-09-pemetaan-data-karyawan-hr.md`.
 
 ## Acceptance Criteria
-- [ ] Setelah eksekusi, pencocokan ulang file HR vs production tidak menyisakan perbedaan dalam cakupan R1, kecuali yang dilaporkan sebagai konflik (R5).
-- [ ] Setiap perubahan tercatat di audit per karyawan, dan ada backup sebelum eksekusi.
-- [ ] HR menerima laporan sisa: konflik, nonaktif, karyawan baru, dan level jabatan yang berbeda.
+- [x] Setelah eksekusi, pencocokan ulang file HR vs production tidak menyisakan perbedaan dalam cakupan R1, kecuali yang dilaporkan sebagai konflik (R5).
+- [x] Setiap perubahan tercatat di audit per karyawan, dan ada backup sebelum eksekusi.
+- [x] HR menerima laporan sisa: konflik, nonaktif, karyawan baru, dan level jabatan yang berbeda.
 
 ## Automation Log
 - 2026-11-09: Pencocokan read-only dan laporan ke user. User memutuskan R1–R4. Rencana ditulis.
@@ -76,3 +76,19 @@ Lihat `docs/superpowers/plans/2026-11-09-pemetaan-data-karyawan-hr.md`.
     - Kayla Olivia Berliana muncul 2 kali dengan isi berbeda;
     - 3 NIP bentrok dengan record nonaktif (Dominic, Kezia, Syakira).
   - Dirapikan: jabatan berawalan kode toko, ejaan setara, dan ejaan jabatan baru (Patnership → Partnership, Assisstant → Assistant, SPV → Supervisor).
+- 2026-11-09: **Eksekusi production 23.31–23.32 WIB** (izin user: "Malam ini 23.30 WIB"; sheet FREELANCE/DW ikut, status mengikuti file). PR #88 merged → main 11660d40.
+  - Ringkasan sama dengan gladi, kecuali "aktif tidak di file" 9 → 10: Kurnia Devi Lestari, karyawan baru 06-11.
+  - Backup: `~/backups/prod-db-before-e096-20261109-233115.dump`, salinan lokal di `~/Desktop/paddydev-backups/data-karyawan-hr/prod-20261109-233115/`.
+  - Diterapkan:
+    - 01: 28 jabatan baru;
+    - 02: penempatan 20 karyawan, berlaku 10-11 (laporan `DITERAPKAN`, error 0);
+    - 03: 188 audit `employee.update`.
+  - Total 196 karyawan berubah. Pencocokan ulang: **0 perubahan tersisa**; `/login` dan `/api/ready` 200.
+  - Insiden kecil: pratinjau 02 gagal `permission denied` karena skrip eksekusi berjalan dengan `umask 077` (file input 0600 tidak terbaca user container). Saat itu baru 01 yang masuk. Dilanjutkan dengan `umask 022` + `chmod 644`, tanpa ulang 01. Pelajaran: file yang di-`docker cp` ke container harus terbaca (≥ 0644).
+  - Laporan HR `.share/data-karyawan-20261109/hasil-pemetaan.xlsx`:
+    - 14 dilewati;
+    - 10 aktif tidak di file;
+    - 20 level file ≠ master;
+    - 22 pengajuan menunggu yang penyetujunya berganti (5 cuti, 16 lembur, 1 pinjaman);
+    - roster Elvan Sabiq s.d. 15-11 di toko lama;
+    - 2 jabatan baru berlevel "Coordinator" (Packing/Production Coordinator) yang belum ada di daftar level master, sehingga dihitung bukan leader. HR yang menentukan levelnya.

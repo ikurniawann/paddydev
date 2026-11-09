@@ -1,6 +1,6 @@
 # EPIC-097: Pilihan Manager (Atasan Langsung) Terpotong 200 Karyawan (`MODULE-HRIS`)
 
-status: review
+status: done
 environment: dev
 retries: 0
 
@@ -31,3 +31,9 @@ Laporan bug user (09-11-2026):
   - Penyebab dipetakan: `limit=200` di `frontend/src/features/users/api.ts` dan `frontend/src/features/hris/org-chart/api.ts`.
   - Helper + 4 tes; tes terkait 22 file / 86 tes lulus lokal.
   - Suite penuh lokal terhenti karena OOM: host sedang sangat sibuk (load average ±340, build proyek lain). Suite penuh diserahkan ke CI.
+- 2026-11-09: **Live production.**
+  - PR #89: CI hijau dan merged → main 4fcac55e.
+  - Staging 17.30: QA lulus. Imam bisa memilih Susmitha, Susmitha bisa memilih Teguh, tanpa error API.
+  - Production 22.12 WIB: deploy setelah PR #90 (22.09), sesuai urutan dari user. Image `local-20261109-221156`; `/`, `/login`, `/api/health`, `/api/ready` normal. Bundle memuat `/api/hris/employees?…&limit=500&page=…`.
+  - Backup: `~/backups/prod-db-before-e097-20261109-221149.dump`.
+  - Rollback: image `local-20261109-220009` + `~/paddydev-src.before-e097-20261109-221149`.

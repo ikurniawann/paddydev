@@ -98,6 +98,8 @@ deploying-dev · ready-for-qa · blocked · done).
 | [EPIC-093](./EPIC-093-jadwal-semua-toko.md) | Koordinator Mengatur Jadwal Semua Toko (`MODULE-HRIS`) | done | 2026-11-09 |
 | [EPIC-094](./EPIC-094-disiplin-keterlambatan.md) | Keterlambatan Tanpa Potongan + Peringatan Lonceng + Surat Teguran/SP oleh HR (`MODULE-HRIS`, `MODULE-PAYROLL`) | done | 2026-11-09 |
 | [EPIC-095](./EPIC-095-resign-terjadwal.md) | Resign Terjadwal — Tanggal Efektif di Masa Depan (`MODULE-HRIS`) | done | 2026-11-09 |
+| [EPIC-096](./EPIC-096-pemetaan-data-karyawan-hr.md) | Pemetaan Data Karyawan dari File HR ke Production (`MODULE-HRIS`) | done | 2026-11-09 |
+| [EPIC-097](./EPIC-097-pilihan-atasan-terpotong.md) | Pilihan Manager (Atasan Langsung) Terpotong 200 Karyawan (`MODULE-HRIS`) | done | 2026-11-09 |
 
 Aturan:
 - Epic + registry ini adalah sumber kebenaran status pekerjaan (canonical).
