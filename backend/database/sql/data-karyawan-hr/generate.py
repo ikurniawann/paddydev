@@ -37,13 +37,19 @@ APPROVER_ALIAS = {'zaidane': 'Zaidane Gusma', 'azka': 'Azka Hanifah Hamidah', 'r
 APPROVER_REGION = {'ricky / azka': ('Ricky Pratama Sidik', 'Azka Hanifah Hamidah')}
 # Kata yang ditulis berbeda untuk jabatan yang sama.
 WORD_ALIAS = {'spv': 'supervisor', 'koordinator': 'coordinator', 'operational': 'operation',
-              'assisstant': 'assistant', 'patnership': 'partnership', 'receiveable': 'receivable'}
+              'assisstant': 'assistant', 'patnership': 'partnership', 'receiveable': 'receivable', 'shopkeper': 'shopkeeper'}
 # Nama jabatan file yang maksudnya jabatan HRIS lain (laporan pencocokan 09-11).
 POSITION_ALIAS = {'shopkeeper (coordinator)': 'Shopkeeper Staff Coordinator',
                   'shopkeeper (freelance)': 'Shopkeeper Staff - Freelance',
                   'shopkeeper freelance (bandung)': 'Shopkeeper Freelance - Bandung Area',
-                  'purchasing staff (local & import)': 'Purchasing Staff'}
+                  'purchasing staff (local & import)': 'Purchasing Staff',
+                  'office support': 'Store Support', 'admin logistic': 'Logistics Admin Staff',
+                  'general affair supervisor': 'GA Supervisor', 'affiliator specialist staff': 'Affiliate Specialist',
+                  'mini rolling shopkeeper staff': 'Mini Rolling Staff', 'human resource intern': 'HR Intern'}
 LEVELS = {'freelance': 'Staff'}
+# Ejaan judul jabatan baru dirapikan sebelum masuk master (R2).
+TITLE_FIX = {'Patnership': 'Partnership', 'Assisstant': 'Assistant', 'SPV': 'Supervisor', 'Spv': 'Supervisor'}
+POSITION_ALIAS_KEY = {}  # diisi setelah title_key terdefinisi
 
 
 def norm(s):
@@ -136,12 +142,21 @@ class Masters:
 
 
 def title_key(t):
-    return ' '.join(WORD_ALIAS.get(w, w) for w in norm(t).split(' '))
+    return ' '.join(WORD_ALIAS.get(w, w) for w in norm(re.sub(r'[()]', ' ', str(t or ''))).split(' '))
+
+
+def same_title(a, b):
+    """Sama setelah ejaan disamakan, termasuk beda akhiran " Staff" saja."""
+    ka, kb = title_key(a), title_key(b)
+    return bool(ka) and (ka == kb or ka + ' staff' == kb or kb + ' staff' == ka)
+
+
+POSITION_ALIAS_KEY.update({title_key(k): v for k, v in POSITION_ALIAS.items()})
 
 
 def strip_codes(title, codes):
     words = clean(title).split(' ')
-    if len(words) > 1 and words[0].upper() in codes:
+    while len(words) > 1 and (words[0].upper() in codes or words[0] == '&'):
         words = words[1:]
     if len(words) > 1 and words[-1].upper() in codes:
         words = words[:-1]
@@ -186,10 +201,10 @@ def desired(m, r, e, new_positions):
         want['department'] = dept
     title = strip_codes(r.get('Posisi'), m.codes)
     if title:
-        title = POSITION_ALIAS.get(norm(title), title)
+        title = POSITION_ALIAS.get(norm(title)) or POSITION_ALIAS_KEY.get(title_key(title), title)
         found = m.positions.get(title_key(title), [])
         exact = [t for t in found if norm(t) == norm(title)]
-        if title_key(title) == title_key(e.get('position')):
+        if same_title(title, e.get('position')):
             want['position'] = e['position']
         elif len(found) == 1 or exact:
             want['position'] = (exact or found)[0]
@@ -197,8 +212,9 @@ def desired(m, r, e, new_positions):
             issues.append(f"Posisi '{title}' cocok dengan lebih dari satu jabatan master")
         else:
             level = clean(r.get('Level Jabatan'))
-            new_positions[title_key(title)] = (title, LEVELS.get(norm(level), level or 'Staff'), dept or '')
-            want['position'] = title
+            tidy = ' '.join(TITLE_FIX.get(w, w) for w in title.split(' '))
+            new_positions.setdefault(title_key(title), (tidy, LEVELS.get(norm(level), level or 'Staff'), dept or ''))
+            want['position'] = new_positions[title_key(title)][0]
     st = norm(r.get('Status Karyawan / Tipe Kontrak'))
     if st:
         if st in STATUS:
@@ -267,6 +283,8 @@ def plan(hr_rows, snap, today):
         if 'nip' not in w:
             continue
         owner = m.by_exact_nip.get(w['nip'])
+        if owner is None or owner['id'] == eid:
+            owner = next((o for o in m.by_nip.get(nip_key(w['nip']), []) if o['id'] != eid), owner)
         reason = None
         if targets[w['nip']] > 1:
             reason = f"NIP {w['nip']} diminta lebih dari satu karyawan"
@@ -471,26 +489,24 @@ def sql_people(p):
 
 
 def fill_template(matrix, p):
-    """02: baris template EPIC-086 untuk karyawan dengan perubahan penempatan/departemen/jabatan."""
-    want = defaultdict(dict)
+    """02: sheet Data template EPIC-086 — header dari template, satu baris per karyawan dengan perubahan
+    penempatan/departemen/jabatan (pratinjau EPIC-086 menerima NIP aktif mana pun)."""
+    header = matrix[0]
+    want, names = defaultdict(dict), {}
     for c in p.changes:
         if c.field in TEMPLATE_FIELDS:
             want[clean(c.nip)][c.field] = c.new
-    out = [matrix[0]]
-    width = len(matrix[0])
-    for r in matrix[1:]:
-        nip = clean(r[COL_NIP]) if r else ''
-        if nip not in want:
-            continue
-        r = (list(r) + [''] * width)[:width]
-        w = want.pop(nip)
+            names[clean(c.nip)] = c.name
+    out = [header]
+    for nip in sorted(want):
+        w = want[nip]
+        r = [''] * len(header)
+        r[COL_NIP], r[1] = nip, names[nip]
         if 'branch' in w:
             r[COL_BRANCH], r[COL_FROM] = w['branch'], next(iter(p.placement_from.values()))
         r[COL_DEPT] = w.get('department', '')
         r[COL_POS] = w.get('position', '')
         out.append(r)
-    if want:
-        raise SystemExit(f'NIP tidak ada di template: {sorted(want)}')
     return out
 
 

@@ -202,12 +202,46 @@ class OutputTest(unittest.TestCase):
         header = ['NIP', 'Nama', 'Departemen Saat Ini', 'Jabatan Saat Ini', 'Penempatan Saat Ini', 'Tipe Saat Ini',
                   'Yang Perlu Dilengkapi', 'Penempatan Utama (Kode Toko)', 'Tipe Jadwal', 'Senin', 'Selasa', 'Rabu',
                   'Kamis', 'Jumat', 'Sabtu', 'Minggu', 'Berlaku Mulai', 'Departemen Baru', 'Jabatan Baru', 'Catatan']
-        tpl = [header, ['1', 'A'] + [''] * 18, ['2', 'B'] + [''] * 18, ['3', 'C'] + [''] * 18]
+        tpl = [header, ['9', 'Hanya yang belum lengkap'] + [''] * 18]  # template EPIC-086 tidak memuat semua karyawan
         out = g.fill_template(tpl, p)
         self.assertEqual(out[0], header)
-        self.assertEqual([r[0] for r in out[1:]], ['1', '2'])
+        self.assertEqual([r[:2] for r in out[1:]], [['1', 'A'], ['2', 'B']])
+        self.assertTrue(all(len(r) == len(header) for r in out))
         self.assertEqual((out[1][7], out[1][16], out[1][17], out[1][18]), ('ODOO-PPBA', TODAY, '', ''))
         self.assertEqual((out[2][7], out[2][16], out[2][17], out[2][18]), ('', '', 'SCM', 'Perfumer Staff'))
+
+
+class TidyTest(unittest.TestCase):
+    def test_position_equivalents(self):
+        s = snap(emp(1, '1', 'A', position='Store Support'), emp(2, '2', 'B'), emp(3, '3', 'C'), emp(4, '4', 'D'),
+                 emp(5, '5', 'E', position='Quality Control Staff'), emp(6, '6', 'F', position='Warehouse Staff'))
+        s['positions'] += [{'id': 'p-ss', 'title': 'Store Support', 'level': 'Staff', 'department': 'Retail Operational', 'active': True},
+                           {'id': 'p-qc', 'title': 'Quality Control Staff', 'level': 'Staff', 'department': 'SCM', 'active': True},
+                           {'id': 'p-la', 'title': 'Logistics Admin Staff', 'level': 'Staff', 'department': 'Warehouse', 'active': True}]
+        s['branches'] += [{'code': 'ODOO-PPAY', 'active': True}, {'code': 'ODOO-PLAY', 'active': True}]
+        p = g.plan([row(1.0, 'A', Posisi='PPAY & PLAY Office Support'), row(2.0, 'B', line=3, Posisi='PPGA Shopkeper Staff'),
+                    row(3.0, 'C', line=4, Posisi='Host Live (Freelance)'), row(4.0, 'D', line=5, Posisi='Host Live Freelance'),
+                    row(5.0, 'E', line=6, Posisi='Quality Control'), row(6.0, 'F', line=7, Posisi='Admin Logistic')], s, TODAY)
+        pos = changes(p, 'position')
+        self.assertNotIn(('e1', 'position'), pos)
+        self.assertNotIn(('e2', 'position'), pos)
+        self.assertNotIn(('e5', 'position'), pos)
+        self.assertEqual(pos[('e6', 'position')], 'Logistics Admin Staff')
+        self.assertEqual(pos[('e3', 'position')], pos[('e4', 'position')])
+        self.assertEqual(len(p.new_positions), 1)
+
+    def test_nip_digits_conflict(self):
+        s = snap(emp(1, '2026-06-042', 'Syakira'), emp(2, '202610082', 'Syakira', is_active=False))
+        p = g.plan([row('2026-10-082', 'Syakira')], s, TODAY)
+        self.assertNotIn(('e1', 'nip'), changes(p))
+        self.assertIn('NIP 2026-10-082 dipakai Syakira (nonaktif)', skips(p))
+
+    def test_new_title_spelling_tidied(self):
+        s = snap(emp(1, '1', 'A'), emp(2, '2', 'B'))
+        p = g.plan([row(1.0, 'A', Posisi='Brand Patnership SPV', **{'Level Jabatan': 'Supervisor'}),
+                    row(2.0, 'B', line=3, Posisi='Branding & Marketing Assisstant Manager', **{'Level Jabatan': 'Assistant Manager'})], s, TODAY)
+        self.assertEqual(sorted(t for t, _, _ in p.new_positions), ['Brand Partnership Supervisor', 'Branding & Marketing Assistant Manager'])
+        self.assertEqual(changes(p, 'position')[('e1', 'position')], 'Brand Partnership Supervisor')
 
 
 if __name__ == '__main__':
