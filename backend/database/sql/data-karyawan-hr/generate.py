@@ -43,7 +43,7 @@ POSITION_ALIAS = {'shopkeeper (coordinator)': 'Shopkeeper Staff Coordinator',
                   'shopkeeper (freelance)': 'Shopkeeper Staff - Freelance',
                   'shopkeeper freelance (bandung)': 'Shopkeeper Freelance - Bandung Area',
                   'purchasing staff (local & import)': 'Purchasing Staff',
-                  'office support': 'Store Support', 'admin logistic': 'Logistics Admin Staff',
+                  'admin logistic': 'Logistics Admin Staff',
                   'general affair supervisor': 'GA Supervisor', 'affiliator specialist staff': 'Affiliate Specialist',
                   'mini rolling shopkeeper staff': 'Mini Rolling Staff', 'human resource intern': 'HR Intern'}
 LEVELS = {'freelance': 'Staff'}
@@ -91,6 +91,8 @@ class Change:
     new: object
     old_label: str = ''
     new_label: str = ''
+    old_id: object = None
+    new_id: object = None
 
 
 @dataclass
@@ -127,11 +129,12 @@ class Masters:
             self.by_name[norm(e['full_name'])].append(e)
         self.branches = {b['code'] for b in snap['branches'] if b['active']}
         self.codes = {c.replace('ODOO-', '') for c in self.branches} | self.branches
-        self.depts = {norm(d['name']): d['name'] for d in snap['departments'] if d['active']}
+        self.depts = {norm(d['name']): (d['name'], d['id']) for d in snap['departments'] if d['active']}
+        usage = Counter(e['job_title_id'] for e in self.emps if e['is_active'] and e.get('job_title_id'))
         self.positions = defaultdict(list)
-        for p in snap['positions']:
+        for p in sorted(snap['positions'], key=lambda p: (-usage[p['id']], p['id'])):
             if p['active']:
-                self.positions[title_key(p['title'])].append(p['title'])
+                self.positions[title_key(p['title'])].append(p)
         self.delegate = defaultdict(set)
         for d in snap['delegate_branches']:
             self.delegate[d['employee_id']].add(d['code'])
@@ -201,20 +204,21 @@ def desired(m, r, e, new_positions):
         want['department'] = dept
     title = strip_codes(r.get('Posisi'), m.codes)
     if title:
-        title = POSITION_ALIAS.get(norm(title)) or POSITION_ALIAS_KEY.get(title_key(title), title)
+        if not m.positions.get(title_key(title)):
+            title = POSITION_ALIAS.get(norm(title)) or POSITION_ALIAS_KEY.get(title_key(title), title)
         found = m.positions.get(title_key(title), [])
-        exact = [t for t in found if norm(t) == norm(title)]
+        exact = [p for p in found if norm(p['title']) == norm(title)]
         if same_title(title, e.get('position')):
-            want['position'] = e['position']
-        elif len(found) == 1 or exact:
-            want['position'] = (exact or found)[0]
+            want['position'] = (e['position'], e['job_title_id'])
         elif found:
-            issues.append(f"Posisi '{title}' cocok dengan lebih dari satu jabatan master")
+            # judul ganda di master: yang paling banyak dipakai karyawan aktif (urutan Masters)
+            pick = (exact or found)[0]
+            want['position'] = (pick['title'], pick['id'])
         else:
             level = clean(r.get('Level Jabatan'))
             tidy = ' '.join(TITLE_FIX.get(w, w) for w in title.split(' '))
-            new_positions.setdefault(title_key(title), (tidy, LEVELS.get(norm(level), level or 'Staff'), dept or ''))
-            want['position'] = new_positions[title_key(title)][0]
+            new_positions.setdefault(title_key(title), (tidy, LEVELS.get(norm(level), level or 'Staff'), dept[0] if dept else ''))
+            want['position'] = (new_positions[title_key(title)][0], None)
     st = norm(r.get('Status Karyawan / Tipe Kontrak'))
     if st:
         if st in STATUS:
@@ -296,18 +300,26 @@ def plan(hr_rows, snap, today):
     used_new = set()
     for eid, (r, w) in sorted(wanted.items(), key=lambda kv: m.by_id[kv[0]]['nip'] or ''):
         e = m.by_id[eid]
-        cur = {'branch': e.get('branch_code'), 'department': e.get('department'), 'position': e.get('position'),
+        cur = {'branch': e.get('branch_code'), 'department': (e.get('department'), e.get('department_id')),
+               'position': (e.get('position'), e.get('job_title_id')),
                'employment_status': e.get('employment_status'), 'join_date': e.get('join_date'),
                'reporting_to': e.get('reporting_to'), 'nip': e.get('nip')}
         for f in ('branch', 'department', 'position', 'reporting_to', 'employment_status', 'join_date', 'nip'):
             if f not in w or w[f] == cur[f]:
                 continue
+            if f in ('department', 'position'):
+                if w[f][1] is not None and w[f][1] == cur[f][1]:
+                    continue
+                c = Change(eid, e['nip'], e['full_name'], f, cur[f][0], w[f][0], str(cur[f][0] or '-'), w[f][0],
+                           old_id=cur[f][1], new_id=w[f][1])
+                if f == 'position' and w[f][1] is None:
+                    used_new.add(title_key(w[f][0]))
+                p.changes.append(c)
+                continue
             c = Change(eid, e['nip'], e['full_name'], f, cur[f], w[f], str(cur[f] or '-'), str(w[f]))
             if f == 'reporting_to':
                 c.old_label = m.by_id[cur[f]]['full_name'] if cur[f] in m.by_id else '-'
                 c.new_label = m.by_id[w[f]]['full_name']
-            if f == 'position' and title_key(w[f]) in new_positions:
-                used_new.add(title_key(w[f]))
             if f == 'branch':
                 p.placement_from[eid] = today
                 if e.get('roster_last') and e['roster_last'] >= today:
@@ -426,8 +438,9 @@ def write_xlsx(path, sheet, rows):
 
 # --- keluaran ---------------------------------------------------------------
 
-PEOPLE_FIELDS = ('reporting_to', 'employment_status', 'join_date', 'nip')
-TEMPLATE_FIELDS = ('branch', 'department', 'position')
+PEOPLE_FIELDS = ('department', 'position', 'reporting_to', 'employment_status', 'join_date', 'nip')
+TEMPLATE_FIELDS = ('branch',)
+COLUMN = {'department': 'department_id', 'position': 'job_title_id'}
 COL_NIP, COL_BRANCH, COL_FROM, COL_DEPT, COL_POS = 0, 7, 16, 17, 18
 
 
@@ -474,11 +487,20 @@ def sql_people(p):
         cs = per[eid]
         sets, guards, before, after = [], [], {}, {}
         for f, c in cs.items():
-            cast = '::uuid' if f == 'reporting_to' else '::date' if f == 'join_date' else ''
-            sets.append(f'{f} = {lit(c.new)}{cast}')
-            old = f"'tmp096-' || id" if f == 'nip' else f'{lit(c.old)}{cast if c.old is not None else ""}'
-            guards.append(f'{f} IS NOT DISTINCT FROM {old}')
-            before[f], after[f] = c.old, c.new
+            col = COLUMN.get(f, f)
+            if f in COLUMN:
+                new = (f'{lit(c.new_id)}::uuid' if c.new_id is not None else
+                       '(SELECT id FROM hris.positions WHERE coalesce(is_active, true) AND lower(btrim(title)) = '
+                       f'lower({lit(c.new)}) ORDER BY created_at DESC LIMIT 1)')
+                old = f'{lit(c.old_id)}::uuid' if c.old_id is not None else 'NULL'
+                before[col], after[col] = c.old_id, c.new_id if c.new_id is not None else c.new
+            else:
+                cast = '::uuid' if f == 'reporting_to' else '::date' if f == 'join_date' else ''
+                new = f'{lit(c.new)}{cast}'
+                old = "'tmp096-' || id" if f == 'nip' else f'{lit(c.old)}{cast if c.old is not None else ""}'
+                before[col], after[col] = c.old, c.new
+            sets.append(f'{col} = {new}')
+            guards.append(f'{col} IS NOT DISTINCT FROM {old}')
         body.append(f"  UPDATE hris.employees SET {', '.join(sets)}, updated_at = now()\n   WHERE id = {lit(eid)} AND {' AND '.join(guards)};")
         body.append(_check(names[eid].replace("'", "''")))
         body.append(f"  INSERT INTO audit.audit_log (actor_id, actor_name, action, entity, entity_id, entity_label, before, after, reason)\n"
@@ -504,8 +526,6 @@ def fill_template(matrix, p):
         r[COL_NIP], r[1] = nip, names[nip]
         if 'branch' in w:
             r[COL_BRANCH], r[COL_FROM] = w['branch'], next(iter(p.placement_from.values()))
-        r[COL_DEPT] = w.get('department', '')
-        r[COL_POS] = w.get('position', '')
         out.append(r)
     return out
 

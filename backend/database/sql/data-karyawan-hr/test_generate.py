@@ -205,10 +205,13 @@ class OutputTest(unittest.TestCase):
         tpl = [header, ['9', 'Hanya yang belum lengkap'] + [''] * 18]  # template EPIC-086 tidak memuat semua karyawan
         out = g.fill_template(tpl, p)
         self.assertEqual(out[0], header)
-        self.assertEqual([r[:2] for r in out[1:]], [['1', 'A'], ['2', 'B']])
+        self.assertEqual([r[:2] for r in out[1:]], [['1', 'A']])  # departemen/jabatan lewat 03 (id), bukan template
         self.assertTrue(all(len(r) == len(header) for r in out))
         self.assertEqual((out[1][7], out[1][16], out[1][17], out[1][18]), ('ODOO-PPBA', TODAY, '', ''))
-        self.assertEqual((out[2][7], out[2][16], out[2][17], out[2][18]), ('', '', 'SCM', 'Perfumer Staff'))
+        sql = g.sql_people(p)
+        self.assertIn("department_id = 'd-scm'::uuid", sql)
+        self.assertIn("job_title_id = 'p-perf'::uuid", sql)
+        self.assertIn("job_title_id IS NOT DISTINCT FROM 'p-shop'::uuid", sql)
 
 
 class TidyTest(unittest.TestCase):
@@ -223,12 +226,12 @@ class TidyTest(unittest.TestCase):
                     row(3.0, 'C', line=4, Posisi='Host Live (Freelance)'), row(4.0, 'D', line=5, Posisi='Host Live Freelance'),
                     row(5.0, 'E', line=6, Posisi='Quality Control'), row(6.0, 'F', line=7, Posisi='Admin Logistic')], s, TODAY)
         pos = changes(p, 'position')
-        self.assertNotIn(('e1', 'position'), pos)
+        self.assertEqual(pos[('e1', 'position')], 'Office Support')  # kode toko bertanda & dibuang
         self.assertNotIn(('e2', 'position'), pos)
         self.assertNotIn(('e5', 'position'), pos)
         self.assertEqual(pos[('e6', 'position')], 'Logistics Admin Staff')
         self.assertEqual(pos[('e3', 'position')], pos[('e4', 'position')])
-        self.assertEqual(len(p.new_positions), 1)
+        self.assertEqual(sorted(t for t, _, _ in p.new_positions), ['Host Live (Freelance)', 'Office Support'])
 
     def test_nip_digits_conflict(self):
         s = snap(emp(1, '2026-06-042', 'Syakira'), emp(2, '202610082', 'Syakira', is_active=False))
@@ -242,6 +245,23 @@ class TidyTest(unittest.TestCase):
                     row(2.0, 'B', line=3, Posisi='Branding & Marketing Assisstant Manager', **{'Level Jabatan': 'Assistant Manager'})], s, TODAY)
         self.assertEqual(sorted(t for t, _, _ in p.new_positions), ['Brand Partnership Supervisor', 'Branding & Marketing Assistant Manager'])
         self.assertEqual(changes(p, 'position')[('e1', 'position')], 'Brand Partnership Supervisor')
+
+
+class AmbiguousTest(unittest.TestCase):
+    def test_existing_title_beats_alias_and_duplicate_picks_most_used(self):
+        s = snap(emp(1, '1', 'Jejen', position='Office Support', job_title_id='p-os'), emp(2, '2', 'Keyla', position=None, job_title_id=None),
+                 *[emp(10 + i, f'9{i}', f'X{i}', job_title_id='p-shop2') for i in range(4)])
+        s['positions'] += [{'id': 'p-os', 'title': 'Office Support', 'level': 'Staff', 'department': 'HRGA', 'active': True},
+                           {'id': 'p-shop2', 'title': 'Shopkeeper Staff', 'level': 'Staff', 'department': 'Retail Operational', 'active': True}]
+        p = g.plan([row(1.0, 'Jejen', Posisi='Office Support'), row(2.0, 'Keyla', line=3)], s, TODAY)
+        self.assertNotIn(('e1', 'position'), changes(p))
+        self.assertIn("job_title_id = 'p-shop2'::uuid", g.sql_people(p))
+
+    def test_new_position_resolved_by_title_in_sql(self):
+        p = g.plan([row(1.0, 'A', Posisi='Driver', Departemen='Operations / Warehouse')], snap(emp(1, '1', 'A')), TODAY)
+        sql = g.sql_people(p)
+        self.assertIn("job_title_id = (SELECT id FROM hris.positions WHERE coalesce(is_active, true) AND lower(btrim(title)) = lower('Driver')", sql)
+        self.assertIn("department_id = 'd-wh'::uuid", sql)
 
 
 if __name__ == '__main__':
