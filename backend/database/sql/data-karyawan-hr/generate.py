@@ -174,6 +174,8 @@ def match(m, r):
     if e is not None and (not e['is_active'] or norm(e['full_name']) != norm(name)):
         alt = m.active_named(name)
         if alt is not None and alt['id'] != e['id']:
+            if e['is_active']:  # NIK dan nama menunjuk dua karyawan aktif berbeda: jangan menebak
+                return None, f"NIK menunjuk {e['full_name']}, nama menunjuk karyawan lain"
             return alt, 'nama'
     if e is not None:
         return e, 'nip'
@@ -281,22 +283,26 @@ def plan(hr_rows, snap, today):
             p.skipped.append(Skip(r['_sheet'], r['_row'], nik_text(r.get('NIK Karyawan')), clean(r.get('Nama Lengkap')), i))
         wanted[eid] = (r, want)
     # NIP: target tidak boleh dipakai karyawan lain yang NIP-nya tetap; dua karyawan tidak boleh ke NIP yang sama.
-    moving = {eid for eid, (_, w) in wanted.items() if 'nip' in w}
-    targets = Counter(w['nip'] for _, w in wanted.values() if 'nip' in w)
-    for eid, (r, w) in wanted.items():
-        if 'nip' not in w:
-            continue
-        owner = m.by_exact_nip.get(w['nip'])
-        if owner is None or owner['id'] == eid:
-            owner = next((o for o in m.by_nip.get(nip_key(w['nip']), []) if o['id'] != eid), owner)
-        reason = None
-        if targets[w['nip']] > 1:
-            reason = f"NIP {w['nip']} diminta lebih dari satu karyawan"
-        elif owner is not None and owner['id'] != eid and owner['id'] not in moving:
-            reason = f"NIP {w['nip']} dipakai {owner['full_name']}" + ('' if owner['is_active'] else ' (nonaktif)')
-        if reason:
-            p.skipped.append(Skip(r['_sheet'], r['_row'], nik_text(r.get('NIK Karyawan')), clean(r.get('Nama Lengkap')), reason))
-            del w['nip']
+    dropped = True
+    while dropped:  # ulangi sampai stabil: membatalkan satu perubahan bisa membuat yang lain bentrok
+        dropped = False
+        moving = {eid for eid, (_, w) in wanted.items() if 'nip' in w}
+        targets = Counter(w['nip'] for _, w in wanted.values() if 'nip' in w)
+        for eid, (r, w) in wanted.items():
+            if 'nip' not in w:
+                continue
+            owner = m.by_exact_nip.get(w['nip'])
+            if owner is None or owner['id'] == eid:
+                owner = next((o for o in m.by_nip.get(nip_key(w['nip']), []) if o['id'] != eid), owner)
+            reason = None
+            if targets[w['nip']] > 1:
+                reason = f"NIP {w['nip']} diminta lebih dari satu karyawan"
+            elif owner is not None and owner['id'] != eid and owner['id'] not in moving:
+                reason = f"NIP {w['nip']} dipakai {owner['full_name']}" + ('' if owner['is_active'] else ' (nonaktif)')
+            if reason:
+                p.skipped.append(Skip(r['_sheet'], r['_row'], nik_text(r.get('NIK Karyawan')), clean(r.get('Nama Lengkap')), reason))
+                del w['nip']
+                dropped = True
     used_new = set()
     for eid, (r, w) in sorted(wanted.items(), key=lambda kv: m.by_id[kv[0]]['nip'] or ''):
         e = m.by_id[eid]
@@ -489,6 +495,9 @@ def sql_people(p):
         for f, c in cs.items():
             col = COLUMN.get(f, f)
             if f in COLUMN:
+                if c.new_id is None:
+                    body.append(f"  IF NOT EXISTS (SELECT 1 FROM hris.positions WHERE coalesce(is_active, true) AND lower(btrim(title)) = lower({lit(c.new)})) "
+                                f"THEN RAISE EXCEPTION 'jabatan baru belum ada (jalankan 01 dulu): {c.new.replace(chr(39), chr(39) * 2)}'; END IF;")
                 new = (f'{lit(c.new_id)}::uuid' if c.new_id is not None else
                        '(SELECT id FROM hris.positions WHERE coalesce(is_active, true) AND lower(btrim(title)) = '
                        f'lower({lit(c.new)}) ORDER BY created_at DESC LIMIT 1)')

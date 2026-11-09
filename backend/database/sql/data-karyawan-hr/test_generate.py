@@ -155,7 +155,7 @@ class PlanTest(unittest.TestCase):
 class OutputTest(unittest.TestCase):
     def plan_people(self):
         s = snap(emp(1, '101', 'A'), emp(2, '102', 'B'), emp(3, '104', 'C'), emp(4, '105', 'D', employment_status='probation'))
-        rows = [row('102', 'A'), row('103', 'B', line=3), row('104', 'C', line=4, **{'Approver di HRIS': 'Zaidane'}),
+        rows = [row('106', 'A'), row('103', 'B', line=3), row('104', 'C', line=4, **{'Approver di HRIS': 'Zaidane'}),
                 row('105', 'D', line=5, **{'Join Date': '2024-02-03'})]
         return g.plan(rows, s, TODAY), s
 
@@ -174,20 +174,41 @@ class OutputTest(unittest.TestCase):
         self.assertGreater(sql.count('GET DIAGNOSTICS'), 0)
         self.assertEqual(sql.count('GET DIAGNOSTICS'), sql.count('RAISE EXCEPTION'))
 
-    def test_nip_swap_two_phase(self):
+    def test_nip_two_phase(self):
         p, _ = self.plan_people()
         sql = g.sql_people(p)
         nips = changes(p, 'nip')
-        self.assertEqual(nips, {('e1', 'nip'): '102', ('e2', 'nip'): '103'})
+        self.assertEqual(nips, {('e1', 'nip'): '106', ('e2', 'nip'): '103'})
         last_tmp = max(sql.index("nip = 'tmp096-' || id WHERE id = 'e1'"), sql.index("nip = 'tmp096-' || id WHERE id = 'e2'"))
-        self.assertLess(last_tmp, sql.index("nip = '102'"))
+        self.assertLess(last_tmp, sql.index("nip = '106'"))
         self.assertLess(last_tmp, sql.index("nip = '103'"))
 
+    def test_nip_swap_between_active_is_ambiguous(self):
+        # NIK milik karyawan aktif lain: tukar NIP tidak bisa dibedakan dari salah orang → dilewati
+        p = g.plan([row('102', 'A'), row('101', 'B', line=3)], snap(emp(1, '101', 'A'), emp(2, '102', 'B')), TODAY)
+        self.assertEqual(changes(p, 'nip'), {})
+        self.assertIn('NIK menunjuk B, nama menunjuk karyawan lain', skips(p))
+
     def test_nip_taken_by_other_skipped(self):
-        s = snap(emp(1, '101', 'A'), emp(2, '102', 'Orang Lain'))
-        p = g.plan([row('102', 'A')], s, TODAY)
-        self.assertNotIn(('e1', 'nip'), changes(p))
-        self.assertIn('NIP 102 dipakai Orang Lain', skips(p))
+        s = snap(emp(1, '101', 'A'), emp(2, '102', 'Orang Lain'), emp(3, '201', 'Dita'))
+        p = g.plan([row('102', 'A'), row('202', 'Dita', line=3)], s, TODAY)
+        self.assertFalse({'e1', 'e2'} & {c.employee_id for c in p.changes})
+        self.assertIn('NIK menunjuk Orang Lain, nama menunjuk karyawan lain', skips(p))
+        p = g.plan([row('102', 'Dita')], snap(emp(3, '201', 'Dita'), emp(4, '102', 'Lain Lagi', is_active=False)), TODAY)
+        self.assertNotIn(('e3', 'nip'), changes(p))
+        self.assertIn('NIP 102 dipakai Lain Lagi (nonaktif)', skips(p))
+
+    def test_nip_chain_dropped_until_stable(self):
+        s = snap(emp(1, '101', 'A'), emp(2, '102', 'B'), emp(3, '103', 'C Tetap'))
+        p = g.plan([row('102', 'A'), row('103', 'B', line=3)], s, TODAY)
+        self.assertEqual(changes(p, 'nip'), {})
+        self.assertIn('NIK menunjuk B, nama menunjuk karyawan lain', skips(p))
+        self.assertIn('NIK menunjuk C Tetap, nama menunjuk karyawan lain', skips(p))
+
+    def test_new_position_null_raises(self):
+        p = g.plan([row(1.0, 'A', Posisi='Driver')], snap(emp(1, '1', 'A')), TODAY)
+        sql = g.sql_people(p)
+        self.assertIn("IF NOT EXISTS (SELECT 1 FROM hris.positions WHERE coalesce(is_active, true) AND lower(btrim(title)) = lower('Driver'))", sql)
 
     def test_audit_one_row_per_employee(self):
         p, _ = self.plan_people()
