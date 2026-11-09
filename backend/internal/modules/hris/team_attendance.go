@@ -77,8 +77,9 @@ func (s *Service) TeamAttendance(ctx context.Context, managerID *string, date, t
 		if att, ok := e.Get("attendance").(*Row); ok && att != nil {
 			att.Set("clock_in_photo_url", nil)
 			att.Set("clock_out_photo_url", nil)
-			// Free-text notes only where the page shows them: a check outside the area.
-			if att.Str("clock_in_geofence") != "invalid" && att.Str("clock_out_geofence") != "invalid" {
+			// Free-text notes only where the page shows them: a check outside the
+			// area or with an imprecise location.
+			if !geofenceNeedsNote(att.Str("clock_in_geofence")) && !geofenceNeedsNote(att.Str("clock_out_geofence")) {
 				att.Set("notes", nil)
 			}
 		}

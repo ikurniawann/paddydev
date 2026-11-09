@@ -25,8 +25,10 @@ describe("submitClock", () => {
     expect(err).toBeInstanceOf(ClockGeofenceError);
     expect((err as ClockGeofenceError).info).toEqual({
       message: "Anda di luar area PVJ (±334 m, batas 100 m).",
+      reason: "outside",
       distanceM: 334,
       radiusM: 100,
+      accuracyM: null,
       branchName: "PVJ",
     });
   });

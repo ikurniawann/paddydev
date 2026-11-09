@@ -304,14 +304,14 @@ func (s *store) ApprovedTripOn(ctx context.Context, employeeID, date string) (bo
 	return ok, err
 }
 
-// RelabelTripAttendance turns the range's invalid/unchecked geofence
+// RelabelTripAttendance turns the range's invalid/imprecise/unchecked geofence
 // verdicts into dinas, outside closed attendance periods (EPIC-062 R8).
 func (s *store) RelabelTripAttendance(ctx context.Context, employeeID, start, end string) error {
 	_, err := s.db.Exec(ctx, `UPDATE hris.attendance a SET
-		  clock_in_geofence = CASE WHEN a.clock_in_geofence IN ('invalid', 'unchecked') THEN 'dinas' ELSE a.clock_in_geofence END,
-		  clock_out_geofence = CASE WHEN a.clock_out_geofence IN ('invalid', 'unchecked') THEN 'dinas' ELSE a.clock_out_geofence END
+		  clock_in_geofence = CASE WHEN a.clock_in_geofence IN ('invalid', 'imprecise', 'unchecked') THEN 'dinas' ELSE a.clock_in_geofence END,
+		  clock_out_geofence = CASE WHEN a.clock_out_geofence IN ('invalid', 'imprecise', 'unchecked') THEN 'dinas' ELSE a.clock_out_geofence END
 		WHERE a.employee_id = $1 AND a.date BETWEEN $2::date AND $3::date
-		  AND (a.clock_in_geofence IN ('invalid', 'unchecked') OR a.clock_out_geofence IN ('invalid', 'unchecked'))
+		  AND (a.clock_in_geofence IN ('invalid', 'imprecise', 'unchecked') OR a.clock_out_geofence IN ('invalid', 'imprecise', 'unchecked'))
 		  AND NOT EXISTS (SELECT 1 FROM hris.attendance_periods p
 		                  WHERE p.status = 'closed' AND a.date BETWEEN p.start_date AND p.end_date)`,
 		employeeID, start, end)

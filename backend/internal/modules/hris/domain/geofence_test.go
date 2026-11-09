@@ -31,7 +31,7 @@ func TestGeofence(t *testing.T) {
 	check("tepat 100 m", store(&GeoPoint{Lat: -6.9009, Lng: 107.6}), GeofenceValid, intp(100))
 	check("111 m tanpa akurasi", store(&GeoPoint{Lat: -6.901, Lng: 107.6}), GeofenceInvalid, intp(111))
 	check("167 m akurasi 80", store(&GeoPoint{Lat: -6.9015, Lng: 107.6, Accuracy: f64p(80)}), GeofenceValid, intp(167))
-	check("334 m akurasi 5000", store(&GeoPoint{Lat: -6.903, Lng: 107.6, Accuracy: f64p(5000)}), GeofenceInvalid, intp(334))
+	check("334 m akurasi 5000", store(&GeoPoint{Lat: -6.903, Lng: 107.6, Accuracy: f64p(5000)}), GeofenceImprecise, intp(334))
 	override := store(&GeoPoint{Lat: -6.903, Lng: 107.6})
 	override.RadiusM = intp(350)
 	check("override 350 m", override, GeofenceValid, intp(334))
@@ -86,6 +86,35 @@ func TestGeofenceBoundaries(t *testing.T) {
 	check("toko hanya lng", Geofence(GeofenceInput{BranchLng: f64p(107.6), Point: pt}), GeofenceUnchecked, nil)
 }
 
+// Lokasi perkiraan (Android "Perkiraan", iPhone Lokasi Akurat mati): titik
+// dipatok ke kisi ±1 km dengan akurasi ±2000 m, jadi jaraknya tidak bisa
+// menentukan dalam/luar area kecuali sudah pasti di luar.
+func TestGeofenceImprecise(t *testing.T) {
+	in := func(p *GeoPoint) GeofenceInput {
+		return GeofenceInput{BranchLat: f64p(-6.9), BranchLng: f64p(107.6), Point: p}
+	}
+	check := func(name string, got GeofenceResult, status string, dist *int) {
+		t.Helper()
+		if got.Status != status {
+			t.Errorf("%s: status %q, want %q", name, got.Status, status)
+		}
+		eq(t, got.DistanceM, dist)
+	}
+	hq := GeofenceInput{BranchLat: f64p(-6.938272), BranchLng: f64p(107.618741),
+		Point: &GeoPoint{Lat: -6.936936936936937, Lng: 107.616616155624, Accuracy: f64p(2000)}}
+	check("kasus Sabrina: kisi 278 m ±2000", Geofence(hq), GeofenceImprecise, intp(278))
+	check("akurasi 500 masih dinilai biasa", Geofence(in(metersNorth(201, f64p(500)))), GeofenceInvalid, intp(201))
+	check("akurasi 500 dalam toleransi", Geofence(in(metersNorth(200, f64p(500)))), GeofenceValid, intp(200))
+	check("akurasi 501 dekat toko", Geofence(in(metersNorth(40, f64p(501)))), GeofenceImprecise, intp(40))
+	// Prod 06-11: dari dalam HQ, titik perkiraan meleset 3446 m pada ±2000 m.
+	check("±2000 meleset 3446 m", Geofence(in(metersNorth(3446, f64p(2000)))), GeofenceImprecise, intp(3446))
+	check("±2000 tapi 4100 m", Geofence(in(metersNorth(4100, f64p(2000)))), GeofenceImprecise, intp(4100))
+	check("±2000 dan 4101 m: pasti di luar", Geofence(in(metersNorth(4101, f64p(2000)))), GeofenceInvalid, intp(4101))
+	trip := in(metersNorth(278, f64p(2000)))
+	trip.OnBusinessTrip = true
+	check("dinas menang", Geofence(trip), GeofenceDinas, intp(278))
+}
+
 func TestDistanceMetersNearAntipodal(t *testing.T) {
 	for _, d := range []float64{
 		DistanceMeters(0.0000001, 0, -0.0000001, 180),
@@ -103,6 +132,8 @@ func TestGeofenceNoteMissing(t *testing.T) {
 	eq(t, GeofenceNoteMissing(GeofenceInvalid, nil), true)
 	eq(t, GeofenceNoteMissing(GeofenceInvalid, sp("  abcd ")), true)
 	eq(t, GeofenceNoteMissing(GeofenceInvalid, sp("Ambil stok")), false)
+	eq(t, GeofenceNoteMissing(GeofenceImprecise, nil), true)
+	eq(t, GeofenceNoteMissing(GeofenceImprecise, sp("Di lantai 1 HQ")), false)
 	eq(t, GeofenceNoteMissing(GeofenceValid, nil), false)
 	eq(t, GeofenceNoteMissing(GeofenceUnchecked, nil), false)
 	eq(t, GeofenceNoteMissing(GeofenceDinas, nil), false)

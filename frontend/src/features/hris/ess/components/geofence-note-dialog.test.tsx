@@ -4,10 +4,13 @@ import { GeofenceNoteDialog } from "./geofence-note-dialog";
 
 const info = {
   message: "Anda di luar area PVJ (±334 m, batas 100 m). Isi keterangan minimal 5 karakter untuk tetap absen.",
+  reason: "outside" as const,
   distanceM: 334,
   radiusM: 100,
+  accuracyM: null,
   branchName: "PVJ",
 };
+const imprecise = { ...info, reason: "imprecise" as const, distanceM: 278, accuracyM: 2000, branchName: "Paddy HQ Bandung" };
 
 afterEach(cleanup);
 
@@ -43,6 +46,30 @@ describe("GeofenceNoteDialog", () => {
     );
     expect(screen.getByText(/batas 250 m/)).toBeTruthy();
     expect(screen.queryByText(/batas 100 m/)).toBeNull();
+  });
+
+  it("di luar area tidak menawarkan Coba lagi", () => {
+    render(<GeofenceNoteDialog info={info} pending={false} onSubmit={() => {}} onCancel={() => {}} onRetry={() => {}} />);
+    expect(screen.queryByRole("button", { name: "Coba lagi" })).toBeNull();
+  });
+
+  it("lokasi tidak akurat: panduan Lokasi Akurat Android & iPhone, Coba lagi, atau tetap absen", () => {
+    const onRetry = vi.fn();
+    const onSubmit = vi.fn();
+    render(<GeofenceNoteDialog info={imprecise} pending={false} onSubmit={onSubmit} onCancel={() => {}} onRetry={onRetry} />);
+    expect(screen.getByText("Lokasi HP tidak akurat")).toBeTruthy();
+    expect(screen.getByText(/±2000 m/)).toBeTruthy();
+    expect(screen.getByText(/Paddy HQ Bandung/)).toBeTruthy();
+    expect(screen.queryByText(/±278 m/)).toBeNull();
+    expect(screen.getByText("Android")).toBeTruthy();
+    expect(screen.getByText(/Gunakan lokasi akurat/)).toBeTruthy();
+    expect(screen.getByText("iPhone")).toBeTruthy();
+    expect(screen.getAllByText(/Lokasi Akurat/).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("button", { name: "Coba lagi" }));
+    expect(onRetry).toHaveBeenCalledTimes(1);
+    fireEvent.change(screen.getByLabelText("Keterangan"), { target: { value: "Di lantai 1 HQ" } });
+    fireEvent.click(screen.getByRole("button", { name: "Tetap absen" }));
+    expect(onSubmit).toHaveBeenCalledWith("Di lantai 1 HQ");
   });
 
   it("tidak tampil tanpa info", () => {

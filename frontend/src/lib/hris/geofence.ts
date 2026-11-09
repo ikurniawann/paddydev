@@ -6,11 +6,12 @@
 
 import { GEOFENCE_DEFAULT_RADIUS_M, isUsableCoord } from "@/lib/maps/coords";
 
-export type GeofenceStatus = "valid" | "invalid" | "unchecked" | "dinas";
+export type GeofenceStatus = "valid" | "invalid" | "imprecise" | "unchecked" | "dinas";
 
 export const GEOFENCE_META: Record<GeofenceStatus, { label: string; className: string }> = {
   valid: { label: "Dalam area", className: "bg-green-100 text-green-700" },
   invalid: { label: "Di luar area", className: "bg-red-100 text-red-700" },
+  imprecise: { label: "Lokasi tidak akurat", className: "bg-amber-100 text-amber-800" },
   unchecked: { label: "Belum dicek", className: "bg-gray-100 text-gray-600" },
   dinas: { label: "Perjalanan Dinas", className: "bg-sky-100 text-sky-700" },
 };
@@ -19,7 +20,7 @@ export function isGeofenceStatus(v: unknown): v is GeofenceStatus {
   return typeof v === "string" && Object.hasOwn(GEOFENCE_META, v);
 }
 
-/** "Di luar area · 334 m"; null bila absen tidak dinilai (sebelum EPIC-062 atau dicatat HRD). */
+/** "Di luar area · 334 m"; tanpa jarak untuk lokasi tidak akurat; null bila absen tidak dinilai (sebelum EPIC-062 atau dicatat HRD). */
 export function geofenceLabel(
   status: string | null | undefined,
   distanceM: number | null | undefined
@@ -30,6 +31,23 @@ export function geofenceLabel(
   return label;
 }
 
+/** Status yang membawa keterangan karyawan (di luar area atau lokasi tidak akurat). */
+export function geofenceHasNote(status: string | null | undefined): boolean {
+  return status === "invalid" || status === "imprecise";
+}
+
+/**
+ * Akurasi terburuk yang masih dinilai dalam/luar area (sama dengan server,
+ * GeofenceImpreciseAccuracyM). Di atasnya HP mengirim lokasi perkiraan:
+ * Android dengan izin "Perkiraan" atau iPhone dengan Lokasi Akurat mati
+ * (titik dipatok ke kisi ±1 km, akurasi ±2000 m).
+ */
+export const GEOFENCE_IMPRECISE_ACCURACY_M = 500;
+
+export function isImpreciseAccuracy(accuracy: number | null | undefined): boolean {
+  return typeof accuracy === "number" && accuracy > GEOFENCE_IMPRECISE_ACCURACY_M;
+}
+
 /** Didefinisikan di lib/maps/coords (agar komponen peta tidak mengimpor lib/hris); diekspor ulang di sini. */
 export { GEOFENCE_DEFAULT_RADIUS_M };
 
@@ -38,8 +56,12 @@ export const GEOFENCE_NOTE_MIN = 5;
 
 export interface GeofenceNoteInfo {
   message: string;
+  /** outside = di luar area; imprecise = lokasi HP tidak akurat (perkiraan). */
+  reason: "outside" | "imprecise";
   distanceM: number | null;
   radiusM: number;
+  /** Akurasi lokasi HP (meter) untuk reason imprecise. */
+  accuracyM: number | null;
   branchName: string | null;
 }
 
@@ -52,12 +74,21 @@ export function geofenceNoteRequired(status: number, body: unknown): GeofenceNot
   if (status !== 422 || !body || typeof body !== "object") return null;
   const { error, details } = body as { error?: unknown; details?: unknown };
   if (!details || typeof details !== "object") return null;
-  const d = details as { code?: unknown; distance_m?: unknown; radius_m?: unknown; branch_name?: unknown };
+  const d = details as {
+    code?: unknown;
+    reason?: unknown;
+    distance_m?: unknown;
+    radius_m?: unknown;
+    accuracy_m?: unknown;
+    branch_name?: unknown;
+  };
   if (d.code !== "geofence_note_required") return null;
   return {
     message: typeof error === "string" ? error : "Anda di luar area toko. Isi keterangan untuk tetap absen.",
+    reason: d.reason === "imprecise" ? "imprecise" : "outside",
     distanceM: typeof d.distance_m === "number" ? d.distance_m : null,
     radiusM: typeof d.radius_m === "number" ? d.radius_m : GEOFENCE_DEFAULT_RADIUS_M,
+    accuracyM: typeof d.accuracy_m === "number" ? d.accuracy_m : null,
     branchName: typeof d.branch_name === "string" ? d.branch_name : null,
   };
 }

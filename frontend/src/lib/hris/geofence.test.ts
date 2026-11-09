@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   GEOFENCE_DEFAULT_RADIUS_M,
   GEOFENCE_META,
+  geofenceHasNote,
   geofenceLabel,
+  isImpreciseAccuracy,
   geofenceNoteRequired,
   isGeofenceStatus,
   toBranchLocationPayload,
@@ -15,6 +17,10 @@ describe("geofenceLabel", () => {
     expect(geofenceLabel("invalid", 334)).toBe("Di luar area · 334 m");
     expect(geofenceLabel("unchecked", null)).toBe("Belum dicek");
     expect(geofenceLabel("dinas", 334)).toBe("Perjalanan Dinas");
+  });
+  it("lokasi perkiraan tanpa jarak (jaraknya tidak bermakna)", () => {
+    expect(geofenceLabel("imprecise", 278)).toBe("Lokasi tidak akurat");
+    expect(isGeofenceStatus("imprecise")).toBe(true);
   });
   it("kosong untuk absen tanpa penilaian (sebelum EPIC-062 / dicatat HRD)", () => {
     expect(geofenceLabel(null, null)).toBeNull();
@@ -41,10 +47,19 @@ describe("geofenceNoteRequired", () => {
   it("membaca respons 422 di luar area", () => {
     expect(geofenceNoteRequired(422, body)).toEqual({
       message: body.error,
+      reason: "outside",
       distanceM: 334,
       radiusM: 100,
+      accuracyM: null,
       branchName: "PVJ",
     });
+  });
+  it("membaca respons 422 lokasi tidak akurat", () => {
+    const imprecise = {
+      ...body,
+      details: { ...body.details, reason: "imprecise", accuracy_m: 2000, distance_m: 278 },
+    };
+    expect(geofenceNoteRequired(422, imprecise)).toMatchObject({ reason: "imprecise", accuracyM: 2000, distanceM: 278 });
   });
   it("memakai radius_m dari server, bukan angka tetap", () => {
     const custom = { ...body, details: { ...body.details, radius_m: 250 } };
@@ -97,5 +112,22 @@ describe("validateBranchLocation", () => {
       lng: null,
       geofence_radius_m: 250,
     });
+  });
+});
+
+describe("lokasi perkiraan", () => {
+  it("akurasi di atas 500 m dianggap lokasi perkiraan, sama dengan server", () => {
+    expect(isImpreciseAccuracy(2000)).toBe(true);
+    expect(isImpreciseAccuracy(501)).toBe(true);
+    expect(isImpreciseAccuracy(500)).toBe(false);
+    expect(isImpreciseAccuracy(12)).toBe(false);
+    expect(isImpreciseAccuracy(null)).toBe(false);
+    expect(isImpreciseAccuracy(undefined)).toBe(false);
+  });
+  it("status yang membawa keterangan karyawan", () => {
+    expect(geofenceHasNote("invalid")).toBe(true);
+    expect(geofenceHasNote("imprecise")).toBe(true);
+    expect(geofenceHasNote("valid")).toBe(false);
+    expect(geofenceHasNote(null)).toBe(false);
   });
 });

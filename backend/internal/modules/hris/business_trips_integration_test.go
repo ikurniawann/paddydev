@@ -185,7 +185,7 @@ func TestBusinessTripRejectCancelAndClosedPeriod(t *testing.T) {
 	}
 	closedRow := att("2026-10-30", "invalid", nil)
 	validRow := att("2026-11-01", "valid", "valid")
-	openRow := att("2026-11-02", "invalid", "unchecked")
+	openRow := att("2026-11-02", "imprecise", "unchecked")
 	outside := att("2026-11-03", "invalid", nil)
 	h.exec(`DELETE FROM hris.attendance_periods WHERE start_date <= '2026-11-30' AND end_date >= '2026-10-01'`)
 	h.exec(`INSERT INTO hris.attendance_periods (period_year, period_month, start_date, end_date, closing_date,

@@ -9,13 +9,14 @@ import { CameraCapture } from "@/components/hris/CameraCapture";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { formatTime } from "@/lib/format";
 import { GeofenceBadge } from "@/features/hris/attendance/components/geofence-badge";
+import { acquireClockLocation } from "@/lib/hris/clock-location";
 import { geofenceLabel, type GeofenceNoteInfo } from "@/lib/hris/geofence";
 import { preferredClockStore } from "@/lib/hris/placements";
 import { useClockPlacements } from "@/features/hris/placements/queries";
 import { useTodayAttendance } from "../queries";
 import { ClockGeofenceError } from "../api";
 import { useSubmitClock } from "../mutations";
-import type { EssClockLocation, EssClockPayload } from "../types";
+import type { EssClockPayload } from "../types";
 import { GeofenceNoteDialog } from "./geofence-note-dialog";
 
 /**
@@ -26,28 +27,14 @@ import { GeofenceNoteDialog } from "./geofence-note-dialog";
  * toko diisi, selain itu penempatan utama). Toko menentukan pembagian biaya
  * gaji per toko.
  * Di luar area: server menjawab 422, popup meminta keterangan, payload
- * (termasuk selfie) dikirim ulang.
+ * (termasuk selfie) dikirim ulang. Lokasi tidak akurat (lokasi perkiraan):
+ * popup yang sama dengan panduan Lokasi Akurat; Coba lagi mengambil GPS ulang
+ * dan mengirim ulang payload dengan lokasi baru.
  * State absensi hari ini dipulihkan dari server (tahan refresh). Setelah
  * berhasil, mutasi menyegarkan beranda dan kalender absensi.
  */
 
 type ClockAction = EssClockPayload["action"];
-
-function getLocation(): Promise<EssClockLocation | null> {
-  return new Promise((resolve) => {
-    if (!navigator.geolocation) return resolve(null);
-    navigator.geolocation.getCurrentPosition(
-      (pos) =>
-        resolve({
-          latitude: pos.coords.latitude,
-          longitude: pos.coords.longitude,
-          accuracy: pos.coords.accuracy,
-        }),
-      () => resolve(null),
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-    );
-  });
-}
 
 export function EssClockPanel() {
   const todayQuery = useTodayAttendance();
@@ -69,7 +56,7 @@ export function EssClockPanel() {
     const options = storeData?.placements ?? [];
     if (clockedIn || options.length < 2 || !options.some((s) => s.lat !== null && s.lng !== null)) return;
     let cancelled = false;
-    getLocation().then((loc) => {
+    acquireClockLocation().then((loc) => {
       if (!cancelled && loc) {
         setNearestStore(preferredClockStore(options, storeData?.default_branch_id ?? null, loc));
       }
@@ -86,7 +73,7 @@ export function EssClockPanel() {
   async function submit(action: ClockAction, photo: string) {
     setCameraFor(null);
     setLocating(true);
-    const location = await getLocation();
+    const location = await acquireClockLocation();
     setLocating(false);
 
     const payload: EssClockPayload = { action, photo };
@@ -99,6 +86,17 @@ export function EssClockPanel() {
     }
 
     send(payload);
+  }
+
+  async function retryLocation(payload: EssClockPayload) {
+    setLocating(true);
+    const location = await acquireClockLocation();
+    setLocating(false);
+    const next: EssClockPayload = { ...payload };
+    const key = payload.action === "clock-in" ? "clock_in_location" : "clock_out_location";
+    if (location) next[key] = location;
+    else delete next[key];
+    send(next);
   }
 
   function send(payload: EssClockPayload) {
@@ -221,6 +219,11 @@ export function EssClockPanel() {
           const pending = noteFor;
           setNoteFor(null);
           if (pending) send({ ...pending.payload, notes: note });
+        }}
+        onRetry={() => {
+          const pending = noteFor;
+          setNoteFor(null);
+          if (pending) void retryLocation(pending.payload);
         }}
       />
     </div>

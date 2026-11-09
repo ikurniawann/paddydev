@@ -14,6 +14,14 @@ const (
 	GeofenceAccuracyCapM = 100.0
 	// GeofenceNoteMinChars is the shortest out-of-area note (AB-03).
 	GeofenceNoteMinChars = 5
+	// GeofenceImpreciseAccuracyM is the worst accuracy still judged in/out:
+	// beyond it the device sent an approximate fix (Android "Perkiraan",
+	// iPhone Lokasi Akurat off: snapped to a ~1 km grid at ±2000 m).
+	GeofenceImpreciseAccuracyM = 500.0
+	// GeofenceImpreciseErrorFactor: an approximate fix is shifted at random
+	// and then snapped to the grid, so it can land up to about twice its
+	// accuracy away (production 06-11: 3446 m off at ±2000 m from inside HQ).
+	GeofenceImpreciseErrorFactor = 2.0
 )
 
 // Statuses stored in hris.attendance.clock_in_geofence / clock_out_geofence.
@@ -22,6 +30,7 @@ const (
 	GeofenceInvalid   = "invalid"
 	GeofenceUnchecked = "unchecked"
 	GeofenceDinas     = "dinas"
+	GeofenceImprecise = "imprecise"
 )
 
 // GeoPoint is a device position; Accuracy is the reported radius in meters.
@@ -74,10 +83,16 @@ func accuracyTolerance(acc *float64) float64 {
 	return math.Min(*acc, GeofenceAccuracyCapM)
 }
 
+func impreciseFix(acc *float64) bool {
+	return acc != nil && !math.IsNaN(*acc) && *acc > GeofenceImpreciseAccuracyM
+}
+
 // Geofence judges one clock event (EPIC-062 R2/R3): dinas on an approved
 // business trip; unchecked without usable store or device coordinates;
-// invalid only when the rounded distance minus the capped accuracy exceeds
-// the radius; valid otherwise.
+// with an approximate fix (accuracy above GeofenceImpreciseAccuracyM)
+// imprecise, unless the distance minus twice the accuracy still exceeds the
+// radius (invalid); otherwise invalid only when the rounded distance minus
+// the capped accuracy exceeds the radius; valid otherwise.
 func Geofence(in GeofenceInput) GeofenceResult {
 	radius := GeofenceRadiusDefaultM
 	if in.RadiusM != nil && *in.RadiusM > 0 {
@@ -94,6 +109,12 @@ func Geofence(in GeofenceInput) GeofenceResult {
 		out.Status = GeofenceDinas
 	case out.DistanceM == nil:
 		out.Status = GeofenceUnchecked
+	case impreciseFix(in.Point.Accuracy):
+		if float64(*out.DistanceM)-GeofenceImpreciseErrorFactor**in.Point.Accuracy > float64(radius) {
+			out.Status = GeofenceInvalid
+		} else {
+			out.Status = GeofenceImprecise
+		}
 	case float64(*out.DistanceM)-accuracyTolerance(in.Point.Accuracy) > float64(radius):
 		out.Status = GeofenceInvalid
 	default:
@@ -102,10 +123,10 @@ func Geofence(in GeofenceInput) GeofenceResult {
 	return out
 }
 
-// GeofenceNoteMissing: an out-of-area event needs a note of at least
-// GeofenceNoteMinChars characters (AB-03); other statuses need none.
+// GeofenceNoteMissing: an out-of-area or imprecise event needs a note of at
+// least GeofenceNoteMinChars characters (AB-03); other statuses need none.
 func GeofenceNoteMissing(status string, note *string) bool {
-	if status != GeofenceInvalid {
+	if status != GeofenceInvalid && status != GeofenceImprecise {
 		return false
 	}
 	return note == nil || len([]rune(JSTrim(*note))) < GeofenceNoteMinChars

@@ -19,6 +19,7 @@ import { useStoreBranches } from "@/features/hris/placements/queries";
 import { formatDate, formatTime } from "@/lib/format";
 import { todayWib } from "@/lib/hris/attendance-period";
 import { GeofenceBadge } from "./geofence-badge";
+import { geofenceHasNote } from "@/lib/hris/geofence";
 import { SelfiePhotoDialog } from "./selfie-photo-dialog";
 import { AutoCheckoutBadge } from "./auto-checkout-badge";
 import { ShortHoursBadge } from "./short-hours-badge";
@@ -415,7 +416,7 @@ export function AttendanceRecapTab() {
                           {!row.clock_in_geofence && !row.clock_out_geofence && (
                             <span className="text-xs text-gray-400">—</span>
                           )}
-                          {row.notes && (row.clock_in_geofence === "invalid" || row.clock_out_geofence === "invalid") && (
+                          {row.notes && (geofenceHasNote(row.clock_in_geofence) || geofenceHasNote(row.clock_out_geofence)) && (
                             <p className="max-w-[16rem] whitespace-pre-line text-xs text-gray-500">“{row.notes}”</p>
                           )}
                         </div>
