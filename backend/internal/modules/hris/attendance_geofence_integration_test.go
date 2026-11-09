@@ -82,6 +82,33 @@ func TestClockInOutsideAreaNeedsNote(t *testing.T) {
 
 // Radius per toko (configuration.branches.geofence_radius_m) menggantikan
 // default 100 m: 400 m menjadikan ±334 m valid, 250 m tetap di luar area.
+// Lokasi perkiraan (akurasi ±2000 m) di dekat toko: tidak bisa dinilai,
+// minta keterangan dengan pesan Lokasi Akurat, lalu tercatat imprecise.
+func TestClockInImpreciseLocationNeedsNote(t *testing.T) {
+	h, _ := newFileHarness(t)
+	staff, own := h.staff("pos", nil, true, emp{name: "Crew Perkiraan"})
+	store := h.branch("HQ Perkiraan")
+	h.exec(`INSERT INTO hris.employee_placements (employee_id, branch_id, is_primary, start_date)
+		VALUES ($1, $2, true, '2026-01-01')`, own, store)
+	photo := dataURL("image/png", pngBytes(t))
+	approx := map[string]any{"latitude": -6.9025, "longitude": 107.6, "accuracy": 2000}
+
+	out := h.do(&staff, "POST", "/api/hris/attendance", clockInBody(photo, approx, ""))
+	expect(t, out, 422, "Lokasi HP Anda tidak akurat (±2000 m), jadi jarak ke HQ Perkiraan tidak bisa dipastikan. "+
+		"Nyalakan Lokasi Akurat lalu coba lagi, atau isi keterangan minimal 5 karakter untuk tetap absen.")
+	det := out.body["details"].(map[string]any)
+	if det["code"] != "geofence_note_required" || det["reason"] != "imprecise" || det["accuracy_m"] != 2000.0 ||
+		det["distance_m"] != 278.0 || det["radius_m"] != 100.0 {
+		t.Fatalf("details = %s", out.raw)
+	}
+
+	in := h.do(&staff, "POST", "/api/hris/attendance", clockInBody(photo, approx, "Di lantai 1 HQ"))
+	expect(t, in, 200, "")
+	if d := in.data(); d["clock_in_geofence"] != "imprecise" || d["clock_in_distance_m"] != 278.0 || d["notes"] != "Di lantai 1 HQ" {
+		t.Fatalf("clock-in = %s", in.raw)
+	}
+}
+
 func TestClockInStoreRadiusOverride(t *testing.T) {
 	h, _ := newFileHarness(t)
 	photo := dataURL("image/png", pngBytes(t))

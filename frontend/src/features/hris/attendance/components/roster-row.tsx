@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { formatTime } from "@/lib/format";
 import { LEAVE_TYPE_LABELS } from "@/types/hris";
 import { GeofenceBadge } from "./geofence-badge";
+import { geofenceHasNote } from "@/lib/hris/geofence";
 import { SelfiePhotoDialog } from "./selfie-photo-dialog";
 import { AutoCheckoutBadge } from "./auto-checkout-badge";
 import { ShortHoursBadge } from "./short-hours-badge";
@@ -90,7 +91,7 @@ export function RosterRow({ emp, isToday }: { emp: RosterEmployee; isToday: bool
             <AutoCheckoutBadge auto={emp.attendance.clock_out_auto} />
           </div>
           {emp.attendance.notes &&
-            (emp.attendance.clock_in_geofence === "invalid" || emp.attendance.clock_out_geofence === "invalid") && (
+            (geofenceHasNote(emp.attendance.clock_in_geofence) || geofenceHasNote(emp.attendance.clock_out_geofence)) && (
               <p className="mt-0.5 max-w-xs whitespace-pre-line text-right text-[11px] text-gray-500">“{emp.attendance.notes}”</p>
             )}
         </div>

@@ -125,6 +125,62 @@ describe("EssClockPanel di luar area", () => {
     expect(getCurrentPosition).toHaveBeenCalledTimes(1);
   });
 
+  it("lokasi tidak akurat -> Coba lagi mengambil GPS ulang dan mengirim ulang tanpa keterangan", async () => {
+    const imprecise422 = {
+      success: false,
+      error: "Lokasi HP Anda tidak akurat (±2000 m), jadi jarak ke PVJ tidak bisa dipastikan.",
+      details: { code: "geofence_note_required", reason: "imprecise", accuracy_m: 2000, distance_m: 278, radius_m: 100, branch_name: "PVJ" },
+    };
+    const coarse = { latitude: -6.936936936936937, longitude: 107.616616155624, accuracy: 2000 };
+    getCurrentPosition.mockReset();
+    getCurrentPosition
+      .mockImplementationOnce((ok: (p: unknown) => void) => ok({ coords: coarse }))
+      .mockImplementationOnce((ok: (p: unknown) => void) => ok({ coords: gps }));
+    const fetchFn = vi
+      .fn()
+      .mockResolvedValueOnce(json(422, imprecise422))
+      .mockResolvedValueOnce(json(200, { data: { clock_in_geofence: "valid", clock_in_distance_m: 25 } }));
+    vi.stubGlobal("fetch", fetchFn);
+    renderPanel();
+
+    fireEvent.click(screen.getByRole("button", { name: /Clock In/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Ambil foto" }));
+    expect(await screen.findByText("Lokasi HP tidak akurat")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Coba lagi" }));
+
+    await waitFor(() => expect(fetchFn).toHaveBeenCalledTimes(2));
+    const first = JSON.parse(fetchFn.mock.calls[0][1].body);
+    const second = JSON.parse(fetchFn.mock.calls[1][1].body);
+    expect(first.clock_in_location).toEqual(coarse);
+    expect(second).toEqual({ ...first, clock_in_location: gps });
+    expect(second.notes).toBeUndefined();
+    await waitFor(() => expect(toastSuccess).toHaveBeenCalled());
+  });
+
+  it("Coba lagi saat GPS gagal mengirim ulang dengan lokasi lama, bukan tanpa lokasi", async () => {
+    const imprecise422 = {
+      success: false,
+      error: "Lokasi HP Anda tidak akurat (±2000 m).",
+      details: { code: "geofence_note_required", reason: "imprecise", accuracy_m: 2000, distance_m: 278, radius_m: 100 },
+    };
+    const coarse = { latitude: -6.936936936936937, longitude: 107.616616155624, accuracy: 2000 };
+    getCurrentPosition.mockReset();
+    getCurrentPosition
+      .mockImplementationOnce((ok: (p: unknown) => void) => ok({ coords: coarse }))
+      .mockImplementationOnce((_ok: unknown, err: () => void) => err());
+    const fetchFn = vi.fn().mockResolvedValue(json(422, imprecise422));
+    vi.stubGlobal("fetch", fetchFn);
+    renderPanel();
+
+    fireEvent.click(screen.getByRole("button", { name: /Clock In/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Ambil foto" }));
+    await screen.findByText("Lokasi HP tidak akurat");
+    fireEvent.click(screen.getByRole("button", { name: "Coba lagi" }));
+
+    await waitFor(() => expect(fetchFn).toHaveBeenCalledTimes(2));
+    expect(JSON.parse(fetchFn.mock.calls[1][1].body).clock_in_location).toEqual(coarse);
+  });
+
   it("Batal menutup popup tanpa mengirim ulang", async () => {
     const fetchFn = vi.fn().mockResolvedValue(json(422, note422));
     vi.stubGlobal("fetch", fetchFn);

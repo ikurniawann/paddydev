@@ -15,10 +15,12 @@ import (
 // themselves is judged; HR recording for someone else leaves the columns
 // NULL (R6).
 
-// clockGeofence is the verdict plus the store name for the 422 message.
+// clockGeofence is the verdict plus the store name and the device accuracy
+// for the 422 message.
 type clockGeofence struct {
 	domain.GeofenceResult
 	BranchName string
+	AccuracyM  *float64
 }
 
 // numPtr is a nullable numeric column (numeric arrives as text); nil for
@@ -73,12 +75,17 @@ func (s *Service) geofenceFor(ctx context.Context, a *Actor, employeeID, date st
 		return nil, err
 	}
 	in.OnBusinessTrip = onTrip
-	return &clockGeofence{GeofenceResult: domain.Geofence(in), BranchName: name}, nil
+	g := &clockGeofence{GeofenceResult: domain.Geofence(in), BranchName: name}
+	if in.Point != nil {
+		g.AccuracyM = in.Point.Accuracy
+	}
+	return g, nil
 }
 
-// requireGeofenceNote is the AB-03 popup contract: an out-of-area event
-// without a note answers 422 geofence_note_required before anything is
-// stored, so the client resends the same payload with notes.
+// requireGeofenceNote is the AB-03 popup contract: an out-of-area or
+// imprecise event without a note answers 422 geofence_note_required before
+// anything is stored, so the client resends the same payload with notes.
+// reason tells the client which popup to show.
 func requireGeofenceNote(g *clockGeofence, note *string) error {
 	if g == nil || !domain.GeofenceNoteMissing(g.Status, note) {
 		return nil
@@ -90,12 +97,23 @@ func requireGeofenceNote(g *clockGeofence, note *string) error {
 	} else {
 		branchName = place
 	}
-	distance := *g.DistanceM // invalid always has a distance
+	distance := *g.DistanceM // invalid and imprecise always have a distance
+	if g.Status == domain.GeofenceImprecise {
+		accuracy := int(math.Round(*g.AccuracyM)) // imprecise always has an accuracy
+		return &httpx.Error{
+			Status: http.StatusUnprocessableEntity,
+			Message: fmt.Sprintf("Lokasi HP Anda tidak akurat (±%d m), jadi jarak ke %s tidak bisa dipastikan. "+
+				"Nyalakan Lokasi Akurat lalu coba lagi, atau isi keterangan minimal %d karakter untuk tetap absen.",
+				accuracy, place, domain.GeofenceNoteMinChars),
+			Details: obj("code", "geofence_note_required", "reason", "imprecise", "accuracy_m", accuracy,
+				"distance_m", distance, "radius_m", g.RadiusM, "branch_name", branchName),
+		}
+	}
 	return &httpx.Error{
 		Status: http.StatusUnprocessableEntity,
 		Message: fmt.Sprintf("Anda di luar area %s (±%d m, batas %d m). Isi keterangan minimal %d karakter untuk tetap absen.",
 			place, distance, g.RadiusM, domain.GeofenceNoteMinChars),
-		Details: obj("code", "geofence_note_required", "distance_m", distance, "radius_m", g.RadiusM, "branch_name", branchName),
+		Details: obj("code", "geofence_note_required", "reason", "outside", "distance_m", distance, "radius_m", g.RadiusM, "branch_name", branchName),
 	}
 }
 
@@ -112,4 +130,9 @@ func (g *clockGeofence) distance() any {
 		return nil
 	}
 	return *g.DistanceM
+}
+
+// geofenceNeedsNote: the stored statuses that carry the employee's note.
+func geofenceNeedsNote(status string) bool {
+	return status == domain.GeofenceInvalid || status == domain.GeofenceImprecise
 }
