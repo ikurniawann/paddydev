@@ -45,6 +45,18 @@ type LeaveRepo interface {
 	// DecideLeave writes the verdict of a pending request; errNoRow when it
 	// is no longer pending (decided meanwhile).
 	DecideLeave(ctx context.Context, id string, v leaveVerdict, credit *quotaMove) error
+	// ManagerApproveLeave records the manager's approval of a request with an
+	// attachment, which then waits for HR (EPIC-088 R3); errNoRow when it is
+	// no longer pending without a review stage.
+	ManagerApproveLeave(ctx context.Context, id string, v leaveVerdict) error
+	// SpvApproveLeave records the SPV stage of a tiered leave (EPIC-092).
+	SpvApproveLeave(ctx context.Context, id string, by *string, name string) error
+	// ReviewLeaveAttachment verifies (approving, with the annual quota) or
+	// returns a request waiting for HR (R5); errNoRow when it is not waiting.
+	ReviewLeaveAttachment(ctx context.Context, id string, rv attachmentReview, credit *quotaMove) error
+	// ResubmitLeaveAttachment puts a returned request back in HR's queue
+	// with its new attachment (R6); errNoRow when it is not returned.
+	ResubmitLeaveAttachment(ctx context.Context, id, path string) error
 	LeavesForExport(ctx context.Context, f leaveFilter) ([]*Row, error)
 	Publish(ctx context.Context, topic, key string, payload any) error
 	ManagerContact(ctx context.Context, employeeID string) (name string, phone *string, found bool, err error)
@@ -84,11 +96,22 @@ type leaveVerdict struct {
 	Status                string
 	ApproverID, Rejection *string
 	DecidedAs, DecidedBy  string
+	// Reviewer is set when an attachment verifier approves a leave with an
+	// attachment: the approval is also the verification (EPIC-088 R2).
+	Reviewer *auth.User
+	// ReviewerName is the verifier's own name, never "mewakili" (EPIC-092).
+	ReviewerName string
+	// HRReject: an attachment verifier rejects, which may land on a request
+	// already waiting for HR; any other decision needs no review stage yet,
+	// so a second atasan cannot overturn the first one's approval (EPIC-091).
+	HRReject bool
 }
 
 // leaveFilter is the list/export query.
 type leaveFilter struct {
 	EmployeeID, Status, LeaveType, StartDate, EndDate *string
+	// Review is the EPIC-088 stage of a pending request: awaiting / returned.
+	Review *string
 }
 
 // asPlainError hides a PostgreSQL error behind a plain one: the TS throws
@@ -387,6 +410,10 @@ func (s *Service) CreateLeave(ctx context.Context, a *Actor, in leaveRequest) (*
 		if leave, err = r.InsertLeave(ctx, f); err != nil {
 			return err
 		}
+		title, message := domain.LeaveManagerNotice(emp.Str("full_name"), in.LeaveType, in.StartDate, in.EndDate, totalDays)
+		if err := r.NotifyManager(ctx, *employeeID, title, message, domain.TeamApprovalsLink); err != nil {
+			return err
+		}
 		reason := in.Reason
 		return r.Publish(ctx, TopicLeaveRequested, *employeeID, contracts.LeaveRequested{
 			LeaveID: leave.Str("id"), EmployeeID: *employeeID, EmployeeName: emp.Str("full_name"),
@@ -429,7 +456,7 @@ func (s *Service) Leave(ctx context.Context, a *Actor, id string) (*Row, error) 
 	own := a.EmployeeID != nil && row.Str("employee_id") == *a.EmployeeID
 	manager := false
 	if emp := row.Child("employee"); emp != nil && a.EmployeeID != nil {
-		manager = emp.Str("reporting_to") == *a.EmployeeID
+		manager = isApprover(emp, *a.EmployeeID)
 	}
 	if !a.hrReads(iam.LeafCuti) && !own && !manager {
 		return nil, httpx.Forbidden("Insufficient permissions")
@@ -446,7 +473,7 @@ type leaveUpdate struct {
 // UpdateLeave cancels (owner while pending, HR also once approved, with the
 // annual quota refunded in the same transaction) or lets HR edit the reason
 // and attachment.
-func (s *Service) UpdateLeave(ctx context.Context, a *Actor, id string, in leaveUpdate) (*Row, error) {
+func (s *Service) UpdateLeave(ctx context.Context, a *Actor, id string, in leaveUpdate, meta audit.Entry) (*Row, error) {
 	leave, err := s.repo.PlainLeave(ctx, id)
 	if err != nil {
 		return nil, err
@@ -491,6 +518,11 @@ func (s *Service) UpdateLeave(ctx context.Context, a *Actor, id string, in leave
 			return msgOf("Cuti dibatalkan — kuota " + refund.Days + " hari dikembalikan"), nil
 		}
 		return msgOf("Pengajuan dibatalkan"), nil
+	}
+
+	if in.AttachmentURL.Sent && !in.Reason.Sent && leave.Str("attachment_review") == domain.AttachmentReturned &&
+		leave.Str("status") == "pending" && a.EmployeeID != nil && leave.Str("employee_id") == *a.EmployeeID {
+		return s.resubmitLeaveAttachment(ctx, a, id, in.AttachmentURL.Val, meta)
 	}
 
 	var f fields
@@ -552,23 +584,40 @@ func (s *Service) DecideLeave(ctx context.Context, a *Actor, in leaveDecision, m
 		return nil, httpx.NotFound("Leave request not found")
 	}
 	emp := leave.Child("employee")
-	var reportingTo *string
-	if emp != nil {
-		reportingTo = emp.StrPtr("reporting_to")
-	}
-	// The HR backup holds "approve" on the Cuti leaf (EPIC-067 R11), not IsHR.
-	decidedAs, refusal := domain.DecideAs(domain.Approver{EmployeeID: a.EmployeeID, IsHR: a.CanApprove(iam.LeafCuti)},
-		leave.Str("employee_id"), reportingTo, "cuti")
+	stage := tieredStage(emp, leave.Get("spv_approved_at") != nil)
+	// EPIC-092: SPV then the Manager above; HR (approve on the Cuti leaf,
+	// EPIC-067 R11) may act for the running stage at any time.
+	decidedAs, onBehalf, final, refusal := domain.DecideTiered(domain.Approver{EmployeeID: a.EmployeeID,
+		IsHR: a.CanApprove(iam.LeafCuti)}, leave.Str("employee_id"), stage, "cuti")
 	if decidedAs == "" {
 		return nil, httpx.Forbidden(refusal)
+	}
+	// Waiting for HR's attachment review the atasan stages are over: HR acts
+	// as itself there (review akhir EPIC-092).
+	onBehalf = onBehalf && leave.Str("attachment_review") == ""
+	deciderName := actorName(a)
+	if onBehalf {
+		deciderName += " (mewakili " + stageName(emp, stage) + ")"
 	}
 	if status := leave.Str("status"); status != "pending" {
 		return nil, httpx.BadRequest("Leave request already "+status, obj("current_status", status))
 	}
+	approve := in.Action == "approve"
+	verifier := a.CanApprove(iam.LeafCuti)
+	// EPIC-088 R4: once the manager approved, only HR acts — rejecting here,
+	// approving through the attachment review.
+	if leave.Str("attachment_review") != "" && (approve || !verifier) {
+		return nil, httpx.BadRequest(awaitingReviewMsg)
+	}
 	if in.Action == "reject" && (in.Rejection == nil || *in.Rejection == "") {
 		return nil, httpx.BadRequest("Rejection reason is required")
 	}
-	approve := in.Action == "approve"
+	if approve && !final {
+		return s.spvApproveLeave(ctx, a, leave, emp, onBehalf, deciderName, meta)
+	}
+	if approve && domain.NeedsAttachmentReview(leave.Str("attachment_url"), verifier) {
+		return s.managerApproveLeave(ctx, a, leave, decidedAs, meta)
+	}
 	status, rejection := "rejected", in.Rejection
 	var credit *quotaMove
 	if approve {
@@ -579,7 +628,11 @@ func (s *Service) DecideLeave(ctx context.Context, a *Actor, in leaveDecision, m
 		}
 	}
 	verdict := leaveVerdict{Status: status, ApproverID: a.EmployeeID, Rejection: rejection,
-		DecidedAs: decidedAs, DecidedBy: actorName(a)}
+		DecidedAs: decidedAs, DecidedBy: deciderName}
+	if approve && strings.TrimSpace(leave.Str("attachment_url")) != "" {
+		verdict.Reviewer, verdict.ReviewerName = userOf(a), actorName(a)
+	}
+	verdict.HRReject = !approve && verifier
 	label := dateText(leave, "start_date") + " s.d. " + dateText(leave, "end_date")
 	if emp != nil {
 		label = emp.Str("full_name") + " · " + label

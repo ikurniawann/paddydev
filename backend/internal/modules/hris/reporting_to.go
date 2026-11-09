@@ -24,9 +24,10 @@ func selfManager(employeeID string, reportingTo *string) bool {
 	return okA && okB && a == b
 }
 
-// EmployeesWithoutManager lists active employees whose leave and overtime only
-// HR can decide: reporting_to empty, pointing at themselves, or at an
-// inactive employee.
+// EmployeesWithoutManager lists active employees whose requests only HR can
+// decide: no request approver (EPIC-091: nearest atasan from Supervisor up,
+// active, with an account). The reason names the direct atasan's problem:
+// empty, self, inactive, no_account, or below_spv (only lower levels above).
 func (s *Service) EmployeesWithoutManager(ctx context.Context) ([]*Row, error) {
 	return s.repo.EmployeesWithoutManager(ctx)
 }
@@ -35,12 +36,14 @@ func (s *store) EmployeesWithoutManager(ctx context.Context) ([]*Row, error) {
 	return queryRows(ctx, s.db, `SELECT e.id, e.nip, e.full_name, p.title AS job_title, d.name AS department,
 		CASE WHEN e.reporting_to IS NULL THEN 'empty'
 		     WHEN e.reporting_to = e.id THEN 'self'
-		     ELSE 'inactive' END AS reason
+		     WHEN m.is_active IS NOT TRUE THEN 'inactive'
+		     WHEN m.user_id IS NULL THEN 'no_account'
+		     ELSE 'below_spv' END AS reason
 		FROM hris.employees e
 		LEFT JOIN hris.employees m ON m.id = e.reporting_to
 		LEFT JOIN hris.positions p ON p.id = e.job_title_id
 		LEFT JOIN hris.departments d ON d.id = e.department_id
-		WHERE e.is_active AND (e.reporting_to IS NULL OR e.reporting_to = e.id OR m.is_active IS NOT TRUE)
+		WHERE e.is_active AND hris.request_approver(e.id) IS NULL
 		ORDER BY reason, e.full_name LIMIT 500`)
 }
 

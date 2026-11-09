@@ -17,9 +17,7 @@ func TestResignEmployee(t *testing.T) {
 	h.exec(`INSERT INTO hris.employee_shifts (employee_id, day_of_week, shift_id, effective_from) VALUES ($1, 1, $2, '2025-01-10')`, e, def)
 	h.exec(`INSERT INTO hris.employee_shift_days (employee_id, work_date, shift_id, batch_id) VALUES ($1, '2026-10-20', $2, gen_random_uuid())`, e, def)
 
-	// Review I8: resign dicatat pada/sesudah hari terakhir kerja, bukan tanggal depan.
-	future := h.do(&hr, http.MethodPost, "/api/hris/employees/"+e+"/resign", map[string]any{"effective_date": "2026-10-15", "resign_type": "resign"})
-	expect(t, future, http.StatusBadRequest, "Tanggal efektif tidak boleh setelah hari ini — catat resign pada hari terakhir kerja")
+	// Tanggal mendatang menjadi resign terjadwal (EPIC-095): employee_resign_schedule_integration_test.go.
 	bad := h.do(&hr, http.MethodPost, "/api/hris/employees/"+e+"/resign", map[string]any{"effective_date": "2024-12-31", "resign_type": "resign"})
 	expect(t, bad, http.StatusBadRequest, "Tanggal efektif tidak boleh sebelum tanggal masuk (10/01/2025)")
 

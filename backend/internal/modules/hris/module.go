@@ -16,6 +16,7 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"slices"
 	"time"
 
 	"nuhabit/backend/internal/platform/auth"
@@ -68,8 +69,10 @@ type Service struct {
 
 type mod struct{ h handlers }
 
-func (m mod) Name() string           { return Name }
-func (m mod) Routes() []module.Route { return append(m.h.routes(), m.h.fileRoutes()...) }
+func (m mod) Name() string { return Name }
+func (m mod) Routes() []module.Route {
+	return slices.Concat(m.h.routes(), m.h.fileRoutes(), m.h.disciplinaryRoutes())
+}
 
 // New builds the module. It subscribes the leave notification handler to
 // the outbox so the WhatsApp send runs after the leave is committed.
@@ -88,6 +91,8 @@ func New(deps module.Deps, ports Ports) module.Module {
 		go svc.AutoCheckoutLoop(context.Background(), AutoCheckoutEvery)
 		// The 1 January leave carry-over (EPIC-068 R9).
 		go svc.LeaveCarryOverLoop(context.Background(), LeaveCarryOverEvery)
+		// Scheduled resigns, applied the day after the last working day (EPIC-095 R4).
+		go svc.ScheduledResignLoop(context.Background(), ScheduledResignEvery)
 	}
 	return mod{handlers{svc: svc, auth: deps.Auth}}
 }

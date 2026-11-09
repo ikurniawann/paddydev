@@ -42,7 +42,7 @@ TnC (ringkas):
 - **R2 Jam mulai**: pada hari kerja (jenis `regular`) yang jadwalnya diketahui, `start_time` harus ≥ jam selesai shift hari itu (shift kedua bila ada 2 shift). Bila tidak: 400 "Lembur hari kerja dimulai setelah jam kerja selesai ({HH:MM})".
   - Shift overnight, tanpa jadwal, `rest_day`, dan tanggal perjalanan dinas → tidak dicek.
   - Berlaku untuk pengajuan sendiri, koreksi atasan, dan koreksi HR. Penugasan HR untuk karyawan lain bebas (HR menetapkan jam).
-- **R3 Batas**: total jam dibayar (pending + approved, tanpa baris yang sedang dikoreksi) + jam baru:
+- **R3 Batas** (**direvisi EPIC-089, 05-11**: batas 4 jam/hari dan 12 jam kotor dihapus; > 4 jam wajib Keterangan; dokumentasi opsional): total jam dibayar (pending + approved, tanpa baris yang sedang dikoreksi) + jam baru:
   - ≤ 4 per tanggal → "Lembur maksimal 4 jam per hari";
   - ≤ 18 per minggu Senin–Minggu → "Lembur minggu {dd-mm} s.d. {dd-mm} sudah {x} jam; maksimal 18 jam per minggu (sisa {y} jam)";
   - ≤ 72 per periode absensi (`periodContaining`) → "Lembur periode {label} sudah {x} jam; maksimal 72 jam per periode (sisa {y} jam)".

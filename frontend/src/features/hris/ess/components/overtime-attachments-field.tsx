@@ -11,7 +11,7 @@ interface OvertimeAttachmentsFieldProps {
   onBusyChange?: (busy: boolean) => void;
 }
 
-/** Dokumentasi lembur (EPIC-066): 1–3 file PDF/JPG/PNG/WebP ≤ 5 MB, diunggah satu per satu. */
+/** Dokumentasi lembur (EPIC-066; opsional sejak EPIC-089): 0–3 file PDF/JPG/PNG/WebP ≤ 5 MB, diunggah satu per satu. */
 export function OvertimeAttachmentsField({ value, onChange, onBusyChange }: OvertimeAttachmentsFieldProps) {
   return (
     <PrivateAttachmentsField
@@ -19,7 +19,7 @@ export function OvertimeAttachmentsField({ value, onChange, onBusyChange }: Over
       onChange={onChange}
       onBusyChange={onBusyChange}
       upload={uploadOvertimeAttachment}
-      label="Dokumentasi (wajib, 1–3 file PDF/foto)"
+      label="Dokumentasi (opsional, maks. 3 file PDF/foto)"
       noun="dokumentasi"
       inputLabel="Pilih file dokumentasi lembur"
       tooManyMessage={`Maksimal ${MAX_OVERTIME_ATTACHMENTS} dokumentasi lembur`}

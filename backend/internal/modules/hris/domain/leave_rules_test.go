@@ -109,3 +109,29 @@ func TestInitialContractPassed(t *testing.T) {
 		}
 	}
 }
+
+// EPIC-094 R14: SLA pengajuan dari katalog, bukan dari tipe buatan tes —
+// Cuti Tahunan H-3, Cuti Ibadah Haji/Umrah H-30, Sakit hari H.
+func TestLeaveSLACatalog(t *testing.T) {
+	const today = "2026-11-06"
+	get := func(code string) LeaveType {
+		lt, ok := LookupLeaveType(code)
+		if !ok {
+			t.Fatalf("leave type %s missing", code)
+		}
+		return lt
+	}
+	cases := []struct {
+		code, start string
+		refused     bool
+	}{
+		{"annual", "2026-11-08", true}, {"annual", "2026-11-09", false},
+		{"pilgrimage", "2026-12-05", true}, {"pilgrimage", "2026-12-06", false},
+		{"sick", "2026-11-06", false}, {"sick", "2026-11-07", true}, {"sick", "2026-11-05", true},
+	}
+	for _, c := range cases {
+		if got := LeaveTimingError(get(c.code), c.start, today); (got != "") != c.refused {
+			t.Errorf("%s mulai %s: %q, refused want %v", c.code, c.start, got, c.refused)
+		}
+	}
+}

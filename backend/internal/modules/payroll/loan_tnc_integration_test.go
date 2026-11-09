@@ -192,8 +192,9 @@ func TestLoanTwoStepForPinjamanKaryawan(t *testing.T) {
 	worker := kasbonWorker(e, "contract")
 	mgrStaff, mgr := e.loanManager(worker)
 	id := e.loan(&e.staff, map[string]any{"loan_type": "loan", "principal_amount": 3000000, "tenor_months": 3}, 200)["data"].(map[string]any)["id"].(string)
-	wantErr(t, e.call(&e.hr, "POST", "/api/hris/loans/"+id+"/approve", map[string]any{"approved": true}, 400),
-		"Pinjaman Karyawan menunggu persetujuan Manager Departemen")
+	// EPIC-092 R5 (menggantikan EPIC-076 R7): HR yang menyetujui saat tahap
+	// Manager berjalan bertindak mewakili Manager — diuji di
+	// TestLoanHROnBehalfOfStages; di sini Manager sendiri yang memutus.
 	step1 := e.call(&mgrStaff, "POST", "/api/hris/loans/"+id+"/approve", map[string]any{"approved": true}, 200)
 	if step1["message"] != "Pinjaman Karyawan disetujui Manager — menunggu persetujuan HR" ||
 		step1["data"].(map[string]any)["manager_approved_by"] != mgr {

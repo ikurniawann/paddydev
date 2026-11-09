@@ -59,9 +59,17 @@ export function SchedulesPage({
   const [fixedOpen, setFixedOpen] = useState(false);
   const storeBranches = useStoreBranches(!store);
   const access = useScheduleAccess(store);
-  const branchList = store ? access.data?.branches : storeBranches.data;
-  // Pengatur dengan satu toko langsung melihat toko itu.
-  const branchId = pickedBranchId || (store && branchList?.length === 1 ? branchList[0].id : "");
+  // EPIC-093: daftar toko tab Jadwal; pengatur bercentang melihat semua toko aktif.
+  const branchList = store ? (access.data?.schedule_branches ?? access.data?.branches) : storeBranches.data;
+  const areaBranches = access.data?.branches;
+  // Pengatur dengan satu toko wilayah langsung melihat toko itu.
+  const ownBranch = areaBranches?.length === 1 ? areaBranches[0].id : "";
+  const autoBranch = store && ownBranch && branchList?.some((b) => b.id === ownBranch) ? ownBranch : "";
+  // Toko yang tidak lagi ada di daftar (centang semua toko dicabut HR) kembali ke toko wilayah.
+  const pickedValid = !store || !branchList || branchList.some((b) => b.id === pickedBranchId);
+  const branchId = (pickedValid && pickedBranchId) || autoBranch;
+  // Penempatan hanya untuk toko wilayah (EPIC-093 R4).
+  const placementsHere = !store || !!areaBranches?.some((b) => b.id === branchId);
   const place = store ? "toko" : "cabang";
   const params = { branch_id: branchId, from: start, to: addDays(start, days - 1) };
   // Template & unggah tidak boleh memuat tanggal lewat (server menolak).
@@ -96,6 +104,12 @@ export function SchedulesPage({
           <p className="text-sm text-gray-500">Atur jadwal shift per cabang: ubah per kotak, terapkan pola, atau unggah Excel</p>
         </div>
       )}
+
+      {store && access.data?.schedule_all_branches ? (
+        <p className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-800">
+          Anda bisa mengatur jadwal semua toko. Penempatan dan checkout otomatis hanya untuk toko wilayah Anda.
+        </p>
+      ) : null}
 
       <div className="flex flex-wrap items-end gap-3">
         <div className="w-full sm:w-64">
@@ -191,7 +205,7 @@ export function SchedulesPage({
           {grid.data.employees.length === 0 && store ? (
             <div className="flex flex-col items-center gap-3 py-10 text-center">
               <p className="text-sm text-gray-400">Belum ada karyawan Shift yang ditempatkan di toko ini.</p>
-              {onOpenPlacements ? (
+              {onOpenPlacements && placementsHere ? (
                 <Button variant="outline" onClick={onOpenPlacements}>
                   Tempatkan karyawan di tab Penempatan
                 </Button>
@@ -200,7 +214,7 @@ export function SchedulesPage({
           ) : grid.data.employees.length === 0 ? (
             <p className="py-10 text-center text-sm text-gray-400">
               Belum ada karyawan Shift yang ditempatkan di cabang ini.{" "}
-              {onOpenPlacements ? (
+              {onOpenPlacements && placementsHere ? (
                 <button type="button" className="underline" onClick={onOpenPlacements}>
                   Atur penempatan karyawan
                 </button>

@@ -95,6 +95,12 @@ export interface EssLeaveRow {
   status: string;
   reason: string;
   rejection_reason: string | null;
+  /** EPIC-088: tahap verifikasi lampiran oleh HR (status tetap pending). */
+  attachment_review?: "awaiting" | "returned" | "verified" | null;
+  attachment_return_reason?: string | null;
+  /** EPIC-092: tahap SPV yang sudah lewat (pending = menunggu Manager). */
+  spv_approved_at?: string | null;
+  spv_approved_name?: string | null;
 }
 
 export interface EssLeaveForm {
@@ -248,6 +254,8 @@ export interface EssRecentRequest {
 export interface EssBeranda {
   employee: {
     full_name: string;
+    /** Foto karyawan (salinan foto profil akun, EPIC-087). */
+    photo_url?: string | null;
     nip: string | null;
     join_date: string | null;
     employment_status: string;

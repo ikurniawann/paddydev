@@ -57,12 +57,17 @@ func (s *service) checkLoanAttachments(ownerID string, paths []string, required 
 	return nil
 }
 
-// isLoanApproverOf: employeeID is the stored manager approver of a loan that
-// holds rel as a supporting document or collateral.
+// isLoanApproverOf: employeeID is the stored manager approver, or the
+// direct atasan of the applicant (EPIC-091: a Supervisor follows the request
+// in Persetujuan Tim → Riwayat), of a loan that holds rel as a supporting
+// document or collateral.
 func (s *service) isLoanApproverOf(ctx context.Context, employeeID, rel string) (bool, error) {
 	var ok bool
-	err := s.db.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM hris.loans WHERE manager_approver_id::text = $1
-		AND ($2 = ANY(attachments) OR $2 = ANY(collateral_attachments)))`, employeeID, rel).Scan(&ok)
+	err := s.db.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM hris.loans l JOIN hris.employees e ON e.id = l.employee_id
+		WHERE ($2 = ANY(l.attachments) OR $2 = ANY(l.collateral_attachments))
+		  AND (l.manager_approver_id::text = $1 OR l.supervisor_approver_id::text = $1
+		       OR (e.reporting_to::text = $1 AND e.id::text <> $1)
+		       OR hris.request_approver(e.id)::text = $1))`, employeeID, rel).Scan(&ok)
 	return ok, err
 }
 

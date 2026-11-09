@@ -29,8 +29,8 @@ describe("mutasi pengatur jadwal toko (EPIC-071)", () => {
     api.saveScheduleDelegate.mockResolvedValue({});
     const { spy, wrapper } = setup();
     const { result } = renderHook(() => useSaveDelegate(), { wrapper });
-    await act(() => result.current.mutateAsync({ employeeId: "e1", payload: { branch_ids: ["b1"], can_place: false } }));
-    expect(api.saveScheduleDelegate).toHaveBeenCalledWith("e1", { branch_ids: ["b1"], can_place: false });
+    await act(() => result.current.mutateAsync({ employeeId: "e1", payload: { branch_ids: ["b1"], can_place: false, schedule_all_branches: false } }));
+    expect(api.saveScheduleDelegate).toHaveBeenCalledWith("e1", { branch_ids: ["b1"], can_place: false, schedule_all_branches: false });
     await waitFor(() => expect(invalidatedKeys(spy)).toHaveLength(2));
     expect(invalidatedKeys(spy)).toEqual(
       expect.arrayContaining([["hris", "schedule-delegates"], ["hris", "schedule-access"]])

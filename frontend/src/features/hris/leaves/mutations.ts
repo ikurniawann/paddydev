@@ -3,7 +3,8 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { withDeleteReason } from "@/lib/hris/delete-reason";
 import { leavesQueryKeys } from "./query-keys";
-import { createLeave, updateLeave, deleteLeave, approveLeave } from "./api";
+import { createLeave, updateLeave, deleteLeave, approveLeave, reviewLeaveAttachment } from "./api";
+import type { ReviewLeaveAttachmentPayload } from "./api";
 import type {
   CreateLeavePayload,
   UpdateLeavePayload,
@@ -45,6 +46,15 @@ export function useApproveLeave() {
   const invalidate = useInvalidateLeaves();
   return useMutation({
     mutationFn: (payload: ApproveLeavePayload) => approveLeave(payload),
+    onSuccess: invalidate,
+  });
+}
+
+export function useReviewLeaveAttachment() {
+  const invalidate = useInvalidateLeaves();
+  return useMutation({
+    mutationFn: (payload: ReviewLeaveAttachmentPayload) => reviewLeaveAttachment(payload),
+    retry: false,
     onSuccess: invalidate,
   });
 }

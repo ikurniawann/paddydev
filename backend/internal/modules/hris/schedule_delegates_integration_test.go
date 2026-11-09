@@ -70,6 +70,13 @@ func TestScheduleAccessDelegate(t *testing.T) {
 	if b["id"] != tokoA || b["name"] != "Del Toko A" || b["code"] == nil || b["code"] == "" {
 		t.Fatalf("branch = %v", b)
 	}
+	// EPIC-093: without the tick the schedule stores are the area.
+	if d["schedule_all_branches"] != false {
+		t.Fatalf("schedule_all_branches = %v", d["schedule_all_branches"])
+	}
+	if got := branchIDsOf(map[string]any{"branches": d["schedule_branches"]}); len(got) != 1 || got[0] != tokoA {
+		t.Fatalf("schedule_branches = %v", d["schedule_branches"])
+	}
 }
 
 func TestScheduleAccessBranchesSortedByCode(t *testing.T) {

@@ -23,6 +23,18 @@ describe("JadwalTokoShortcut (EPIC-073 R4)", () => {
     expect(screen.getByText(/penempatan/)).toBeTruthy();
   });
 
+  it("pengatur bercentang semua toko: kartu menyebut semua toko dan penempatan di tokonya (EPIC-093)", () => {
+    access = { is_delegate: true, can_place: true, branches: [store("a")], schedule_all_branches: true, schedule_branches: [store("a"), store("b")] };
+    render(<JadwalTokoShortcut />);
+    expect(screen.getByText("Atur jadwal kerja karyawan di semua toko, penempatan di 1 toko Anda")).toBeTruthy();
+  });
+
+  it("pengatur bercentang tanpa hak penempatan: hanya jadwal semua toko (EPIC-093)", () => {
+    access = { is_delegate: true, can_place: false, branches: [store("a")], schedule_all_branches: true, schedule_branches: [store("a"), store("b")] };
+    render(<JadwalTokoShortcut />);
+    expect(screen.getByText("Atur jadwal kerja karyawan di semua toko")).toBeTruthy();
+  });
+
   it("HR Jadwal Kerja: kartu mode HR", () => {
     access = { is_delegate: false, can_place: false, branches: [], hr: true, hr_can_place: false };
     render(<JadwalTokoShortcut />);

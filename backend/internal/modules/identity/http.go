@@ -55,6 +55,8 @@ func (h handlers) handle(route string, fail any, fn httpx.HandlerFunc) http.Hand
 func (h handlers) Routes() []module.Route {
 	return []module.Route{
 		{Pattern: "GET /api/auth/me", Handler: httpx.Handle(h.me)},
+		{Pattern: "POST /api/auth/me/avatar", Handler: httpx.Handle(h.setAvatar)},
+		{Pattern: "DELETE /api/auth/me/avatar", Handler: httpx.Handle(h.clearAvatar)},
 		{Pattern: "POST /api/auth/login", Handler: h.handle("auth/login", errorBody{"Login failed"}, h.login)},
 		{Pattern: "POST /api/auth/logout", Handler: httpx.Handle(h.logoutPost)},
 		{Pattern: "GET /api/auth/logout", Handler: httpx.Handle(h.logoutGet)},

@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { RequestDetailDialog } from "@/components/hris/request-detail-dialog";
 import { formatDateTime } from "@/lib/format";
 import { tripDays, tripRangeLabel } from "@/lib/hris/business-trips";
+import { spvApprovedNote } from "@/lib/hris/tiered-approval";
 import type { BusinessTrip } from "../types";
 import { TripStatusBadge } from "./trip-status-badge";
 
@@ -23,7 +24,7 @@ export function TripDetailDialog({
       onOpenChange={(o) => !o && onClose()}
       title="Detail perjalanan dinas"
       employee={{ name: trip.employee?.full_name ?? "—", nip: trip.employee?.nip }}
-      status={<TripStatusBadge status={trip.status} />}
+      status={<TripStatusBadge status={trip.status} spvApprovedAt={trip.spv_approved_at} />}
       fields={[
         { label: "Tanggal", value: `${tripRangeLabel(trip.start_date, trip.end_date)} (${tripDays(trip.start_date, trip.end_date)} hari)` },
         { label: "Tujuan", value: trip.destination },
@@ -31,8 +32,9 @@ export function TripDetailDialog({
       ]}
       reason={{ label: "Keperluan", text: trip.purpose }}
       notes={
-        trip.decided_by_name || trip.rejection_reason ? (
+        trip.decided_by_name || trip.rejection_reason || spvApprovedNote(trip) ? (
           <div className="space-y-1 text-xs text-gray-600">
+            {spvApprovedNote(trip) && <p>{spvApprovedNote(trip)}</p>}
             {trip.decided_by_name && <p>Diputus oleh {trip.decided_by_name}</p>}
             {trip.rejection_reason && (
               <p className="whitespace-pre-line break-words text-red-600">Alasan penolakan: {trip.rejection_reason}</p>

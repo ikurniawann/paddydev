@@ -1,13 +1,20 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { ApprovalButtons } from "@/components/hris/ApprovalButtons";
+import { AttachmentReviewButtons } from "@/components/hris/AttachmentReviewButtons";
+import {
+  LEAVE_REVIEW_STAGE_CLASSES,
+  LEAVE_REVIEW_STAGE_LABELS,
+  leaveReviewStage,
+} from "@/lib/hris/leave-attachment-review";
 import { AttachmentPreviewButtons } from "@/components/hris/attachment-preview";
 import { RequestDetailDialog } from "@/components/hris/request-detail-dialog";
 import { leaveAttachmentHref } from "@/lib/hris/attachments";
+import { SPV_APPROVED_CLASS, SPV_APPROVED_LABEL, spvApprovedNote, spvStageDone } from "@/lib/hris/tiered-approval";
 import { useHrApproveAccess } from "@/features/hris/approve-access";
 import { useEssMe } from "@/features/hris/ess/queries";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -40,14 +47,19 @@ import type { LeaveItem, LeaveListParams } from "../types";
 
 export function LeavesPage() {
   const router = useRouter();
-  const [filterStatus, setFilterStatus] = useState<string>("all");
+  // Notifikasi HR menautkan ?review=awaiting (EPIC-088 R3): jadi filter awal.
+  const initialReview = useSearchParams().get("review");
+  const [filterStatus, setFilterStatus] = useState<string>(
+    initialReview === "awaiting" || initialReview === "returned" ? `review:${initialReview}` : "all"
+  );
   const [filterType, setFilterType] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
 
   const listParams = useMemo<LeaveListParams>(
     () => ({
       limit: 100,
-      status: filterStatus !== "all" ? filterStatus : undefined,
+      status: filterStatus !== "all" && !filterStatus.startsWith("review:") ? filterStatus : undefined,
+      review: filterStatus.startsWith("review:") ? filterStatus.slice("review:".length) : undefined,
       leave_type: filterType !== "all" ? filterType : undefined,
     }),
     [filterStatus, filterType]
@@ -61,6 +73,23 @@ export function LeavesPage() {
   // Cuti milik sendiri tidak diputus di sini (server juga menolak, EPIC-072 Review Focus #4).
   const myEmployeeId = useEssMe().data?.employee?.id;
   const decidable = (leave: LeaveItem) => canDecide && leave.status === "pending" && leave.employee_id !== myEmployeeId;
+  // Keputusan per tahap (EPIC-088 R4/R5): menunggu HR → Verifikasi/Kembalikan/Tolak;
+  // dikembalikan → menunggu karyawan, HR masih bisa Tolak agar tidak macet;
+  // selain itu Setujui/Tolak seperti biasa.
+  const decisionFor = (leave: LeaveItem) => {
+    if (!decidable(leave)) return undefined;
+    const stage = leaveReviewStage(leave);
+    if (stage === "returned") return <ApprovalButtons leaveId={leave.id} rejectOnly />;
+    if (stage === "awaiting") {
+      return (
+        <div className="flex flex-wrap gap-2">
+          <AttachmentReviewButtons leaveId={leave.id} name={leave.employee?.full_name ?? ""} />
+          <ApprovalButtons leaveId={leave.id} rejectOnly />
+        </div>
+      );
+    }
+    return <ApprovalButtons leaveId={leave.id} />;
+  };
   const leaves = useMemo(() => data ?? [], [data]);
   // Detail cuti (EPIC-072): alasan utuh + lampiran sebelum memutus.
   // Disimpan per id agar status/aksi mengikuti data terbaru setelah keputusan.
@@ -96,6 +125,19 @@ export function LeavesPage() {
       leave.reason?.toLowerCase().includes(query)
     );
   });
+
+  const getLeaveBadge = (leave: LeaveItem) => {
+    const stage = leaveReviewStage(leave);
+    if (!stage && spvStageDone(leave)) {
+      return <Badge variant="outline" className={SPV_APPROVED_CLASS}>{SPV_APPROVED_LABEL}</Badge>;
+    }
+    if (!stage) return getStatusBadge(leave.status);
+    return (
+      <Badge variant="outline" className={LEAVE_REVIEW_STAGE_CLASSES[stage]}>
+        {LEAVE_REVIEW_STAGE_LABELS[stage]}
+      </Badge>
+    );
+  };
 
   const getStatusBadge = (status: string) => {
     const colors = LEAVE_STATUS_COLORS[status as keyof typeof LEAVE_STATUS_COLORS] || "bg-gray-100 text-gray-800";
@@ -145,6 +187,8 @@ export function LeavesPage() {
               <SelectContent>
                 <SelectItem value="all">Semua Status</SelectItem>
                 <SelectItem value="pending">Pending</SelectItem>
+                <SelectItem value="review:awaiting">{LEAVE_REVIEW_STAGE_LABELS.awaiting}</SelectItem>
+                <SelectItem value="review:returned">{LEAVE_REVIEW_STAGE_LABELS.returned}</SelectItem>
                 <SelectItem value="approved">Disetujui</SelectItem>
                 <SelectItem value="rejected">Ditolak</SelectItem>
                 <SelectItem value="cancelled">Dibatalkan</SelectItem>
@@ -200,7 +244,7 @@ export function LeavesPage() {
                     </div>
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
-                    {getStatusBadge(leave.status)}
+                    {getLeaveBadge(leave)}
                     <Button
                       size="sm"
                       variant="outline"
@@ -269,6 +313,8 @@ export function LeavesPage() {
                       </div>
                     )}
 
+                    <ReviewNotes leave={leave} />
+
                     {leave.status === "rejected" && (
                       <div className="flex items-center gap-2 text-sm text-red-600">
                         <XCircle className="w-4 h-4" />
@@ -284,7 +330,7 @@ export function LeavesPage() {
                     <p className="text-xs text-gray-500">
                       Diajukan: {formatDate(leave.created_at)}
                     </p>
-                    {decidable(leave) && <ApprovalButtons leaveId={leave.id} />}
+                    {decisionFor(leave)}
                   </div>
                 )}
               </CardContent>
@@ -374,7 +420,7 @@ export function LeavesPage() {
             nip: detail.employee?.nip,
             subtitle: detail.employee?.department?.name,
           }}
-          status={getStatusBadge(detail.status)}
+          status={getLeaveBadge(detail)}
           fields={[
             { label: "Jenis", value: typeLabel(detail.leave_type) },
             { label: "Periode", value: `${formatDate(detail.start_date)} – ${formatDate(detail.end_date)}` },
@@ -388,18 +434,38 @@ export function LeavesPage() {
             label: "Lampiran",
           }}
           notes={
-            detail.status === "approved" && detail.approver ? (
-              <p className="text-xs text-green-700">Disetujui oleh {detail.approver.full_name}</p>
-            ) : detail.status === "rejected" && detail.rejection_reason ? (
-              <p className="whitespace-pre-line break-words text-xs text-red-600">
-                Alasan penolakan: {detail.rejection_reason}
-              </p>
-            ) : undefined
+            <>
+              {spvApprovedNote(detail) && <p className="text-xs text-indigo-700">{spvApprovedNote(detail)}</p>}
+              {detail.status === "approved" && detail.approver ? (
+                <p className="text-xs text-green-700">Disetujui oleh {detail.approver.full_name}</p>
+              ) : detail.status === "rejected" && detail.rejection_reason ? (
+                <p className="whitespace-pre-line break-words text-xs text-red-600">
+                  Alasan penolakan: {detail.rejection_reason}
+                </p>
+              ) : null}
+              <ReviewNotes leave={detail} />
+            </>
           }
-          actions={
-            decidable(detail) ? <ApprovalButtons leaveId={detail.id} /> : undefined
-          }
+          actions={decisionFor(detail)}
         />
+      )}
+    </div>
+  );
+}
+
+/** Jejak verifikasi lampiran (EPIC-088 R8): atasan, pemeriksa HR, alasan kembali. */
+function ReviewNotes({ leave }: { leave: LeaveItem }) {
+  if (!leave.attachment_review) return null;
+  return (
+    <div className="space-y-0.5 text-xs text-gray-600">
+      {leave.manager_approved_name && <p>Disetujui atasan: {leave.manager_approved_name}</p>}
+      {leave.attachment_review === "verified" && leave.attachment_reviewed_name && (
+        <p>Diverifikasi HR: {leave.attachment_reviewed_name}</p>
+      )}
+      {leave.status === "pending" && leave.attachment_review === "returned" && (
+        <p className="whitespace-pre-line break-words text-orange-700">
+          Dikembalikan ke karyawan: {leave.attachment_return_reason}
+        </p>
       )}
     </div>
   );

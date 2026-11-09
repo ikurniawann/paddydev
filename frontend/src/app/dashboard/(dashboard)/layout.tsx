@@ -93,6 +93,7 @@ export default async function DashboardGroupLayout({
         full_name: user.full_name,
         role: user.role,
         email: user.email,
+        avatar_url: user.avatar_url,
         company_name: user.company_name,
         branch_id: user.branch_id,
         branch_name: user.branch_name,

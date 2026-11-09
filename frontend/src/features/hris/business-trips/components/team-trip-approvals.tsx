@@ -5,6 +5,7 @@ import { UserGroupIcon } from "@heroicons/react/24/outline";
 import { Button } from "@/components/ui/button";
 import { tripRangeLabel } from "@/lib/hris/business-trips";
 import { useBusinessTrips } from "../queries";
+import { spvApprovedNote } from "@/lib/hris/tiered-approval";
 import type { BusinessTrip, TripAction } from "../types";
 import { useTripDecision } from "../use-trip-decision";
 import { TripDetailDialog } from "./trip-detail-dialog";
@@ -39,6 +40,7 @@ export function TeamTripApprovals() {
               <p className="line-clamp-2 break-words text-xs text-gray-600">
                 {trip.destination} — {trip.purpose}
               </p>
+              {spvApprovedNote(trip) && <p className="text-xs text-indigo-700">{spvApprovedNote(trip)}</p>}
             </div>
             <div className="flex shrink-0 gap-2">
               <Button size="sm" variant="ghost" aria-label={`Detail perjalanan dinas ${trip.employee?.full_name ?? ""}`}

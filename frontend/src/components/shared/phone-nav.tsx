@@ -10,6 +10,7 @@ import { matchesNavQuery, type NavLeaf } from "@/lib/iam/nav-leaves";
 import { cn } from "@/lib/utils";
 import { AppSidebarNavIcon } from "./app-sidebar-nav-icons";
 import { NavLink } from "./nav-link";
+import { UserAvatar } from "./user-avatar";
 
 const HOME_HREF = "/dashboard";
 const RECENT_KEY = "bcd.admin.recent-nav";
@@ -42,11 +43,14 @@ export function PhoneNav({
   leaves,
   userName,
   userRole,
+  userAvatar = null,
   onAccount,
 }: {
   leaves: NavLeaf[];
   userName: string;
   userRole: string;
+  /** Foto profil akun (EPIC-087); null = inisial. */
+  userAvatar?: string | null;
   onAccount: () => void;
 }) {
   const pathname = usePathname();
@@ -137,6 +141,7 @@ export function PhoneNav({
               allHrefs={allHrefs}
               userName={userName}
               userRole={userRole}
+              userAvatar={userAvatar}
               onNavigate={(href) => {
                 pushRecent(href);
                 setMoreOpen(false);
@@ -159,6 +164,7 @@ function MoreSheetBody({
   allHrefs,
   userName,
   userRole,
+  userAvatar,
   onNavigate,
   onAccount,
 }: {
@@ -167,6 +173,7 @@ function MoreSheetBody({
   allHrefs: string[];
   userName: string;
   userRole: string;
+  userAvatar: string | null;
   onNavigate: (href: string) => void;
   onAccount: () => void;
 }) {
@@ -283,9 +290,7 @@ function MoreSheetBody({
       })}
 
       <div className="mt-3 flex items-center gap-3 border-t border-white/10 px-5 pt-4">
-        <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-accent text-xs font-semibold text-accent-foreground">
-          {userName.slice(0, 1).toUpperCase() || "A"}
-        </span>
+        <UserAvatar name={userName} src={userAvatar} size={36} className="bg-accent text-xs font-semibold text-accent-foreground" />
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold">{userName}</p>
           <p className="truncate text-xs text-on-ink-muted capitalize">{userRole.replace(/_/g, " ")}</p>

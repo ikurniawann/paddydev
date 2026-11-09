@@ -339,3 +339,39 @@ it("mode HR: cabang tanpa karyawan Shift → tombol ke tab Penempatan, tidak kel
   await waitFor(() => expect(screen.getByRole("tab", { name: "Penempatan" }).getAttribute("aria-selected")).toBe("true"));
 });
 
+
+// EPIC-093: pengatur bercentang "jadwal semua toko".
+const OTHER = { id: "s2", code: "BTR", name: "BTR - Paddy Batununggal" };
+const ALL_STORES: ScheduleAccess = { ...DELEGATE, schedule_all_branches: true, schedule_branches: [OTHER, STORE] };
+
+it("subjudul pengatur bercentang menyebut semua toko", async () => {
+  renderPage(ALL_STORES);
+  await screen.findByLabelText("Pilih Ana");
+  expect(screen.getByText("Atur jadwal kerja karyawan di semua toko. Perubahan langsung berlaku ke absensi mereka.")).toBeTruthy();
+});
+
+it("centang dicabut saat toko lain terbuka → kembali ke toko wilayah, bukan pilihan kosong", async () => {
+  accessApi.fetchScheduleAccess.mockResolvedValueOnce(ALL_STORES);
+  scheduleApi.fetchScheduleGrid.mockImplementation(async (p: { branch_id: string; from: string; to: string }) => {
+    if (p.branch_id === OTHER.id && accessApi.fetchScheduleAccess.mock.calls.length > 1) {
+      throw new ApiError("Toko di luar wilayah Anda", 403, null);
+    }
+    return { data: grid(p.from, p.to) };
+  });
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(
+    <QueryClientProvider client={client}>
+      <EssJadwalTokoPage />
+    </QueryClientProvider>
+  );
+  await screen.findByLabelText("Pilih Ana");
+  fireEvent.change(screen.getByLabelText("Pilih toko"), { target: { value: OTHER.id } });
+  await waitFor(() => expect(scheduleApi.fetchScheduleGrid).toHaveBeenLastCalledWith(expect.objectContaining({ branch_id: OTHER.id })));
+  // HR mencabut centang; muatan ulang berikutnya menolak toko lain.
+  accessApi.fetchScheduleAccess.mockResolvedValue({ ...DELEGATE, schedule_all_branches: false, schedule_branches: [STORE] });
+  await act(() => client.invalidateQueries());
+  const select = screen.getByLabelText("Pilih toko") as HTMLSelectElement;
+  await waitFor(() => expect(select.value).toBe(STORE.id));
+  await waitFor(() => expect(scheduleApi.fetchScheduleGrid).toHaveBeenLastCalledWith(expect.objectContaining({ branch_id: STORE.id })));
+  expect(screen.queryByText("Toko di luar wilayah Anda")).toBeNull();
+});

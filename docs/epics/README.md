@@ -89,6 +89,15 @@ deploying-dev · ready-for-qa · blocked · done).
 | [EPIC-084](./EPIC-084-ketentuan-cuti-izin.md) | Ketentuan Cuti & Izin + SLA Pengajuan terhadap Payroll (`MODULE-HRIS`) | ready-for-qa | 2026-11-03 |
 | [EPIC-085](./EPIC-085-ketentuan-lembur.md) | Ketentuan Lembur + Batas 72 Jam per Cut Off (`MODULE-HRIS`) | ready-for-qa | 2026-11-03 |
 | [EPIC-086](./EPIC-086-data-kerja-massal.md) | Pengisian Massal Data Kerja (Jadwal, Shift, Penempatan) via Template Excel (`MODULE-HRIS`) | review | 2026-11-03 |
+| [EPIC-087](./EPIC-087-foto-profil.md) | Upload Foto Profil Akun (`MODULE-IDENTITY`) | review | 2026-11-03 |
+| [EPIC-088](./EPIC-088-verifikasi-lampiran-cuti.md) | Verifikasi Lampiran Cuti/Izin oleh HR (`MODULE-HRIS`, ES-11) | review | 2026-11-05 |
+| [EPIC-089](./EPIC-089-lembur-lebih-4-jam.md) | Lembur Lebih dari 4 Jam dengan Keterangan, Dokumentasi Opsional (`MODULE-HRIS`) | review | 2026-11-05 |
+| [EPIC-090](./EPIC-090-riwayat-persetujuan-tim.md) | Riwayat Persetujuan Tim untuk Atasan (`MODULE-HRIS`) | review | 2026-11-05 |
+| [EPIC-091](./EPIC-091-pinjaman-atasan-langsung.md) | Penyetuju Minimal SPV untuk Semua Pengajuan + Kasbon/Pinjaman Tiga Tahap (`MODULE-HRIS`, `MODULE-PAYROLL`) | review | 2026-11-05 |
+| [EPIC-092](./EPIC-092-approval-berjenjang.md) | Approval Berjenjang SPV → Manager + HR Mewakili Atasan (`MODULE-HRIS`, `MODULE-PAYROLL`) | review | 2026-11-05 |
+| [EPIC-093](./EPIC-093-jadwal-semua-toko.md) | Koordinator Mengatur Jadwal Semua Toko (`MODULE-HRIS`) | review | 2026-11-06 |
+| [EPIC-094](./EPIC-094-disiplin-keterlambatan.md) | Keterlambatan Tanpa Potongan + Peringatan Lonceng + Surat Teguran/SP oleh HR (`MODULE-HRIS`, `MODULE-PAYROLL`) | review | 2026-11-06 |
+| [EPIC-095](./EPIC-095-resign-terjadwal.md) | Resign Terjadwal — Tanggal Efektif di Masa Depan (`MODULE-HRIS`) | review | 2026-11-06 |
 
 Aturan:
 - Epic + registry ini adalah sumber kebenaran status pekerjaan (canonical).

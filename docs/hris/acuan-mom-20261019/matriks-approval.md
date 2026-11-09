@@ -51,3 +51,8 @@ EPIC-063 tidak mengubah data live. HR memperbaikinya lewat kartu "karyawan aktif
 | Karyawan aktif tanpa `reporting_to` | 55 dari 374 (23 `staff`, 15 `Staff`, 12 tanpa jabatan, 4 Store Manager, 1 CEO) | Pengajuan mereka hanya bisa diputus HR |
 | `reporting_to` menunjuk diri sendiri | 1 (Retail Operation Manager) | Kode menolak self-approval dan tidak mengirim WA ke dirinya sendiri (EPIC-063); data tetap perlu diperbaiki user |
 | Store Manager tanpa atasan | 4 (termasuk akun uji "QA Dimas Dua Entitas") | Tidak ada atasan untuk time-off/lembur |
+
+### Revisi EPIC-091 (05-11-2026, keputusan user)
+- **Penyetuju semua pengajuan** (cuti/izin, lembur, perjalanan dinas, kasbon/pinjaman) = **atasan terdekat minimal Supervisor** di rantai `reporting_to` (aktif, berakun; `hris.request_approver`). Atasan langsung berlevel Staff dilewati; tidak ada → HR.
+- **Kasbon/pinjaman**: SPV → Manager (bila ada orang ≥ Manager yang berbeda di atasnya) → HR. Ini mengganti "Manager Departemen saja" di AP-05.
+

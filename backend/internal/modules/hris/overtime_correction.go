@@ -61,7 +61,7 @@ func (s *Service) CorrectOvertime(ctx context.Context, a *Actor, id string, in o
 			return httpx.Forbidden(overtimeCorrectSelf)
 		}
 		if ot.Str("source") == "employee" {
-			reportingTo, managerActive := overtimeManager(ot.Child("employee"))
+			reportingTo, managerActive := overtimeManager(ot.Child("employee"), a.EmployeeID)
 			if allowed, msg := domain.CanCorrectOvertimeTimes(a.EmployeeID, a.IsHRD, ot.Str("employee_id"), reportingTo,
 				managerActive); !allowed {
 				return httpx.Forbidden(msg)
@@ -89,9 +89,6 @@ func (s *Service) CorrectOvertime(ctx context.Context, a *Actor, id string, in o
 		}
 		if start == end {
 			return httpx.BadRequest("Jam mulai dan selesai tidak boleh sama")
-		}
-		if domain.OvertimeGrossMinutes(start, end) > 12*60 {
-			return httpx.BadRequest("Durasi lembur maksimal 12 jam")
 		}
 		hours := domain.PaidOvertimeHours(start, end, brk)
 		if hours < 1 {
@@ -127,6 +124,11 @@ func (s *Service) CorrectOvertime(ctx context.Context, a *Actor, id string, in o
 		}
 		if date != was.date || hours > ot.Num("hours") {
 			if err := s.checkOvertimeCaps(ctx, r, ot.Str("employee_id"), date, hours, id); err != nil {
+				return err
+			}
+		}
+		if date != was.date || start != was.start || end != was.end {
+			if err := s.checkOvertimeOverlap(ctx, r, ot.Str("employee_id"), date, start, end, id); err != nil {
 				return err
 			}
 		}

@@ -191,3 +191,11 @@ FK `attendance_requests.attendance_id` → `attendance` (SET NULL).
     - Sesudah execute: sisa ≤ 20 Okt 0/0/0/0 (absensi, cuti, lembur, pengajuan absensi), pinjaman 22 utuh, `close_summary` Oktober semua 0.
     - Uji restore: 3.229 / 94 / 236 / 13 kembali persis.
     - Container, volume, dump, dan folder gladi dibersihkan.
+- 2026-11-06 23.31 WIB: **Eksekusi DM-01 tahap kedua di production** (izin user "Ya, eksekusi 23.30"; kode main `45305bdd` di `~/dm01-src`).
+  - **Pratinjau** `dm01-20261106-233127-pratinjau`, SHA-256 `e26c01d5…08433`. Angkanya sama dengan pratinjau 15.3x: 13 / 3.229 / 94 / 236 / 0 / 0 (pengajuan absensi, absensi, cuti, lembur, perjalanan dinas, pinjaman), 34 berkas.
+  - **Execute** (`DM01_PAYROLL_ACK=yes`) `dm01-20261106-233141-eksekusi`: terhapus 13 / 3.229 / 94 / 236 / 0 / 0, audit `data_cleanup.dm01`, cek pasca-eksekusi lolos.
+  - **Periode Oktober**: `2026-11-06_dm01_periode_oktober.sql` dijalankan 23.32. `close_summary` semua 0, event closing 0, audit `data_cleanup.dm01_periods`.
+  - **Berkas**: 34 diarsipkan (`files-20261106-233226.tgz`) lalu dihapus, 0 gagal.
+  - **Verifikasi**: sisa ≤ 20 Okt 0 (absensi, pengajuan absensi, cuti, lembur); cuti sakit yang melintasi 21 Okt tetap 1; pinjaman tetap 22; absensi tersisa 3.027; `/login` dan `/api/ready` 200; container sehat; log API bersih.
+  - **Backup**: `db.dump` (SHA-256 `9ee8343e…4ca06`) dan arsip berkas ada di VPS `~/backups/dm01-20261106-233141-eksekusi`, salinannya di lokal `~/Desktop/paddydev-backups/prod-dm01-20261106/`. Pemulihan: runbook §9 (`restore`).
+  - Folder log gladi `~/dm01b-gladi-log-*` di VPS dihapus.

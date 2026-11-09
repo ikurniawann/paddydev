@@ -27,6 +27,9 @@ vi.mock("@/features/hris/business-trips", () => ({
 vi.mock("../queries", () => ({
   useTeamApprovals: () => ({ data: queue, isLoading: false, isError: queueError }),
 }));
+vi.mock("./team-history", () => ({ TeamHistoryPanel: () => <p>panel-riwayat</p> }));
+let search = "";
+vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams(search) }));
 vi.mock("../mutations", () => ({
   useDecideTeamRequest: () => ({ mutate: decide, isPending: false, variables: undefined }),
 }));
@@ -67,6 +70,24 @@ describe("EssPersetujuanTimPage", () => {
       expect.anything()
     );
     expect(toastSuccess).toHaveBeenCalledWith("Cuti disetujui");
+  });
+
+  it("cuti berlampiran: toast memakai pesan server bila menunggu verifikasi HR (EPIC-088)", () => {
+    queue = { leaves: [{ ...leave, attachment_url: "leave-attachments/e1/surat.png" }], overtime: [] };
+    decide.mockImplementation((_v, opts) =>
+      opts.onSuccess({ message: "Disetujui atasan — menunggu verifikasi lampiran oleh HR" }));
+    render(<EssPersetujuanTimPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Setujui cuti Anggota A" }));
+    expect(toastSuccess).toHaveBeenCalledWith("Disetujui atasan — menunggu verifikasi lampiran oleh HR");
+  });
+
+  it("cuti berjenjang: SPV menyetujui → toast menunggu Manager; Manager melihat nama SPV (EPIC-092)", () => {
+    queue = { leaves: [{ ...leave, spv_approved_at: "2031-03-02T00:00:00Z", spv_approved_name: "SPV Toko" }], overtime: [] };
+    decide.mockImplementation((_v, opts) => opts.onSuccess({ message: "Disetujui SPV — menunggu persetujuan Manager" }));
+    render(<EssPersetujuanTimPage />);
+    expect(screen.getByText("Disetujui SPV oleh SPV Toko")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Setujui cuti Anggota A" }));
+    expect(toastSuccess).toHaveBeenCalledWith("Disetujui SPV — menunggu persetujuan Manager");
   });
 
   it("lembur: ringkasan menampilkan istirahat & dokumentasi; Setujui tanpa perubahan tidak mengirim jam (EPIC-066)", () => {
@@ -226,5 +247,20 @@ describe("EssPersetujuanTimPage", () => {
     rerender(<EssPersetujuanTimPage />);
     expect(screen.queryByRole("dialog")).toBeNull();
   });
-});
 
+  it("tab Riwayat menampilkan riwayat tim (EPIC-090)", () => {
+    render(<EssPersetujuanTimPage />);
+    expect(screen.queryByText("panel-riwayat")).toBeNull();
+    fireEvent.click(screen.getByRole("tab", { name: "Riwayat" }));
+    expect(screen.getByText("panel-riwayat")).toBeTruthy();
+    fireEvent.click(screen.getByRole("tab", { name: "Menunggu" }));
+    expect(screen.queryByText("panel-riwayat")).toBeNull();
+  });
+
+  it("?tab=riwayat dari notifikasi langsung membuka Riwayat (EPIC-091)", () => {
+    search = "tab=riwayat";
+    render(<EssPersetujuanTimPage />);
+    expect(screen.getByText("panel-riwayat")).toBeTruthy();
+    search = "";
+  });
+});

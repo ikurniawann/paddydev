@@ -53,7 +53,7 @@ afterEach(() => {
 });
 
 describe("ESS Input Lembur (EPIC-066)", () => {
-  it("menolak lembur yang belum selesai dan tanpa dokumentasi; menampilkan jam dibayar", () => {
+  it("menolak lembur yang belum selesai; tanpa dokumentasi tetap terkirim (EPIC-089); menampilkan jam dibayar", () => {
     vi.setSystemTime(new Date("2026-10-21T18:00:00+07:00"));
     render(<EssLemburPage />);
     fireEvent.click(screen.getByRole("button", { name: /Input Lembur/ }));
@@ -65,9 +65,24 @@ describe("ESS Input Lembur (EPIC-066)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Kirim" }));
     expect(toastError).toHaveBeenCalledWith("Lembur baru bisa diinput setelah selesai (21-10-2026 20:00 WIB)");
     vi.setSystemTime(new Date("2026-10-22T08:00:00+07:00"));
+    toastError.mockReset();
     fireEvent.click(screen.getByRole("button", { name: "Kirim" }));
-    expect(toastError).toHaveBeenLastCalledWith("Lampirkan minimal 1 dokumentasi lembur");
+    expect(toastError).not.toHaveBeenCalled();
+    expect(submit).toHaveBeenCalledWith(expect.objectContaining({ attachments: [] }), expect.anything());
+  });
+
+  it("lebih dari 4 jam: Keterangan wajib (EPIC-089 R2)", () => {
+    render(<EssLemburPage />);
+    fill("2020-01-06");
+    fireEvent.change(screen.getByLabelText("Jam Selesai"), { target: { value: "22:00" } });
+    expect(screen.getByText("Keterangan (wajib — lebih dari 4 jam)")).toBeTruthy();
+    expect(screen.getByPlaceholderText("Jelaskan kenapa lembur lebih dari 4 jam")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Kirim" }));
+    expect(toastError).toHaveBeenLastCalledWith("Lembur lebih dari 4 jam: isi Keterangan alasannya (minimal 10 karakter)");
     expect(submit).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText("Keterangan (wajib — lebih dari 4 jam)"), { target: { value: "Closing stok akhir bulan" } });
+    fireEvent.click(screen.getByRole("button", { name: "Kirim" }));
+    expect(submit).toHaveBeenCalledWith(expect.objectContaining({ end_time: "22:00", reason: "Closing stok akhir bulan" }), expect.anything());
   });
 
   it("menolak istirahat di luar 0–720 menit dan durasi dibayar di bawah 1 jam", () => {
