@@ -136,4 +136,11 @@ Lihat rencana `docs/superpowers/plans/2026-11-06-disiplin-keterlambatan.md`.
   - Data demo dihapus (0 tersisa; 3 baris audit tetap, append-only). Bukti: `.share/qa094/`.
 - **Siap production** setelah tumpukan #75–#80, dengan izin user. Sesudah deploy, hitung ulang run payroll draft periode berjalan.
 - 2026-11-09 13.18 WIB: **LIVE production** lewat rilis gabungan PR #86 (main `bd9ff4db`, image `local-20261109-130944`; 10 migrasi EPIC-087..095, verify 0 berbeda). Backup `~/backups/prod-db-before-rilis-20261109-125740.dump` (VPS + lokal); rollback image `local-20261103-150738`, source lama `~/paddydev-src.before-rilis-20261109-130930`. Verifikasi read-only: `/login` dan `/api/ready` 200, container sehat, log API bersih. Sisa: QA HR di production.
-  - `late_deduction_mode` production kini `off`. Run payroll draft November dihitung sebelum rilis (mode `tier`), jadi perlu **dihitung ulang** atas izin terpisah sebelum di-approve.
+  - `late_deduction_mode` production kini `off`.
+- 2026-11-09 13.51 WIB: **Draft payroll November dihitung di production** atas izin user.
+  - Caranya: run `2996c867` (dibuat 15-10, sebelumnya 0 baris), lewat API calculate memakai satu sesi sementara akun HR `paddyhumanresources`. Pengecualian sekali ini dari aturan tanpa sesi, atas izin user; sesi langsung dihapus (sisa 0).
+  - Hasil: 122 karyawan dihitung, bruto Rp468.812.186, potongan Rp4.122.027, neto Rp464.690.159.
+  - **Potongan terlambat Rp0** walau 43 karyawan punya hari terlambat.
+  - Potongan Izin Pribadi Rp472.027 (5 orang), Sakit Rp0, cicilan pinjaman Rp3.650.000 (5 orang).
+  - 87 karyawan dilewati: 85 "Belum ada struktur gaji aktif", 2 "Struktur gaji belum punya entitas". Data ini perlu dilengkapi HR.
+  - Periode absensi 21 Okt–21 Nov masih terbuka, jadi draft ini sementara: **hitung ulang setelah closing** sebelum di-approve. Respons tersimpan di VPS `~/backups/payroll-nov-calc-20261109-135157.json`.
