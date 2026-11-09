@@ -1,6 +1,6 @@
 # EPIC-092: Approval Berjenjang SPV → Manager + HR Mewakili Atasan (`MODULE-HRIS`, `MODULE-PAYROLL`)
 
-status: review
+status: done
 environment: dev
 retries: 0
 
@@ -64,3 +64,4 @@ Di staging, semua jabatan Koordinator/Coordinator (15 jabatan) berlevel **Staff*
   - label "mewakili atasan" tetap tampil bila HR sendiri adalah atasan tahap berjalan;
   - Manager yang juga HR menerima lonceng dari tindakannya sendiri.
 - 2026-11-05 — Gates: Go `go test -p 1 ./...` hijau; Vitest 6492 lulus; tsc + eslint bersih. Staging: backup `staging-db-before-epic092-20261105-175230.dump` dan `staging-db-before-epic092b-20261105-175743.dump`, deploy `local-20261105-175749` (EPIC-087 + EPIC-092 di atas #79), migrasi `20261110090300` ok, 0 berbeda. QA Playwright 23/23 (HP + desktop): Leader/Koordinator (Staff) 403, Manager sebelum SPV 403 (cuti/dinas), lembur langsung oleh Manager, SPV → Manager cuti, lencana di Riwayat/ESS/HR Cuti/HR Dinas, HR mewakili SPV + Manager (dinas, cuti), HR mewakili SPV kasbon lalu Manager → menunggu HR; 0 respons ≥400, 0 error konsol. Data demo dibersihkan.
+- 2026-11-09 13.18 WIB: **LIVE production** lewat rilis gabungan PR #86 (main `bd9ff4db`, image `local-20261109-130944`; 10 migrasi EPIC-087..095, verify 0 berbeda). Backup `~/backups/prod-db-before-rilis-20261109-125740.dump` (VPS + lokal); rollback image `local-20261103-150738`, source lama `~/paddydev-src.before-rilis-20261109-130930`. Verifikasi read-only: `/login` dan `/api/ready` 200, container sehat, log API bersih. Sisa: QA HR di production.

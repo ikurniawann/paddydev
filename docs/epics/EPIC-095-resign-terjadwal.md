@@ -1,6 +1,6 @@
 # EPIC-095: Resign Terjadwal — Tanggal Efektif di Masa Depan (`MODULE-HRIS`)
 
-status: review
+status: done
 environment: dev
 retries: 0
 
@@ -54,7 +54,7 @@ Lihat rencana `docs/superpowers/plans/2026-11-06-resign-terjadwal.md`.
 - [x] Sehari setelah tanggal efektif, karyawan otomatis nonaktif, login diblokir, serta penempatan dan jadwal sesudah tanggal itu ditutup, sama dengan resign langsung.
 - [x] Profil menampilkan jadwal resign; HR bisa membatalkannya.
 - [x] Resign dengan tanggal hari ini atau lampau tetap berjalan seperti sebelumnya (tes lama hijau).
-- [ ] `go test`, `pnpm test`, `pnpm lint`, dan `tsc` hijau; CI hijau; QA staging lulus.
+- [x] `go test`, `pnpm test`, `pnpm lint`, dan `tsc` hijau; CI hijau; QA staging lulus.
 
 ## Automation Log
 - 2026-11-06: **Laporan bug user.** Penyebab dipetakan (validasi server EPIC-056 I8 + `max` di dialog). Rencana ditulis; status `backlog`, menunggu review user.
@@ -80,3 +80,4 @@ Lihat rencana `docs/superpowers/plans/2026-11-06-resign-terjadwal.md`.
   - **Job.** Jadwal kedua dibuat jatuh tempo lewat SQL demo, lalu job menjalankannya pada tick berikutnya (17:37, log `hris resign terjadwal applied=1`). Hasilnya: nonaktif, `end_date` = hari terakhir kerja, status resigned, login diblokir dan ditolak di halaman masuk, audit oleh "Sistem (resign terjadwal)".
   - **Resign langsung.** Resign dengan tanggal hari ini tetap langsung, tanpa baris jadwal.
   - Data demo dihapus. Bukti di `.share/qa095/`.
+- 2026-11-09 13.18 WIB: **LIVE production** lewat rilis gabungan PR #86 (main `bd9ff4db`, image `local-20261109-130944`; 10 migrasi EPIC-087..095, verify 0 berbeda). Backup `~/backups/prod-db-before-rilis-20261109-125740.dump` (VPS + lokal); rollback image `local-20261103-150738`, source lama `~/paddydev-src.before-rilis-20261109-130930`. Verifikasi read-only: `/login` dan `/api/ready` 200, container sehat, log API bersih. Sisa: QA HR di production.

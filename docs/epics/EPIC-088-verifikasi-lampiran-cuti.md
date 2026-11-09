@@ -1,6 +1,6 @@
 # EPIC-088: Verifikasi Lampiran Cuti/Izin oleh HR (`MODULE-HRIS`, ES-11)
 
-status: review
+status: done
 environment: dev
 retries: 0
 
@@ -140,3 +140,4 @@ Rencana: `docs/superpowers/plans/2026-11-03-verifikasi-lampiran-cuti.md`.
   - Data demo dan berkas dihapus.
   - Catatan: popover lonceng di HP terpotong di tepi kiri (bawaan UI, bukan dari R11).
 
+- 2026-11-09 13.18 WIB: **LIVE production** lewat rilis gabungan PR #86 (main `bd9ff4db`, image `local-20261109-130944`; 10 migrasi EPIC-087..095, verify 0 berbeda). Backup `~/backups/prod-db-before-rilis-20261109-125740.dump` (VPS + lokal); rollback image `local-20261103-150738`, source lama `~/paddydev-src.before-rilis-20261109-130930`. Verifikasi read-only: `/login` dan `/api/ready` 200, container sehat, log API bersih. Sisa: QA HR di production.
