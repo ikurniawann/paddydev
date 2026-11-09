@@ -1,6 +1,6 @@
 # EPIC-096: Pemetaan Data Karyawan dari File HR ke Production (`MODULE-HRIS`)
 
-status: backlog
+status: review
 environment: dev
 retries: 0
 
@@ -67,3 +67,12 @@ Lihat `docs/superpowers/plans/2026-11-09-pemetaan-data-karyawan-hr.md`.
 
 ## Automation Log
 - 2026-11-09: Pencocokan read-only dan laporan ke user. User memutuskan R1–R4. Rencana ditulis.
+- 2026-11-09: **Implementasi + gladi** (Native) di branch `ops/data-karyawan-hr-20261109`.
+  - Generator `backend/database/sql/data-karyawan-hr/` dengan 22 tes.
+  - Hasil gladi di salinan production: 196 karyawan berubah (atasan 86, jabatan 74, join date 66, status 61, penempatan 20, NIP 13, departemen 4) dan 28 jabatan baru. Generate ulang menghasilkan 0 perubahan.
+  - Dilewati dan dilaporkan (14 baris):
+    - 5 nonaktif di HRIS;
+    - 4 "Ricky / Azka" di Headquarter;
+    - Kayla Olivia Berliana muncul 2 kali dengan isi berbeda;
+    - 3 NIP bentrok dengan record nonaktif (Dominic, Kezia, Syakira).
+  - Dirapikan: jabatan berawalan kode toko, ejaan setara, dan ejaan jabatan baru (Patnership → Partnership, Assisstant → Assistant, SPV → Supervisor).

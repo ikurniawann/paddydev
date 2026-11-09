@@ -7,8 +7,9 @@
 **Architecture:**
 - Generator Python (stdlib saja) membaca file HR dan snapshot read-only production, lalu menghasilkan tiga keluaran:
   1. `01-jabatan-baru.sql`: jabatan baru;
-  2. `02-data-kerja.xlsx`: template EPIC-086 terisi untuk penempatan, departemen, dan jabatan, dijalankan dengan `tools/ops/data-kerja.sh` (preview → apply, backup otomatis);
-  3. `03-data-karyawan.sql`: atasan, status, join date, dan NIP dalam satu transaksi, dengan guard nilai lama dan audit `employee.update` per karyawan.
+  2. `02-data-kerja.xlsx`: template EPIC-086 terisi untuk **penempatan** saja, dijalankan dengan `tools/ops/data-kerja.sh` (preview → apply, backup otomatis);
+  3. `03-data-karyawan.sql`: departemen dan jabatan (berbasis id), atasan, status, join date, dan NIP dalam satu transaksi, dengan guard nilai lama dan audit `employee.update` per karyawan.
+- *Ruling gladi 09-11:* master production punya judul jabatan aktif ganda ("Shopkeeper Staff" ×2, "Store Support" ×2) yang ditolak pratinjau EPIC-086, jadi departemen dan jabatan dipindah ke `03`. Untuk judul ganda dipilih id yang paling banyak dipakai karyawan aktif.
 - Generator juga menulis `rencana.csv` (setiap perubahan dan setiap baris yang dilewati, beserta alasannya).
 - Menjalankan ulang generator setelah eksekusi = verifikasi: perubahan dalam cakupan harus 0.
 
@@ -145,3 +146,13 @@ Ubah satu nilai lama di DB gladi, lalu jalankan `03` versi awal. Expected: RAISE
 
 - [ ] **Step 1:** `.share/data-karyawan-20261109/hasil-pemetaan.xlsx` berisi: perubahan yang diterapkan, Skip beserta alasan, nonaktif/baru/tidak di file (R4), level jabatan berbeda, dan pengajuan pending yang pindah penyetuju.
 - [ ] **Step 2:** EPIC-096 Automation Log + status `done`; PR docs; memori `hris-epic096-pemetaan-data-karyawan`.
+
+## Automation Log
+
+- 2026-11-09: User memilih Native dan eksekusi production malam ini pukul 23.30 WIB.
+  - Task 1–2: generator + 22 tes.
+  - Task 3, gladi di salinan production 15.07:
+    - `01` 68 ms (28 jabatan baru), `02` 167 ms (20 penempatan), `03` 159 ms (188 karyawan);
+    - generate ulang menghasilkan 0 perubahan, dan 14 baris yang dilewati tetap sama;
+    - jalur gagal: `03` yang dijalankan ulang batal seluruhnya;
+    - pengajuan pending yang pindah penyetuju: 6 cuti, 15 lembur, 2 pinjaman.
