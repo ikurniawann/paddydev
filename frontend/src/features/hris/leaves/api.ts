@@ -1,4 +1,5 @@
 import { buildListUrl, apiGet, apiPost, apiPut, apiDelete } from "@/lib/api-client";
+import { fetchAllEmployees } from "@/lib/hris/fetch-all-employees";
 import { withReasonQuery } from "@/lib/hris/delete-reason";
 import type {
   LeaveItem,
@@ -38,9 +39,7 @@ export const reviewLeaveAttachment = (body: ReviewLeaveAttachmentPayload) =>
   apiPost<{ data: LeaveItem; message?: string }>(`${BASE}/attachment-review`, body);
 
 export const fetchLeaveEmployees = () =>
-  apiGet<{ data: LeaveEmployeeLite[] }>("/api/hris/employees?is_active=true&limit=500&sort_by=full_name&sort_order=asc").then(
-    (res) => res.data
-  );
+  fetchAllEmployees<LeaveEmployeeLite>("is_active=true&sort_by=full_name&sort_order=asc");
 
 /** Unggah foto lampiran (data URL); balikan path privat untuk attachment_url. */
 export const uploadLeaveAttachment = (photo: string, employeeId: string) =>
