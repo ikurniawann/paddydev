@@ -39,7 +39,8 @@ export function GeofenceNoteDialog({
   };
   return (
     <Dialog open={info !== null} onOpenChange={(open) => !open && close()}>
-      <DialogContent className="max-h-[90dvh] overflow-y-auto">
+      {/* Panduan Lokasi Akurat panjang di HP: isi digulir, tombol tetap terlihat. */}
+      <DialogContent className="flex max-h-[90dvh] flex-col">
         <DialogHeader>
           {imprecise ? (
             <>
@@ -65,21 +66,23 @@ export function GeofenceNoteDialog({
             </>
           )}
         </DialogHeader>
-        {imprecise && <PreciseLocationGuide />}
-        <label htmlFor="geofence-note" className="text-sm font-medium text-gray-700">
-          Keterangan
-        </label>
-        <Textarea
-          id="geofence-note"
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          placeholder={imprecise ? "Mis. sudah di lantai 1 HQ, GPS HP lemah" : "Mis. mengambil stok di gudang, antar barang ke pelanggan"}
-          rows={3}
-        />
-        <p className="text-xs text-gray-500">
-          Minimal {GEOFENCE_NOTE_MIN} karakter.
-          {imprecise ? " Bila tetap absen, tercatat Lokasi tidak akurat dan ditinjau HRD." : ""}
-        </p>
+        <div className="-mx-1 min-h-0 flex-1 space-y-2 overflow-y-auto px-1">
+          {imprecise && <PreciseLocationGuide />}
+          <label htmlFor="geofence-note" className="block text-sm font-medium text-gray-700">
+            Keterangan
+          </label>
+          <Textarea
+            id="geofence-note"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder={imprecise ? "Mis. sudah di lantai 1 HQ, GPS HP lemah" : "Mis. mengambil stok di gudang, antar barang ke pelanggan"}
+            rows={3}
+          />
+          <p className="text-xs text-gray-500">
+            Minimal {GEOFENCE_NOTE_MIN} karakter.
+            {imprecise ? " Bila tetap absen, tercatat Lokasi tidak akurat dan ditinjau HRD." : ""}
+          </p>
+        </div>
         <DialogFooter className="gap-2">
           <Button variant="outline" onClick={close}>
             Batal
