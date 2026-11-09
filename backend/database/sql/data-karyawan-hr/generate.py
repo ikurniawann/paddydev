@@ -153,9 +153,9 @@ def match(m, r):
     nk, name = nip_key(r.get('NIK Karyawan')), r.get('Nama Lengkap')
     cands = m.by_nip.get(nk, []) if nk else []
     e = cands[0] if len(cands) == 1 else None
-    if e is not None and not e['is_active']:
+    if e is not None and (not e['is_active'] or norm(e['full_name']) != norm(name)):
         alt = m.active_named(name)
-        if alt is not None:
+        if alt is not None and alt['id'] != e['id']:
             return alt, 'nama'
     if e is not None:
         return e, 'nip'
@@ -404,3 +404,144 @@ def write_xlsx(path, sheet, rows):
     with zipfile.ZipFile(path, 'w', zipfile.ZIP_DEFLATED) as z:
         for n, data in files.items():
             z.writestr(n, data)
+
+
+# --- keluaran ---------------------------------------------------------------
+
+PEOPLE_FIELDS = ('reporting_to', 'employment_status', 'join_date', 'nip')
+TEMPLATE_FIELDS = ('branch', 'department', 'position')
+COL_NIP, COL_BRANCH, COL_FROM, COL_DEPT, COL_POS = 0, 7, 16, 17, 18
+
+
+def lit(v):
+    return 'NULL' if v is None else "'" + str(v).replace("'", "''") + "'"
+
+
+def sql_positions(new_positions):
+    """01: jabatan baru (R2), idempoten; gagal bila setelahnya ada yang belum ada."""
+    out = ['-- EPIC-096 01: jabatan baru dari file HR. Jalankan: psql -X -1 -v ON_ERROR_STOP=1 -f 01-jabatan-baru.sql',
+           'SET LOCAL search_path = hris, public;']
+    for title, level, dept in new_positions:
+        out.append(f"""INSERT INTO hris.positions (brand_id, title, level, department, is_active)
+SELECT (SELECT brand_id FROM hris.positions WHERE coalesce(is_active, true) GROUP BY brand_id ORDER BY count(*) DESC LIMIT 1),
+       {lit(title)}, {lit(level)}, {lit(dept or None)}, true
+WHERE NOT EXISTS (SELECT 1 FROM hris.positions WHERE coalesce(is_active, true) AND lower(btrim(title)) = lower({lit(title)}));""")
+    titles = ', '.join(f'lower({lit(t)})' for t, _, _ in new_positions) or "''"
+    out.append(f"""DO $$ DECLARE n int; BEGIN
+  SELECT count(DISTINCT lower(btrim(title))) INTO n FROM hris.positions
+   WHERE coalesce(is_active, true) AND lower(btrim(title)) IN ({titles});
+  IF n <> {len(new_positions)} THEN RAISE EXCEPTION 'jabatan baru: % dari {len(new_positions)} ada', n; END IF;
+END $$;""")
+    return '\n'.join(out) + '\n'
+
+
+def _check(what):
+    return f"  GET DIAGNOSTICS n = ROW_COUNT;\n  IF n <> 1 THEN RAISE EXCEPTION 'data berubah sejak snapshot: {what}'; END IF;"
+
+
+def sql_people(p):
+    """03: atasan, status, join date, NIP. Guard nilai lama per kolom; NIP dua fase (prefix sementara)."""
+    per = defaultdict(dict)
+    names, nips = {}, {}
+    for c in p.changes:
+        if c.field in PEOPLE_FIELDS:
+            per[c.employee_id][c.field] = c
+            names[c.employee_id], nips[c.employee_id] = c.name, c.nip
+    body = []
+    for eid in sorted(per, key=lambda i: nips[i] or ''):
+        if 'nip' in per[eid]:
+            body.append(f"  UPDATE hris.employees SET nip = 'tmp096-' || id WHERE id = {lit(eid)} AND nip IS NOT DISTINCT FROM {lit(per[eid]['nip'].old)};")
+            body.append(_check(f"NIP {nips[eid]}"))
+    for eid in sorted(per, key=lambda i: nips[i] or ''):
+        cs = per[eid]
+        sets, guards, before, after = [], [], {}, {}
+        for f, c in cs.items():
+            cast = '::uuid' if f == 'reporting_to' else '::date' if f == 'join_date' else ''
+            sets.append(f'{f} = {lit(c.new)}{cast}')
+            old = f"'tmp096-' || id" if f == 'nip' else f'{lit(c.old)}{cast if c.old is not None else ""}'
+            guards.append(f'{f} IS NOT DISTINCT FROM {old}')
+            before[f], after[f] = c.old, c.new
+        body.append(f"  UPDATE hris.employees SET {', '.join(sets)}, updated_at = now()\n   WHERE id = {lit(eid)} AND {' AND '.join(guards)};")
+        body.append(_check(names[eid].replace("'", "''")))
+        body.append(f"  INSERT INTO audit.audit_log (actor_id, actor_name, action, entity, entity_id, entity_label, before, after, reason)\n"
+                    f"  VALUES (NULL, {lit(ACTOR)}, 'employee.update', 'hris.employees', {lit(eid)}, {lit(names[eid])}, "
+                    f"{lit(json.dumps(before, sort_keys=True))}::jsonb, {lit(json.dumps(after, sort_keys=True))}::jsonb, {lit(REASON)});")
+    return ('-- EPIC-096 03: atasan, status kontrak, join date, NIP. Jalankan: psql -X -1 -v ON_ERROR_STOP=1 -f 03-data-karyawan.sql\n'
+            'SET LOCAL search_path = hris, public;\nDO $$ DECLARE n int; BEGIN\n' + '\n'.join(body) + '\nEND $$;\n')
+
+
+def fill_template(matrix, p):
+    """02: baris template EPIC-086 untuk karyawan dengan perubahan penempatan/departemen/jabatan."""
+    want = defaultdict(dict)
+    for c in p.changes:
+        if c.field in TEMPLATE_FIELDS:
+            want[clean(c.nip)][c.field] = c.new
+    out = [matrix[0]]
+    width = len(matrix[0])
+    for r in matrix[1:]:
+        nip = clean(r[COL_NIP]) if r else ''
+        if nip not in want:
+            continue
+        r = (list(r) + [''] * width)[:width]
+        w = want.pop(nip)
+        if 'branch' in w:
+            r[COL_BRANCH], r[COL_FROM] = w['branch'], next(iter(p.placement_from.values()))
+        r[COL_DEPT] = w.get('department', '')
+        r[COL_POS] = w.get('position', '')
+        out.append(r)
+    if want:
+        raise SystemExit(f'NIP tidak ada di template: {sorted(want)}')
+    return out
+
+
+def write_reports(out_dir, p):
+    labels = {'branch': 'Penempatan', 'department': 'Departemen', 'position': 'Jabatan', 'reporting_to': 'Atasan',
+              'employment_status': 'Status kontrak', 'join_date': 'Join date', 'nip': 'NIP'}
+    with open(os.path.join(out_dir, 'rencana.csv'), 'w', newline='', encoding='utf-8') as f:
+        w = csv.writer(f)
+        w.writerow(['jenis', 'nip', 'nama', 'kolom', 'nilai_lama', 'nilai_baru', 'sheet', 'baris', 'alasan'])
+        for c in p.changes:
+            w.writerow(['ubah', c.nip, c.name, labels[c.field], c.old_label, c.new_label, '', '', ''])
+        for s in p.skipped:
+            w.writerow(['lewati', s.nik, s.name, '', '', '', s.sheet, s.row, s.reason])
+        for t, lv, d in p.new_positions:
+            w.writerow(['jabatan_baru', '', t, 'Jabatan', '', f'{t} ({lv}, {d})', '', '', ''])
+        for eid, name, last in p.roster_after_move:
+            w.writerow(['roster_toko_lama', '', name, 'Penempatan', '', '', '', '', f'roster sampai {last} tetap di toko lama'])
+        for e in p.not_in_file:
+            w.writerow(['tidak_di_file', e['nip'], e['full_name'], '', '', '', '', '', 'aktif di HRIS, tidak ada di file'])
+    reasons = Counter(re.sub(r"'[^']*'|NIP \S+ dipakai .*|\(\d+\)", '…', s.reason) for s in p.skipped)
+    lines = ['Perubahan per kolom:'] + [f'  {labels[k]}: {v}' for k, v in Counter(c.field for c in p.changes).most_common()]
+    lines += [f'Karyawan berubah: {len({c.employee_id for c in p.changes})}', f'Jabatan baru: {len(p.new_positions)}',
+              f'Roster sesudah pindah toko: {len(p.roster_after_move)}', f'Aktif HRIS tidak di file: {len(p.not_in_file)}',
+              f'Dilewati: {len(p.skipped)}'] + [f'  {k}: {v}' for k, v in reasons.most_common()]
+    text = '\n'.join(lines) + '\n'
+    with open(os.path.join(out_dir, 'ringkasan.txt'), 'w', encoding='utf-8') as f:
+        f.write(text)
+    return text
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument('--hr', required=True)
+    ap.add_argument('--snapshot', required=True)
+    ap.add_argument('--template', help='template EPIC-086 dari data-kerja.sh template (untuk 02)')
+    ap.add_argument('--today', required=True)
+    ap.add_argument('--out', required=True)
+    a = ap.parse_args(argv)
+    os.makedirs(a.out, exist_ok=True)
+    with open(a.snapshot, encoding='utf-8') as f:
+        snap = json.load(f)
+    p = plan(read_hr(a.hr), snap, a.today)
+    with open(os.path.join(a.out, '01-jabatan-baru.sql'), 'w', encoding='utf-8') as f:
+        f.write(sql_positions(p.new_positions))
+    with open(os.path.join(a.out, '03-data-karyawan.sql'), 'w', encoding='utf-8') as f:
+        f.write(sql_people(p))
+    if a.template:
+        write_xlsx(os.path.join(a.out, '02-data-kerja.xlsx'), 'Data', fill_template(read_xlsx_sheets(a.template)['Data'], p))
+    sys.stdout.write(write_reports(a.out, p))
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())

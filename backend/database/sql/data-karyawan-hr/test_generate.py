@@ -152,5 +152,63 @@ class PlanTest(unittest.TestCase):
             self.assertEqual(g.read_xlsx_sheets(path)['Data'], [['NIP', 'Nama', 'Tanggal'], ['201602001', 'Katrin', '2026-11-10']])
 
 
+class OutputTest(unittest.TestCase):
+    def plan_people(self):
+        s = snap(emp(1, '101', 'A'), emp(2, '102', 'B'), emp(3, '104', 'C'), emp(4, '105', 'D', employment_status='probation'))
+        rows = [row('102', 'A'), row('103', 'B', line=3), row('104', 'C', line=4, **{'Approver di HRIS': 'Zaidane'}),
+                row('105', 'D', line=5, **{'Join Date': '2024-02-03'})]
+        return g.plan(rows, s, TODAY), s
+
+    def test_positions_sql_idempotent(self):
+        sql = g.sql_positions([('Packing Coordinator', 'Coordinator', 'Warehouse')])
+        self.assertIn("WHERE NOT EXISTS", sql)
+        self.assertIn("lower(btrim(title)) = lower('Packing Coordinator')", sql)
+        self.assertIn('RAISE EXCEPTION', sql)
+
+    def test_sql_guards_old_value(self):
+        p, s = self.plan_people()
+        sql = g.sql_people(p)
+        self.assertIn("reporting_to IS NOT DISTINCT FROM NULL", sql)
+        self.assertIn("employment_status IS NOT DISTINCT FROM 'probation'", sql)
+        self.assertIn("join_date IS NOT DISTINCT FROM '2025-01-01'", sql)
+        self.assertGreater(sql.count('GET DIAGNOSTICS'), 0)
+        self.assertEqual(sql.count('GET DIAGNOSTICS'), sql.count('RAISE EXCEPTION'))
+
+    def test_nip_swap_two_phase(self):
+        p, _ = self.plan_people()
+        sql = g.sql_people(p)
+        nips = changes(p, 'nip')
+        self.assertEqual(nips, {('e1', 'nip'): '102', ('e2', 'nip'): '103'})
+        last_tmp = max(sql.index("nip = 'tmp096-' || id WHERE id = 'e1'"), sql.index("nip = 'tmp096-' || id WHERE id = 'e2'"))
+        self.assertLess(last_tmp, sql.index("nip = '102'"))
+        self.assertLess(last_tmp, sql.index("nip = '103'"))
+
+    def test_nip_taken_by_other_skipped(self):
+        s = snap(emp(1, '101', 'A'), emp(2, '102', 'Orang Lain'))
+        p = g.plan([row('102', 'A')], s, TODAY)
+        self.assertNotIn(('e1', 'nip'), changes(p))
+        self.assertIn('NIP 102 dipakai Orang Lain', skips(p))
+
+    def test_audit_one_row_per_employee(self):
+        p, _ = self.plan_people()
+        sql = g.sql_people(p)
+        self.assertEqual(sql.count('INSERT INTO audit.audit_log'), 4)
+        self.assertIn('\'{"reporting_to": null}\'::jsonb, \'{"reporting_to": "e92"}\'::jsonb', sql)
+
+    def test_template_fill(self):
+        s = snap(emp(1, '1', 'A'), emp(2, '2', 'B'), emp(3, '3', 'C'))
+        p = g.plan([row(1.0, 'A', Branch='PPBA'), row(2.0, 'B', line=3, Posisi='Perfumer Staff', Departemen='SCM'),
+                    row(3.0, 'C', line=4)], s, TODAY)
+        header = ['NIP', 'Nama', 'Departemen Saat Ini', 'Jabatan Saat Ini', 'Penempatan Saat Ini', 'Tipe Saat Ini',
+                  'Yang Perlu Dilengkapi', 'Penempatan Utama (Kode Toko)', 'Tipe Jadwal', 'Senin', 'Selasa', 'Rabu',
+                  'Kamis', 'Jumat', 'Sabtu', 'Minggu', 'Berlaku Mulai', 'Departemen Baru', 'Jabatan Baru', 'Catatan']
+        tpl = [header, ['1', 'A'] + [''] * 18, ['2', 'B'] + [''] * 18, ['3', 'C'] + [''] * 18]
+        out = g.fill_template(tpl, p)
+        self.assertEqual(out[0], header)
+        self.assertEqual([r[0] for r in out[1:]], ['1', '2'])
+        self.assertEqual((out[1][7], out[1][16], out[1][17], out[1][18]), ('ODOO-PPBA', TODAY, '', ''))
+        self.assertEqual((out[2][7], out[2][16], out[2][17], out[2][18]), ('', '', 'SCM', 'Perfumer Staff'))
+
+
 if __name__ == '__main__':
     unittest.main()
