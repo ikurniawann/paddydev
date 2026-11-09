@@ -84,4 +84,9 @@ Lihat rencana `docs/superpowers/plans/2026-11-06-jadwal-semua-toko.md`.
   - Data demo dihapus (0 tersisa; 10 pengatur uji coba staging utuh). Bukti `.share/qa093/` (`t2.log`, `2b-…`, `5-…`).
   - Siap production: menunggu izin user untuk merge PR #81 + deploy, lalu izin terpisah untuk centang 9 pengatur Coordinator (R8).
 - 2026-11-09 13.18 WIB: **LIVE production** lewat rilis gabungan PR #86 (main `bd9ff4db`, image `local-20261109-130944`; 10 migrasi EPIC-087..095, verify 0 berbeda). Backup `~/backups/prod-db-before-rilis-20261109-125740.dump` (VPS + lokal); rollback image `local-20261103-150738`, source lama `~/paddydev-src.before-rilis-20261109-130930`. Verifikasi read-only: `/login` dan `/api/ready` 200, container sehat, log API bersih. Sisa: QA HR di production.
-  - Centang "Boleh atur jadwal semua toko" untuk 9 pengatur Coordinator (R8) **belum** dipasang; di production 0 dari 22 pengatur tercentang. Menunggu izin terpisah.
+- 2026-11-09 13.28 WIB: **R8 dieksekusi di production** atas izin user ("lakukan centang yang sudah jelas sebagai coordinator jabatannya").
+  - 9 pengatur berjabatan Coordinator dicentang "Boleh atur jadwal semua toko": Dhimas Ilham Akbar G, Dini Virayanti, Farial Sifa Fasya, Laura Mardiana, Maria Allethea Putri, Muhammad Rizal Mutaqqin Sudibyo, Muhammad Wisnu Yudhayana Sakti, Riri Riyan Sari, Siti Asyah Nurhamidah.
+  - Satu transaksi dengan guard tepat 9 orang; uji kering (ROLLBACK) lebih dulu. 9 baris audit `schedule_delegate.set`, aktor "Ops (Claude Code atas persetujuan user)".
+  - Hasil: 9 dari 22 pengatur tercentang.
+  - Backup `~/backups/prod-schedule-delegates-before-e093r8-20261109-132833.dump`.
+  - Mencabut: HR membuka Pengatur jadwal toko → Ubah → hapus centang.
