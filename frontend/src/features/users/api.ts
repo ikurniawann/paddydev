@@ -1,5 +1,6 @@
 import { apiGet, apiPost, apiPut, apiPatch, apiDelete, buildListUrl } from "@/lib/api-client";
 import { withReasonQuery } from "@/lib/hris/delete-reason";
+import { fetchAllEmployees } from "@/lib/hris/fetch-all-employees";
 import type { ShiftScheduleRowLike } from "@/lib/hris/employee-profile-shifts";
 import type { ScheduleType } from "@/lib/hris/schedule-type";
 import type { CreateUserEmployeeInput, UpdateUserEmployeeInput } from "@/lib/users/schemas";
@@ -278,9 +279,7 @@ export const fetchUserFormLookups = async (): Promise<UserFormLookups> => {
     apiGet<{ data: UserFormLookups["departments"] }>("/api/master/departments"),
     apiGet<{ data: UserFormLookups["positions"] }>("/api/master/positions"),
     apiGet<{ data: UserFormLookups["employmentStatuses"] }>("/api/master/employment-statuses"),
-    apiGet<{ data: UserFormLookups["managers"] }>(
-      "/api/hris/employees?is_active=true&limit=200&sort_by=full_name&sort_order=asc"
-    ),
+    fetchAllEmployees<UserFormLookups["managers"][number]>("is_active=true&sort_by=full_name&sort_order=asc"),
     apiGet<{ data: UserFormLookups["sections"] }>("/api/sections"),
   ]);
 
@@ -288,7 +287,7 @@ export const fetchUserFormLookups = async (): Promise<UserFormLookups> => {
     departments: deptsRes.data ?? [],
     positions: posRes.data ?? [],
     employmentStatuses: (statusRes.data ?? []).filter((s) => s.is_active !== false),
-    managers: managersRes.data ?? [],
+    managers: managersRes,
     sections: (sectionsRes.data ?? []).map((s) => ({ id: s.id, name: s.name })),
   };
 };

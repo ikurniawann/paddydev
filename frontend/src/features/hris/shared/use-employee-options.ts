@@ -1,13 +1,11 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { apiGet } from "@/lib/api-client";
+import { fetchAllEmployees } from "@/lib/hris/fetch-all-employees";
 import { employeeComboOptions, type EmployeeBrief } from "@/lib/hris/loans-view";
 
 const fetchActiveEmployeeOptions = () =>
-  apiGet<{ data: EmployeeBrief[] }>("/api/hris/employees?is_active=true&limit=500").then((res) =>
-    employeeComboOptions(res.data ?? [])
-  );
+  fetchAllEmployees<EmployeeBrief>("is_active=true").then(employeeComboOptions);
 
 /** Pilihan combobox karyawan aktif (form pinjaman & lembur). */
 export const useEmployeeOptions = () =>

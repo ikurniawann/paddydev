@@ -1,4 +1,5 @@
 import { apiDelete, apiGet, apiPatch, apiPost, apiPut, buildListUrl } from "@/lib/api-client";
+import { fetchAllEmployees } from "@/lib/hris/fetch-all-employees";
 import type { ScheduleType } from "@/lib/hris/schedule-type";
 import type {
   AttendanceAdjustment,
@@ -139,9 +140,7 @@ export interface EmployeeOption {
 }
 
 export const fetchActiveEmployees = () =>
-  apiGet<{ data?: EmployeeOption[] }>(
-    "/api/hris/employees?is_active=true&limit=500&sort_by=full_name&sort_order=asc"
-  ).then((res) => res.data ?? []);
+  fetchAllEmployees<EmployeeOption>("is_active=true&sort_by=full_name&sort_order=asc");
 
 /** Statistik bulan (year + month 1-12); null bila endpoint gagal. */
 export function fetchAttendanceMonthStats(year: number, month: number) {
