@@ -76,6 +76,7 @@ const delegate: ScheduleDelegate = {
   position_title: "Area Manager",
   has_login: true,
   can_place: true,
+  schedule_all_branches: false,
   direct_reports: 3,
   is_active: true,
   branches: [{ id: "b3", code: "PIK", name: "Paddy PIK" }],
@@ -142,7 +143,7 @@ describe("DelegateFormDialog (EPIC-071)", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Simpan" }));
     await waitFor(() => expect(api.saveScheduleDelegate).toHaveBeenCalled());
-    expect(api.saveScheduleDelegate).toHaveBeenCalledWith("e1", { branch_ids: ["b1", "b2"], can_place: false });
+    expect(api.saveScheduleDelegate).toHaveBeenCalledWith("e1", { branch_ids: ["b1", "b2"], can_place: false, schedule_all_branches: false });
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
   });
 
@@ -158,7 +159,34 @@ describe("DelegateFormDialog (EPIC-071)", () => {
     fireEvent.click(screen.getByLabelText("Boleh atur penempatan karyawan"));
     fireEvent.click(screen.getByRole("button", { name: "Simpan" }));
     await waitFor(() => expect(api.saveScheduleDelegate).toHaveBeenCalled());
-    expect(api.saveScheduleDelegate).toHaveBeenCalledWith("e1", { branch_ids: ["b2", "b3"], can_place: true });
+    expect(api.saveScheduleDelegate).toHaveBeenCalledWith("e1", { branch_ids: ["b2", "b3"], can_place: true, schedule_all_branches: false });
+  });
+
+  it("centang jadwal semua toko dikirim bersama petunjuknya", async () => {
+    api.saveScheduleDelegate.mockResolvedValue(delegate);
+    renderDialog();
+    await waitFor(() => expect(screen.getByRole("option", { name: /Ani Wijaya/ })).toBeTruthy());
+    fireEvent.change(screen.getByLabelText("Pilih karyawan"), { target: { value: "e1" } });
+    await waitFor(() => expect((screen.getByLabelText("PVJ - Paddy PVJ") as HTMLInputElement).checked).toBe(true));
+    expect(
+      screen.getByText("Jadwal toko lain langsung berlaku tanpa persetujuan. Penempatan tetap hanya di toko yang diatur di atas.")
+    ).toBeTruthy();
+    const all = screen.getByLabelText("Boleh atur jadwal semua toko") as HTMLInputElement;
+    expect(all.checked).toBe(false);
+    fireEvent.click(all);
+    fireEvent.click(screen.getByRole("button", { name: "Simpan" }));
+    await waitFor(() => expect(api.saveScheduleDelegate).toHaveBeenCalled());
+    expect(api.saveScheduleDelegate).toHaveBeenCalledWith("e1", {
+      branch_ids: ["b1", "b2"],
+      can_place: false,
+      schedule_all_branches: true,
+    });
+  });
+
+  it("mode ubah: centang jadwal semua toko terisi dari baris", async () => {
+    renderDialog({ delegate: { ...delegate, schedule_all_branches: true } });
+    await waitFor(() => expect((screen.getByLabelText("PIK - Paddy PIK") as HTMLInputElement).checked).toBe(true));
+    expect((screen.getByLabelText("Boleh atur jadwal semua toko") as HTMLInputElement).checked).toBe(true);
   });
 
   it("respons 400 ditampilkan di dalam dialog dan dialog tetap terbuka", async () => {
@@ -193,7 +221,7 @@ describe("DelegateFormDialog (EPIC-071)", () => {
     expect(api.fetchDelegateSuggest).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Simpan" }));
     await waitFor(() => expect(api.saveScheduleDelegate).toHaveBeenCalled());
-    expect(api.saveScheduleDelegate).toHaveBeenCalledWith("e9", { branch_ids: ["b3"], can_place: true });
+    expect(api.saveScheduleDelegate).toHaveBeenCalledWith("e9", { branch_ids: ["b3"], can_place: true, schedule_all_branches: false });
   });
 
   it("memilih karyawan yang sudah jadi pengatur memakai toko dan hak lamanya, dengan catatan", async () => {
@@ -212,7 +240,7 @@ describe("DelegateFormDialog (EPIC-071)", () => {
     expect(api.fetchDelegateSuggest).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Simpan" }));
     await waitFor(() => expect(api.saveScheduleDelegate).toHaveBeenCalled());
-    expect(api.saveScheduleDelegate).toHaveBeenCalledWith("e1", { branch_ids: ["b3"], can_place: true });
+    expect(api.saveScheduleDelegate).toHaveBeenCalledWith("e1", { branch_ids: ["b3"], can_place: true, schedule_all_branches: false });
   });
 
   it("karyawan baru tidak menampilkan catatan pengatur yang sudah ada", async () => {
@@ -233,7 +261,7 @@ describe("DelegateFormDialog (EPIC-071)", () => {
     fireEvent.click(screen.getByLabelText("KPO - Paddy Kopo"));
     fireEvent.click(screen.getByRole("button", { name: "Simpan" }));
     await waitFor(() => expect(api.saveScheduleDelegate).toHaveBeenCalled());
-    expect(api.saveScheduleDelegate).toHaveBeenCalledWith("e1", { branch_ids: ["b2"], can_place: false });
+    expect(api.saveScheduleDelegate).toHaveBeenCalledWith("e1", { branch_ids: ["b2"], can_place: false, schedule_all_branches: false });
     expect(api.fetchDelegateSuggest).toHaveBeenCalledTimes(1);
   });
 

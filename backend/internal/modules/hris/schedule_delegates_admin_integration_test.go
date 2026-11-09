@@ -274,3 +274,56 @@ func TestDelegatesSuggest(t *testing.T) {
 	expect(t, h.do(&hr, "GET", delegatesURL+"/suggest?employee_id=xx", nil), 400, "ID karyawan tidak valid")
 	expect(t, h.do(&hr, "GET", delegatesURL+"/suggest?employee_id=00000000-0000-4000-8000-000000000001", nil), 404, "Karyawan tidak ditemukan")
 }
+
+// EPIC-093 R1: HR ticks "Boleh atur jadwal semua toko"; a PUT without the
+// field clears it, and the audit before/after carries it.
+func TestDelegatesAdminScheduleAllBranches(t *testing.T) {
+	h := newHarness(t)
+	hr := delegateHR(h)
+	p, pid := h.staff("pos", nil, true, emp{name: "Del Adm Semua Toko"})
+	a := h.branch("Del Adm Semua A")
+	url := delegatesURL + "/" + pid
+	// The harness runs in one transaction, so both audit rows share
+	// created_at: the first set has no before, the second one has.
+	lastAudit := func(field string) string {
+		return h.scalar(`SELECT coalesce(`+field+`->>'schedule_all_branches', '') FROM audit.audit_log
+			WHERE entity = 'hris.employees' AND entity_id = $1 AND action = 'schedule_delegate.set'
+			ORDER BY (before IS NOT NULL) DESC LIMIT 1`, pid)
+	}
+
+	set := h.do(&hr, "PUT", url, map[string]any{"branch_ids": []string{a}, "can_place": false, "schedule_all_branches": true})
+	expect(t, set, 200, "")
+	if set.data()["schedule_all_branches"] != true {
+		t.Fatalf("set = %s", set.raw)
+	}
+	var found map[string]any
+	for _, r := range h.do(&hr, "GET", delegatesURL, nil).list() {
+		if m := r.(map[string]any); m["employee_id"] == pid {
+			found = m
+		}
+	}
+	if found == nil || found["schedule_all_branches"] != true {
+		t.Fatalf("list row = %v", found)
+	}
+	if got := lastAudit("after"); got != "true" {
+		t.Fatalf("audit after = %q, want true", got)
+	}
+	if h.do(&p, "GET", scheduleAccessURL, nil).data()["schedule_all_branches"] != true {
+		t.Fatal("schedule-access must report the tick")
+	}
+
+	again := h.do(&hr, "PUT", url, map[string]any{"branch_ids": []string{a}, "can_place": false})
+	expect(t, again, 200, "")
+	if again.data()["schedule_all_branches"] != false {
+		t.Fatalf("again = %s", again.raw)
+	}
+	if got := lastAudit("before"); got != "true" {
+		t.Fatalf("audit before = %q, want true", got)
+	}
+	if got := lastAudit("after"); got != "false" {
+		t.Fatalf("audit after = %q, want false", got)
+	}
+	if h.do(&p, "GET", scheduleAccessURL, nil).data()["schedule_all_branches"] != false {
+		t.Fatal("schedule-access must drop the tick")
+	}
+}

@@ -96,6 +96,7 @@ export function ScheduleDelegatesPage({ canManage }: { canManage: boolean }) {
                     <th className="min-w-[9rem] p-3">Jabatan</th>
                     <th className="min-w-[15rem] p-3">Toko</th>
                     <th className="p-3">Penempatan</th>
+                    <th className="whitespace-nowrap p-3">Jadwal semua toko</th>
                     <th className="p-3">Bawahan</th>
                     <th className="p-3">Diubah</th>
                     {canManage ? <th className="p-3 text-right">Aksi</th> : null}
@@ -180,6 +181,7 @@ function DelegateRow({
         </div>
       </td>
       <td className="p-3 text-gray-700">{row.can_place ? "Ya" : "Tidak"}</td>
+      <td className="p-3 text-gray-700">{row.schedule_all_branches ? "Ya" : "Tidak"}</td>
       <td className="p-3 text-gray-700">{row.direct_reports}</td>
       <td className="p-3 text-xs text-gray-500">
         {row.updated_at ? <p className="whitespace-nowrap">{formatDateTime(row.updated_at)}</p> : null}

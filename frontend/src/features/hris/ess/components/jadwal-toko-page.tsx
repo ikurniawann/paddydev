@@ -67,7 +67,7 @@ export function EssJadwalTokoPage() {
           Jadwal Toko
         </h1>
         <p className="mt-1 text-sm text-gray-500">
-          {hrMode
+          {hrMode || data?.schedule_all_branches
             ? "Atur jadwal kerja karyawan di semua toko. Perubahan langsung berlaku ke absensi mereka."
             : "Atur jadwal kerja karyawan di toko Anda. Perubahan langsung berlaku ke absensi mereka."}
         </p>
