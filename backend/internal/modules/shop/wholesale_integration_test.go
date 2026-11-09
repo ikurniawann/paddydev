@@ -262,10 +262,11 @@ func TestWholesaleOrderValidationAndInvoice(t *testing.T) {
 func TestWholesalePayLaterOrder(t *testing.T) {
 	now := time.Date(2026, 10, 7, 9, 0, 0, 0, time.UTC)
 	f := newWholesaleFixture(t, "pay_later")
+	// The session is checked against the database's now(), so it must be issued on the real clock.
+	_, token := f.login(f.password)
 	f.svc.now = func() time.Time { return now }
 	stock := "50"
 	f.catalog.products[f.product] = WebProduct{ID: f.product, Name: "Kaos", BasePrice: "100000", InventoryQuantity: &stock}
-	_, token := f.login(f.password)
 
 	res, body := f.partner(token, "POST", "/api/wholesale/orders", map[string]any{
 		"items":            []map[string]any{{"product_id": f.product, "quantity": 10}},
