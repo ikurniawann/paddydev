@@ -35,6 +35,9 @@ import { EmployeeAuditTab } from "./detail/employee-audit-tab";
 import { ScheduleTypeDialog } from "./schedule-type-dialog";
 import { RehireDialog } from "./rehire-dialog";
 import { ResignDialog } from "./resign-dialog";
+import { ScheduledResignBanner, scheduledResignKey } from "./detail/scheduled-resign-banner";
+import { useQuery } from "@tanstack/react-query";
+import { fetchScheduledResign } from "../api";
 import { todayWib } from "@/lib/dates";
 import { ResetPasswordDialog } from "./reset-password-dialog";
 
@@ -79,6 +82,8 @@ export function UserDetailPage({ params }: { params: Promise<{ id: string }> }) 
   const tabs = TABS.filter((t) => t.key !== "letters" || lettersHR);
 
   const { data: employee, isLoading, refetch: refetchEmployee } = useHRISEmployeeDetail(id);
+  // EPIC-095: selama ada resign terjadwal, tombol Resign disembunyikan (banner yang tampil).
+  const scheduledResign = useQuery({ queryKey: scheduledResignKey(id), queryFn: () => fetchScheduledResign(id), enabled: isHR });
 
   if (isLoading) {
     return (
@@ -139,9 +144,13 @@ export function UserDetailPage({ params }: { params: Promise<{ id: string }> }) 
         onCreateAccount={() => setCreateAccountOpen(true)}
         onResetPassword={() => setResetDialogOpen(true)}
         onChangeScheduleType={isHR ? () => setScheduleTypeOpen(true) : undefined}
-        onResign={isHR ? () => setResignOpen(true) : undefined}
+        onResign={isHR && scheduledResign.isSuccess && !scheduledResign.data ? () => setResignOpen(true) : undefined}
         onRehire={isHR ? () => setRehireOpen(true) : undefined}
       />
+
+      {isHR && employee.is_active ? (
+        <ScheduledResignBanner employeeId={id} canCancel={isHR} onChanged={() => void scheduledResign.refetch()} />
+      ) : null}
 
       {rehireOpen ? (
         <RehireDialog
@@ -161,7 +170,10 @@ export function UserDetailPage({ params }: { params: Promise<{ id: string }> }) 
           joinDate={employee.join_date.slice(0, 10)}
           today={todayWib()}
           onOpenChange={setResignOpen}
-          onDone={() => void refetchEmployee()}
+          onDone={() => {
+            void refetchEmployee();
+            void scheduledResign.refetch();
+          }}
         />
       ) : null}
 

@@ -91,6 +91,8 @@ func New(deps module.Deps, ports Ports) module.Module {
 		go svc.AutoCheckoutLoop(context.Background(), AutoCheckoutEvery)
 		// The 1 January leave carry-over (EPIC-068 R9).
 		go svc.LeaveCarryOverLoop(context.Background(), LeaveCarryOverEvery)
+		// Scheduled resigns, applied the day after the last working day (EPIC-095 R4).
+		go svc.ScheduledResignLoop(context.Background(), ScheduledResignEvery)
 	}
 	return mod{handlers{svc: svc, auth: deps.Auth}}
 }
