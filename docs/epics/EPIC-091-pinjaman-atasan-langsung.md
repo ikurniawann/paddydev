@@ -1,6 +1,6 @@
 # EPIC-091: Penyetuju Minimal SPV untuk Semua Pengajuan + Kasbon/Pinjaman Tiga Tahap (`MODULE-HRIS`, `MODULE-PAYROLL`)
 
-status: review
+status: done
 environment: dev
 retries: 0
 
@@ -130,3 +130,4 @@ Laporan user 05-11-2026: karyawan tidak bisa mengajukan pinjaman, atau pinjamann
   - QA ulang di data bersih: kasbon/penyetuju 18/18 dan dua atasan 10/10, 0 error API dan console. Satu kali cek gagal karena timing toast di run pertama, lulus saat diulang.
   - Data demo qa091 dan berkasnya dihapus.
 
+- 2026-11-09 13.18 WIB: **LIVE production** lewat rilis gabungan PR #86 (main `bd9ff4db`, image `local-20261109-130944`; 10 migrasi EPIC-087..095, verify 0 berbeda). Backup `~/backups/prod-db-before-rilis-20261109-125740.dump` (VPS + lokal); rollback image `local-20261103-150738`, source lama `~/paddydev-src.before-rilis-20261109-130930`. Verifikasi read-only: `/login` dan `/api/ready` 200, container sehat, log API bersih. Sisa: QA HR di production.
