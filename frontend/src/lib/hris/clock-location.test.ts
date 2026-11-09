@@ -5,6 +5,7 @@ type Ok = (p: { coords: { latitude: number; longitude: number; accuracy: number 
 const fix = (accuracy: number, latitude = -6.938) => ({ coords: { latitude, longitude: 107.618, accuracy } });
 
 let watchOk: Ok | null;
+let watchErr: ((e: { code: number }) => void) | null;
 const clearWatch = vi.fn();
 function geo(first: ReturnType<typeof fix> | null, withWatch = true) {
   watchOk = null;
@@ -12,8 +13,9 @@ function geo(first: ReturnType<typeof fix> | null, withWatch = true) {
     getCurrentPosition: vi.fn((ok: Ok, err: () => void) => (first ? ok(first) : err())),
     ...(withWatch
       ? {
-          watchPosition: vi.fn((ok: Ok) => {
+          watchPosition: vi.fn((ok: Ok, err: (e: { code: number }) => void) => {
             watchOk = ok;
+            watchErr = err;
             return 7;
           }),
           clearWatch,
@@ -51,6 +53,18 @@ describe("acquireClockLocation", () => {
     await vi.advanceTimersByTimeAsync(6000);
     await expect(p).resolves.toEqual({ latitude: -6.95, longitude: 107.618, accuracy: 1500 });
     expect(clearWatch).toHaveBeenCalledWith(7);
+  });
+
+  it("gangguan sesaat (iOS POSITION_UNAVAILABLE) tidak menghentikan penantian; izin dicabut menghentikan", async () => {
+    const g = geo(fix(2000));
+    const p = acquireClockLocation(g, 6000);
+    watchErr!({ code: 2 });
+    watchOk!(fix(40, -6.9382));
+    await expect(p).resolves.toMatchObject({ accuracy: 40, latitude: -6.9382 });
+
+    const denied = acquireClockLocation(geo(fix(2000)), 6000);
+    watchErr!({ code: 1 });
+    await expect(denied).resolves.toMatchObject({ accuracy: 2000 });
   });
 
   it("tanpa watchPosition atau tanpa izin lokasi", async () => {

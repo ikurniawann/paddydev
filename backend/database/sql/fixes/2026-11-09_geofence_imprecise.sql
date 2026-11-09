@@ -14,7 +14,7 @@ BEGIN;
 SET LOCAL search_path = hris, public;
 
 CREATE TEMP TABLE geo_fix ON COMMIT DROP AS
-SELECT a.id, side
+SELECT a.id, v.side
 FROM hris.attendance a
 LEFT JOIN configuration.branches b ON b.id = a.branch_id
 CROSS JOIN LATERAL (VALUES
@@ -45,17 +45,21 @@ SELECT (:total = :expected) AS same_count \gset
   \quit
 \endif
 
+-- Status dicek ulang: baris yang berubah sejak pratinjau (mis. disetujui sebagai
+-- perjalanan dinas) tidak ditimpa, dan verifikasi di bawah lalu gagal.
 UPDATE hris.attendance a SET clock_in_geofence = 'imprecise'
-  FROM geo_fix f WHERE f.id = a.id AND f.side = 'in';
+  FROM geo_fix f WHERE f.id = a.id AND f.side = 'in' AND a.clock_in_geofence = 'invalid';
 UPDATE hris.attendance a SET clock_out_geofence = 'imprecise'
-  FROM geo_fix f WHERE f.id = a.id AND f.side = 'out';
+  FROM geo_fix f WHERE f.id = a.id AND f.side = 'out' AND a.clock_out_geofence = 'invalid';
 
 INSERT INTO audit.audit_log (actor_name, action, entity, entity_id, reason, after)
 SELECT 'Ops (Claude Code atas persetujuan user)', 'data_fix.geofence_imprecise', 'hris', 'attendance',
        'Absen dengan lokasi perkiraan (akurasi > 500 m) dilabel ulang dari Di luar area menjadi Lokasi tidak akurat (keputusan user 09-11-2026)',
        jsonb_build_object('rows', count(*), 'clock_in', count(*) FILTER (WHERE side = 'in'),
-                          'clock_out', count(*) FILTER (WHERE side = 'out'))
-FROM geo_fix;
+                          'clock_out', count(*) FILTER (WHERE side = 'out'),
+                          'items', jsonb_agg(jsonb_build_object('attendance_id', id, 'side', side) ORDER BY id, side))
+FROM geo_fix
+HAVING count(*) > 0;
 
 DO $$ BEGIN
   IF EXISTS (SELECT 1 FROM geo_fix f JOIN hris.attendance a ON a.id = f.id

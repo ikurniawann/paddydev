@@ -50,7 +50,11 @@ export function acquireClockLocation(
             if (loc.accuracy < best.accuracy) best = loc;
             if (!isImpreciseAccuracy(best.accuracy)) finish();
           },
-          () => finish(),
+          // Hanya izin dicabut yang menghentikan penantian; POSITION_UNAVAILABLE/TIMEOUT
+          // sesaat (iOS saat GPS memanas) dibiarkan sampai batas waktu.
+          (err) => {
+            if (err.code === 1) finish();
+          },
           { enableHighAccuracy: true, maximumAge: 0 }
         );
         // watchPosition bisa memanggil callback secara sinkron dan finish sebelum id tersedia.

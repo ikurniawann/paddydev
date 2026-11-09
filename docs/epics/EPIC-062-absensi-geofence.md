@@ -168,3 +168,11 @@ Rekomendasi di bawah dipakai sebagai ruling rencana (R1–R11). **User perlu men
   Data lama: `backend/database/sql/fixes/2026-11-09_geofence_imprecise.sql` (pratinjau, guard jumlah, audit `data_fix.geofence_imprecise`, idempoten). Gladi di salinan prod 09-11: migrasi 1,7 detik, verify bersih, 45 catatan (24 masuk, 21 pulang, 5 karyawan); jumlah salah ditolak tanpa perubahan; jalankan ulang = 0. Eksekusi prod hanya dengan izin terpisah dan backup.
 
   Test: `TestGeofenceImprecise`, `TestClockInImpreciseLocationNeedsNote`, relabel dinas `imprecise`, `clock-location.test.ts`, dialog dan panel ESS (Coba lagi). Suite Go hris dan vitest HRIS lulus, tsc bersih.
+
+  Review independen (1 sedang, 3 ringan) sudah diperbaiki:
+  - Coba lagi yang gagal mengambil GPS kini mengirim lokasi lama, bukan tanpa lokasi yang akan lolos sebagai "Belum dicek" tanpa keterangan.
+  - Penantian fix akurat hanya berhenti saat izin dicabut (bukan POSITION_UNAVAILABLE sesaat di iOS).
+  - UPDATE di SQL mengecek ulang status `invalid`.
+  - Audit menyimpan daftar id dan tidak ditulis bila jumlahnya 0.
+
+  Gladi ulang di salinan prod: 45 catatan, audit 1 baris berisi 45 id, jalankan ulang 0.

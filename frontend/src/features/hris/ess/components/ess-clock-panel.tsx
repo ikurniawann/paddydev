@@ -92,11 +92,10 @@ export function EssClockPanel() {
     setLocating(true);
     const location = await acquireClockLocation();
     setLocating(false);
-    const next: EssClockPayload = { ...payload };
+    // GPS gagal saat mencoba lagi: tetap kirim lokasi lama, supaya absen tidak
+    // lolos sebagai "Belum dicek" tanpa keterangan.
     const key = payload.action === "clock-in" ? "clock_in_location" : "clock_out_location";
-    if (location) next[key] = location;
-    else delete next[key];
-    send(next);
+    send(location ? { ...payload, [key]: location } : payload);
   }
 
   function send(payload: EssClockPayload) {
