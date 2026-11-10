@@ -24,7 +24,7 @@ func importReleaseFixture(t *testing.T, h *harness, userID, email string) []byte
 	h.exec(`UPDATE auth.users SET banned_until = now() + interval '100 years' WHERE id = $1`, userID)
 	h.exec(`UPDATE configuration.users SET status = 'inactive' WHERE id = $1`, userID)
 	header := []string{"NIP", "Nama Lengkap *", "Email *", "Tanggal Masuk *", "Status Kepegawaian *", "Tipe Jadwal *", "Cabang Utama *"}
-	return employeeFile(t, header, []string{"IMP" + testutil.RandomHex(8), "Masuk Lagi", email, "21/10/2026", "Kontrak (PKWT)", "Shift", "Cabang Lepas"})
+	return employeeFile(t, header, []string{h.nextNIP("2026-10-21", "contract", 0), "Masuk Lagi", email, "21/10/2026", "Kontrak (PKWT)", "Shift", "Cabang Lepas"})
 }
 
 func loginState(h *harness, userID string) string {

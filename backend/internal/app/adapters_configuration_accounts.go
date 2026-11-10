@@ -222,8 +222,9 @@ func (accountsEmployees) Get(ctx context.Context, q database.Querier, id string)
 
 func (accountsEmployees) Access(ctx context.Context, q database.Querier, id string) (*accounts.EmployeeAccess, error) {
 	var a accounts.EmployeeAccess
-	err := q.QueryRow(ctx, `SELECT id::text, user_id::text, is_access_app, email, full_name
-  FROM hris.employees WHERE id = $1::text::uuid`, id).Scan(&a.ID, &a.UserID, &a.IsAccessApp, &a.Email, &a.FullName)
+	err := q.QueryRow(ctx, `SELECT id::text, user_id::text, is_access_app, email, full_name,
+  coalesce(nip, ''), coalesce(to_char(join_date, 'YYYY-MM-DD'), '')
+  FROM hris.employees WHERE id = $1::text::uuid`, id).Scan(&a.ID, &a.UserID, &a.IsAccessApp, &a.Email, &a.FullName, &a.NIP, &a.JoinDate)
 	if database.IsNoRows(err) {
 		return nil, nil
 	}

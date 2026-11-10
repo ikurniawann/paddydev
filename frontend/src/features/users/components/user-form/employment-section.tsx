@@ -46,7 +46,7 @@ export function EmploymentSection({ form, lookups, onChange, isEdit = false, emp
           required
           value={form.nip}
           onChange={(nip) => onChange({ nip })}
-          placeholder="mis. 202511001"
+          placeholder="mis. 202611677 (tahun-bulan join date + nomor urut)"
           maxLength={50}
           error={nipError}
         />

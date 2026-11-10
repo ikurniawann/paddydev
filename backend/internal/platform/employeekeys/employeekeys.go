@@ -7,12 +7,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
 
 	"nuhabit/backend/internal/platform/database"
 	"nuhabit/backend/internal/platform/httpx"
+	"nuhabit/backend/internal/platform/nipformat"
 	"nuhabit/backend/internal/platform/validate"
 )
 
@@ -116,4 +118,56 @@ func deref(p *string) string {
 		return ""
 	}
 	return *p
+}
+
+// allNIPs is every NIP held, active or not (EPIC-099 numbers never reuse).
+func allNIPs(ctx context.Context, q database.Querier) ([]string, error) {
+	rows, err := q.Query(ctx, `SELECT btrim(nip) FROM hris.employees WHERE nip IS NOT NULL`)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, pgx.RowTo[string])
+}
+
+func lastFor(ctx context.Context, q database.Querier, joinDate string) (nipformat.Last, error) {
+	nips, err := allNIPs(ctx, q)
+	if err != nil {
+		return nipformat.Last{}, err
+	}
+	year := 0
+	if len(joinDate) >= 4 {
+		year, _ = strconv.Atoi(joinDate[:4])
+	}
+	return nipformat.LastFor(nips, year), nil
+}
+
+// CheckNewNIP refuses the NIP of a new employee that is not YYYYMM of the
+// join date + the next number of its series (EPIC-099), as a 400.
+func CheckNewNIP(ctx context.Context, q database.Querier, nip, joinDate, status string) error {
+	l, err := lastFor(ctx, q, joinDate)
+	if err != nil {
+		return err
+	}
+	if msg := nipformat.CheckNew(nip, joinDate, status, l); msg != "" {
+		return httpx.BadRequest(msg)
+	}
+	return nil
+}
+
+// NextNIP is the NIP that follows the latest number of the series.
+func NextNIP(ctx context.Context, q database.Querier, joinDate, status string) (string, error) {
+	l, err := lastFor(ctx, q, joinDate)
+	if err != nil {
+		return "", err
+	}
+	return nipformat.Next(joinDate, nipformat.SeriesFor(status), l), nil
+}
+
+// CheckChangedNIP refuses a replaced NIP out of the format or not matching
+// the join date's YYYYMM; its number is not checked (typo fixes).
+func CheckChangedNIP(nip, joinDate string) error {
+	if msg := nipformat.CheckChanged(nip, joinDate); msg != "" {
+		return httpx.BadRequest(msg)
+	}
+	return nil
 }
