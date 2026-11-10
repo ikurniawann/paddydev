@@ -150,7 +150,12 @@ export function ChartTree() {
         <span className="text-gray-400">· Status &quot;Rencana&quot; dan &quot;Perlu konfirmasi&quot; menunggu jawaban klien</span>
       </div>
 
-      {filtered.isLoading ? (
+      {filtered.isError ? (
+        <p role="alert" className="rounded-lg bg-danger-soft p-3 text-sm text-danger">
+          Bagan tidak bisa dimuat
+          {filtered.error instanceof Error && filtered.error.message ? ` — ${filtered.error.message}` : ""}
+        </p>
+      ) : filtered.isLoading ? (
         <div className="flex justify-center py-12">
           <div className="h-8 w-8 animate-spin rounded-full border-2 border-gray-300 border-t-blue-500" />
         </div>

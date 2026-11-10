@@ -45,3 +45,17 @@ it("menampilkan ringkasan selisih, tautan Excel, dan peringatan validasi", async
   expect(screen.getByText("Warehouse Staff")).toBeTruthy();
   expect(screen.getByText("BXST")).toBeTruthy();
 });
+
+it("gagal memuat laporan ditampilkan sebagai error", async () => {
+  api.fetchOrgChartGap.mockReset().mockRejectedValue(new Error("boom"));
+  api.fetchOrgChartValidation.mockReset().mockRejectedValue(new Error("boom"));
+  render(
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <ChartGap />
+    </QueryClientProvider>
+  );
+  const alerts = await screen.findAllByRole("alert");
+  const text = alerts.map((a) => a.textContent).join(" ");
+  expect(text).toContain("Laporan selisih tidak bisa dimuat");
+  expect(text).toContain("Validasi bagan tidak bisa dimuat");
+});

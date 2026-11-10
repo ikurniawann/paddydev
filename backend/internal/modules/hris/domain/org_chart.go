@@ -237,11 +237,14 @@ func MatchOrgChart(nodes []OrgNode, emps []OrgEmployee, aliases map[string]OrgAl
 			continue
 		}
 		// First ancestor position with a holder; a chart top has none to check.
+		// A seen set stops the climb on a cyclic chart.
 		p, ok := effectiveParent(byCode, byCode[m.NodeCode])
-		for ok && len(g.Holders[p.Code]) == 0 {
+		climbed := map[string]bool{m.NodeCode: true}
+		for ok && len(g.Holders[p.Code]) == 0 && !climbed[p.Code] {
+			climbed[p.Code] = true
 			p, ok = effectiveParent(byCode, p)
 		}
-		if !ok {
+		if !ok || climbed[p.Code] {
 			continue
 		}
 		var mgrID string
@@ -249,6 +252,12 @@ func MatchOrgChart(nodes []OrgNode, emps []OrgEmployee, aliases map[string]OrgAl
 			if e.ID == m.EmployeeID {
 				mgrID = e.ManagerID
 			}
+		}
+		// An active manager who is not placed in the chart (unknown or
+		// ambiguous title) cannot be compared: their node may be the empty
+		// one the climb skipped.
+		if mgrID != "" && names[mgrID] != "" && nodeOf[mgrID] == "" {
+			continue
 		}
 		if nodeOf[mgrID] == p.Code && mgrID != "" {
 			continue

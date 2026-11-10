@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestValidateOrgChartDraft6(t *testing.T) {
@@ -184,5 +185,41 @@ func TestMatchOrgChartEmptyParent(t *testing.T) {
 	}
 	if !strings.Contains(strings.Join(g.EmptyNodes, ","), "L1") {
 		t.Errorf("empty nodes %v", g.EmptyNodes)
+	}
+}
+
+// A manager whose own title is not in the chart leaves their node empty; their
+// people must not be reported against the grandparent (final review).
+func TestMatchOrgChartUnmatchedManager(t *testing.T) {
+	nodes, aliases := matchFixture()
+	// K1's parent L1 (Store Leader) is empty because Rina's title "Area Lead"
+	// is not in the chart; the climb would otherwise reach Dewi at S1.
+	emps := []OrgEmployee{
+		{ID: "dewi", Name: "Dewi", Title: "Store Supervisor - Jawa Barat 1"},
+		{ID: "rina", Name: "Rina", Title: "Area Lead", ManagerID: "dewi"},
+		{ID: "ani", Name: "Ani", Title: "Shopkeeper Staff", StoreCode: "PPGA", ManagerID: "rina"},
+	}
+	g := MatchOrgChart(nodes, emps, aliases, nil)
+	if m := matchOf(g, "ani"); m.NodeCode != "K1" || m.ManagerProblem != "" {
+		t.Errorf("ani %+v", m)
+	}
+}
+
+// A cycle of empty positions must not hang the climb (final review).
+func TestMatchOrgChartCycleTerminates(t *testing.T) {
+	nodes := []OrgNode{
+		{Code: "A", ParentCode: "B", Title: "Alpha", IsPosition: true},
+		{Code: "B", ParentCode: "A", Title: "Beta", IsPosition: true},
+		{Code: "C", ParentCode: "A", Title: "Gamma", IsPosition: true},
+	}
+	done := make(chan OrgGap, 1)
+	go func() { done <- MatchOrgChart(nodes, []OrgEmployee{{ID: "x", Name: "X", Title: "Gamma"}}, nil, nil) }()
+	select {
+	case g := <-done:
+		if m := matchOf(g, "x"); m.NodeCode != "C" {
+			t.Errorf("x %+v", m)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("MatchOrgChart did not return on a cyclic chart")
 	}
 }

@@ -64,7 +64,12 @@ export function ChartGap() {
         </Button>
       </div>
 
-      {gap.isLoading ? (
+      {gap.isError ? (
+        <p role="alert" className="rounded-lg bg-danger-soft p-3 text-sm text-danger">
+          Laporan selisih tidak bisa dimuat
+          {gap.error instanceof Error && gap.error.message ? ` — ${gap.error.message}` : ""}
+        </p>
+      ) : gap.isLoading ? (
         <div className="flex justify-center py-12">
           <div className="h-8 w-8 animate-spin rounded-full border-2 border-gray-300 border-t-blue-500" />
         </div>
@@ -108,6 +113,12 @@ export function ChartGap() {
         </>
       ) : null}
 
+      {validation.isError ? (
+        <p role="alert" className="rounded-lg bg-danger-soft p-3 text-sm text-danger">
+          Validasi bagan tidak bisa dimuat
+          {validation.error instanceof Error && validation.error.message ? ` — ${validation.error.message}` : ""}
+        </p>
+      ) : null}
       {validation.data ? (
         <div className="space-y-3">
           <p className="text-sm font-semibold text-gray-800">Validasi struktur bagan</p>

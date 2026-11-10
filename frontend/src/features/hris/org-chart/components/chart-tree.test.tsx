@@ -91,3 +91,14 @@ it("filter divisi memanggil API dengan division", async () => {
   fireEvent.change(screen.getByLabelText("Divisi"), { target: { value: "RTL" } });
   await waitFor(() => expect(api.fetchOrgChartTree).toHaveBeenLastCalledWith({ division: "RTL", region: "" }));
 });
+
+it("gagal memuat ditampilkan sebagai error, bukan bagan kosong", async () => {
+  api.fetchOrgChartTree.mockReset().mockRejectedValue(new Error("Insufficient permissions"));
+  render(
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <ChartTree />
+    </QueryClientProvider>
+  );
+  expect((await screen.findByRole("alert")).textContent).toContain("Bagan tidak bisa dimuat");
+  expect(screen.queryByText("Tidak ada posisi untuk filter ini")).toBeNull();
+});
