@@ -1,6 +1,6 @@
 # EPIC-098: Impor Karyawan Excel Ditolak karena NIP Atasan (`MODULE-HRIS`)
 
-status: on-progress
+status: review
 environment: dev
 retries: 0
 
@@ -36,11 +36,24 @@ Yang gagal: satu baris bermasalah memblokir **seluruh file** ("File masih punya 
 Lihat `docs/superpowers/plans/2026-11-10-impor-karyawan-nip-atasan.md`.
 
 ## Acceptance Criteria
-- [ ] File berisi SPV baru dan staf baru dengan NIP Atasan = NIP SPV tersebut lolos pratinjau dan masuk. `reporting_to` staf menunjuk SPV, baik baris SPV di atas maupun di bawah stafnya.
-- [ ] NIP Atasan `'202611676` dikenali sama dengan `202611676`.
-- [ ] Mode Tambah dengan NIP yang sudah ada menampilkan pemilik, status nonaktif bila ada, dan arahan ke mode Timpa.
-- [ ] NIP Atasan yang tidak ada di HRIS maupun di file tetap ditolak.
-- [ ] Gate hijau: unit dan integration `backend/internal/modules/hris`, serta CI PR.
+- [x] File berisi SPV baru dan staf baru dengan NIP Atasan = NIP SPV tersebut lolos pratinjau dan masuk. `reporting_to` staf menunjuk SPV, baik baris SPV di atas maupun di bawah stafnya.
+- [x] NIP Atasan `'202611676` dikenali sama dengan `202611676`.
+- [x] Mode Tambah dengan NIP yang sudah ada menampilkan pemilik, status nonaktif bila ada, dan arahan ke mode Timpa.
+- [x] NIP Atasan yang tidak ada di HRIS maupun di file tetap ditolak.
+- [x] Gate hijau: unit dan integration `backend/internal/modules/hris`, serta CI PR.
 
 ## Automation Log
 - 2026-11-10: Laporan user. Reproduksi di staging: B1, B2, B3 terbukti; jalur NIP teks, angka, kutip, dan NBSP sudah benar. Data uji dan sesi QA staging sudah dihapus. Rencana ditulis.
+- 2026-11-10: **Implementasi Native** di branch `fix/impor-karyawan-nip-atasan`.
+  - Task 1 (domain, 7f64f523): NIP Atasan memakai `CleanNIP`; pre-pass `newInFile` menandai `ManagerNIPNew`; pesan mode Tambah memuat pemilik, `(nonaktif)`, dan arahan Timpa.
+  - Task 2 (service, dad3155a): `reporting_to` dipasang setelah semua insert dalam transaksi impor, ditambah audit `employee.update`. Baris Timpa yang perubahannya hanya atasan baru dihitung update.
+  - Review akhir (opus): Critical 0, Important 1, Minor 5.
+    - Important diperbaiki (916493ff): baris karyawan resign tetap ditolak walau atasannya dibuat di file yang sama. Tes `TestValidateEmployeeImportReplaceResignedNewManager` RED→GREEN.
+    - Minor ditunda: pesan notasi ilmiah menyebut "kolom NIP", label audit, error DB jadi 400, siklus atasan.
+  - Gate: `go test ./internal/modules/hris/...` hijau (DB uji migrasi 587).
+  - Staging 07.13 (image `local-20261110-071340`, backup `/mnt/hdd1/backup/paddydev/staging-before-e098-20261110-070757.dump`):
+    - B1: SPV + staf di satu file masuk, atasan staf = SPV;
+    - B2: NIP Atasan `'202611676` diterima;
+    - B3: pesan "sudah dipakai Naisya Septya Wardhani (nonaktif) — … pakai mode Timpa".
+    - Data dan sesi uji sudah dihapus.
+  - Deploy staging pertama gagal karena cache build Docker modul Go rusak (excelize `lib.go`), kemungkinan sisa disk penuh 09-11. Build `--no-cache` berhasil dan deploy ulang lancar.
