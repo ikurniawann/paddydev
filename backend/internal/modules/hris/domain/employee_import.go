@@ -111,6 +111,9 @@ type EmployeeImportRow struct {
 	Set              map[string]any
 	Branch           string
 	ReleaseEmailFrom string
+	// ManagerNIPNew is NIP Atasan when that manager is a new employee created
+	// by the same file (EPIC-098); reporting_to is set after the inserts.
+	ManagerNIPNew string
 }
 
 var columnHeader = func() map[string]string {
@@ -173,6 +176,20 @@ func ValidateEmployeeImport(mode string, header []string, rows [][]string, first
 		}
 		return ""
 	}
+	// EPIC-098: NIPs this file creates (absent from HRIS), so NIP Atasan may
+	// point at a new employee above or below the staff row.
+	newInFile := map[string]bool{}
+	for _, cells := range rows {
+		for j, k := range keys {
+			if k == "nip" && j < len(cells) {
+				if n, _ := CleanNIP(cells[j]); n != "" {
+					if _, exists := lk.ExistingNIP[n]; !exists {
+						newInFile[n] = true
+					}
+				}
+			}
+		}
+	}
 	for i, cells := range rows {
 		line := firstLine + i
 		v := map[string]string{}
@@ -202,7 +219,12 @@ func ValidateEmployeeImport(mode string, header []string, rows [][]string, first
 		case nip != "" && seen[nip] > 0:
 			fail("nip", fmt.Sprintf("NIP %s ganda (baris %d & %d)", nip, seen[nip], line))
 		case mode == "add" && nip != "" && exists:
-			errs = append(errs, UploadIssue{Line: line, Message: "NIP " + nip + " sudah ada (mode Tambah hanya untuk karyawan baru)"})
+			owner := existing.Name
+			if !existing.Active {
+				owner += " (nonaktif)"
+			}
+			errs = append(errs, UploadIssue{Line: line, Message: "NIP " + nip + " sudah dipakai " + owner +
+				" — mode Tambah hanya untuk karyawan baru; pakai mode Timpa untuk memperbarui"})
 		case mode == "replace" && nip == "" && msg == "":
 			fail("nip", "wajib diisi di mode Timpa")
 		case mode == "add" && nip == "" && msg == "":
@@ -322,16 +344,23 @@ func ValidateEmployeeImport(mode string, header []string, rows [][]string, first
 					row.Set["job_title_id"] = id
 				}
 			case k == "manager_nip":
-				if m, _ := CleanNIP(val); m != "" && m == nip {
+				// EPIC-098: cleaned like NIP (leading quote, Excel number format).
+				m, msg := CleanNIP(val)
+				if msg != "" {
+					fail(k, msg)
+					continue
+				}
+				if m == nip {
 					fail(k, "NIP atasan tidak boleh NIP karyawan itu sendiri")
 					continue
 				}
-				id, ok := lk.ManagerNIP[val]
-				if !ok {
-					fail(k, "NIP atasan "+val+" tidak ditemukan / tidak aktif")
-					continue
+				if id, ok := lk.ManagerNIP[m]; ok {
+					row.Set["reporting_to"] = id
+				} else if newInFile[m] {
+					row.ManagerNIPNew = m // set after the manager row is inserted
+				} else {
+					fail(k, "NIP atasan "+m+" tidak ditemukan / tidak aktif")
 				}
-				row.Set["reporting_to"] = id
 			case k == "ktp":
 				d := CleanDigits(val)
 				if !isDigits(d) || len(d) != 16 {
@@ -367,10 +396,10 @@ func ValidateEmployeeImport(mode string, header []string, rows [][]string, first
 		}
 		// A resigned employee is not edited through the file (an old export
 		// would otherwise put back an active status on an inactive row).
-		if row.Action == "update" && !existing.Active && (len(row.Set) > 0 || row.Branch != "") {
+		if row.Action == "update" && !existing.Active && (len(row.Set) > 0 || row.Branch != "" || row.ManagerNIPNew != "") {
 			errs = append(errs, UploadIssue{Line: line, Message: fmt.Sprintf(
 				"NIP %s (%s) sudah resign — data karyawan resign tidak diubah lewat import", nip, existing.Name)})
-			row.Set, row.Branch = map[string]any{}, ""
+			row.Set, row.Branch, row.ManagerNIPNew = map[string]any{}, "", ""
 		}
 		out = append(out, row)
 	}

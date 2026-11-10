@@ -3,6 +3,7 @@ package domain
 import (
 	"regexp"
 	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -59,7 +60,7 @@ func TestValidateEmployeeImportAdd(t *testing.T) {
 	}
 	out, errs, warns := ValidateEmployeeImport("add", hdr, rows, 2, lk())
 	wantErr := []string{
-		"Baris 3: NIP 202505272 sudah ada (mode Tambah hanya untuk karyawan baru)",
+		"Baris 3: NIP 202505272 sudah dipakai Feti — mode Tambah hanya untuk karyawan baru; pakai mode Timpa untuk memperbarui",
 		"Baris 4, kolom Email: wajib diisi untuk karyawan baru",
 		"Baris 5, kolom Status Kepegawaian: 'Karyawan Tetap' tidak ada di daftar pilihan",
 		"Baris 6, kolom NIK (KTP): harus 16 angka",
@@ -216,11 +217,105 @@ func TestValidateEmployeeImportReplaceRefusesResignedRows(t *testing.T) {
 	}
 }
 
+// EPIC-098 review: a resigned row stays refused when its only change is a
+// NIP Atasan created by the same file.
+func TestValidateEmployeeImportReplaceResignedNewManager(t *testing.T) {
+	l := lk()
+	l.ExistingNIP["201901001"] = EmployeeRef{ID: "e9", NIP: "201901001", Name: "Lama", Active: false}
+	rows := [][]string{
+		{"201901001", "", "", "", "", "", "", "", "", "", "", "202611051"},
+		mgrRow("202611051", "SPV Baru", "spv5@x.id", ""),
+	}
+	out, errs, _ := ValidateEmployeeImport("replace", mgrHdr, rows, 2, l)
+	if !issueText(errs, "Baris 2: NIP 201901001 (Lama) sudah resign — data karyawan resign tidak diubah lewat import") || out[0].ManagerNIPNew != "" {
+		t.Fatalf("errs %+v row %+v", errs, out[0])
+	}
+}
+
 func TestValidateEmployeeImportRefusesSelfManager(t *testing.T) {
 	header := append(append([]string{}, hdr...), "NIP Atasan")
 	rows := [][]string{{"202505272", "Feti", "", "", "", "", "", "", "", "", "", "202505272"}}
 	_, errs, _ := ValidateEmployeeImport("replace", header, rows, 2, lk())
 	if !issueText(errs, "Baris 2, kolom NIP Atasan: NIP atasan tidak boleh NIP karyawan itu sendiri") {
+		t.Fatalf("errors %+v", errs)
+	}
+}
+
+// EPIC-098 B1: a manager may be a new employee created by the same file,
+// above or below the staff row.
+func mgrRow(nip, name, email, manager string) []string {
+	return []string{nip, name, email, "", "21/10/2026", "Kontrak (PKWT)", "Shift", "PPLN", "", "", "", manager}
+}
+
+var mgrHdr = append(append([]string{}, hdr...), "NIP Atasan")
+
+func TestValidateEmployeeImportManagerInSameFile(t *testing.T) {
+	rows := [][]string{
+		mgrRow("202611011", "Staf Satu", "s1@x.id", "202611012"),
+		mgrRow("202611012", "SPV Baru", "spv@x.id", ""),
+		mgrRow("202611013", "Staf Dua", "s2@x.id", "202611012"),
+		mgrRow("202611014", "Staf Tiga", "s3@x.id", "202611099"),
+	}
+	out, errs, _ := ValidateEmployeeImport("add", mgrHdr, rows, 2, lk())
+	if len(errs) != 1 || !issueText(errs, "Baris 5, kolom NIP Atasan: NIP atasan 202611099 tidak ditemukan / tidak aktif") {
+		t.Fatalf("errors %+v", errs)
+	}
+	if out[0].ManagerNIPNew != "202611012" || out[2].ManagerNIPNew != "202611012" {
+		t.Fatalf("pending managers %q %q", out[0].ManagerNIPNew, out[2].ManagerNIPNew)
+	}
+	if _, ok := out[0].Set["reporting_to"]; ok {
+		t.Fatalf("reporting_to must wait for the insert: %+v", out[0].Set)
+	}
+}
+
+// EPIC-098 B2: NIP Atasan is cleaned like NIP (leading quote, Excel number).
+func TestValidateEmployeeImportManagerNIPQuoted(t *testing.T) {
+	rows := [][]string{
+		mgrRow("202611031", "Kutip", "k@x.id", "'202310037"),
+		mgrRow("202611032", "Ilmiah", "i@x.id", "2,02E+08"),
+	}
+	out, errs, _ := ValidateEmployeeImport("add", mgrHdr, rows, 2, lk())
+	if out[0].Set["reporting_to"] != "m1" {
+		t.Fatalf("quoted manager = %+v", out[0].Set)
+	}
+	if len(errs) != 1 || errs[0].Line != 3 || errs[0].Column != "NIP Atasan" || !strings.Contains(errs[0].Message, "format angka Excel") {
+		t.Fatalf("errors %+v", errs)
+	}
+}
+
+// A new manager row with its own error blocks the file by itself; its staff
+// row gets no misleading "not found".
+func TestValidateEmployeeImportManagerRowHasError(t *testing.T) {
+	rows := [][]string{
+		mgrRow("202611041", "SPV Tanpa Email", "", ""),
+		mgrRow("202611042", "Staf", "st@x.id", "202611041"),
+	}
+	_, errs, _ := ValidateEmployeeImport("add", mgrHdr, rows, 2, lk())
+	if len(errs) != 1 || errs[0].Line != 2 {
+		t.Fatalf("errors %+v", errs)
+	}
+}
+
+// Replace mode: a new NIP acts as create and may be another new row's manager.
+func TestValidateEmployeeImportReplaceNewManager(t *testing.T) {
+	rows := [][]string{
+		mgrRow("202611021", "SPV Baru", "spv2@x.id", ""),
+		mgrRow("202611022", "Staf Baru", "st2@x.id", "202611021"),
+	}
+	out, errs, _ := ValidateEmployeeImport("replace", mgrHdr, rows, 2, lk())
+	if len(errs) != 0 || out[1].ManagerNIPNew != "202611021" {
+		t.Fatalf("errors %+v row %+v", errs, out[1])
+	}
+}
+
+// EPIC-098 B3: Tambah keeps refusing an existing NIP but names the owner,
+// flags an inactive one and points to Timpa.
+func TestValidateEmployeeImportAddExistingNIPMessage(t *testing.T) {
+	l := lk()
+	l.ExistingNIP["201901001"] = EmployeeRef{ID: "e9", NIP: "201901001", Name: "Lama", Active: false}
+	rows := [][]string{mgrRow("201901001", "Lama Lagi", "lagi@x.id", "")}
+	_, errs, _ := ValidateEmployeeImport("add", mgrHdr, rows, 2, l)
+	if !issueText(errs, "Baris 2: NIP 201901001 sudah dipakai Lama (nonaktif) — mode Tambah hanya untuk karyawan baru; pakai mode Timpa untuk memperbarui") {
 		t.Fatalf("errors %+v", errs)
 	}
 }
