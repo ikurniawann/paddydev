@@ -254,7 +254,7 @@ func employeeWorkbook(rows [][]any, l *employeeLists) ([]byte, error) {
 	hints := map[string]string{
 		"nip": "Teks. Wajib diisi, tidak dibuat otomatis", "phone": "Diawali 08 / 62 / +62",
 		"join_date": "DD/MM/YYYY", "birth_date": "DD/MM/YYYY", "ktp": "16 angka", "npwp": "15–16 angka",
-		"manager_nip": "NIP atasan langsung", "email": "Alamat email aktif",
+		"manager_nip": "NIP atasan langsung (boleh NIP karyawan baru di file yang sama)", "email": "Alamat email aktif",
 	}
 	for _, c := range domain.EmployeeColumns {
 		req := ""
@@ -526,7 +526,7 @@ func (s *Service) ImportEmployees(ctx context.Context, actor *auth.User, in empl
 					before["branch"], set["branch"] = curBranch, row.Branch
 				}
 				p.row.Set, p.before = set, before
-				if len(set) == 0 {
+				if len(set) == 0 && row.ManagerNIPNew == "" {
 					summary["skip"]++
 					continue
 				}
@@ -536,6 +536,10 @@ func (s *Service) ImportEmployees(ctx context.Context, actor *auth.User, in empl
 						changes = append(changes, employeeImportChange{Line: row.Line, NIP: row.NIP, Name: row.Name, Field: headerOf(k),
 							Before: displayValue(k, before[k], l, names), After: displayValue(k, v, l, names)})
 					}
+				}
+				if row.ManagerNIPNew != "" && len(changes) < 500 {
+					changes = append(changes, employeeImportChange{Line: row.Line, NIP: row.NIP, Name: row.Name, Field: headerOf("reporting_to"),
+						Before: displayValue("reporting_to", cur["reporting_to"], l, names), After: row.ManagerNIPNew})
 				}
 			} else {
 				p.branch = row.Branch
@@ -559,7 +563,38 @@ func (s *Service) ImportEmployees(ctx context.Context, actor *auth.User, in empl
 			}
 		}
 		for _, p := range plans {
+			if p.row.Action == "update" && len(p.row.Set) == 0 && p.branch == "" {
+				continue // only a manager created by this file changes; set below
+			}
 			if err := s.applyImportRow(ctx, r, actor, p.row, p.id, p.before, p.branch, today, in.Guard, in.SuperAdmin); err != nil {
+				return err
+			}
+		}
+		// EPIC-098: NIP Atasan pointing at a new employee of this file is set
+		// once every row is inserted, so row order does not matter.
+		for _, p := range plans {
+			if p.row.ManagerNIPNew == "" {
+				continue
+			}
+			var empID, oldManager, managerID string
+			if err := q.QueryRow(ctx, `SELECT e.id::text, coalesce(e.reporting_to::text, ''), m.id::text
+				FROM hris.employees e, hris.employees m WHERE e.nip = $1 AND m.nip = $2`,
+				p.row.NIP, p.row.ManagerNIPNew).Scan(&empID, &oldManager, &managerID); err != nil {
+				return httpx.BadRequest(fmt.Sprintf("Baris %d: NIP atasan %s gagal dipasang", p.row.Line, p.row.ManagerNIPNew))
+			}
+			if _, err := q.Exec(ctx, `UPDATE hris.employees SET reporting_to = $2, updated_at = now() WHERE id = $1`, empID, managerID); err != nil {
+				return err
+			}
+			var before any
+			if oldManager != "" {
+				before = oldManager
+			}
+			label := p.row.Name
+			if label == "" {
+				label, _ = p.row.Set["full_name"].(string)
+			}
+			if err := writeEmployeeAudit(ctx, q, actor, "employee.update", empID, label,
+				map[string]any{"reporting_to": before}, map[string]any{"reporting_to": managerID}); err != nil {
 				return err
 			}
 		}

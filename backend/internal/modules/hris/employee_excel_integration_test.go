@@ -199,3 +199,52 @@ func TestEmployeeImportAddAndReplace(t *testing.T) {
 		t.Fatalf("add message = %v", msg)
 	}
 }
+
+// EPIC-098: NIP Atasan may be a new employee created by the same file, even
+// when the manager's row comes after the staff row.
+func TestEmployeeImportManagerInSameFile(t *testing.T) {
+	h := newHarness(t)
+	hr, _ := h.staff("hrd", iam.HrisKepegawaian, false)
+	h.exec(`INSERT INTO configuration.branches (company_id, name, code)
+		SELECT id, 'Cabang Atasan', 'CA'||substr(md5(random()::text),1,4) FROM configuration.companies LIMIT 1`)
+	h.exec(`INSERT INTO hris.employment_statuses (code, name, is_active) VALUES ('contract', 'Kontrak (PKWT)', true) ON CONFLICT (code) DO NOTHING`)
+	header := []string{"NIP", "Nama Lengkap *", "Email *", "Tanggal Masuk *", "Status Kepegawaian *", "Tipe Jadwal *", "Cabang Utama *", "NIP Atasan"}
+	suffix := fmt.Sprintf("%05d", time.Now().UnixNano()/1000%100000)
+	staff, spv := "98S"+suffix, "98M"+suffix
+	file := employeeFile(t, header,
+		[]string{staff, "Staf Baru", "staf." + suffix + "@test.id", "21/10/2026", "Kontrak (PKWT)", "Shift", "Cabang Atasan", spv},
+		[]string{spv, "SPV Baru", "spv." + suffix + "@test.id", "21/10/2026", "Kontrak (PKWT)", "Shift", "Cabang Atasan", ""})
+	pre := uploadEmployees(t, h, &hr, map[string]string{"mode": "add", "step": "preview"}, file)
+	expect(t, pre, http.StatusOK, "")
+	if errs := pre.data()["errors"].([]any); len(errs) != 0 || pre.data()["summary"].(map[string]any)["create"] != float64(2) {
+		t.Fatalf("preview = %v", pre.data())
+	}
+	if h.scalar(`SELECT count(*)::text FROM hris.employees WHERE nip IN ($1, $2)`, staff, spv) != "0" {
+		t.Fatal("preview must not write")
+	}
+	commit := uploadEmployees(t, h, &hr, map[string]string{"mode": "add", "step": "commit"}, file)
+	expect(t, commit, http.StatusOK, "")
+	if got := h.scalar(`SELECT m.nip FROM hris.employees e JOIN hris.employees m ON m.id = e.reporting_to WHERE e.nip = $1`, staff); got != spv {
+		t.Fatalf("staff manager = %q, want %q", got, spv)
+	}
+	spvID := h.scalar(`SELECT id::text FROM hris.employees WHERE nip = $1`, spv)
+	if h.scalar(`SELECT count(*)::text FROM audit.audit_log a JOIN hris.employees e ON e.id::text = a.entity_id::text
+		WHERE e.nip = $1 AND a.after->>'reporting_to' = $2`, staff, spvID) != "1" {
+		t.Fatal("audit for reporting_to missing")
+	}
+	// Timpa: an existing employee moves under a new SPV created by the same
+	// file; the row's only change is NIP Atasan.
+	spv2 := "98N" + suffix
+	move := employeeFile(t, header,
+		[]string{staff, "", "", "", "", "", "", spv2},
+		[]string{spv2, "SPV Dua", "spv2." + suffix + "@test.id", "21/10/2026", "Kontrak (PKWT)", "Shift", "Cabang Atasan", ""})
+	pre2 := uploadEmployees(t, h, &hr, map[string]string{"mode": "replace", "step": "preview"}, move)
+	expect(t, pre2, http.StatusOK, "")
+	if sum := pre2.data()["summary"].(map[string]any); sum["create"] != float64(1) || sum["update"] != float64(1) {
+		t.Fatalf("replace preview = %v", pre2.data())
+	}
+	expect(t, uploadEmployees(t, h, &hr, map[string]string{"mode": "replace", "step": "commit"}, move), http.StatusOK, "")
+	if got := h.scalar(`SELECT m.nip FROM hris.employees e JOIN hris.employees m ON m.id = e.reporting_to WHERE e.nip = $1`, staff); got != spv2 {
+		t.Fatalf("moved manager = %q, want %q", got, spv2)
+	}
+}
