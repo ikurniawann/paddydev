@@ -3,9 +3,9 @@
 // 1000 on). HR still types the NIP; this only says whether it is right.
 //
 // Two series exist in the data. The main series is one running number since
-// 2016 that never restarts. The harian series (Daily Worker, Freelance,
-// Magang) restarts at 001 every year and stays at or below the highest
-// number used before that year (its cap), so the two never mix.
+// 2016 that never restarts; new main numbers are at least 500. The harian
+// series (Daily Worker, Freelance, Magang) restarts at 001 every year and
+// stays at or below 499, so the two never mix.
 package nipformat
 
 import (
@@ -47,31 +47,30 @@ func Parse(nip string) (ym string, seq int, ok bool) {
 	return m[1] + m[2], seq, true
 }
 
-// Last holds the latest numbers for a join year. HarianCap 0 = no cap (no
-// NIP of an earlier year exists).
-type Last struct{ Main, Harian, HarianCap int }
+// HarianMax is the highest number of the harian series; the main series
+// starts above it (final review ruling 10-11: a fixed split, so a back-dated
+// main hire never moves the harian series).
+const (
+	HarianMax = 499
+	MainMin   = HarianMax + 1
+)
+
+// Last holds the latest number of each series for a join year.
+type Last struct{ Main, Harian int }
 
 // LastFor computes Last for the given year from every NIP held; NIPs not
-// in the format are ignored.
+// in the format are ignored. Main is the largest number of any year (it
+// never restarts); Harian the largest number up to HarianMax of that year.
 func LastFor(nips []string, year int) Last {
-	type parsed struct{ year, seq int }
-	var ps []parsed
 	var l Last
 	for _, n := range nips {
 		ym, seq, ok := Parse(n)
 		if !ok {
 			continue
 		}
-		y, _ := strconv.Atoi(ym[:4])
-		ps = append(ps, parsed{y, seq})
 		l.Main = max(l.Main, seq)
-		if y < year {
-			l.HarianCap = max(l.HarianCap, seq)
-		}
-	}
-	for _, p := range ps {
-		if p.year == year && (l.HarianCap == 0 || p.seq <= l.HarianCap) {
-			l.Harian = max(l.Harian, p.seq)
+		if y, _ := strconv.Atoi(ym[:4]); y == year && seq <= HarianMax {
+			l.Harian = max(l.Harian, seq)
 		}
 	}
 	return l
@@ -94,7 +93,11 @@ func last(s Series, l Last) int {
 
 // Next is the NIP that follows the latest number of the series.
 func Next(joinDate string, s Series, l Last) string {
-	return fmt.Sprintf("%s%03d", yearMonth(joinDate), last(s, l)+1)
+	n := last(s, l) + 1
+	if s == Main {
+		n = max(n, MainMin)
+	}
+	return fmt.Sprintf("%s%03d", yearMonth(joinDate), n)
 }
 
 // CheckNew is the message refusing nip for a new employee ("" = accepted).
@@ -109,14 +112,17 @@ func CheckNew(nip, joinDate, status string, l Last) string {
 		if seq <= l.Main {
 			return fmt.Sprintf("NIP %s: nomor urut terakhir karyawan %03d — pakai nomor berikutnya, mis. %s", nip, l.Main, next)
 		}
+		if seq < MainMin {
+			return fmt.Sprintf("NIP %s: nomor urut karyawan mulai %d (001–%03d untuk %s) — mis. %s", nip, MainMin, HarianMax, harianLabel, next)
+		}
 		return ""
 	}
 	year := joinDate[:4]
 	if seq <= l.Harian {
 		return fmt.Sprintf("NIP %s: nomor urut terakhir %s %s adalah %03d — pakai nomor berikutnya, mis. %s", nip, harianLabel, year, l.Harian, next)
 	}
-	if l.HarianCap > 0 && seq > l.HarianCap {
-		return fmt.Sprintf("NIP %s: nomor urut %s %s maksimal %03d — mis. %s", nip, harianLabel, year, l.HarianCap, next)
+	if seq > HarianMax {
+		return fmt.Sprintf("NIP %s: nomor urut %s %s maksimal %03d — mis. %s", nip, harianLabel, year, HarianMax, next)
 	}
 	return ""
 }

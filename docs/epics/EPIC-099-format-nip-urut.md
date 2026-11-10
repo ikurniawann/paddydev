@@ -30,15 +30,10 @@ Nomor pernah dipakai dua kali dengan bulan berbeda. Contohnya `202601518` (sudah
   Pesan penolakan menyebut nomor terakhir dan contoh NIP berikutnya.
   Berlaku di: `POST /api/users` (dengan data karyawan), `POST /api/hris/employees`, `POST /api/hris/promote`, dan baris *create* impor Excel (mode Tambah maupun Timpa).
 - **R2 — Dua deret.**
-  - Status awal `daily_worker`, `freelance`, atau `intern` → **deret harian** tahun join date.
-  - Status lain → **deret utama**.
-
-  Cara menghitung nomor terakhir dari NIP yang berformat:
-  - **Deret utama** = nomor urut terbesar dari semua NIP berformat.
-  - **Batas harian tahun Y** = nomor urut terbesar dari NIP berformat dengan tahun < Y (2026: 507). Kalau tidak ada NIP tahun sebelumnya, batasnya tidak ada.
-  - **Deret harian tahun Y** = nomor urut terbesar dari NIP berformat bertahun Y yang nomornya ≤ batas harian tahun Y.
-
-  Nomor harian harus berada di atas nomor terakhir deret harian dan **tidak boleh melewati batas harian tahun itu**, agar kedua deret tidak tercampur.
+  - Status awal `daily_worker`, `freelance`, `intern`, atau `internship` (Magang dari Promosi) → **deret harian** tahun join date. Status lain → **deret utama**.
+  - **Deret utama** = nomor urut terbesar dari semua NIP berformat, dari tahun mana pun. Nomor baru selalu **≥ 500**.
+  - **Deret harian tahun Y** = nomor urut terbesar dari NIP berformat bertahun Y yang nomornya **≤ 499**. Nomor harian baru harus di atas nomor itu dan **maksimal 499**.
+  - *Revisi 10-11 (review akhir).* Rancangan awal memakai "batas harian = nomor terbesar tahun-tahun sebelumnya" (2026: 507). Rancangan itu rusak bila ada karyawan reguler back-dated, mis. `202512677` untuk join Desember 2025 yang dimasukkan pada 2026: batas harian 2026 naik ke 677, nomor utama 508–676 ikut terhitung harian, dan Daily Worker/Freelance/Magang tidak bisa dibuat sampai akhir tahun. User memilih **batas tetap 499**.
 - **R3 — Lewat 999 lanjut 4 digit.** Contoh: nomor 1000 di Januari 2028 menjadi `2028011000` (10 angka). Nomor tidak pernah mulai ulang.
 - **R4 — NIP lama dibiarkan.** Aturan R1.1 dan R1.2 hanya dicek saat ubah karyawan jika **NIP-nya diganti**, dibandingkan dengan join date baru (bila dikirim) atau join date lama. Saat ubah tidak ada cek nomor urut, karena koreksi salah ketik harus tetap bisa. Mengubah join date saja tidak mengecek NIP.
 - **R5 — Satu file impor.** Dua baris baru di satu file tidak boleh memakai nomor urut yang sama dalam satu deret. Contoh: `202611677` dan `202612677` → error di baris kedua.
@@ -52,7 +47,8 @@ Lihat `docs/superpowers/plans/2026-11-10-format-nip-urut.md`.
 - [ ] `202611650` ditolak dengan pesan "nomor urut terakhir karyawan 676 … mis. 202611677".
 - [ ] `202610677` dengan join 2026-11-10 ditolak karena 6 digit depan harus `202611`.
 - [ ] `2026-11-677`, `20261167`, dan `202613001` ditolak dengan pesan format.
-- [ ] Daily Worker join 2026-11 dengan `202611096` → tersimpan. `202611090` ditolak (terakhir 095). `202611700` ditolak karena melewati batas 507.
+- [ ] Daily Worker join 2026-11 dengan `202611096` → tersimpan. `202611090` ditolak (terakhir 095). `202611700` ditolak karena melewati batas 499.
+- [ ] Karyawan reguler back-dated (`202512677`, join 2025-12) tidak mengubah deret harian 2026.
 - [ ] Impor Excel menerapkan aturan yang sama per baris, termasuk nomor ganda dalam satu file (R5).
 - [ ] Ubah NIP karyawan lama ke bentuk yang salah format → ditolak. Ubah data lain tanpa mengganti NIP → tetap tersimpan, walau NIP lamanya `EMP-…`.
 - [ ] Gate hijau: Go `./internal/...`, vitest yang terdampak, dan CI PR.

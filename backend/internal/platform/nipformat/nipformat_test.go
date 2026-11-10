@@ -47,14 +47,44 @@ func TestSeriesFor(t *testing.T) {
 }
 
 func TestLastFor(t *testing.T) {
-	if got, want := LastFor(data, 2026), (Last{Main: 676, Harian: 95, HarianCap: 507}); got != want {
+	if got, want := LastFor(data, 2026), (Last{Main: 676, Harian: 95}); got != want {
 		t.Errorf("LastFor(data, 2026) = %+v, want %+v", got, want)
 	}
-	if got, want := LastFor(data, 2027), (Last{Main: 676, Harian: 0, HarianCap: 676}); got != want {
+	if got, want := LastFor(data, 2027), (Last{Main: 676, Harian: 0}); got != want {
 		t.Errorf("LastFor(data, 2027) = %+v, want %+v", got, want)
 	}
-	if got, want := LastFor([]string{"202611005"}, 2026), (Last{Main: 5, Harian: 5, HarianCap: 0}); got != want {
+	if got, want := LastFor([]string{"202611005"}, 2026), (Last{Main: 5, Harian: 5}); got != want {
 		t.Errorf("LastFor(single, 2026) = %+v, want %+v", got, want)
+	}
+}
+
+// A back-dated main hire (join Dec 2025, entered in 2026) must not move the
+// harian series of 2026 (final review, ruling: harian 001–499, main ≥ 500).
+func TestBackdatedMainKeepsHarian(t *testing.T) {
+	nips := append(append([]string{}, data...), "202512677")
+	l := LastFor(nips, 2026)
+	if want := (Last{Main: 677, Harian: 95}); l != want {
+		t.Fatalf("LastFor = %+v, want %+v", l, want)
+	}
+	if msg := CheckNew("202611096", "2026-11-10", "daily_worker", l); msg != "" {
+		t.Fatalf("daily worker refused after a back-dated hire: %q", msg)
+	}
+	if msg := CheckNew("202611678", "2026-11-10", "probation", l); msg != "" {
+		t.Fatalf("main refused: %q", msg)
+	}
+}
+
+func TestMainStartsAt500(t *testing.T) {
+	l := LastFor([]string{"202611005"}, 2026)
+	if got := Next("2026-11-10", Main, l); got != "202611500" {
+		t.Errorf("Next main in a young database = %q, want 202611500", got)
+	}
+	if got := Next("2026-11-10", Harian, l); got != "202611006" {
+		t.Errorf("Next harian = %q", got)
+	}
+	want := "NIP 202611006: nomor urut karyawan mulai 500 (001–499 untuk Daily Worker/Freelance/Magang) — mis. 202611500"
+	if msg := CheckNew("202611006", "2026-11-10", "probation", l); msg != want {
+		t.Errorf("got %q\nwant %q", msg, want)
 	}
 }
 
@@ -90,7 +120,7 @@ func TestCheckNew(t *testing.T) {
 		{"202610677", "2026-11-10", "probation", "NIP 202610677: 6 digit depan harus 202611 (tahun-bulan join date)"},
 		{"202611650", "2026-11-10", "probation", "NIP 202611650: nomor urut terakhir karyawan 676 — pakai nomor berikutnya, mis. 202611677"},
 		{"202611090", "2026-11-10", "freelance", "NIP 202611090: nomor urut terakhir Daily Worker/Freelance/Magang 2026 adalah 095 — pakai nomor berikutnya, mis. 202611096"},
-		{"202611700", "2026-11-10", "intern", "NIP 202611700: nomor urut Daily Worker/Freelance/Magang 2026 maksimal 507 — mis. 202611096"},
+		{"202611700", "2026-11-10", "intern", "NIP 202611700: nomor urut Daily Worker/Freelance/Magang 2026 maksimal 499 — mis. 202611096"},
 	}
 	for _, c := range refused {
 		if msg := CheckNew(c.nip, c.join, c.status, l); msg != c.want {

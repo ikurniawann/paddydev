@@ -49,12 +49,12 @@ var hdr = []string{"NIP", "Nama Lengkap *", "Email *", "No. HP", "Tanggal Masuk 
 
 func TestValidateEmployeeImportAdd(t *testing.T) {
 	rows := [][]string{
-		{"202610301", "Baru Satu", "baru@x.id", "0812-3456-7890", "21/10/2026", "Kontrak (PKWT)", "Shift", "PPLN", "Perempuan", "3273012345678901", "Aktif"},
+		{"202610501", "Baru Satu", "baru@x.id", "0812-3456-7890", "21/10/2026", "Kontrak (PKWT)", "Shift", "PPLN", "Perempuan", "3273012345678901", "Aktif"},
 		{"202505272", "Feti", "feti@x.id", "", "01/06/2025", "Kontrak (PKWT)", "Shift", "PPLN", "", "", ""},
-		{"202610302", "Tanpa Email", "", "", "21/10/2026", "Kontrak (PKWT)", "Shift", "PPLN", "", "", ""},
-		{"202610303", "Status Salah", "s@x.id", "", "21/10/2026", "Karyawan Tetap", "Shift", "PPLN", "", "", ""},
-		{"202610304", "NIK Pendek", "n@x.id", "", "2026-10-21", "Kontrak (PKWT)", "shift", "ppln", "", "3273", ""},
-		{"202610305", "Email Lama", "lama@x.id", "", "21/10/2026", "Kontrak (PKWT)", "Shift", "PPLN", "", "", ""},
+		{"202610502", "Tanpa Email", "", "", "21/10/2026", "Kontrak (PKWT)", "Shift", "PPLN", "", "", ""},
+		{"202610503", "Status Salah", "s@x.id", "", "21/10/2026", "Karyawan Tetap", "Shift", "PPLN", "", "", ""},
+		{"202610504", "NIK Pendek", "n@x.id", "", "2026-10-21", "Kontrak (PKWT)", "shift", "ppln", "", "3273", ""},
+		{"202610505", "Email Lama", "lama@x.id", "", "21/10/2026", "Kontrak (PKWT)", "Shift", "PPLN", "", "", ""},
 		{"", "Tanpa NIP", "tanpa@x.id", "", "21/10/2026", "Kontrak (PKWT)", "Shift", "PPLN", "", "", ""},
 		{"   ", "NIP Spasi", "spasi@x.id", "", "21/10/2026", "Kontrak (PKWT)", "Shift", "PPLN", "", "", ""},
 	}
@@ -223,8 +223,8 @@ func TestValidateEmployeeImportReplaceResignedNewManager(t *testing.T) {
 	l := lk()
 	l.ExistingNIP["201901001"] = EmployeeRef{ID: "e9", NIP: "201901001", Name: "Lama", Active: false}
 	rows := [][]string{
-		{"201901001", "", "", "", "", "", "", "", "", "", "", "202610351"},
-		mgrRow("202610351", "SPV Baru", "spv5@x.id", ""),
+		{"201901001", "", "", "", "", "", "", "", "", "", "", "202610551"},
+		mgrRow("202610551", "SPV Baru", "spv5@x.id", ""),
 	}
 	out, errs, _ := ValidateEmployeeImport("replace", mgrHdr, rows, 2, l)
 	if !issueText(errs, "Baris 2: NIP 201901001 (Lama) sudah resign — data karyawan resign tidak diubah lewat import") || out[0].ManagerNIPNew != "" {
@@ -251,16 +251,16 @@ var mgrHdr = append(append([]string{}, hdr...), "NIP Atasan")
 
 func TestValidateEmployeeImportManagerInSameFile(t *testing.T) {
 	rows := [][]string{
-		mgrRow("202610311", "Staf Satu", "s1@x.id", "202610312"),
-		mgrRow("202610312", "SPV Baru", "spv@x.id", ""),
-		mgrRow("202610313", "Staf Dua", "s2@x.id", "202610312"),
-		mgrRow("202610314", "Staf Tiga", "s3@x.id", "202610399"),
+		mgrRow("202610511", "Staf Satu", "s1@x.id", "202610512"),
+		mgrRow("202610512", "SPV Baru", "spv@x.id", ""),
+		mgrRow("202610513", "Staf Dua", "s2@x.id", "202610512"),
+		mgrRow("202610514", "Staf Tiga", "s3@x.id", "202610599"),
 	}
 	out, errs, _ := ValidateEmployeeImport("add", mgrHdr, rows, 2, lk())
-	if len(errs) != 1 || !issueText(errs, "Baris 5, kolom NIP Atasan: NIP atasan 202610399 tidak ditemukan / tidak aktif") {
+	if len(errs) != 1 || !issueText(errs, "Baris 5, kolom NIP Atasan: NIP atasan 202610599 tidak ditemukan / tidak aktif") {
 		t.Fatalf("errors %+v", errs)
 	}
-	if out[0].ManagerNIPNew != "202610312" || out[2].ManagerNIPNew != "202610312" {
+	if out[0].ManagerNIPNew != "202610512" || out[2].ManagerNIPNew != "202610512" {
 		t.Fatalf("pending managers %q %q", out[0].ManagerNIPNew, out[2].ManagerNIPNew)
 	}
 	if _, ok := out[0].Set["reporting_to"]; ok {
@@ -271,8 +271,8 @@ func TestValidateEmployeeImportManagerInSameFile(t *testing.T) {
 // EPIC-098 B2: NIP Atasan is cleaned like NIP (leading quote, Excel number).
 func TestValidateEmployeeImportManagerNIPQuoted(t *testing.T) {
 	rows := [][]string{
-		mgrRow("202610331", "Kutip", "k@x.id", "'202310037"),
-		mgrRow("202610332", "Ilmiah", "i@x.id", "2,02E+08"),
+		mgrRow("202610531", "Kutip", "k@x.id", "'202310037"),
+		mgrRow("202610532", "Ilmiah", "i@x.id", "2,02E+08"),
 	}
 	out, errs, _ := ValidateEmployeeImport("add", mgrHdr, rows, 2, lk())
 	if out[0].Set["reporting_to"] != "m1" {
@@ -287,8 +287,8 @@ func TestValidateEmployeeImportManagerNIPQuoted(t *testing.T) {
 // row gets no misleading "not found".
 func TestValidateEmployeeImportManagerRowHasError(t *testing.T) {
 	rows := [][]string{
-		mgrRow("202610341", "SPV Tanpa Email", "", ""),
-		mgrRow("202610342", "Staf", "st@x.id", "202610341"),
+		mgrRow("202610541", "SPV Tanpa Email", "", ""),
+		mgrRow("202610542", "Staf", "st@x.id", "202610541"),
 	}
 	_, errs, _ := ValidateEmployeeImport("add", mgrHdr, rows, 2, lk())
 	if len(errs) != 1 || errs[0].Line != 2 {
@@ -299,11 +299,11 @@ func TestValidateEmployeeImportManagerRowHasError(t *testing.T) {
 // Replace mode: a new NIP acts as create and may be another new row's manager.
 func TestValidateEmployeeImportReplaceNewManager(t *testing.T) {
 	rows := [][]string{
-		mgrRow("202610321", "SPV Baru", "spv2@x.id", ""),
-		mgrRow("202610322", "Staf Baru", "st2@x.id", "202610321"),
+		mgrRow("202610521", "SPV Baru", "spv2@x.id", ""),
+		mgrRow("202610522", "Staf Baru", "st2@x.id", "202610521"),
 	}
 	out, errs, _ := ValidateEmployeeImport("replace", mgrHdr, rows, 2, lk())
-	if len(errs) != 0 || out[1].ManagerNIPNew != "202610321" {
+	if len(errs) != 0 || out[1].ManagerNIPNew != "202610521" {
 		t.Fatalf("errors %+v row %+v", errs, out[1])
 	}
 }
