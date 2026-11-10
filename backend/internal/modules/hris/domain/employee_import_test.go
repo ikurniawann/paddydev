@@ -217,6 +217,21 @@ func TestValidateEmployeeImportReplaceRefusesResignedRows(t *testing.T) {
 	}
 }
 
+// EPIC-098 review: a resigned row stays refused when its only change is a
+// NIP Atasan created by the same file.
+func TestValidateEmployeeImportReplaceResignedNewManager(t *testing.T) {
+	l := lk()
+	l.ExistingNIP["201901001"] = EmployeeRef{ID: "e9", NIP: "201901001", Name: "Lama", Active: false}
+	rows := [][]string{
+		{"201901001", "", "", "", "", "", "", "", "", "", "", "202611051"},
+		mgrRow("202611051", "SPV Baru", "spv5@x.id", ""),
+	}
+	out, errs, _ := ValidateEmployeeImport("replace", mgrHdr, rows, 2, l)
+	if !issueText(errs, "Baris 2: NIP 201901001 (Lama) sudah resign — data karyawan resign tidak diubah lewat import") || out[0].ManagerNIPNew != "" {
+		t.Fatalf("errs %+v row %+v", errs, out[0])
+	}
+}
+
 func TestValidateEmployeeImportRefusesSelfManager(t *testing.T) {
 	header := append(append([]string{}, hdr...), "NIP Atasan")
 	rows := [][]string{{"202505272", "Feti", "", "", "", "", "", "", "", "", "", "202505272"}}
