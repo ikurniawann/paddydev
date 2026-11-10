@@ -297,7 +297,9 @@ describe("Go route manifest", () => {
       // Riwayat Persetujuan Tim (EPIC-090): hanya di Go, tanpa fallback Next.
       "/api/hris/me/team-history",
       // Surat Teguran/SP oleh HR (EPIC-094): hanya di Go, tanpa fallback Next.
-      "/api/hris/disciplinary-letters", "/api/hris/me/disciplinary-letters"];
+      "/api/hris/disciplinary-letters", "/api/hris/me/disciplinary-letters",
+      // Bagan organisasi Draft 6 dan selisihnya (EPIC-101): hanya di Go, tanpa fallback Next.
+      "/api/hris/org-chart"];
     const goNative = (p: string) =>
       goNativePrefixes.some((n) => p === n || p.startsWith(`${n}/`));
     const missing = switched

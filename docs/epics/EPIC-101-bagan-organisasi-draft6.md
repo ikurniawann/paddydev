@@ -124,6 +124,7 @@ Q1 grade resmi, Q2 kepala Support, Q3 arti warna, Q4 judul fungsi, Q6 approver s
     - peran ARIA tree yang tidak lengkap diganti daftar bertingkat biasa; status lipat/buka ada di `aria-expanded` tombolnya (opsi yang disarankan reviewer, tanpa navigasi panah) — tes chart-tree RED→GREEN;
     - label jumlah hanya menghitung posisi (149, bukan 150) — tes chart-tree RED→GREEN;
     - tes posisi di bawah node grup untuk BR-04 dan atasan efektif di laporan selisih — `TestOrgChartPositionUnderGroupingNode` (cakupan perilaku yang sudah benar, langsung lulus).
+  - CI PR #96 menemukan `backend-routes.test.ts` gagal: 4 route `/api/hris/org-chart/*` belum terdaftar sebagai route khusus Go. Prefiks `/api/hris/org-chart` ditambahkan ke daftar itu, seperti epic HRIS sebelumnya. Gate frontend kini dijalankan pada seluruh suite vitest, bukan hanya tes org-chart.
 - Gate:
   - Go: gofmt 0, vet, `./internal/...` 137 ok;
   - frontend: vitest org-chart 8/8, tsc 0, eslint bersih.
