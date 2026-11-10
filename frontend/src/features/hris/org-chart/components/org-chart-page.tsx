@@ -5,6 +5,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
   SelectContent,
@@ -16,6 +17,8 @@ import { BuildingOfficeIcon, UserGroupIcon, ChevronDownIcon, ChevronRightIcon } 
 import { buildOrgTree, type OrgEmployee, type OrgNode } from "@/lib/hris/org-chart";
 import { useOrgEmployees, useOrgDepartments } from "../queries";
 import type { OrgDepartment } from "../types";
+import { ChartGap } from "./chart-gap";
+import { ChartTree } from "./chart-tree";
 
 const STATUS_COLORS: Record<string, string> = {
   permanent: "bg-green-100 text-green-700",
@@ -135,7 +138,7 @@ function DepartmentSection({ dept, employees }: { dept: OrgDepartment; employees
   );
 }
 
-export function OrgChartPage() {
+function ActualStructure() {
   const [selectedDept, setSelectedDept] = useState("all");
 
   const employeesQuery = useOrgEmployees();
@@ -221,5 +224,30 @@ export function OrgChartPage() {
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * Struktur Organisasi: struktur aktual dari atasan langsung karyawan, bagan
+ * Draft 6 dari klien, dan selisih keduanya (EPIC-101).
+ */
+export function OrgChartPage() {
+  return (
+    <Tabs defaultValue="actual" className="space-y-4">
+      <TabsList>
+        <TabsTrigger value="actual">Struktur Aktual</TabsTrigger>
+        <TabsTrigger value="chart">Bagan Draft 6</TabsTrigger>
+        <TabsTrigger value="gap">Selisih</TabsTrigger>
+      </TabsList>
+      <TabsContent value="actual">
+        <ActualStructure />
+      </TabsContent>
+      <TabsContent value="chart">
+        <ChartTree />
+      </TabsContent>
+      <TabsContent value="gap">
+        <ChartGap />
+      </TabsContent>
+    </Tabs>
   );
 }

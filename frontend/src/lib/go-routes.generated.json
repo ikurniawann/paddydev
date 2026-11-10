@@ -2657,6 +2657,26 @@
   {
     "module": "hris",
     "method": "GET",
+    "path": "/api/hris/org-chart/gap"
+  },
+  {
+    "module": "hris",
+    "method": "GET",
+    "path": "/api/hris/org-chart/tree"
+  },
+  {
+    "module": "hris",
+    "method": "GET",
+    "path": "/api/hris/org-chart/validation"
+  },
+  {
+    "module": "hris",
+    "method": "GET",
+    "path": "/api/hris/org-chart/versions"
+  },
+  {
+    "module": "hris",
+    "method": "GET",
     "path": "/api/hris/overtime"
   },
   {

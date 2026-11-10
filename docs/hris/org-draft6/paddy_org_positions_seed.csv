@@ -1,0 +1,151 @@
+position_code,parent_code,source_sheet,smartart_type,raw_title,normalized_title,is_position,division_code,division,job_level,level_confidence,employment_type,vendor,region,store_codes,flags
+EXE-001,,All,node,CEO,CEO,Y,EXE,Executive,L0,keyword,PERMANENT_OR_CONTRACT,,,,
+EXE-002,EXE-001,All,node,General Manager,General Manager,Y,EXE,Executive,L1,keyword,PERMANENT_OR_CONTRACT,,,,
+OPS-001,EXE-002,All,node,Operations Manager,Operations Manager,Y,OPS,Operations,L2,keyword,PERMANENT_OR_CONTRACT,,,,
+OPS-002,OPS-001,All,node,Supply Chain Management Supervisor,Supply Chain Management Supervisor,Y,OPS,Operations,L4,keyword,PERMANENT_OR_CONTRACT,,,,
+OPS-003,OPS-002,All,node,Purchasing,Purchasing Staff,Y,OPS,Operations,L7,keyword,PERMANENT_OR_CONTRACT,,,,FUNCTION_AS_TITLE
+OPS-004,OPS-002,All,node,Vendor Management,Vendor Management Staff,Y,OPS,Operations,L7,keyword,PERMANENT_OR_CONTRACT,,,,FUNCTION_AS_TITLE
+OPS-005,OPS-002,All,node,Procurement Control,Procurement Control Staff,Y,OPS,Operations,L7,keyword,PERMANENT_OR_CONTRACT,,,,FUNCTION_AS_TITLE
+OPS-006,OPS-002,All,node,Quality Control,Quality Control Staff,Y,OPS,Operations,L7,keyword,PERMANENT_OR_CONTRACT,,,,FUNCTION_AS_TITLE
+OPS-007,OPS-002,All,node,Administrator,SCM Administrator,Y,OPS,Operations,L7,role_rule,PERMANENT_OR_CONTRACT,,,,GENERIC_TITLE
+OPS-008,OPS-001,All,node,Warehouse Supervisor,Warehouse Supervisor,Y,OPS,Operations,L4,keyword,PERMANENT_OR_CONTRACT,,,,
+OPS-009,OPS-008,All,node,Inbond Coordinator,Inbound Coordinator,Y,OPS,Operations,L5,keyword,PERMANENT_OR_CONTRACT,,,,TYPO
+OPS-010,OPS-009,All,node,Assembly Staff,Assembly Staff,Y,OPS,Operations,L7,keyword,PERMANENT_OR_CONTRACT,,,,
+OPS-011,OPS-009,All,node,Admin Inbound,Admin Inbound,Y,OPS,Operations,L7,role_rule,PERMANENT_OR_CONTRACT,,,,
+OPS-012,OPS-009,All,node,Inbound Staff,Inbound Staff,Y,OPS,Operations,L7,keyword,PERMANENT_OR_CONTRACT,,,,
+OPS-013,OPS-008,All,node,Outbond Coordinator,Outbound Coordinator,Y,OPS,Operations,L5,keyword,PERMANENT_OR_CONTRACT,,,,TYPO
+OPS-014,OPS-013,All,node,Outbound Staff,Outbound Staff,Y,OPS,Operations,L7,keyword,PERMANENT_OR_CONTRACT,,,,
+OPS-015,OPS-013,All,node,Picker Staff,Picker Staff,Y,OPS,Operations,L7,keyword,PERMANENT_OR_CONTRACT,,,,
+OPS-016,OPS-008,All,node,Packing Coordinator,Packing Coordinator,Y,OPS,Operations,L5,keyword,PERMANENT_OR_CONTRACT,,,,
+OPS-017,OPS-016,All,node,Staff,Packing Staff,Y,OPS,Operations,L7,keyword,PERMANENT_OR_CONTRACT,,,,GENERIC_TITLE
+OPS-018,OPS-008,All,node,Logistic Corrdinator,Logistics Coordinator,Y,OPS,Operations,L5,keyword,PERMANENT_OR_CONTRACT,,,,TYPO
+OPS-019,OPS-018,All,node,Admin Logistic,Logistics Admin,Y,OPS,Operations,L7,role_rule,PERMANENT_OR_CONTRACT,,,,WORDING
+OPS-020,OPS-018,All,node,Driver,Driver,Y,OPS,Operations,L7,role_rule,PERMANENT_OR_CONTRACT,,,,
+OPS-021,OPS-008,All,node,Production Coordinator,Production Coordinator,Y,OPS,Operations,L5,keyword,PERMANENT_OR_CONTRACT,,,,
+OPS-022,OPS-021,All,node,Staff,Production Staff,Y,OPS,Operations,L7,keyword,PERMANENT_OR_CONTRACT,,,,GENERIC_TITLE
+OPS-023,OPS-008,All,node,Inventory Control Staff,Inventory Control Staff,Y,OPS,Operations,L7,keyword,PERMANENT_OR_CONTRACT,,,,
+OPS-024,OPS-008,All,asst,Inventory Control,Inventory Control,Y,OPS,Operations,L6,needs_confirm,PERMANENT_OR_CONTRACT,,,,DUPLICATE_CANDIDATE;ASSISTANT_NODE
+FIN-001,EXE-002,All,node,Finance & Accounting Manager,Finance & Accounting Manager,Y,FIN,Finance & Accounting,L2,keyword,PERMANENT_OR_CONTRACT,,,,
+FIN-002,FIN-001,All,node,Finance Supervisor,Finance Supervisor,Y,FIN,Finance & Accounting,L4,keyword,PERMANENT_OR_CONTRACT,,,,
+FIN-003,FIN-002,All,node,Senior Staff,Finance Senior Staff,Y,FIN,Finance & Accounting,L6,keyword,PERMANENT_OR_CONTRACT,,,,GENERIC_TITLE
+FIN-004,FIN-003,All,node,Recon Staff,Recon Staff,Y,FIN,Finance & Accounting,L7,keyword,PERMANENT_OR_CONTRACT,,,,
+FIN-005,FIN-004,All,node,Intern,Recon Intern,Y,FIN,Finance & Accounting,L8,keyword,INTERN,,,,EMPLOYMENT_TYPE_AS_NODE;GENERIC_TITLE
+FIN-006,FIN-003,All,node,Finance Staff,Finance Staff,Y,FIN,Finance & Accounting,L7,keyword,PERMANENT_OR_CONTRACT,,,,
+FIN-007,FIN-003,All,node,Account Receiveable | Staff,Account Receivable Staff,Y,FIN,Finance & Accounting,L7,keyword,PERMANENT_OR_CONTRACT,,,,LINEBREAK_IN_TITLE;TYPO
+FIN-008,FIN-003,All,node,Account Payable Staff,Account Payable Staff,Y,FIN,Finance & Accounting,L7,keyword,PERMANENT_OR_CONTRACT,,,,
+FIN-009,FIN-008,All,node,Intern,Account Payable Intern,Y,FIN,Finance & Accounting,L8,keyword,INTERN,,,,EMPLOYMENT_TYPE_AS_NODE;GENERIC_TITLE
+FIN-010,FIN-001,All,node,Accounting Supervisor,Accounting Supervisor,Y,FIN,Finance & Accounting,L4,keyword,PERMANENT_OR_CONTRACT,,,,
+FIN-011,FIN-010,All,node,General Ledger Senior Staff,General Ledger Senior Staff,Y,FIN,Finance & Accounting,L6,keyword,PERMANENT_OR_CONTRACT,,,,
+FIN-012,FIN-011,All,node,Inventory Management,Inventory Management Staff,Y,FIN,Finance & Accounting,L7,keyword,PERMANENT_OR_CONTRACT,,,,FUNCTION_AS_TITLE
+FIN-013,FIN-001,All,node,Tax Supervisor,Tax Supervisor,Y,FIN,Finance & Accounting,L4,keyword,PERMANENT_OR_CONTRACT,,,,HIGHLIGHTED_NO_LEGEND
+HRG-001,EXE-002,All,node,HRGA Manager,HRGA Manager,Y,HRG,HRGA,L2,keyword,PERMANENT_OR_CONTRACT,,,,
+HRG-002,HRG-001,All,node,HR Supervisor,HR Supervisor,Y,HRG,HRGA,L4,keyword,PERMANENT_OR_CONTRACT,,,,HIGHLIGHTED_NO_LEGEND
+HRG-003,HRG-002,All,node,Talent Acquisition,Talent Acquisition Staff,Y,HRG,HRGA,L7,keyword,PERMANENT_OR_CONTRACT,,,,FUNCTION_AS_TITLE;HIGHLIGHTED_NO_LEGEND
+HRG-004,HRG-003,All,node,Freelance,Talent Acquisition Freelancer,Y,HRG,HRGA,L7,role_rule,FREELANCE,,,,EMPLOYMENT_TYPE_AS_NODE;GENERIC_TITLE;LEVEL_PARITY_WITH_PARENT
+HRG-005,HRG-002,All,node,HR Ops & Com,HR Operations & Com Staff,Y,HRG,HRGA,L7,keyword,PERMANENT_OR_CONTRACT,,,,FUNCTION_AS_TITLE;AMBIGUOUS_ABBR
+HRG-006,HRG-002,All,node,People Ops & Development,People Operations & Development Staff,Y,HRG,HRGA,L7,keyword,PERMANENT_OR_CONTRACT,,,,FUNCTION_AS_TITLE
+HRG-007,HRG-006,All,node,Intern,People Ops & Development Intern,Y,HRG,HRGA,L8,keyword,INTERN,,,,EMPLOYMENT_TYPE_AS_NODE;GENERIC_TITLE
+HRG-008,HRG-001,All,node,GA Supervisor,GA Supervisor,Y,HRG,HRGA,L4,keyword,PERMANENT_OR_CONTRACT,,,,
+HRG-009,HRG-008,All,node,GA Staff,GA Staff,Y,HRG,HRGA,L7,keyword,PERMANENT_OR_CONTRACT,,,,
+HRG-010,HRG-009,All,node,Freelance,GA Freelancer,Y,HRG,HRGA,L7,role_rule,FREELANCE,,,,EMPLOYMENT_TYPE_AS_NODE;GENERIC_TITLE;HIGHLIGHTED_NO_LEGEND;LEVEL_PARITY_WITH_PARENT
+HRG-011,HRG-008,All,node,Office Support,Office Support,Y,HRG,HRGA,L7,role_rule,PERMANENT_OR_CONTRACT,,,,
+HRG-012,HRG-008,All,node,Security  | Red Guard - Outsorcing,Security,Y,HRG,HRGA,L7,role_rule,OUTSOURCE,Red Guard,,,WHITESPACE;LINEBREAK_IN_TITLE;EMPLOYMENT_TYPE_IN_TITLE;VENDOR_IN_TITLE;TYPO
+SUP-001,EXE-002,All,node,Support,Support,N,SUP,Corporate Support,,,,,,,UNIT_AS_NODE
+SUP-002,EXE-002,All,node,Corporate Secretary,Corporate Secretary,Y,SUP,Corporate Support,L5,needs_confirm,PERMANENT_OR_CONTRACT,,,,
+SUP-003,EXE-002,All,node,Internal Audit Supervisor,Internal Audit Supervisor,Y,SUP,Corporate Support,L4,keyword,PERMANENT_OR_CONTRACT,,,,HIGHLIGHTED_NO_LEGEND
+SUP-004,SUP-003,All,node,Staff,Internal Audit Staff,Y,SUP,Corporate Support,L7,keyword,PERMANENT_OR_CONTRACT,,,,GENERIC_TITLE
+SUP-005,EXE-002,All,node,IT Developer,IT Developer,Y,SUP,Corporate Support,L6,needs_confirm,PERMANENT_OR_CONTRACT,,,,
+SUP-006,SUP-005,All,node,IT Data Support,IT Data Support,Y,SUP,Corporate Support,L7,role_rule,PERMANENT_OR_CONTRACT,,,,
+RND-001,EXE-002,All,node,Product R&D Manager,Product R&D Manager,Y,RND,Product R&D,L2,keyword,PERMANENT_OR_CONTRACT,,,,
+RND-002,RND-001,All,node,Product Designer ,Product Designer,Y,RND,Product R&D,L6,needs_confirm,PERMANENT_OR_CONTRACT,,,,WHITESPACE
+RND-003,RND-002,All,node,Freelance Designer,Freelance Product Designer,Y,RND,Product R&D,L7,role_rule,FREELANCE,,,,EMPLOYMENT_TYPE_IN_TITLE;HIGHLIGHTED_NO_LEGEND
+RND-004,RND-001,All,node,Product Development Supervisor ,Product Development Supervisor,Y,RND,Product R&D,L4,keyword,PERMANENT_OR_CONTRACT,,,,WHITESPACE
+RND-005,RND-004,All,node,Sample Maker Lead,Sample Maker Lead,Y,RND,Product R&D,L5,keyword,PERMANENT_OR_CONTRACT,,,,
+RND-006,RND-005,All,node,Staff,Sample Maker Staff,Y,RND,Product R&D,L7,keyword,PERMANENT_OR_CONTRACT,,,,GENERIC_TITLE
+RND-007,RND-004,All,node,Product Developer,Product Developer,Y,RND,Product R&D,L6,needs_confirm,PERMANENT_OR_CONTRACT,,,,HIGHLIGHTED_NO_LEGEND
+RND-008,RND-007,All,node,Runner,Runner,Y,RND,Product R&D,L7,role_rule,PERMANENT_OR_CONTRACT,,,,
+RND-009,RND-007,All,node,Admin Product R&D,Admin Product R&D,Y,RND,Product R&D,L7,role_rule,PERMANENT_OR_CONTRACT,,,,HIGHLIGHTED_NO_LEGEND
+MKT-001,EXE-002,All,node,Branding & Marketing Manager,Branding & Marketing Manager,Y,MKT,Branding & Marketing,L2,keyword,PERMANENT_OR_CONTRACT,,,,
+MKT-002,MKT-001,All,node,Branding & Marketing Assisstant Manager,Branding & Marketing Assistant Manager,Y,MKT,Branding & Marketing,L3,keyword,PERMANENT_OR_CONTRACT,,,,TYPO
+MKT-003,MKT-002,All,node,Brand Creative Lead,Brand Creative Lead,Y,MKT,Branding & Marketing,L5,needs_confirm,PERMANENT_OR_CONTRACT,,,,
+MKT-004,MKT-003,All,node,Illustrator Coordinator,Illustrator Coordinator,Y,MKT,Branding & Marketing,L5,keyword,PERMANENT_OR_CONTRACT,,,,LEVEL_PARITY_WITH_PARENT
+MKT-005,MKT-004,All,node,Illustrator Staff,Illustrator Staff,Y,MKT,Branding & Marketing,L7,keyword,PERMANENT_OR_CONTRACT,,,,
+MKT-006,MKT-002,All,node,Art Director,Art Director,Y,MKT,Branding & Marketing,L5,needs_confirm,PERMANENT_OR_CONTRACT,,,,
+MKT-007,MKT-006,All,node,Graphic Designer,Graphic Designer,Y,MKT,Branding & Marketing,L7,role_rule,PERMANENT_OR_CONTRACT,,,,
+MKT-008,MKT-006,All,node,Visual Merchandiser,Visual Merchandiser,Y,MKT,Branding & Marketing,L7,role_rule,PERMANENT_OR_CONTRACT,,,,
+MKT-009,MKT-002,All,node,Marketing Communication Supervisor,Marketing Communication Supervisor,Y,MKT,Branding & Marketing,L4,keyword,PERMANENT_OR_CONTRACT,,,,
+MKT-010,MKT-009,All,node,Social Media Specialist Staff ,Social Media Specialist Staff,Y,MKT,Branding & Marketing,L7,keyword,PERMANENT_OR_CONTRACT,,,,WHITESPACE
+MKT-011,MKT-010,All,node,Intern,Social Media Intern,Y,MKT,Branding & Marketing,L8,keyword,INTERN,,,,EMPLOYMENT_TYPE_AS_NODE;GENERIC_TITLE
+MKT-012,MKT-009,All,node,Content Creator Coordinator,Content Creator Coordinator,Y,MKT,Branding & Marketing,L5,keyword,PERMANENT_OR_CONTRACT,,,,
+MKT-013,MKT-012,All,node,Content Creator  Staff,Content Creator Staff,Y,MKT,Branding & Marketing,L7,keyword,PERMANENT_OR_CONTRACT,,,,WHITESPACE
+MKT-014,MKT-002,All,node,Brand Patnership Supervisor,Brand Partnership Supervisor,Y,MKT,Branding & Marketing,L4,keyword,PERMANENT_OR_CONTRACT,,,,TYPO
+MKT-015,MKT-014,All,node,Brand Patnership Staff,Brand Partnership Staff,Y,MKT,Branding & Marketing,L7,keyword,PERMANENT_OR_CONTRACT,,,,TYPO
+MKT-016,MKT-002,All,node,KOL Specialist Supervisor,KOL Specialist Supervisor,Y,MKT,Branding & Marketing,L4,keyword,PERMANENT_OR_CONTRACT,,,,
+MKT-017,MKT-016,All,node,KOL Specialst Staff,KOL Specialist Staff,Y,MKT,Branding & Marketing,L7,keyword,PERMANENT_OR_CONTRACT,,,,TYPO
+MKT-018,MKT-017,All,node,Intern,KOL Intern,Y,MKT,Branding & Marketing,L8,keyword,INTERN,,,,EMPLOYMENT_TYPE_AS_NODE;GENERIC_TITLE
+MKT-019,MKT-001,All,node,Revenue Assisstant Manager,Revenue Assistant Manager,Y,MKT,Branding & Marketing,L3,keyword,PERMANENT_OR_CONTRACT,,,,TYPO;HIGHLIGHTED_NO_LEGEND
+MKT-020,MKT-019,All,node,CRM & Revenue Specialist,CRM & Revenue Specialist,Y,MKT,Branding & Marketing,L5,needs_confirm,PERMANENT_OR_CONTRACT,,,,
+MKT-021,MKT-020,All,node,Customer Service Staff,Customer Service Staff,Y,MKT,Branding & Marketing,L7,keyword,PERMANENT_OR_CONTRACT,,,,
+MKT-022,MKT-019,All,node,Performance Marketing & Marketplace Supervisor,Performance Marketing & Marketplace Supervisor,Y,MKT,Branding & Marketing,L4,keyword,PERMANENT_OR_CONTRACT,,,,
+MKT-023,MKT-022,All,node,Marketplace Specialist Staff,Marketplace Specialist Staff,Y,MKT,Branding & Marketing,L7,keyword,PERMANENT_OR_CONTRACT,,,,
+MKT-024,MKT-022,All,node,Affiliator Specialist Staff,Affiliator Specialist Staff,Y,MKT,Branding & Marketing,L7,keyword,PERMANENT_OR_CONTRACT,,,,
+MKT-025,MKT-022,All,node,Host Live Coordinator,Host Live Coordinator,Y,MKT,Branding & Marketing,L5,keyword,PERMANENT_OR_CONTRACT,,,,
+MKT-026,MKT-025,All,node,Host Live Freelance,Live Host Freelancer,Y,MKT,Branding & Marketing,L7,role_rule,FREELANCE,,,,EMPLOYMENT_TYPE_IN_TITLE
+MKT-027,MKT-019,All,node,Sales Event Specialist,Sales Event Specialist,Y,MKT,Branding & Marketing,L6,needs_confirm,PERMANENT_OR_CONTRACT,,,,
+MKT-028,MKT-019,All,node,Merchandiser Specialist,Merchandiser Specialist,Y,MKT,Branding & Marketing,L6,needs_confirm,PERMANENT_OR_CONTRACT,,,,
+RTL-001,EXE-002,Retail,node,Retail Operational Manager,Retail Operational Manager,Y,RTL,Retail Operational,L2,keyword,PERMANENT_OR_CONTRACT,,,,
+RTL-002,RTL-001,Retail,node,Store Supervisor - Jawa Barat 1,Store Supervisor,Y,RTL,Retail Operational,L4,keyword,PERMANENT_OR_CONTRACT,,Jawa Barat 1,,LOCATION_IN_TITLE
+RTL-003,RTL-002,Retail,asst,PPGA Store Leader,Store Leader,Y,RTL,Retail Operational,L5,keyword,PERMANENT_OR_CONTRACT,,Jawa Barat 1,PPGA,STORE_CODE_IN_TITLE;ASSISTANT_NODE
+RTL-004,RTL-003,Retail,node,PPGA Shopkeeper,Shopkeeper,Y,RTL,Retail Operational,L7,role_rule,PERMANENT_OR_CONTRACT,,Jawa Barat 1,PPGA,STORE_CODE_IN_TITLE
+RTL-005,RTL-002,Retail,asst,PPVJ Store Leader,Store Leader,Y,RTL,Retail Operational,L5,keyword,PERMANENT_OR_CONTRACT,,Jawa Barat 1,PPVJ,STORE_CODE_IN_TITLE;ASSISTANT_NODE
+RTL-006,RTL-005,Retail,node,PPVJShopkeeper,Shopkeeper,Y,RTL,Retail Operational,L7,role_rule,PERMANENT_OR_CONTRACT,,Jawa Barat 1,PPVJ,STORE_CODE_IN_TITLE;WHITESPACE
+RTL-007,RTL-002,Retail,asst,PBSA Store Leader,Store Leader,Y,RTL,Retail Operational,L5,keyword,PERMANENT_OR_CONTRACT,,Jawa Barat 1,PBSA,STORE_CODE_IN_TITLE;ASSISTANT_NODE
+RTL-008,RTL-007,Retail,node,PBSA Patcher,Patcher,Y,RTL,Retail Operational,L7,role_rule,PERMANENT_OR_CONTRACT,,Jawa Barat 1,PBSA,STORE_CODE_IN_TITLE
+RTL-009,RTL-007,Retail,node,Penjahit PBSA,Penjahit,Y,RTL,Retail Operational,L7,role_rule,PERMANENT_OR_CONTRACT,,Jawa Barat 1,PBSA,STORE_CODE_IN_TITLE
+RTL-010,RTL-002,Retail,node,MPVJ Shopkeeper,Shopkeeper,Y,RTL,Retail Operational,L7,role_rule,PERMANENT_OR_CONTRACT,,Jawa Barat 1,MPVJ,STORE_CODE_IN_TITLE
+RTL-011,RTL-002,Retail,node,MBRM Patcher,Patcher,Y,RTL,Retail Operational,L7,role_rule,PERMANENT_OR_CONTRACT,,Jawa Barat 1,MBRM,STORE_CODE_IN_TITLE
+RTL-012,RTL-001,Retail,node,Store Supervisor - Jawa Barat 2,Store Supervisor,Y,RTL,Retail Operational,L4,keyword,PERMANENT_OR_CONTRACT,,Jawa Barat 2,,LOCATION_IN_TITLE
+RTL-013,RTL-012,Retail,asst,PLRM Store Leader,Store Leader,Y,RTL,Retail Operational,L5,keyword,PERMANENT_OR_CONTRACT,,Jawa Barat 2,PLRM,STORE_CODE_IN_TITLE;ASSISTANT_NODE
+RTL-014,RTL-013,Retail,node,PLRM | Perfumer,Perfumer,Y,RTL,Retail Operational,L7,role_rule,PERMANENT_OR_CONTRACT,,Jawa Barat 2,PLRM,LINEBREAK_IN_TITLE;STORE_CODE_IN_TITLE
+RTL-015,RTL-012,Retail,asst,PPBA Store Leader,Store Leader,Y,RTL,Retail Operational,L5,keyword,PERMANENT_OR_CONTRACT,,Jawa Barat 2,PPBA,STORE_CODE_IN_TITLE;ASSISTANT_NODE
+RTL-016,RTL-015,Retail,node,PPBAShopkeeper,Shopkeeper,Y,RTL,Retail Operational,L7,role_rule,PERMANENT_OR_CONTRACT,,Jawa Barat 2,PPBA,STORE_CODE_IN_TITLE;WHITESPACE
+RTL-017,RTL-012,Retail,node,MBIP | Shopkeeper,Shopkeeper,Y,RTL,Retail Operational,L7,role_rule,PERMANENT_OR_CONTRACT,,Jawa Barat 2,MBIP,LINEBREAK_IN_TITLE;STORE_CODE_IN_TITLE
+RTL-018,RTL-012,Retail,node,MPSL Shopkeeper,Shopkeeper,Y,RTL,Retail Operational,L7,role_rule,PERMANENT_OR_CONTRACT,,Jawa Barat 2,MPSL,STORE_CODE_IN_TITLE
+RTL-019,RTL-012,Retail,node,MTSM Shopkeeper,Shopkeeper,Y,RTL,Retail Operational,L7,role_rule,PERMANENT_OR_CONTRACT,,Jawa Barat 2,MTSM,STORE_CODE_IN_TITLE
+RTL-020,RTL-001,Retail,node,Store Supervisor - Jabodetabek 1,Store Supervisor,Y,RTL,Retail Operational,L4,keyword,PERMANENT_OR_CONTRACT,,Jabodetabek 1,,LOCATION_IN_TITLE
+RTL-021,RTL-020,Retail,asst,PPJA Store Leader,Store Leader,Y,RTL,Retail Operational,L5,keyword,PERMANENT_OR_CONTRACT,,Jabodetabek 1,PPJA,STORE_CODE_IN_TITLE;ASSISTANT_NODE
+RTL-022,RTL-021,Retail,node,PPJA Shopkeeper,Shopkeeper,Y,RTL,Retail Operational,L7,role_rule,PERMANENT_OR_CONTRACT,,Jabodetabek 1,PPJA,STORE_CODE_IN_TITLE
+RTL-023,RTL-020,Retail,node,PLBM Perfumer,Perfumer,Y,RTL,Retail Operational,L7,role_rule,PERMANENT_OR_CONTRACT,,Jabodetabek 1,PLBM,STORE_CODE_IN_TITLE
+RTL-024,RTL-020,Retail,node,PLPK Perfumer,Perfumer,Y,RTL,Retail Operational,L7,role_rule,PERMANENT_OR_CONTRACT,,Jabodetabek 1,PLPK,STORE_CODE_IN_TITLE
+RTL-025,RTL-020,Retail,node,CBBM Shopkeeper,Shopkeeper,Y,RTL,Retail Operational,L7,role_rule,PERMANENT_OR_CONTRACT,,Jabodetabek 1,CBBM,STORE_CODE_IN_TITLE
+RTL-026,RTL-020,Retail,node,MPIK Shopkeeper,Shopkeeper,Y,RTL,Retail Operational,L7,role_rule,PERMANENT_OR_CONTRACT,,Jabodetabek 1,MPIK,STORE_CODE_IN_TITLE
+RTL-027,RTL-020,Retail,node,MUBM Shopkeeper,Shopkeeper,Y,RTL,Retail Operational,L7,role_rule,PERMANENT_OR_CONTRACT,,Jabodetabek 1,MUBM,STORE_CODE_IN_TITLE
+RTL-028,RTL-020,Retail,node,TWLK Shopkeeper,Shopkeeper,Y,RTL,Retail Operational,L7,role_rule,PERMANENT_OR_CONTRACT,,Jabodetabek 1,TWLK,STORE_CODE_IN_TITLE
+RTL-029,RTL-001,Retail,node,Store Supervisor - Jabodetabek 2,Store Supervisor,Y,RTL,Retail Operational,L4,keyword,PERMANENT_OR_CONTRACT,,Jabodetabek 2,,LOCATION_IN_TITLE
+RTL-030,RTL-029,Retail,asst,PPAY & PLAY Store Leader,Store Leader,Y,RTL,Retail Operational,L5,keyword,PERMANENT_OR_CONTRACT,,Jabodetabek 2,PPAY;PLAY,STORE_CODE_IN_TITLE;MULTI_STORE;ASSISTANT_NODE
+RTL-031,RTL-030,Retail,node,PPAY Shopkeeper,Shopkeeper,Y,RTL,Retail Operational,L7,role_rule,PERMANENT_OR_CONTRACT,,Jabodetabek 2,PPAY,STORE_CODE_IN_TITLE
+RTL-032,RTL-030,Retail,node,PPAY & PLAY Store Support,Store Support,Y,RTL,Retail Operational,L7,role_rule,PERMANENT_OR_CONTRACT,,Jabodetabek 2,PPAY;PLAY,STORE_CODE_IN_TITLE;MULTI_STORE
+RTL-033,RTL-030,Retail,node,PLAY Perfumer,Perfumer,Y,RTL,Retail Operational,L7,role_rule,PERMANENT_OR_CONTRACT,,Jabodetabek 2,PLAY,STORE_CODE_IN_TITLE
+RTL-034,RTL-029,Retail,node,PPLN Shopkeeper,Shopkeeper,Y,RTL,Retail Operational,L7,role_rule,PERMANENT_OR_CONTRACT,,Jabodetabek 2,PPLN,STORE_CODE_IN_TITLE
+RTL-035,RTL-029,Retail,node,PPGI Shopkeeper,Shopkeeper,Y,RTL,Retail Operational,L7,role_rule,PERMANENT_OR_CONTRACT,,Jabodetabek 2,PPGI,STORE_CODE_IN_TITLE
+RTL-036,RTL-029,Retail,node,TWPG Shopkeeper,Shopkeeper,Y,RTL,Retail Operational,L7,role_rule,PERMANENT_OR_CONTRACT,,Jabodetabek 2,TWPG,STORE_CODE_IN_TITLE
+RTL-037,RTL-029,Retail,node,TWLC Shopkeeper,Shopkeeper,Y,RTL,Retail Operational,L7,role_rule,PERMANENT_OR_CONTRACT,,Jabodetabek 2,TWLC,STORE_CODE_IN_TITLE
+RTL-038,RTL-001,Retail,node,Admin Store & Control,Admin Store & Control,Y,RTL,Retail Operational,L7,needs_confirm,PERMANENT_OR_CONTRACT,,,,
+RTL-039,RTL-001,Retail,node,Store Supervisor - Jawa Tengah,Store Supervisor,Y,RTL,Retail Operational,L4,keyword,PERMANENT_OR_CONTRACT,,Jawa Tengah,,LOCATION_IN_TITLE
+RTL-040,RTL-039,Retail,asst,PPYA Store Leader,Store Leader,Y,RTL,Retail Operational,L5,keyword,PERMANENT_OR_CONTRACT,,Jawa Tengah,PPYA,STORE_CODE_IN_TITLE;ASSISTANT_NODE
+RTL-041,RTL-040,Retail,node,PPYA Shopkeeper,Shopkeeper,Y,RTL,Retail Operational,L7,role_rule,PERMANENT_OR_CONTRACT,,Jawa Tengah,PPYA,STORE_CODE_IN_TITLE
+RTL-042,RTL-039,Retail,asst,PPPA Store Leader,Store Leader,Y,RTL,Retail Operational,L5,keyword,PERMANENT_OR_CONTRACT,,Jawa Tengah,PPPA,STORE_CODE_IN_TITLE;ASSISTANT_NODE
+RTL-043,RTL-042,Retail,node,PPPA Shopkeeper,Shopkeeper,Y,RTL,Retail Operational,L7,role_rule,PERMANENT_OR_CONTRACT,,Jawa Tengah,PPPA,STORE_CODE_IN_TITLE
+RTL-044,RTL-039,Retail,node,MDTS Shopkeeper,Shopkeeper,Y,RTL,Retail Operational,L7,role_rule,PERMANENT_OR_CONTRACT,,Jawa Tengah,MDTS,STORE_CODE_IN_TITLE
+RTL-045,RTL-001,Retail,node,Store Supervisor - Jawa Timur,Store Supervisor,Y,RTL,Retail Operational,L4,keyword,PERMANENT_OR_CONTRACT,,Jawa Timur,,LOCATION_IN_TITLE
+RTL-046,RTL-045,Retail,asst,PPTN Store Leader,Store Leader,Y,RTL,Retail Operational,L5,keyword,PERMANENT_OR_CONTRACT,,Jawa Timur,PPTN,STORE_CODE_IN_TITLE;ASSISTANT_NODE
+RTL-047,RTL-046,Retail,node,PPTN Shopkeeper,Shopkeeper,Y,RTL,Retail Operational,L7,role_rule,PERMANENT_OR_CONTRACT,,Jawa Timur,PPTN,STORE_CODE_IN_TITLE
+RTL-048,RTL-045,Retail,asst,PPSU Store Leader,Store Leader,Y,RTL,Retail Operational,L5,keyword,PERMANENT_OR_CONTRACT,,Jawa Timur,PPSU,STORE_CODE_IN_TITLE;ASSISTANT_NODE
+RTL-049,RTL-048,Retail,node,PPSU Shopkeeper,Shopkeeper,Y,RTL,Retail Operational,L7,role_rule,PERMANENT_OR_CONTRACT,,Jawa Timur,PPSU,STORE_CODE_IN_TITLE
+RTL-050,RTL-045,Retail,node,MLMS Shopkeeper,Shopkeeper,Y,RTL,Retail Operational,L7,role_rule,PERMANENT_OR_CONTRACT,,Jawa Timur,MLMS,STORE_CODE_IN_TITLE
+RTL-051,RTL-045,Retail,node,TWPS Shopkeeper,Shopkeeper,Y,RTL,Retail Operational,L7,role_rule,PERMANENT_OR_CONTRACT,,Jawa Timur,TWPS,STORE_CODE_IN_TITLE
+RTL-052,RTL-045,Retail,node,TWEM Shopkeeper,Shopkeeper,Y,RTL,Retail Operational,L7,role_rule,PERMANENT_OR_CONTRACT,,Jawa Timur,TWEM,STORE_CODE_IN_TITLE
+RTL-053,RTL-001,Retail,node,Store Supervisor - Makassar,Store Supervisor,Y,RTL,Retail Operational,L4,keyword,PERMANENT_OR_CONTRACT,,Makassar,,LOCATION_IN_TITLE
+RTL-054,RTL-053,Retail,asst,PPMR & PLMR Store Leader,Store Leader,Y,RTL,Retail Operational,L5,keyword,PERMANENT_OR_CONTRACT,,Makassar,PPMR;PLMR,STORE_CODE_IN_TITLE;MULTI_STORE;ASSISTANT_NODE
+RTL-055,RTL-054,Retail,node,PPMR Shopkeeper,Shopkeeper,Y,RTL,Retail Operational,L7,role_rule,PERMANENT_OR_CONTRACT,,Makassar,PPMR,STORE_CODE_IN_TITLE
+RTL-056,RTL-054,Retail,node,PLMR Perfumer,Perfumer,Y,RTL,Retail Operational,L7,role_rule,PERMANENT_OR_CONTRACT,,Makassar,PLMR,STORE_CODE_IN_TITLE

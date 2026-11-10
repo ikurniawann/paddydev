@@ -103,6 +103,7 @@ deploying-dev · ready-for-qa · blocked · done).
 | [EPIC-098](./EPIC-098-impor-karyawan-nip-atasan.md) | Impor Karyawan Excel Ditolak karena NIP Atasan (`MODULE-HRIS`) | review | 2026-11-10 |
 | [EPIC-099](./EPIC-099-format-nip-urut.md) | Format NIP YYYYMM + Nomor Urut (`MODULE-HRIS`) | review | 2026-11-10 |
 | [EPIC-100](./EPIC-100-kode-status-toko-massal.md) | Kode & Status Toko Massal lewat Template (`MODULE-HRIS`, `MODULE-CONFIGURATION`) | review | 2026-11-10 |
+| [EPIC-101](./EPIC-101-bagan-organisasi-draft6.md) | Bagan Organisasi Draft 6 — Master Data Fase 1 (`MODULE-HRIS`) | done | 2026-11-10 |
 
 Aturan:
 - Epic + registry ini adalah sumber kebenaran status pekerjaan (canonical).
