@@ -107,9 +107,12 @@ func ValidateBranchCodeUpload(matrix [][]string, branches []BranchRef, usage map
 		}
 		return strings.TrimSpace(r[j])
 	}
-	byCode := map[string]BranchRef{}
+	// holders lists the branches per code; the DB is unique per company only,
+	// so a code may name several branches and is then refused, never guessed.
+	holders := map[string][]BranchRef{}
 	for _, b := range branches {
-		byCode[strings.ToUpper(strings.TrimSpace(b.Code))] = b
+		k := strings.ToUpper(strings.TrimSpace(b.Code))
+		holders[k] = append(holders[k], b)
 	}
 	seenCode, seenNew := map[string]int{}, map[string]int{}
 	for i := header + 1; i < len(matrix); i++ {
@@ -126,10 +129,22 @@ func ValidateBranchCodeUpload(matrix [][]string, branches []BranchRef, usage map
 			res.Errors = append(res.Errors, UploadIssue{Line: line, Column: column, Message: msg})
 			bad = true
 		}
-		b, ok := byCode[code]
+		held := holders[code]
+		ok := len(held) == 1
+		var b BranchRef
+		if ok {
+			b = held[0]
+		}
 		switch {
 		case code == "":
 			fail("Kode Saat Ini", "Kode Saat Ini wajib diisi")
+		case len(held) > 1:
+			names := make([]string, len(held))
+			for i, h := range held {
+				names[i] = h.Name
+			}
+			fail("Kode Saat Ini", fmt.Sprintf("Kode %s dipakai %d toko (%s) — ubah lewat Settings → Business",
+				code, len(held), strings.Join(names, ", ")))
 		case !ok:
 			fail("Kode Saat Ini", "Kode "+code+" tidak ditemukan")
 		case seenCode[code] > 0:
@@ -144,8 +159,8 @@ func ValidateBranchCodeUpload(matrix [][]string, branches []BranchRef, usage map
 		c := BranchCodeChange{Line: line, ID: b.ID, OldCode: b.Code, NewCode: b.Code, OldName: b.Name, NewName: b.Name,
 			OldActive: b.Active, NewActive: b.Active}
 		if newCode != "" && newCode != strings.ToUpper(b.Code) {
-			if owner, taken := byCode[newCode]; taken && owner.ID != b.ID {
-				fail("Kode Baru", "Kode "+newCode+" sudah dipakai toko "+owner.Name)
+			if owners := holders[newCode]; len(owners) > 0 && owners[0].ID != b.ID {
+				fail("Kode Baru", "Kode "+newCode+" sudah dipakai toko "+owners[0].Name)
 			} else if !branchCodePattern.MatchString(newCode) {
 				fail("Kode Baru", "Kode baru hanya huruf besar, angka, dan tanda -, 2–30 karakter")
 			} else if first, dup := seenNew[newCode]; dup {

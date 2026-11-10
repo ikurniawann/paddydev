@@ -140,3 +140,25 @@ func TestValidateBranchCodeUploadNewName(t *testing.T) {
 		t.Fatalf("errors %+v", res.Errors)
 	}
 }
+
+// A code held by branches of two companies (the DB is unique per company
+// only) must not send one row's edit to the other branch (final review).
+func TestValidateBranchCodeUploadAmbiguousCode(t *testing.T) {
+	branches := append(append([]BranchRef{}, testBranches...),
+		BranchRef{ID: "k1", Code: "KANTOR", Name: "Kantor Pusat A", Active: true},
+		BranchRef{ID: "k2", Code: "kantor", Name: "Kantor Pusat B", Active: true})
+	res, _ := ValidateBranchCodeUpload(codeFile(
+		codeRow("KANTOR", "KTRA", "", ""),
+		codeRow("ODOO-PPGA", "KANTOR", "", ""),
+	), branches, testUsage)
+	if len(res.Changes) != 0 {
+		t.Fatalf("an ambiguous code must change nothing: %+v", res.Changes)
+	}
+	want := "Baris 2, kolom Kode Saat Ini: Kode KANTOR dipakai 2 toko (Kantor Pusat A, Kantor Pusat B) — ubah lewat Settings → Business"
+	if !issueText(res.Errors, want) {
+		t.Errorf("missing %q in %+v", want, res.Errors)
+	}
+	if !issueText(res.Errors, "Baris 3, kolom Kode Baru: Kode KANTOR sudah dipakai toko Kantor Pusat A") {
+		t.Errorf("errors %+v", res.Errors)
+	}
+}
