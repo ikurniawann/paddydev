@@ -2,7 +2,10 @@ package domain
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
+
+	"nuhabit/backend/internal/platform/nipformat"
 )
 
 // Columns of the Data Karyawan file (Spec 2026-10-19 §3.2): export and
@@ -164,6 +167,14 @@ func ValidateEmployeeImport(mode string, header []string, rows [][]string, first
 	}
 	seen := map[string]int{}
 	seenIn := map[string]map[string]int{"email": {}, "ktp": {}, "npwp": {}}
+	// EPIC-099: the latest number of each series per join year, and the
+	// numbers new rows of this file already took (series key → line).
+	held := make([]string, 0, len(lk.ExistingNIP))
+	for n := range lk.ExistingNIP {
+		held = append(held, n)
+	}
+	lastByYear := map[int]nipformat.Last{}
+	takenSeq := map[string]int{}
 	// unique checks a value against the file and the database (NIK, NPWP,
 	// email); "" when fine, else the message.
 	unique := func(key, label, value string, line int, owners map[string]EmployeeRef, self string) string {
@@ -394,6 +405,15 @@ func ValidateEmployeeImport(mode string, header []string, rows [][]string, first
 				row.Set[k] = val
 			}
 		}
+		if row.Action == "create" && nip != "" && msg == "" && !exists {
+			join, _ := row.Set["join_date"].(string)
+			status, _ := row.Set["employment_status"].(string)
+			if join != "" && status != "" {
+				if m := checkImportNIP(nip, join, status, held, lastByYear, takenSeq, line); m != "" {
+					fail("nip", m)
+				}
+			}
+		}
 		// A resigned employee is not edited through the file (an old export
 		// would otherwise put back an active status on an inactive row).
 		if row.Action == "update" && !existing.Active && (len(row.Set) > 0 || row.Branch != "" || row.ManagerNIPNew != "") {
@@ -404,4 +424,30 @@ func ValidateEmployeeImport(mode string, header []string, rows [][]string, first
 		out = append(out, row)
 	}
 	return out, errs, warns
+}
+
+// checkImportNIP is the EPIC-099 check of a new row's NIP: the rule of
+// nipformat against the NIPs held, and no number of a series twice in the
+// file (R5). An accepted number is recorded in taken.
+func checkImportNIP(nip, join, status string, held []string, lastByYear map[int]nipformat.Last, taken map[string]int, line int) string {
+	year, _ := strconv.Atoi(join[:4])
+	l, ok := lastByYear[year]
+	if !ok {
+		l = nipformat.LastFor(held, year)
+		lastByYear[year] = l
+	}
+	if m := nipformat.CheckNew(nip, join, status, l); m != "" {
+		return m
+	}
+	_, seq, _ := nipformat.Parse(nip)
+	key := string(nipformat.Main)
+	if nipformat.SeriesFor(status) == nipformat.Harian {
+		key = fmt.Sprintf("%s:%d", nipformat.Harian, year)
+	}
+	key += ":" + strconv.Itoa(seq)
+	if first, dup := taken[key]; dup {
+		return fmt.Sprintf("NIP %s: nomor urut %03d sudah dipakai baris %d di file", nip, seq, first)
+	}
+	taken[key] = line
+	return ""
 }

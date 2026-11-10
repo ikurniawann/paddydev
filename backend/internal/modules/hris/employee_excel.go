@@ -245,14 +245,14 @@ func employeeWorkbook(rows [][]any, l *employeeLists) ([]byte, error) {
 		{"3. Tanggal ditulis DD/MM/YYYY, mis. 21/10/2026. NIK, NPWP, No. HP, No. Rekening, No. BPJS ditulis sebagai teks (jangan diubah ke angka)."},
 		{"4. Simpan lalu unggah di halaman Karyawan → Import. Periksa hasil pengecekan sebelum menyimpan."},
 		{""},
-		{"Mode Tambah: hanya karyawan baru; NIP yang sudah ada ditolak. NIP wajib diisi (tidak dibuat otomatis)."},
+		{"Mode Tambah: hanya karyawan baru; NIP yang sudah ada ditolak. NIP wajib diisi: 6 digit tahun-bulan Tanggal Masuk + nomor urut berikutnya (mis. 202611677)."},
 		{"Mode Timpa: NIP yang ada diperbarui sesuai file; sel kosong TIDAK mengubah data; NIP baru ditambahkan."},
 		{"Kolom abu-abu di paling kanan (Nama Atasan, Status Aktif, Tanggal Keluar, Terakhir Diubah) hanya informasi, tidak dibaca saat import."},
 		{""},
 		{"Kolom", "Wajib", "Isi"},
 	}
 	hints := map[string]string{
-		"nip": "Teks. Wajib diisi, tidak dibuat otomatis", "phone": "Diawali 08 / 62 / +62",
+		"nip": "Teks. YYYYMM Tanggal Masuk + nomor urut berikutnya", "phone": "Diawali 08 / 62 / +62",
 		"join_date": "DD/MM/YYYY", "birth_date": "DD/MM/YYYY", "ktp": "16 angka", "npwp": "15–16 angka",
 		"manager_nip": "NIP atasan langsung (boleh NIP karyawan baru di file yang sama)", "email": "Alamat email aktif",
 	}

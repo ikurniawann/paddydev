@@ -138,10 +138,9 @@ func TestEmployeeImportAddAndReplace(t *testing.T) {
 		SELECT id, 'Cabang Import', 'CI'||substr(md5(random()::text),1,4) FROM configuration.companies LIMIT 1 RETURNING id::text`)
 	h.exec(`INSERT INTO hris.employment_statuses (code, name, is_active) VALUES ('contract', 'Kontrak (PKWT)', true) ON CONFLICT (code) DO NOTHING`)
 	header := []string{"NIP", "Nama Lengkap *", "Email *", "Tanggal Masuk *", "Status Kepegawaian *", "Tipe Jadwal *", "Cabang Utama *", "Jenis Kelamin"}
-	// Deliberately looks like scientific notation ("2026111E…") but is a text NIP
-	// that must be kept exactly; the digits keep it unique per run (no random hex,
-	// whose "12e456"-style prefixes made this test flaky: EPIC-081 review).
-	newNIP := fmt.Sprintf("2026111E%05d", time.Now().UnixNano()/1000%100000)
+	// EPIC-099: a new row's NIP is YYYYMM of Tanggal Masuk + the next number
+	// (the text-vs-scientific NIP case stays covered by domain TestCleanNIP).
+	newNIP := h.nextNIP("2026-10-21", "contract", 0)
 	add := employeeFile(t, header, []string{newNIP, "Baru Import", "baru.import@test.id", "21/10/2026", "Kontrak (PKWT)", "Shift", "Cabang Import", "Perempuan"})
 	pre := uploadEmployees(t, h, &hr, map[string]string{"mode": "add", "step": "preview"}, add)
 	expect(t, pre, http.StatusOK, "")
@@ -210,7 +209,7 @@ func TestEmployeeImportManagerInSameFile(t *testing.T) {
 	h.exec(`INSERT INTO hris.employment_statuses (code, name, is_active) VALUES ('contract', 'Kontrak (PKWT)', true) ON CONFLICT (code) DO NOTHING`)
 	header := []string{"NIP", "Nama Lengkap *", "Email *", "Tanggal Masuk *", "Status Kepegawaian *", "Tipe Jadwal *", "Cabang Utama *", "NIP Atasan"}
 	suffix := fmt.Sprintf("%05d", time.Now().UnixNano()/1000%100000)
-	staff, spv := "98S"+suffix, "98M"+suffix
+	staff, spv := h.nextNIP("2026-10-21", "contract", 0), h.nextNIP("2026-10-21", "contract", 1)
 	file := employeeFile(t, header,
 		[]string{staff, "Staf Baru", "staf." + suffix + "@test.id", "21/10/2026", "Kontrak (PKWT)", "Shift", "Cabang Atasan", spv},
 		[]string{spv, "SPV Baru", "spv." + suffix + "@test.id", "21/10/2026", "Kontrak (PKWT)", "Shift", "Cabang Atasan", ""})
@@ -234,7 +233,7 @@ func TestEmployeeImportManagerInSameFile(t *testing.T) {
 	}
 	// Timpa: an existing employee moves under a new SPV created by the same
 	// file; the row's only change is NIP Atasan.
-	spv2 := "98N" + suffix
+	spv2 := h.nextNIP("2026-10-21", "contract", 0)
 	move := employeeFile(t, header,
 		[]string{staff, "", "", "", "", "", "", spv2},
 		[]string{spv2, "SPV Dua", "spv2." + suffix + "@test.id", "21/10/2026", "Kontrak (PKWT)", "Shift", "Cabang Atasan", ""})

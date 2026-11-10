@@ -49,12 +49,12 @@ var hdr = []string{"NIP", "Nama Lengkap *", "Email *", "No. HP", "Tanggal Masuk 
 
 func TestValidateEmployeeImportAdd(t *testing.T) {
 	rows := [][]string{
-		{"202611001", "Baru Satu", "baru@x.id", "0812-3456-7890", "21/10/2026", "Kontrak (PKWT)", "Shift", "PPLN", "Perempuan", "3273012345678901", "Aktif"},
+		{"202610301", "Baru Satu", "baru@x.id", "0812-3456-7890", "21/10/2026", "Kontrak (PKWT)", "Shift", "PPLN", "Perempuan", "3273012345678901", "Aktif"},
 		{"202505272", "Feti", "feti@x.id", "", "01/06/2025", "Kontrak (PKWT)", "Shift", "PPLN", "", "", ""},
-		{"202611002", "Tanpa Email", "", "", "21/10/2026", "Kontrak (PKWT)", "Shift", "PPLN", "", "", ""},
-		{"202611003", "Status Salah", "s@x.id", "", "21/10/2026", "Karyawan Tetap", "Shift", "PPLN", "", "", ""},
-		{"202611004", "NIK Pendek", "n@x.id", "", "2026-10-21", "Kontrak (PKWT)", "shift", "ppln", "", "3273", ""},
-		{"202611005", "Email Lama", "lama@x.id", "", "21/10/2026", "Kontrak (PKWT)", "Shift", "PPLN", "", "", ""},
+		{"202610302", "Tanpa Email", "", "", "21/10/2026", "Kontrak (PKWT)", "Shift", "PPLN", "", "", ""},
+		{"202610303", "Status Salah", "s@x.id", "", "21/10/2026", "Karyawan Tetap", "Shift", "PPLN", "", "", ""},
+		{"202610304", "NIK Pendek", "n@x.id", "", "2026-10-21", "Kontrak (PKWT)", "shift", "ppln", "", "3273", ""},
+		{"202610305", "Email Lama", "lama@x.id", "", "21/10/2026", "Kontrak (PKWT)", "Shift", "PPLN", "", "", ""},
 		{"", "Tanpa NIP", "tanpa@x.id", "", "21/10/2026", "Kontrak (PKWT)", "Shift", "PPLN", "", "", ""},
 		{"   ", "NIP Spasi", "spasi@x.id", "", "21/10/2026", "Kontrak (PKWT)", "Shift", "PPLN", "", "", ""},
 	}
@@ -223,8 +223,8 @@ func TestValidateEmployeeImportReplaceResignedNewManager(t *testing.T) {
 	l := lk()
 	l.ExistingNIP["201901001"] = EmployeeRef{ID: "e9", NIP: "201901001", Name: "Lama", Active: false}
 	rows := [][]string{
-		{"201901001", "", "", "", "", "", "", "", "", "", "", "202611051"},
-		mgrRow("202611051", "SPV Baru", "spv5@x.id", ""),
+		{"201901001", "", "", "", "", "", "", "", "", "", "", "202610351"},
+		mgrRow("202610351", "SPV Baru", "spv5@x.id", ""),
 	}
 	out, errs, _ := ValidateEmployeeImport("replace", mgrHdr, rows, 2, l)
 	if !issueText(errs, "Baris 2: NIP 201901001 (Lama) sudah resign — data karyawan resign tidak diubah lewat import") || out[0].ManagerNIPNew != "" {
@@ -251,16 +251,16 @@ var mgrHdr = append(append([]string{}, hdr...), "NIP Atasan")
 
 func TestValidateEmployeeImportManagerInSameFile(t *testing.T) {
 	rows := [][]string{
-		mgrRow("202611011", "Staf Satu", "s1@x.id", "202611012"),
-		mgrRow("202611012", "SPV Baru", "spv@x.id", ""),
-		mgrRow("202611013", "Staf Dua", "s2@x.id", "202611012"),
-		mgrRow("202611014", "Staf Tiga", "s3@x.id", "202611099"),
+		mgrRow("202610311", "Staf Satu", "s1@x.id", "202610312"),
+		mgrRow("202610312", "SPV Baru", "spv@x.id", ""),
+		mgrRow("202610313", "Staf Dua", "s2@x.id", "202610312"),
+		mgrRow("202610314", "Staf Tiga", "s3@x.id", "202610399"),
 	}
 	out, errs, _ := ValidateEmployeeImport("add", mgrHdr, rows, 2, lk())
-	if len(errs) != 1 || !issueText(errs, "Baris 5, kolom NIP Atasan: NIP atasan 202611099 tidak ditemukan / tidak aktif") {
+	if len(errs) != 1 || !issueText(errs, "Baris 5, kolom NIP Atasan: NIP atasan 202610399 tidak ditemukan / tidak aktif") {
 		t.Fatalf("errors %+v", errs)
 	}
-	if out[0].ManagerNIPNew != "202611012" || out[2].ManagerNIPNew != "202611012" {
+	if out[0].ManagerNIPNew != "202610312" || out[2].ManagerNIPNew != "202610312" {
 		t.Fatalf("pending managers %q %q", out[0].ManagerNIPNew, out[2].ManagerNIPNew)
 	}
 	if _, ok := out[0].Set["reporting_to"]; ok {
@@ -271,8 +271,8 @@ func TestValidateEmployeeImportManagerInSameFile(t *testing.T) {
 // EPIC-098 B2: NIP Atasan is cleaned like NIP (leading quote, Excel number).
 func TestValidateEmployeeImportManagerNIPQuoted(t *testing.T) {
 	rows := [][]string{
-		mgrRow("202611031", "Kutip", "k@x.id", "'202310037"),
-		mgrRow("202611032", "Ilmiah", "i@x.id", "2,02E+08"),
+		mgrRow("202610331", "Kutip", "k@x.id", "'202310037"),
+		mgrRow("202610332", "Ilmiah", "i@x.id", "2,02E+08"),
 	}
 	out, errs, _ := ValidateEmployeeImport("add", mgrHdr, rows, 2, lk())
 	if out[0].Set["reporting_to"] != "m1" {
@@ -287,8 +287,8 @@ func TestValidateEmployeeImportManagerNIPQuoted(t *testing.T) {
 // row gets no misleading "not found".
 func TestValidateEmployeeImportManagerRowHasError(t *testing.T) {
 	rows := [][]string{
-		mgrRow("202611041", "SPV Tanpa Email", "", ""),
-		mgrRow("202611042", "Staf", "st@x.id", "202611041"),
+		mgrRow("202610341", "SPV Tanpa Email", "", ""),
+		mgrRow("202610342", "Staf", "st@x.id", "202610341"),
 	}
 	_, errs, _ := ValidateEmployeeImport("add", mgrHdr, rows, 2, lk())
 	if len(errs) != 1 || errs[0].Line != 2 {
@@ -299,11 +299,11 @@ func TestValidateEmployeeImportManagerRowHasError(t *testing.T) {
 // Replace mode: a new NIP acts as create and may be another new row's manager.
 func TestValidateEmployeeImportReplaceNewManager(t *testing.T) {
 	rows := [][]string{
-		mgrRow("202611021", "SPV Baru", "spv2@x.id", ""),
-		mgrRow("202611022", "Staf Baru", "st2@x.id", "202611021"),
+		mgrRow("202610321", "SPV Baru", "spv2@x.id", ""),
+		mgrRow("202610322", "Staf Baru", "st2@x.id", "202610321"),
 	}
 	out, errs, _ := ValidateEmployeeImport("replace", mgrHdr, rows, 2, lk())
-	if len(errs) != 0 || out[1].ManagerNIPNew != "202611021" {
+	if len(errs) != 0 || out[1].ManagerNIPNew != "202610321" {
 		t.Fatalf("errors %+v row %+v", errs, out[1])
 	}
 }
@@ -317,5 +317,61 @@ func TestValidateEmployeeImportAddExistingNIPMessage(t *testing.T) {
 	_, errs, _ := ValidateEmployeeImport("add", mgrHdr, rows, 2, l)
 	if !issueText(errs, "Baris 2: NIP 201901001 sudah dipakai Lama (nonaktif) — mode Tambah hanya untuk karyawan baru; pakai mode Timpa untuk memperbarui") {
 		t.Fatalf("errors %+v", errs)
+	}
+}
+
+// nipLookups holds the latest numbers of both series: main 676, harian 2026 095.
+func nipLookups() EmployeeLookups {
+	l := lk()
+	l.Statuses["pekerja harian"] = "daily_worker"
+	l.ExistingNIP["202611676"] = EmployeeRef{ID: "e2", NIP: "202611676", Name: "Terakhir", Active: true}
+	l.ExistingNIP["202611095"] = EmployeeRef{ID: "e3", NIP: "202611095", Name: "Harian Terakhir", Active: true}
+	return l
+}
+
+func nipRow(nip, email, join, status string) []string {
+	return []string{nip, "Baru " + email, email + "@x.id", "", join, status, "Shift", "PPLN", "", "", ""}
+}
+
+// EPIC-099: a new row's NIP is YYYYMM of Tanggal Masuk + the next number.
+func TestValidateEmployeeImportNIPFormat(t *testing.T) {
+	rows := [][]string{
+		nipRow("202611677", "a", "10/11/2026", "Masa Percobaan"),
+		nipRow("202611650", "b", "10/11/2026", "Masa Percobaan"),
+		nipRow("202610678", "c", "10/11/2026", "Masa Percobaan"),
+		nipRow("202611096", "d", "10/11/2026", "Pekerja Harian"),
+		nipRow("202612677", "e", "01/12/2026", "Masa Percobaan"),
+	}
+	_, errs, _ := ValidateEmployeeImport("add", hdr, rows, 2, nipLookups())
+	want := []string{
+		"Baris 3, kolom NIP: NIP 202611650: nomor urut terakhir karyawan 676 — pakai nomor berikutnya, mis. 202611677",
+		"Baris 4, kolom NIP: NIP 202610678: 6 digit depan harus 202611 (tahun-bulan join date)",
+		"Baris 6, kolom NIP: NIP 202612677: nomor urut 677 sudah dipakai baris 2 di file",
+	}
+	for _, w := range want {
+		if !issueText(errs, w) {
+			t.Errorf("missing error %q in %+v", w, errs)
+		}
+	}
+	if len(errs) != len(want) {
+		t.Errorf("unexpected extra errors: %+v", errs)
+	}
+}
+
+func TestValidateEmployeeImportNIPFormatSkipsBadDate(t *testing.T) {
+	rows := [][]string{nipRow("202602677", "a", "31/02/2026", "Masa Percobaan")}
+	_, errs, _ := ValidateEmployeeImport("add", hdr, rows, 2, nipLookups())
+	if len(errs) != 1 || errs[0].Column != "Tanggal Masuk" {
+		t.Fatalf("only the date error is expected: %+v", errs)
+	}
+}
+
+func TestValidateEmployeeImportReplaceKeepsOldNIP(t *testing.T) {
+	l := nipLookups()
+	l.ExistingNIP["EMP-2026-00001"] = EmployeeRef{ID: "e4", NIP: "EMP-2026-00001", Name: "Lama EMP", Active: true}
+	rows := [][]string{{"EMP-2026-00001", "Lama EMP", "", "0812-1111-2222", "", "", "", "", "", "", ""}}
+	_, errs, _ := ValidateEmployeeImport("replace", hdr, rows, 2, l)
+	if len(errs) != 0 {
+		t.Fatalf("an old NIP updated in mode Timpa is not checked: %+v", errs)
 	}
 }
