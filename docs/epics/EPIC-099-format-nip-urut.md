@@ -1,6 +1,6 @@
 # EPIC-099: Format NIP YYYYMM + Nomor Urut (`MODULE-HRIS`)
 
-status: backlog
+status: review
 environment: dev
 retries: 0
 
@@ -43,15 +43,38 @@ Nomor pernah dipakai dua kali dengan bulan berbeda. Contohnya `202601518` (sudah
 Lihat `docs/superpowers/plans/2026-11-10-format-nip-urut.md`.
 
 ## Acceptance Criteria
-- [ ] Tambah karyawan probation, join 2026-11-10, NIP `202611677` → tersimpan (data staging: deret utama terakhir 676).
-- [ ] `202611650` ditolak dengan pesan "nomor urut terakhir karyawan 676 … mis. 202611677".
-- [ ] `202610677` dengan join 2026-11-10 ditolak karena 6 digit depan harus `202611`.
-- [ ] `2026-11-677`, `20261167`, dan `202613001` ditolak dengan pesan format.
-- [ ] Daily Worker join 2026-11 dengan `202611096` → tersimpan. `202611090` ditolak (terakhir 095). `202611700` ditolak karena melewati batas 499.
-- [ ] Karyawan reguler back-dated (`202512677`, join 2025-12) tidak mengubah deret harian 2026.
-- [ ] Impor Excel menerapkan aturan yang sama per baris, termasuk nomor ganda dalam satu file (R5).
-- [ ] Ubah NIP karyawan lama ke bentuk yang salah format → ditolak. Ubah data lain tanpa mengganti NIP → tetap tersimpan, walau NIP lamanya `EMP-…`.
+- [x] Tambah karyawan probation, join 2026-11-10, NIP `202611677` → tersimpan (data staging: deret utama terakhir 676).
+- [x] `202611650` ditolak dengan pesan "nomor urut terakhir karyawan 676 … mis. 202611677".
+- [x] `202610677` dengan join 2026-11-10 ditolak karena 6 digit depan harus `202611`.
+- [x] `2026-11-677`, `20261167`, dan `202613001` ditolak dengan pesan format.
+- [x] Daily Worker join 2026-11 dengan `202611096` → tersimpan. `202611090` ditolak (terakhir 095). `202611700` ditolak karena melewati batas 499.
+- [x] Karyawan reguler back-dated (`202512677`, join 2025-12) tidak mengubah deret harian 2026.
+- [x] Impor Excel menerapkan aturan yang sama per baris, termasuk nomor ganda dalam satu file (R5).
+- [x] Ubah NIP karyawan lama ke bentuk yang salah format → ditolak. Ubah data lain tanpa mengganti NIP → tetap tersimpan, walau NIP lamanya `EMP-…`.
 - [ ] Gate hijau: Go `./internal/...`, vitest yang terdampak, dan CI PR.
 
 ## Automation Log
 - 2026-11-10: Permintaan user. Pola NIP diperiksa di DB staging (read-only). Keputusan user lewat AskUserQuestion: tetap manual + cek format, dua deret, lewat 999 lanjut 4 digit, NIP lama dibiarkan. Rencana ditulis. Branch `feat/nip-format-urut` ditumpuk di atas `fix/impor-karyawan-nip-atasan` (PR #93) karena sama-sama mengubah `employee_import.go`.
+- 2026-11-10: **Implementasi Native** di branch `feat/nip-format-urut`.
+  - Task 1 (aabe992a): paket murni `platform/nipformat` (Parse, SeriesFor, LastFor, Next, CheckNew, CheckChanged).
+  - Task 2 (bbc3a911): `employeekeys.CheckNewNIP/NextNIP/CheckChangedNIP` dipakai `POST /api/users`, `POST /api/hris/employees`, `POST /api/hris/promote`, serta PUT kedua endpoint (cek hanya bila NIP diganti). Tes lama memakai NIP valid.
+  - Task 3 (8a6b773f): impor Excel mengecek baris *create*, termasuk nomor ganda dalam satu file (R5). Petunjuk template diperbarui.
+  - Task 4 (a0599d5e): placeholder form Tambah/Ubah Karyawan dan dialog Promosi.
+  - Ruling pelaksana: cek bentrok NIP sebelum cek format; `internship` masuk deret harian.
+- Review akhir (opus): Critical 1, Important 0, Minor 6.
+  - Critical: karyawan reguler back-dated merusak deret harian (lihat revisi R2). User memilih batas tetap 499. Diperbaiki di 94862b36, tes `TestBackdatedMainKeepsHarian` dan `TestMainStartsAt500` RED→GREEN.
+  - Minor ditunda:
+    - perbandingan NIP lama tanpa trim saat edit (0 NIP berspasi di data);
+    - kunci `ExistingNIP` impor tanpa btrim;
+    - NIP ganda di file mendapat 2 error;
+    - dua pembuatan bersamaan beda bulan bisa memakai nomor sama (tanpa advisory lock);
+    - join date default promosi memakai tanggal UTC;
+    - scan semua NIP per pembuatan (~650 baris).
+- Gate:
+  - Go: gofmt 0, vet, `./internal/...` 136 ok. `TestIntegrationRedeemBrakeIsSharedAcrossReplicas` (memberportal, `Retry-After` 56 vs 60) gagal saat beban paralel dan lulus saat dijalankan terpisah; tidak terkait.
+  - Frontend: vitest 13/13 (dua file terdampak), tsc 0, eslint bersih.
+- Staging 11.50 (image `local-20261110-115008`, backup `/mnt/hdd1/backup/paddydev/staging-before-e099-20261110-114956.dump`). Data staging per QA: utama terakhir 676, harian 2026 terakhir 095.
+  - Ditolak dengan pesan yang benar: `202611650`, `202610677`, `2026-11-677`, DW `202611090`, DW `202611700` (maks 499), PUT `nip: EMP-X`.
+  - Diterima: `202611677` (probation), DW `202611096`, PUT phone saja.
+  - Pratinjau impor: nomor 678 dua kali → error baris 3; `202611650` → error.
+  - Data dan sesi uji sudah dihapus.
