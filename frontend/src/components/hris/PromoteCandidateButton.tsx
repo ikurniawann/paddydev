@@ -160,7 +160,7 @@ export function PromoteCandidateButton({ candidate, onSuccess }: PromoteCandidat
                   value={nip}
                   required
                   maxLength={50}
-                  placeholder="mis. 202511001"
+                  placeholder="mis. 202611677 (tahun-bulan join date + nomor urut)"
                   aria-invalid={nipError ? true : undefined}
                   aria-describedby={nipError ? 'promoteNip-error' : undefined}
                   onChange={(e) => {

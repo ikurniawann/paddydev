@@ -34,7 +34,7 @@ beforeEach(() => {
 describe("PromoteCandidateButton — NIP manual wajib", () => {
   it("menampilkan kolom NIP wajib dan tidak lagi menjanjikan NIP otomatis", () => {
     renderButton();
-    expect(nipInput().placeholder).toBe("mis. 202511001");
+    expect(nipInput().placeholder).toBe("mis. 202611677 (tahun-bulan join date + nomor urut)");
     expect(nipInput()).toBeRequired();
     expect(screen.queryByText(/digenerate|otomatis \(format/i)).not.toBeInTheDocument();
   });

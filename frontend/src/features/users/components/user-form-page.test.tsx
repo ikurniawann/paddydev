@@ -92,7 +92,7 @@ describe("UserFormPage — NIP manual wajib (EPIC-081)", () => {
     state.accountRole = null;
     render(<UserFormPage mode="edit" employeeId={EMP_ID} />);
     expect(nipInput().value).toBe("202509397");
-    expect(nipInput().placeholder).toBe("mis. 202511001");
+    expect(nipInput().placeholder).toBe("mis. 202611677 (tahun-bulan join date + nomor urut)");
   });
 
   it("ubah NIP: nilai baru (dipangkas) dikirim ke server", async () => {
