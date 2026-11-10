@@ -236,3 +236,59 @@ func TestMatchOrgChartNoTitle(t *testing.T) {
 		t.Errorf("titles outside %v", g.TitlesOutside)
 	}
 }
+
+func TestMatchOrgChartSingleCandidateWrongStore(t *testing.T) {
+	nodes := []OrgNode{
+		{Code: "R", Title: "CEO", IsPosition: true, Status: "active"},
+		{Code: "P", ParentCode: "R", Title: "Penjahit", IsPosition: true, StoreCodes: []string{"PBSA"}, Status: "active"},
+		{Code: "S", ParentCode: "R", Title: "Store Support", IsPosition: true, StoreCodes: []string{"PPMR"}, Status: "active"},
+	}
+	emps := []OrgEmployee{
+		{ID: "1", Name: "Jahit Lain", Title: "Penjahit", StoreCode: "PLBM"},
+		{ID: "2", Name: "Jahit Benar", Title: "Penjahit", StoreCode: "PBSA"},
+		{ID: "3", Name: "Support Tanpa Toko", Title: "Store Support"},
+	}
+	g := MatchOrgChart(nodes, emps, nil, nil)
+	if g.Matches[0].NodeCode != "P" || g.Matches[0].Problem != "Toko PLBM tidak ada di posisi bagan P (PBSA)" {
+		t.Errorf("wrong store %+v", g.Matches[0])
+	}
+	if g.Matches[1].NodeCode != "P" || g.Matches[1].Problem != "" {
+		t.Errorf("right store %+v", g.Matches[1])
+	}
+	if g.Matches[2].NodeCode != "S" || g.Matches[2].Problem != "" {
+		t.Errorf("no store %+v", g.Matches[2])
+	}
+}
+
+func TestMatchOrgChartAliasKeyDoubleSpace(t *testing.T) {
+	nodes := []OrgNode{{Code: "R", Title: "CEO", IsPosition: true}, {Code: "A", ParentCode: "R", Title: "Store Leader", IsPosition: true}}
+	aliases := map[string]OrgAlias{"kepala  toko": {Title: "Store Leader", NeedsReview: true}}
+	g := MatchOrgChart(nodes, []OrgEmployee{{ID: "1", Name: "X", Title: "Kepala Toko"}}, aliases, nil)
+	if g.Matches[0].NodeCode != "A" || !g.Matches[0].AliasNeedsReview {
+		t.Errorf("alias %+v", g.Matches[0])
+	}
+}
+
+func TestOrgChartPositionUnderGroupingNode(t *testing.T) {
+	nodes := []OrgNode{
+		{Code: "R", Title: "CEO", IsPosition: true, Level: "L0"},
+		{Code: "M", ParentCode: "R", Title: "Manager", IsPosition: true, Level: "L2"},
+		{Code: "G", ParentCode: "M", Title: "Support"},
+		{Code: "S", ParentCode: "G", Title: "Staff", IsPosition: true, Level: "L2"},
+	}
+	errs, warns := ValidateOrgChart(nodes)
+	if len(errs) != 0 || len(warns) != 1 || warns[0].Code != "S" || warns[0].Message != "Level L2 sama dengan atasan M (L2)" {
+		t.Errorf("errs %+v warns %+v", errs, warns)
+	}
+	emps := []OrgEmployee{{ID: "m", Name: "Bu Manager", Title: "Manager"}, {ID: "s", Name: "Staf", Title: "Staff", ManagerID: "x"},
+		{ID: "x", Name: "Orang Lain", Title: "CEO"}}
+	g := MatchOrgChart(nodes, emps, nil, nil)
+	if g.Matches[1].ManagerProblem != "Atasan di bagan: Manager (M); di data: Orang Lain" {
+		t.Errorf("manager %+v", g.Matches[1])
+	}
+	for _, c := range g.EmptyNodes {
+		if c == "G" {
+			t.Errorf("grouping node listed as empty position")
+		}
+	}
+}

@@ -46,6 +46,7 @@ const nodes = [
     status: "planned",
     needs_confirm: true,
   }),
+  node({ code: "SUP-001", parent_code: "EXE-001", title: "Support", is_position: false, job_level: null, division_code: "SUP", division_name: "Support" }),
 ];
 
 beforeEach(() => {
@@ -63,10 +64,13 @@ function setup() {
 it("menampilkan pohon bagan dengan badge status, perlu konfirmasi, toko, dan pemegang", async () => {
   setup();
   expect(await screen.findByText("CEO")).toBeTruthy();
-  expect(screen.getByRole("tree")).toBeTruthy();
+  expect(screen.getByRole("list", { name: "Bagan organisasi" })).toBeTruthy();
+  expect(screen.queryByRole("tree")).toBeNull();
+  expect(document.querySelector("[aria-selected]")).toBeNull();
+  expect(screen.getByText("Draft 6 · 5 posisi")).toBeTruthy();
   expect(screen.getByText("Bu Direktur")).toBeTruthy();
   expect(screen.getByText("PPMR · PLMR")).toBeTruthy();
-  const leader = screen.getByText("Store Leader").closest("[role=treeitem]") as HTMLElement;
+  const leader = screen.getByText("Store Leader").closest("li") as HTMLElement;
   expect(leader.textContent).toContain("Rencana");
   expect(leader.textContent).toContain("Perlu konfirmasi");
   const legend = screen.getByLabelText("Legenda bagan");
@@ -76,10 +80,10 @@ it("menampilkan pohon bagan dengan badge status, perlu konfirmasi, toko, dan pem
 it("node yang punya bawahan bisa dilipat dan dibuka", async () => {
   setup();
   await screen.findByText("CEO");
-  const ceo = screen.getByText("CEO").closest("[role=treeitem]") as HTMLElement;
-  expect(ceo.getAttribute("aria-expanded")).toBe("true");
-  fireEvent.click(screen.getByRole("button", { name: "Lipat CEO" }));
-  expect(ceo.getAttribute("aria-expanded")).toBe("false");
+  const toggle = screen.getByRole("button", { name: "Lipat CEO" });
+  expect(toggle.getAttribute("aria-expanded")).toBe("true");
+  fireEvent.click(toggle);
+  expect(toggle.getAttribute("aria-expanded")).toBe("false");
   expect(screen.queryByText("General Manager")).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "Buka CEO" }));
   expect(screen.getByText("General Manager")).toBeTruthy();

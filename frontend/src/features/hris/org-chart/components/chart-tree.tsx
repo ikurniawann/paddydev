@@ -28,13 +28,14 @@ function TreeItem({ node, kids }: { node: ChartNode; kids: Map<string, ChartNode
   const [open, setOpen] = useState(true);
   const status = STATUS[node.status] ?? STATUS.active;
   return (
-    <li role="treeitem" aria-expanded={children.length > 0 ? open : undefined} aria-selected={false} className="min-w-0">
+    <li className="min-w-0">
       <div className="flex min-w-0 items-start gap-1.5 py-1">
         {children.length > 0 ? (
           <button
             type="button"
             className="mt-0.5 shrink-0 rounded p-0.5 text-gray-500 hover:bg-gray-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500"
             aria-label={`${open ? "Lipat" : "Buka"} ${node.title}`}
+            aria-expanded={open}
             onClick={() => setOpen((v) => !v)}
           >
             {open ? <ChevronDownIcon className="h-4 w-4" /> : <ChevronRightIcon className="h-4 w-4" />}
@@ -60,7 +61,7 @@ function TreeItem({ node, kids }: { node: ChartNode; kids: Map<string, ChartNode
         </div>
       </div>
       {children.length > 0 && open ? (
-        <ul role="group" className="ml-3 border-l border-gray-200 pl-2 sm:ml-5 sm:pl-3">
+        <ul className="ml-3 border-l border-gray-200 pl-2 sm:ml-5 sm:pl-3">
           {children.map((c) => (
             <TreeItem key={c.code} node={c} kids={kids} />
           ))}
@@ -138,7 +139,7 @@ export function ChartTree() {
             ))}
           </select>
         </label>
-        {filtered.data ? <p className="text-xs text-gray-500 sm:pb-2">{filtered.data.version.label} · {nodes.length} posisi</p> : null}
+        {filtered.data ? <p className="text-xs text-gray-500 sm:pb-2">{filtered.data.version.label} · {nodes.filter((n) => n.is_position).length} posisi</p> : null}
       </div>
 
       <div aria-label="Legenda bagan" className="flex flex-wrap gap-2 text-xs">
@@ -164,7 +165,7 @@ export function ChartTree() {
           <CardContent className="py-12 text-center text-sm text-gray-400">Tidak ada posisi untuk filter ini</CardContent>
         </Card>
       ) : (
-        <ul role="tree" aria-label="Bagan organisasi" className="rounded-xl bg-gray-50 p-3 sm:p-4">
+        <ul aria-label="Bagan organisasi" className="rounded-xl bg-gray-50 p-3 sm:p-4">
           {roots.map((n) => (
             <TreeItem key={n.code} node={n} kids={kids} />
           ))}

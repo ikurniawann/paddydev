@@ -118,12 +118,12 @@ Q1 grade resmi, Q2 kepala Support, Q3 arti warna, Q4 judul fungsi, Q6 approver s
     - error muat tampil sebagai data kosong;
     - loop pada bagan bersiklus (dinaikkan ke Important karena bisa membuat server tergantung).
   - QA staging menemukan 5 karyawan tanpa jabatan tampil sebagai baris kosong; diperbaiki di `d2940267`.
-  - Minor ditunda:
-    - jabatan dengan satu kandidat tidak dicek tokonya;
-    - kunci alias tidak memadatkan spasi ganda;
-    - pola ARIA tree belum lengkap (navigasi panah);
-    - label jumlah posisi ikut menghitung node grup;
-    - tidak ada tes posisi di bawah node grup.
+  - Minor yang semula ditunda diselesaikan sebelum merge PR #96 (atas permintaan user), masing-masing dengan tes:
+    - jabatan dengan satu kandidat kini dicek tokonya: posisi tetap dicocokkan (R9), tetapi kolom Masalah berisi "Toko X tidak ada di posisi bagan KODE (toko bagan)" — `TestMatchOrgChartSingleCandidateWrongStore` RED→GREEN;
+    - kunci alias dipadatkan seperti judul jabatan (huruf kecil, spasi tunggal) — `TestMatchOrgChartAliasKeyDoubleSpace` RED→GREEN;
+    - peran ARIA tree yang tidak lengkap diganti daftar bertingkat biasa; status lipat/buka ada di `aria-expanded` tombolnya (opsi yang disarankan reviewer, tanpa navigasi panah) — tes chart-tree RED→GREEN;
+    - label jumlah hanya menghitung posisi (149, bukan 150) — tes chart-tree RED→GREEN;
+    - tes posisi di bawah node grup untuk BR-04 dan atasan efektif di laporan selisih — `TestOrgChartPositionUnderGroupingNode` (cakupan perilaku yang sudah benar, langsung lulus).
 - Gate:
   - Go: gofmt 0, vet, `./internal/...` 137 ok;
   - frontend: vitest org-chart 8/8, tsc 0, eslint bersih.

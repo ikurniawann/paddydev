@@ -191,11 +191,16 @@ func MatchOrgChart(nodes []OrgNode, emps []OrgEmployee, aliases map[string]OrgAl
 	for _, n := range nodes {
 		byCode[n.Code] = n
 	}
+	// Alias keys are compared the way titles are (lower, single spaces).
+	aliasOf := map[string]OrgAlias{}
+	for k, a := range aliases {
+		aliasOf[normTitle(k)] = a
+	}
 	nodeOf := map[string]string{} // employee → node
 	for _, e := range emps {
 		m := OrgMatch{EmployeeID: e.ID, Name: e.Name, NIP: e.NIP, Title: e.Title, Canonical: e.Title}
 		region := ""
-		if a, ok := aliases[normTitle(e.Title)]; ok {
+		if a, ok := aliasOf[normTitle(e.Title)]; ok {
 			m.Canonical, region, m.AliasNeedsReview = a.Title, a.Region, a.NeedsReview
 		}
 		var cands []OrgNode
@@ -227,6 +232,11 @@ func MatchOrgChart(nodes []OrgNode, emps []OrgEmployee, aliases map[string]OrgAl
 		case 1:
 			m.NodeCode = cands[0].Code
 			nodeOf[e.ID] = m.NodeCode
+			// The only slot for this title is tied to other stores: still
+			// placed (R9), but reported.
+			if c := cands[0]; e.StoreCode != "" && len(c.StoreCodes) > 0 && !hasStore(c, e.StoreCode) {
+				m.Problem = fmt.Sprintf("Toko %s tidak ada di posisi bagan %s (%s)", e.StoreCode, c.Code, strings.Join(c.StoreCodes, ", "))
+			}
 			g.Holders[m.NodeCode] = append(g.Holders[m.NodeCode], e)
 		default:
 			m.Problem = fmt.Sprintf("Cocok ke %d posisi bagan — tidak bisa dipastikan", len(cands))
