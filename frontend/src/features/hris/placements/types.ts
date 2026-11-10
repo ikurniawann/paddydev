@@ -171,3 +171,29 @@ export interface ClockPlacements {
   placements: ClockPlacement[];
   default_branch_id: string | null;
 }
+
+/** Kode & Status Toko (EPIC-100): satu isu file impor. */
+export interface BranchCodeImportIssue {
+  line: number;
+  column: string;
+  name: string;
+  message: string;
+}
+
+export interface BranchCodeImportChange {
+  line: number;
+  old_code: string;
+  new_code: string;
+  old_name: string;
+  new_name: string;
+  old_active: boolean;
+  new_active: boolean;
+}
+
+export interface BranchCodeImportPreview {
+  summary: { rows: number; changed: number; code: number; name: number; deactivate: number; activate: number };
+  errors: BranchCodeImportIssue[];
+  warnings: BranchCodeImportIssue[];
+  fingerprint: string;
+  changes: BranchCodeImportChange[];
+}

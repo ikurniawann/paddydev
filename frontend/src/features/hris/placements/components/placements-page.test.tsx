@@ -28,6 +28,7 @@ vi.mock("@/features/master-data/positions/queries", () => ({
 const accessApi = vi.hoisted(() => ({ fetchScheduleAccess: vi.fn() }));
 vi.mock("@/features/hris/schedule-access/api", () => accessApi);
 vi.mock("./branch-location-dialog", () => ({ BranchLocationDialog: () => null }));
+vi.mock("./branch-code-dialog", () => ({ BranchCodeDialog: () => null }));
 vi.mock("./employee-placements-tab", () => ({ PLACEMENT_MANAGERS: [], EmployeePlacementsTab: () => null }));
 // Combobox asli (popover + cmdk) diganti <select> supaya filter bisa dipilih di jsdom.
 vi.mock("@/components/ui/combobox", () => ({
