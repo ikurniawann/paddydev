@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, ChevronRight, Loader2, MapPin, UserCog } from "lucide-react";
+import { ChevronLeft, ChevronRight, FileSpreadsheet, Loader2, MapPin, UserCog } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -17,6 +17,7 @@ import { useScheduleAccess } from "@/features/hris/schedule-access/queries";
 import { fetchPlacementIds } from "../api";
 import { usePlacementSearch, useStoreBranches } from "../queries";
 import type { PlacementSearchFilter, PlacementSearchRow, PlacementStatusFilter } from "../types";
+import { BranchCodeDialog } from "./branch-code-dialog";
 import { BranchLocationDialog } from "./branch-location-dialog";
 import { BulkActionBar } from "./bulk-action-bar";
 import { BulkPlacementDialog, type BulkPlacementAction } from "./bulk-placement-dialog";
@@ -71,6 +72,7 @@ export function PlacementsPage({
   const [selectingAll, setSelectingAll] = useState(false);
   const [action, setAction] = useState<BulkPlacementAction | null>(null);
   const [locationOpen, setLocationOpen] = useState(false);
+  const [codeOpen, setCodeOpen] = useState(false);
   const [managing, setManaging] = useState<PlacementSearchRow | null>(null);
   // Toko utama setiap karyawan dari halaman yang pernah termuat, untuk tujuan "Atur jadwal".
   const branchOf = useRef(new Map<string, string>());
@@ -204,6 +206,9 @@ export function PlacementsPage({
                   <MapPin className="mr-1.5 h-4 w-4" /> Lokasi Toko
                   {missingCoords > 0 ? ` (${missingCoords} belum diisi)` : ""}
                 </Button>
+                <Button variant="outline" onClick={() => setCodeOpen(true)}>
+                  <FileSpreadsheet className="mr-1.5 h-4 w-4" /> Kode & Status Toko
+                </Button>
               </>
             ) : null
           }
@@ -316,7 +321,10 @@ export function PlacementsPage({
         }}
       />
       {canManage && !store && (
-        <BranchLocationDialog open={locationOpen} onOpenChange={setLocationOpen} branches={branches.data ?? []} />
+        <>
+          <BranchLocationDialog open={locationOpen} onOpenChange={setLocationOpen} branches={branches.data ?? []} />
+          <BranchCodeDialog open={codeOpen} onOpenChange={setCodeOpen} />
+        </>
       )}
       <Dialog open={managing !== null} onOpenChange={(open) => !open && setManaging(null)}>
         <DialogContent className="sm:max-w-3xl">

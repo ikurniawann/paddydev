@@ -2,7 +2,9 @@ import { apiDelete, apiGet, apiPatch, apiPost, apiPut, buildListUrl } from "@/li
 import { withReasonQuery } from "@/lib/hris/delete-reason";
 import type { BranchLocationPayload } from "@/lib/hris/geofence";
 import type { PlaceResult } from "@/lib/maps/coords";
+import { downloadBlob } from "@/lib/purchasing/report-ui-shared";
 import type {
+  BranchCodeImportPreview,
   BulkEndPlacementPayload,
   BulkPlacementPayload,
   BulkPlacementResponse,
@@ -83,3 +85,53 @@ export const fetchClockPlacements = (employeeId?: string) =>
   apiGet<{ data: ClockPlacements }>(
     buildListUrl("/api/hris/me/placements", { employee_id: employeeId })
   ).then((res) => res.data ?? { placements: [], default_branch_id: null });
+
+/* ── Kode & Status Toko (EPIC-100) ── */
+
+/** Template berisi semua toko dengan kode, nama, dan status saat ini. */
+export const branchCodeTemplateUrl = "/api/hris/branches/template";
+
+/** Galat impor dengan status HTTP-nya (409 = data toko berubah sejak pratinjau). */
+export class BranchCodeImportError extends Error {
+  status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "BranchCodeImportError";
+    this.status = status;
+  }
+}
+
+type BranchCodeImportInput = {
+  file: File;
+  step: "preview" | "commit" | "error_file";
+  fingerprint?: string;
+  ack_warnings?: boolean;
+};
+
+function postBranchCodes(input: BranchCodeImportInput) {
+  const form = new FormData();
+  form.append("file", input.file);
+  form.append("step", input.step);
+  if (input.fingerprint) form.append("fingerprint", input.fingerprint);
+  if (input.ack_warnings) form.append("ack_warnings", "true");
+  return fetch("/api/hris/branches/import", { method: "POST", body: form });
+}
+
+/** step=preview mengembalikan pratinjau; step=commit mengembalikan ringkasan + pesan server. */
+export async function importBranchCodeFile(
+  input: Omit<BranchCodeImportInput, "step"> & { step: "preview" | "commit" }
+): Promise<{ data: BranchCodeImportPreview; message?: string }> {
+  const res = await postBranchCodes(input);
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new BranchCodeImportError((json as { error?: string }).error ?? `Upload gagal (${res.status})`, res.status);
+  }
+  return json as { data: BranchCodeImportPreview; message?: string };
+}
+
+/** File yang sama dengan kolom "Keterangan Error". */
+export async function downloadBranchCodeErrors(file: File): Promise<void> {
+  const res = await postBranchCodes({ file, step: "error_file" });
+  if (!res.ok) throw new Error(`Gagal membuat file error (${res.status})`);
+  downloadBlob(await res.blob(), `Error - ${file.name}`);
+}

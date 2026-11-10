@@ -102,6 +102,7 @@ deploying-dev · ready-for-qa · blocked · done).
 | [EPIC-097](./EPIC-097-pilihan-atasan-terpotong.md) | Pilihan Manager (Atasan Langsung) Terpotong 200 Karyawan (`MODULE-HRIS`) | done | 2026-11-09 |
 | [EPIC-098](./EPIC-098-impor-karyawan-nip-atasan.md) | Impor Karyawan Excel Ditolak karena NIP Atasan (`MODULE-HRIS`) | review | 2026-11-10 |
 | [EPIC-099](./EPIC-099-format-nip-urut.md) | Format NIP YYYYMM + Nomor Urut (`MODULE-HRIS`) | review | 2026-11-10 |
+| [EPIC-100](./EPIC-100-kode-status-toko-massal.md) | Kode & Status Toko Massal lewat Template (`MODULE-HRIS`, `MODULE-CONFIGURATION`) | review | 2026-11-10 |
 
 Aturan:
 - Epic + registry ini adalah sumber kebenaran status pekerjaan (canonical).

@@ -43,6 +43,8 @@ func (h handlers) routes() []module.Route {
 		r("DELETE /api/hris/employee-placements/{id}", h.withDelete(delPlacement, h.withMenu(placementManagers, h.deletePlacement))),
 		r("GET /api/hris/me/placements", h.withActor(h.myPlacements)),
 		r("GET /api/hris/branches", h.withUser(h.listBranches)),
+		r("GET /api/hris/branches/template", h.withMenu(placementManagers, h.branchCodeTemplate)),
+		r("POST /api/hris/branches/import", h.withAction("update", placementManagers, h.importBranchCodes)),
 		r("PUT /api/hris/branches/{id}/location", h.withMenu(placementManagers, h.putBranchLocation)),
 		r("PUT /api/hris/branches/{id}/min-work-hours", h.withMenu(placementManagers, h.putBranchMinWorkHours)),
 		r("GET /api/hris/places", h.withMenu(placementManagers, h.searchPlaces)),
