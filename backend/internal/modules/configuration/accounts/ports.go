@@ -126,4 +126,6 @@ type EmployeeAccess struct {
 	ID, Email, FullName string
 	UserID              *string
 	IsAccessApp         bool
+	// NIP and JoinDate (YYYY-MM-DD) let a replaced NIP be checked (EPIC-099).
+	NIP, JoinDate string
 }

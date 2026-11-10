@@ -34,7 +34,7 @@ func TestParse(t *testing.T) {
 }
 
 func TestSeriesFor(t *testing.T) {
-	for _, s := range []string{"daily_worker", "freelance", "intern"} {
+	for _, s := range []string{"daily_worker", "freelance", "intern", "internship"} {
 		if SeriesFor(s) != Harian {
 			t.Errorf("SeriesFor(%q) = %q, want harian", s, SeriesFor(s))
 		}

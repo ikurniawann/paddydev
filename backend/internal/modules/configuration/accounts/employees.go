@@ -261,6 +261,10 @@ func (s *service) createUser(ctx context.Context, actorID string, b *employeeBod
 	if err := s.keyConflict(ctx, b, nip, ""); err != nil {
 		return nil, err
 	}
+	// EPIC-099: YYYYMM of the join date + the next number of the series.
+	if err := employeekeys.CheckNewNIP(ctx, s.db, nip, *b.str("join_date"), *b.str("employment_status")); err != nil {
+		return nil, err
+	}
 	cols := []Column{
 		{"nip", nip}, {"full_name", *b.str("full_name")}, {"email", email}, {"phone", orEmpty(b.str("phone"))},
 		{"join_date", *b.str("join_date")}, {"employment_status", *b.str("employment_status")},
@@ -497,6 +501,16 @@ func (s *service) updateUser(ctx context.Context, actorID, id string, b *employe
 	}
 	if err := s.keyConflict(ctx, b, newNIP, id); err != nil {
 		return nil, err
+	}
+	// A replaced NIP keeps the format (EPIC-099 R4); the old one is left alone.
+	if newNIP != "" && newNIP != existing.NIP {
+		join := existing.JoinDate
+		if j := b.str("join_date"); j != nil && *j != "" {
+			join = *j
+		}
+		if err := employeekeys.CheckChangedNIP(newNIP, join); err != nil {
+			return nil, err
+		}
 	}
 
 	// Refused before the employee patch and the account sync (ruling M3).

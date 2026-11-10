@@ -19,6 +19,8 @@ type TrackedState struct {
 	DepartmentID     *string
 	SectionID        *string
 	JobTitleID       *string
+	// NIP and JoinDate (YYYY-MM-DD) let a replaced NIP be checked (EPIC-099).
+	NIP, JoinDate string
 }
 
 // HistoryChange is the employment_history row a PUT records.

@@ -26,7 +26,7 @@ const harianLabel = "Daily Worker/Freelance/Magang"
 // SeriesFor is the series of a new employee by its starting status.
 func SeriesFor(status string) Series {
 	switch status {
-	case "daily_worker", "freelance", "intern":
+	case "daily_worker", "freelance", "intern", "internship":
 		return Harian
 	}
 	return Main

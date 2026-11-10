@@ -22,6 +22,8 @@ type EmployeeRepo interface {
 	EmployeeExists(ctx context.Context, column, value string, excludeID *string) (bool, error)
 	// EmployeeKeyConflict is the employee (active or not) already holding one of the keys, nil when free.
 	EmployeeKeyConflict(ctx context.Context, k employeekeys.Keys, excludeID string) (*employeekeys.Conflict, error)
+	// CheckNewNIP refuses a new employee's NIP out of the EPIC-099 format, as a 400.
+	CheckNewNIP(ctx context.Context, nip, joinDate, status string) error
 	InsertEmployee(ctx context.Context, f fields) (*Row, error)
 	EmployeeDetail(ctx context.Context, id string) (*Row, error)
 	EmployeeBrief(ctx context.Context, id string) (*Row, error)
@@ -64,6 +66,10 @@ func (s *Service) CreateEmployee(ctx context.Context, in employeeInput) (*Row, e
 		return nil, err
 	} else if conflict != nil {
 		return nil, httpx.BadRequest(conflict.Message())
+	}
+	// EPIC-099: YYYYMM of the join date + the next number of the series.
+	if err := s.repo.CheckNewNIP(ctx, nip, strOr(in.joinDate.Val), strOr(in.employmentStatus.Val)); err != nil {
+		return nil, err
 	}
 	exists, err := s.repo.EmployeeExists(ctx, "email", strOr(in.email.Val), nil)
 	if err != nil {
@@ -161,6 +167,16 @@ func (s *Service) UpdateEmployee(ctx context.Context, id string, in employeeInpu
 		return nil, err
 	} else if conflict != nil {
 		return nil, httpx.BadRequest(conflict.Message())
+	}
+	// A replaced NIP keeps the format (EPIC-099 R4); the old one is left alone.
+	if in.nip.Sent && nip != current.NIP {
+		join := current.JoinDate
+		if j := strOr(in.joinDate.Val); in.joinDate.Sent && j != "" {
+			join = j
+		}
+		if err := employeekeys.CheckChangedNIP(nip, join); err != nil {
+			return nil, err
+		}
 	}
 
 	f := in.columns()

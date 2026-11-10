@@ -3,6 +3,7 @@ package recruitment
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -12,6 +13,8 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"nuhabit/backend/internal/platform/database"
+	"nuhabit/backend/internal/platform/employeekeys"
+	"nuhabit/backend/internal/platform/nipformat"
 	"nuhabit/backend/internal/platform/testutil"
 )
 
@@ -733,7 +736,7 @@ func TestPromote(t *testing.T) {
 	if h.scalar(`SELECT promoted_to_employee_id::text FROM recruitment.candidates WHERE id = $1`, hired) != "<nil>" {
 		t.Fatal("refused promotion must not link the candidate")
 	}
-	manualNIP := "202611" + hired[:6]
+	manualNIP := h.nextNIP("2026-08-01", "contract")
 	c = h.as(h.hr, "POST", "/api/hris/promote", map[string]any{"candidate_id": hired, "join_date": "2026-08-01", "employment_status": "contract", "nip": "  " + manualNIP + " "})
 	expect(t, c, 200, "")
 	nip, _ := c.body["nip"].(string)
@@ -750,7 +753,7 @@ func TestPromote(t *testing.T) {
 	pool := h.scalar(`INSERT INTO recruitment.candidates (full_name, email, phone, domicile, source, status)
 		VALUES ('Go Pool', 'q' || md5(random()::text) || '@x.id', '0812', 'Jkt', 'walk_in', 'talent_pool') RETURNING id::text`)
 	h.ports.rejection = "Karyawan tidak ditemukan"
-	c = h.as(h.hr, "POST", "/api/hris/promote", map[string]any{"candidate_id": pool, "employment_status": "internship", "nip": "202611" + pool[:6]})
+	c = h.as(h.hr, "POST", "/api/hris/promote", map[string]any{"candidate_id": pool, "join_date": "2026-09-01", "employment_status": "internship", "nip": h.nextNIP("2026-09-01", "internship")})
 	if c.body["contract_number"] != nil || !strings.HasSuffix(c.body["message"].(string), "menjadi karyawan") {
 		t.Fatal(c.raw)
 	}
@@ -766,5 +769,45 @@ func TestPromoteConcurrentIs409(t *testing.T) {
 	_, err := svc.repo.PromoteCandidate(context.Background(), h.tx, id, "2026-10-04", "probation", nil, nil, "C2"+id[:8])
 	if !database.IsUniqueViolation(err) {
 		t.Fatalf("want 23505, got %v", err)
+	}
+}
+
+// nextNIP is the next NIP of the series inside the test transaction.
+func (h *harness) nextNIP(join, status string) string {
+	h.t.Helper()
+	n, err := employeekeys.NextNIP(context.Background(), h.tx, join, status)
+	if err != nil {
+		h.t.Fatal(err)
+	}
+	return n
+}
+
+// EPIC-099: the promoted employee's NIP is YYYYMM of the join date + the next number.
+func TestPromoteNIPFormat(t *testing.T) {
+	h := newHarness(t)
+	hired := h.candidate("hired")
+	promote := func(nip, join, status string) call {
+		return h.as(h.hr, "POST", "/api/hris/promote", map[string]any{"candidate_id": hired, "nip": nip, "join_date": join, "employment_status": status})
+	}
+	refused := func(c call, part string) {
+		t.Helper()
+		if c.status != 400 || !strings.Contains(fmt.Sprint(c.body["error"]), part) {
+			t.Fatalf("want 400 %q, got %d %s", part, c.status, c.raw)
+		}
+	}
+	next := h.nextNIP("2026-05-10", "probation")
+	_, seq, _ := nipformat.Parse(next)
+	refused(promote(next, "2026-06-10", "probation"), "6 digit depan harus 202606")
+	refused(promote("2026-05-001", "2026-05-10", "probation"), "NIP harus angka")
+	// Another employee takes the next number; it is not reused in another month.
+	h.exec(`INSERT INTO hris.employees (full_name, nip, email, phone, join_date, employment_status)
+		VALUES ('Pemegang Nomor', $1, 'n' || md5(random()::text) || '@x.id', '', '2026-05-10', 'probation')`, next)
+	refused(promote(fmt.Sprintf("202607%03d", seq), "2026-07-10", "probation"), "nomor urut terakhir karyawan")
+	dw := h.nextNIP("2026-05-10", "internship")
+	if c := promote(dw, "2026-05-10", "internship"); c.status != 200 {
+		t.Fatalf("daily worker NIP: %d %s", c.status, c.raw)
+	}
+	if got := h.scalar(`SELECT nip FROM hris.employees e JOIN recruitment.candidates c ON c.promoted_to_employee_id = e.id WHERE c.id = $1`, hired); got != dw {
+		t.Fatalf("stored NIP %v, want %s", got, dw)
 	}
 }

@@ -81,6 +81,10 @@ func (s *store) EmployeeKeyConflict(ctx context.Context, k employeekeys.Keys, ex
 	return employeekeys.Find(ctx, s.db, k, excludeID)
 }
 
+func (s *store) CheckNewNIP(ctx context.Context, nip, joinDate, status string) error {
+	return employeekeys.CheckNewNIP(ctx, s.db, nip, joinDate, status)
+}
+
 func (s *store) InsertEmployee(ctx context.Context, f fields) (*Row, error) {
 	return insertRow(ctx, s.db, "hris.employees", f, "*")
 }
@@ -101,8 +105,9 @@ func (s *store) EmployeeBrief(ctx context.Context, id string) (*Row, error) {
 
 func (s *store) EmployeeTracked(ctx context.Context, id string) (*domain.TrackedState, error) {
 	var t domain.TrackedState
-	err := s.db.QueryRow(ctx, `SELECT employment_status, department_id::text, section_id::text, job_title_id::text
-		FROM hris.employees WHERE id = $1`, id).Scan(&t.EmploymentStatus, &t.DepartmentID, &t.SectionID, &t.JobTitleID)
+	err := s.db.QueryRow(ctx, `SELECT employment_status, department_id::text, section_id::text, job_title_id::text,
+		coalesce(nip, ''), coalesce(to_char(join_date, 'YYYY-MM-DD'), '')
+		FROM hris.employees WHERE id = $1`, id).Scan(&t.EmploymentStatus, &t.DepartmentID, &t.SectionID, &t.JobTitleID, &t.NIP, &t.JoinDate)
 	if database.IsNoRows(err) || database.PgCode(err) == "22P02" {
 		return nil, nil
 	}

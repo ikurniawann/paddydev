@@ -64,23 +64,25 @@ func TestEmployeeNIPManualRequired(t *testing.T) {
 	long := strings.Repeat("9", 51)
 	expect(t, h.do(&hr, "POST", "/api/hris/employees", body("e", long, true)), 400, "NIP maksimal 50 karakter")
 	expect(t, h.do(&hr, "POST", "/api/hris/employees", body("e2", " "+long+" ", true)), 400, "NIP maksimal 50 karakter")
-	fifty := " T" + strings.Repeat("7", 49) + " "
-	edge := h.do(&hr, "POST", "/api/hris/employees", body("e3", fifty, true))
+	// EPIC-099 made a 50-character NIP impossible on create; the padding is still trimmed.
+	padded := h.nextNIP("2026-03-01", "probation", 0)
+	edge := h.do(&hr, "POST", "/api/hris/employees", body("e3", " "+padded+" ", true))
 	expect(t, edge, 200, "")
-	if got := edge.data()["nip"]; got != strings.TrimSpace(fifty) {
-		t.Fatalf("50 chars + padding must be stored trimmed, got %v", got)
+	if got := edge.data()["nip"]; got != padded {
+		t.Fatalf("NIP must be stored trimmed, got %v", got)
 	}
 	r := h.do(&hr, "POST", "/api/hris/employees", body("f", taken, true))
 	if r.status != 400 || !strings.HasPrefix(r.body["error"].(string), "NIP sudah dipakai karyawan Pemilik NIP") {
 		t.Fatalf("duplicate NIP: %d %s", r.status, r.raw)
 	}
-	ok := h.do(&hr, "POST", "/api/hris/employees", body("g", "202611"+other[:6]+"x", true))
+	ok := h.do(&hr, "POST", "/api/hris/employees", body("g", h.nextNIP("2026-03-01", "probation", 0), true))
 	expect(t, ok, 200, "")
 	id := ok.data()["id"].(string)
 
 	// Update: change is saved (trimmed), a duplicate or blank NIP is refused.
-	expect(t, h.do(&hr, "PUT", "/api/hris/employees/"+id, map[string]any{"nip": " 5551" + other[:6] + " "}), 200, "")
-	if got := h.scalar(`SELECT nip FROM hris.employees WHERE id = $1`, id); got != "5551"+other[:6] {
+	changed := h.nextNIP("2026-03-01", "probation", 0)
+	expect(t, h.do(&hr, "PUT", "/api/hris/employees/"+id, map[string]any{"nip": " " + changed + " "}), 200, "")
+	if got := h.scalar(`SELECT nip FROM hris.employees WHERE id = $1`, id); got != changed {
 		t.Fatalf("saved NIP = %v", got)
 	}
 	expect(t, h.do(&hr, "PUT", "/api/hris/employees/"+id, map[string]any{"nip": ""}), 400, "NIP wajib diisi")
@@ -91,10 +93,10 @@ func TestEmployeeNIPManualRequired(t *testing.T) {
 		t.Fatalf("duplicate NIP on update: %d %s", r.status, r.raw)
 	}
 	// Re-sending the employee's own NIP is not a conflict.
-	expect(t, h.do(&hr, "PUT", "/api/hris/employees/"+id, map[string]any{"nip": "5551" + other[:6], "phone": "081200000008"}), 200, "")
+	expect(t, h.do(&hr, "PUT", "/api/hris/employees/"+id, map[string]any{"nip": changed, "phone": "081200000008"}), 200, "")
 	// Saving other fields without sending a NIP leaves it alone (R4: old EMP- numbers stay).
 	expect(t, h.do(&hr, "PUT", "/api/hris/employees/"+id, map[string]any{"phone": "081200000009"}), 200, "")
-	if got := h.scalar(`SELECT nip FROM hris.employees WHERE id = $1`, id); got != "5551"+other[:6] {
+	if got := h.scalar(`SELECT nip FROM hris.employees WHERE id = $1`, id); got != changed {
 		t.Fatalf("NIP changed by unrelated update: %v", got)
 	}
 }
@@ -106,10 +108,11 @@ func TestEmployeeDirectoryAndCRUD(t *testing.T) {
 	dept := h.department("Bar Test")
 	boss := h.employee(emp{name: "Bos Test", dept: &dept})
 
+	manual := h.nextNIP("2026-03-01", "probation", 0)
 	created := h.do(&hr, "POST", "/api/hris/employees", map[string]any{
 		"full_name": "  Budi Directory ", "email": "budi.dir." + boss[:6] + "@hris.test", "join_date": "2026-03-01",
 		"employment_status": "probation", "department_id": dept, "reporting_to": boss, "phone": nil,
-		"nip": "  202611" + boss[:6] + " ", "is_active": false, "user_id": "00000000-0000-0000-0000-000000000001",
+		"nip": "  " + manual + " ", "is_active": false, "user_id": "00000000-0000-0000-0000-000000000001",
 	})
 	expect(t, created, 200, "")
 	if created.body["message"] != "Karyawan berhasil ditambahkan" {
@@ -119,7 +122,7 @@ func TestEmployeeDirectoryAndCRUD(t *testing.T) {
 	if d["full_name"] != "Budi Directory" || d["phone"] != "" || d["is_active"] != true || d["user_id"] != nil {
 		t.Fatalf("allowlist/trim/defaults broken: %v", d)
 	}
-	if nip, _ := d["nip"].(string); nip != "202611"+boss[:6] {
+	if nip, _ := d["nip"].(string); nip != manual {
 		t.Fatalf("NIP must be the trimmed manual value, got %v", d["nip"])
 	}
 	if d["join_date"] != "2026-03-01T00:00:00.000Z" {
@@ -128,7 +131,7 @@ func TestEmployeeDirectoryAndCRUD(t *testing.T) {
 	id := d["id"].(string)
 
 	dup := h.do(&hr, "POST", "/api/hris/employees", map[string]any{
-		"full_name": "Dup", "email": d["email"], "join_date": "2026-03-01", "employment_status": "probation", "nip": "DUP" + boss[:6]})
+		"full_name": "Dup", "email": d["email"], "join_date": "2026-03-01", "employment_status": "probation", "nip": h.nextNIP("2026-03-01", "probation", 0)})
 	expect(t, dup, 400, "Email sudah digunakan")
 	missing := h.do(&hr, "POST", "/api/hris/employees", map[string]any{"email": "x@y.test"})
 	expect(t, missing, 400, "Field yang wajib diisi: nama lengkap, email, tanggal bergabung, status karyawan")

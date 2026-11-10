@@ -91,6 +91,10 @@ func (s *Service) Promote(ctx context.Context, in promotionInput) (*promotion, e
 	if conflict != nil {
 		return nil, httpx.BadRequest(conflict.Message())
 	}
+	// EPIC-099: YYYYMM of the join date + the next number of the series.
+	if err := employeekeys.CheckNewNIP(ctx, s.db, nip, joinDate, status); err != nil {
+		return nil, err
+	}
 	employeeID, err := s.repo.PromoteCandidate(ctx, s.db, c.ID, joinDate, status, emptyToNil(in.DepartmentID), emptyToNil(in.ReportingTo), nip)
 	if err != nil {
 		// A concurrent write won the race past the NIP pre-check.

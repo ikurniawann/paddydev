@@ -3,15 +3,19 @@ package accounts_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"regexp"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
 
 	"nuhabit/backend/internal/app"
 	"nuhabit/backend/internal/modules/configuration/accounts"
+	"nuhabit/backend/internal/platform/employeekeys"
+	"nuhabit/backend/internal/platform/nipformat"
 	"nuhabit/backend/internal/platform/testutil"
 )
 
@@ -58,10 +62,17 @@ func (e *env) scalar(sql string, args ...any) any {
 
 func uniqueEmail() string { return "go-acc-" + testutil.RandomHex(5) + "@test.local" }
 
+// testSeq numbers the NIPs of employeeBody: far above every committed NIP
+// and rising, so each create in a test transaction is the series' next one
+// (EPIC-099; rows of other tests are never committed).
+var testSeq atomic.Int64
+
+func init() { testSeq.Store(5000) }
+
 func employeeBody(email string) map[string]any {
 	return map[string]any{
 		"full_name": "Budi Santoso", "email": email, "join_date": "2026-01-01", "employment_status": "permanent",
-		"nip": "T" + testutil.RandomHex(6),
+		"nip": fmt.Sprintf("202601%d", testSeq.Add(1)),
 	}
 }
 
@@ -236,7 +247,7 @@ func TestCreateAndGetUser(t *testing.T) {
 		t.Fatalf("keys %s", got)
 	}
 	data := body["data"].(map[string]any)
-	if !regexp.MustCompile(`^T[0-9a-f]{12}$`).MatchString(data["nip"].(string)) || data["phone"] != "" ||
+	if !regexp.MustCompile(`^202601\d{4}$`).MatchString(data["nip"].(string)) || data["phone"] != "" ||
 		data["joinDate"] != "2026-01-01T00:00:00.000Z" || data["appAccount"] != nil || data["isAccessApp"] != false {
 		t.Fatalf("data %v", data)
 	}
@@ -762,7 +773,7 @@ func TestEmployeeNIPManualRequired(t *testing.T) {
 	}
 
 	padded := employeeBody(uniqueEmail())
-	nip := "N" + testutil.RandomHex(6)
+	nip := padded["nip"].(string)
 	padded["nip"] = "  " + nip + " "
 	code, body, raw := e.do("POST", "/api/users", padded)
 	if code != 201 || body["data"].(map[string]any)["nip"] != nip {
@@ -776,7 +787,7 @@ func TestEmployeeNIPManualRequired(t *testing.T) {
 	wantError(t, code, body, 400, "NIP sudah dipakai karyawan Budi Santoso (NIP "+nip+", aktif)")
 
 	// Update: change is saved trimmed, blank is refused, an untouched NIP stays.
-	newNIP := "M" + testutil.RandomHex(6)
+	newNIP := fmt.Sprintf("202601%d", testSeq.Add(1))
 	code, body, raw = e.do("PUT", "/api/users/"+id, map[string]any{"nip": " " + newNIP + " "})
 	if code != 200 || body["data"].(map[string]any)["nip"] != newNIP {
 		t.Fatalf("update NIP: %d %s", code, raw)
@@ -810,4 +821,50 @@ func TestUpdateUserRefusesSelfManager(t *testing.T) {
 	id := body["data"].(map[string]any)["id"].(string)
 	code, body, _ = e.do("PUT", "/api/users/"+id, map[string]any{"reporting_to": id})
 	wantError(t, code, body, 400, "Atasan langsung tidak boleh karyawan itu sendiri")
+}
+
+// EPIC-099: a new employee's NIP is YYYYMM of the join date + the next number.
+func TestEmployeeNIPFormat(t *testing.T) {
+	e := settingsUsers(t)
+	next, err := employeekeys.NextNIP(context.Background(), e.tx, "2026-04-10", "probation")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, seq, _ := nipformat.Parse(next)
+	body := func(nip, join, status string) map[string]any {
+		b := employeeBody(uniqueEmail())
+		b["nip"], b["join_date"], b["employment_status"] = nip, join, status
+		return b
+	}
+	refused := func(b map[string]any, part string) {
+		t.Helper()
+		code, out, raw := e.do("POST", "/api/users", b)
+		if code != 400 || !strings.Contains(fmt.Sprint(out["error"]), part) {
+			t.Fatalf("want 400 %q, got %d %s", part, code, raw)
+		}
+	}
+	refused(body(next, "2026-03-10", "probation"), "6 digit depan harus 202603")
+	refused(body("2026-04-001", "2026-04-10", "probation"), "NIP harus angka")
+	code, out, raw := e.do("POST", "/api/users", body(next, "2026-04-10", "probation"))
+	if code != 201 {
+		t.Fatalf("next NIP: %d %s", code, raw)
+	}
+	// The number just used is not reused in another month (202601518 / 202603518).
+	refused(body(fmt.Sprintf("202607%03d", seq), "2026-07-10", "probation"), "nomor urut terakhir karyawan")
+	id := out["data"].(map[string]any)["id"].(string)
+	dw, _ := employeekeys.NextNIP(context.Background(), e.tx, "2026-04-10", "daily_worker")
+	if code, _, raw = e.do("POST", "/api/users", body(dw, "2026-04-10", "daily_worker")); code != 201 {
+		t.Fatalf("daily worker NIP: %d %s", code, raw)
+	}
+
+	code, out, _ = e.do("PUT", "/api/users/"+id, map[string]any{"nip": "EMP-X"})
+	if code != 400 || !strings.HasPrefix(fmt.Sprint(out["error"]), "NIP harus angka") {
+		t.Fatalf("replaced NIP format: %d %v", code, out)
+	}
+	if _, err := e.tx.Exec(context.Background(), `UPDATE hris.employees SET nip = 'EMP-2026-' || substr(md5(random()::text), 1, 6) WHERE id = $1`, id); err != nil {
+		t.Fatal(err)
+	}
+	if code, _, raw = e.do("PUT", "/api/users/"+id, map[string]any{"phone": "08124"}); code != 200 {
+		t.Fatalf("old NIP must not block other edits: %d %s", code, raw)
+	}
 }
