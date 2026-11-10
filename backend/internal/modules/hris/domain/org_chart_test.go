@@ -223,3 +223,16 @@ func TestMatchOrgChartCycleTerminates(t *testing.T) {
 		t.Fatal("MatchOrgChart did not return on a cyclic chart")
 	}
 }
+
+// An employee without a job title gets a readable reason and label, not an
+// empty row in "Jabatan di Luar Bagan" (staging QA).
+func TestMatchOrgChartNoTitle(t *testing.T) {
+	nodes, aliases := matchFixture()
+	g := MatchOrgChart(nodes, []OrgEmployee{{ID: "x", Name: "X", Title: "  "}}, aliases, nil)
+	if m := matchOf(g, "x"); m.Problem != "Belum punya jabatan di HRIS" || m.NodeCode != "" {
+		t.Errorf("x %+v", m)
+	}
+	if g.TitlesOutside["(tanpa jabatan)"] != 1 || len(g.TitlesOutside) != 1 {
+		t.Errorf("titles outside %v", g.TitlesOutside)
+	}
+}

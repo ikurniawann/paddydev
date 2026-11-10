@@ -292,10 +292,10 @@ func (h handlers) orgChartGap(w http.ResponseWriter, r *http.Request, _ *auth.Us
 		switch {
 		case m.NodeCode != "":
 			sum["matched"]++
-		case m.Problem == "Jabatan tidak ada di bagan":
-			sum["outside"]++
-		default:
+		case strings.HasPrefix(m.Problem, "Cocok ke"):
 			sum["ambiguous"]++
+		default:
+			sum["outside"]++
 		}
 		if m.ManagerProblem != "" {
 			sum["manager_diff"]++

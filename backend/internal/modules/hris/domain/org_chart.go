@@ -217,6 +217,11 @@ func MatchOrgChart(nodes []OrgNode, emps []OrgEmployee, aliases map[string]OrgAl
 		}
 		switch len(cands) {
 		case 0:
+			if strings.TrimSpace(e.Title) == "" {
+				m.Problem = "Belum punya jabatan di HRIS"
+				g.TitlesOutside["(tanpa jabatan)"]++
+				break
+			}
 			m.Problem = "Jabatan tidak ada di bagan"
 			g.TitlesOutside[strings.TrimSpace(e.Title)]++
 		case 1:
