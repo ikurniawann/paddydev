@@ -1886,6 +1886,16 @@
   },
   {
     "module": "hris",
+    "method": "POST",
+    "path": "/api/hris/branches/import"
+  },
+  {
+    "module": "hris",
+    "method": "GET",
+    "path": "/api/hris/branches/template"
+  },
+  {
+    "module": "hris",
     "method": "PUT",
     "path": "/api/hris/branches/{id}/location"
   },
