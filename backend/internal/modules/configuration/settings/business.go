@@ -231,6 +231,105 @@ func updateBusinessEntity(ctx context.Context, q database.Querier, typ, id strin
 	return err
 }
 
+// branchHistory lists the tables (schema.table) holding rows for the branch,
+// over every foreign key to configuration.branches except its warehouses
+// (EPIC-100 R5): a delete would empty or drop that history.
+func branchHistory(ctx context.Context, q database.Querier, id string) ([]string, error) {
+	rows, err := q.Query(ctx, `SELECT DISTINCT n.nspname, c.relname, a.attname
+		FROM pg_constraint k
+		JOIN pg_class c ON c.oid = k.conrelid
+		JOIN pg_namespace n ON n.oid = c.relnamespace
+		JOIN pg_attribute a ON a.attrelid = k.conrelid AND a.attnum = k.conkey[1]
+		WHERE k.contype = 'f' AND k.confrelid = 'configuration.branches'::regclass
+		  AND cardinality(k.conkey) = 1 AND k.conrelid <> 'configuration.warehouses'::regclass
+		ORDER BY 1, 2, 3`)
+	if err != nil {
+		return nil, err
+	}
+	type ref struct{ schema, table, column string }
+	var refs []ref
+	for rows.Next() {
+		var r ref
+		if err := rows.Scan(&r.schema, &r.table, &r.column); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		refs = append(refs, r)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	var used []string
+	for _, r := range refs {
+		var found bool
+		sql := `SELECT EXISTS (SELECT 1 FROM ` + pgx.Identifier{r.schema, r.table}.Sanitize() +
+			` WHERE ` + pgx.Identifier{r.column}.Sanitize() + ` = $1::uuid)`
+		if err := q.QueryRow(ctx, sql, id).Scan(&found); err != nil {
+			return nil, err
+		}
+		if found {
+			used = append(used, r.schema+"."+r.table)
+		}
+	}
+	return used, nil
+}
+
+// historyGuard refuses to delete a branch with history, or the company or
+// holding whose delete would cascade to one.
+func historyGuard(ctx context.Context, q database.Querier, typ, id string) error {
+	var branches string
+	switch typ {
+	case "branch":
+		branches = `SELECT id::text, name FROM configuration.branches WHERE id = $1::uuid`
+	case "company":
+		branches = `SELECT id::text, name FROM configuration.branches WHERE company_id = $1::uuid ORDER BY name`
+	case "holding":
+		branches = `SELECT b.id::text, b.name FROM configuration.branches b
+			JOIN configuration.companies c ON c.id = b.company_id WHERE c.holding_id = $1::uuid ORDER BY b.name`
+	default:
+		return nil
+	}
+	rows, err := q.Query(ctx, branches, id)
+	if err != nil {
+		return err
+	}
+	type br struct{ id, name string }
+	var list []br
+	for rows.Next() {
+		var b br
+		if err := rows.Scan(&b.id, &b.name); err != nil {
+			rows.Close()
+			return err
+		}
+		list = append(list, b)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for _, b := range list {
+		used, err := branchHistory(ctx, q, b.id)
+		if err != nil {
+			return err
+		}
+		if len(used) == 0 {
+			continue
+		}
+		if len(used) > 3 {
+			used = append(used[:3], "…")
+		}
+		tables := strings.Join(used, ", ")
+		if typ == "branch" {
+			return errors.New("Cabang ini tidak dapat dihapus karena sudah punya histori (" + tables + ") — nonaktifkan saja")
+		}
+		label := map[string]string{"company": "Perusahaan", "holding": "Holding"}[typ]
+		return errors.New(label + " ini tidak dapat dihapus karena cabang " + b.name + " sudah punya histori (" + tables +
+			") — nonaktifkan cabangnya saja")
+	}
+	return nil
+}
+
 // deleteBusinessEntity is deleteBusinessEntity: a branch keeps its last
 // default warehouse.
 func deleteBusinessEntity(ctx context.Context, q database.Querier, typ, id string) error {
@@ -255,6 +354,9 @@ func deleteBusinessEntity(ctx context.Context, q database.Querier, typ, id strin
 				return errors.New("Main Storage tidak dapat dihapus. Setiap cabang wajib memiliki minimal 1 outlet.")
 			}
 		}
+	}
+	if err := historyGuard(ctx, q, typ, id); err != nil {
+		return err
 	}
 	_, err := q.Exec(ctx, `DELETE FROM configuration.`+domain.BusinessTables[typ]+` WHERE id = $1 RETURNING id`, id)
 	return err

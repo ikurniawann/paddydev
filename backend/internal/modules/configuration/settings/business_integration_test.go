@@ -116,3 +116,41 @@ func TestBusinessTreeReadableByAccountManagers(t *testing.T) {
 	expect(t, e.do(&none, "GET", "/api/settings/business", nil), 403, "")
 	expect(t, e.do(&users, "POST", "/api/settings/business", map[string]any{"type": "holding", "name": "Tidak Boleh"}), 403, "")
 }
+
+// EPIC-100 R5: a branch with history is deactivated, never deleted (a delete
+// would empty attendance.branch_id and drop its rules); so is its company or
+// holding, whose delete cascades to it.
+func TestDeleteBranchWithHistory(t *testing.T) {
+	admin := staff(t, "settings.business")
+	e := newEnv(t)
+	post := func(body map[string]any) string {
+		r := e.do(&admin, "POST", "/api/settings/business", body)
+		expect(t, r, 201, "")
+		return r.json(t)["data"].(map[string]any)["id"].(string)
+	}
+	sfx := strings.ToUpper(testutil.RandomHex(3))
+	holding := post(map[string]any{"type": "holding", "name": "Hist Holding " + sfx})
+	company := post(map[string]any{"type": "company", "name": "Hist Co " + sfx, "parentId": holding})
+	used := post(map[string]any{"type": "branch", "name": "Toko Berhistori " + sfx, "parentId": company})
+	empty := post(map[string]any{"type": "branch", "name": "Toko Kosong " + sfx, "parentId": company})
+	emp := e.text(`INSERT INTO hris.employees (full_name, nip, email, phone, join_date, employment_status)
+		VALUES ('Hist Karyawan', 'HIST-'||$1, 'hist.'||lower($1)||'@test.local', '', '2026-01-01', 'permanent') RETURNING id::text`, sfx)
+	e.exec(`INSERT INTO hris.attendance (employee_id, branch_id, date) VALUES ($1, $2, '2026-01-05')`, emp, used)
+
+	del := func(path string) resp { return e.do(&admin, "DELETE", path, nil) }
+	r := del("/api/settings/business/branch/" + used)
+	if r.Status != 400 || !strings.Contains(r.Raw, "Cabang ini tidak dapat dihapus karena sudah punya histori (hris.attendance)") ||
+		!strings.Contains(r.Raw, "nonaktifkan") {
+		t.Fatalf("branch with history: %d %s", r.Status, r.Raw)
+	}
+	if e.text(`SELECT count(*)::text FROM configuration.branches WHERE id = $1`, used) != "1" {
+		t.Fatal("the branch must still exist")
+	}
+	for _, path := range []string{"/api/settings/business/company/" + company, "/api/settings/business/holding/" + holding} {
+		r = del(path)
+		if r.Status != 400 || !strings.Contains(r.Raw, "tidak dapat dihapus karena cabang Toko Berhistori "+sfx+" sudah punya histori") {
+			t.Fatalf("%s: %d %s", path, r.Status, r.Raw)
+		}
+	}
+	expect(t, del("/api/settings/business/branch/"+empty), 200, "")
+}
