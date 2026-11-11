@@ -141,9 +141,22 @@ func lastFor(ctx context.Context, q database.Querier, joinDate string) (nipforma
 	return nipformat.LastFor(nips, year), nil
 }
 
+// LockNIPSequence serialises new NIP numbers (EPIC-105 R1): the sequence
+// is global across months, so the unique index on the full NIP cannot stop
+// two months taking the same number. Held until q's transaction ends, so q
+// must be the transaction that also writes the NIP.
+func LockNIPSequence(ctx context.Context, q database.Querier) error {
+	_, err := q.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext('hris.employee-nip-seq'))`)
+	return err
+}
+
 // CheckNewNIP refuses the NIP of a new employee that is not YYYYMM of the
-// join date + the next number of its series (EPIC-099), as a 400.
+// join date + the next number of its series (EPIC-099), as a 400. It takes
+// the sequence lock first (LockNIPSequence).
 func CheckNewNIP(ctx context.Context, q database.Querier, nip, joinDate, status string) error {
+	if err := LockNIPSequence(ctx, q); err != nil {
+		return err
+	}
 	l, err := lastFor(ctx, q, joinDate)
 	if err != nil {
 		return err

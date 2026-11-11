@@ -12,6 +12,7 @@ import (
 	"nuhabit/backend/internal/modules/hris/domain"
 	"nuhabit/backend/internal/platform/auth"
 	"nuhabit/backend/internal/platform/database"
+	"nuhabit/backend/internal/platform/employeekeys"
 	"nuhabit/backend/internal/platform/httpx"
 	"nuhabit/backend/internal/platform/permaudit"
 	"nuhabit/backend/internal/platform/xlsx"
@@ -466,6 +467,12 @@ func (s *Service) ImportEmployees(ctx context.Context, actor *auth.User, in empl
 	var errFile *exportFile
 	err = s.repo.InTx(ctx, func(r Repository) error {
 		q := r.querier()
+		if in.Step == "commit" {
+			// EPIC-105 R1: hold the NIP sequence before reading the NIPs held.
+			if err := employeekeys.LockNIPSequence(ctx, q); err != nil {
+				return err
+			}
+		}
 		l, err := loadEmployeeLists(ctx, q)
 		if err != nil {
 			return err
