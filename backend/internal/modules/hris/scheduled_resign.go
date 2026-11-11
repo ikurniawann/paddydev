@@ -71,8 +71,12 @@ func (s *Service) RunScheduledResigns(ctx context.Context, now time.Time) (appli
 				return err
 			}
 			if !active {
+				const why = "Karyawan sudah nonaktif"
 				if _, err := q.Exec(ctx, `UPDATE hris.scheduled_resignations
-					SET cancelled_at = now(), cancel_reason = 'Karyawan sudah nonaktif' WHERE id = $1`, id); err != nil {
+					SET cancelled_at = now(), cancel_reason = $2 WHERE id = $1`, id, why); err != nil {
+					return err
+				}
+				if err := auditJobResignCancel(ctx, q, emp, date, typ, why); err != nil {
 					return err
 				}
 				outcome = "cancelled"
@@ -91,6 +95,9 @@ func (s *Service) RunScheduledResigns(ctx context.Context, now time.Time) (appli
 				// cancel with that message instead of retrying every tick.
 				if _, err := q.Exec(ctx, `UPDATE hris.scheduled_resignations
 					SET applied_at = NULL, cancelled_at = now(), cancel_reason = $2 WHERE id = $1`, id, he.Message); err != nil {
+					return err
+				}
+				if err := auditJobResignCancel(ctx, q, emp, date, typ, he.Message); err != nil {
 					return err
 				}
 				outcome = "cancelled"
@@ -149,4 +156,18 @@ func (s *Service) scheduledResignTick(ctx context.Context) {
 	if applied > 0 || cancelled > 0 {
 		s.log.Info("hris resign terjadwal", "applied", applied, "cancelled", cancelled)
 	}
+}
+
+// auditJobResignCancel records a cancellation by the job (EPIC-105 R4) with
+// the system actor, like the manual "Batalkan jadwal" does for HR. The
+// label is the employee's name, or the NIP when the name is empty.
+func auditJobResignCancel(ctx context.Context, q database.Querier, employeeID, effectiveDate, resignType, reason string) error {
+	var label string
+	if err := q.QueryRow(ctx, `SELECT coalesce(nullif(btrim(full_name), ''), nip, '') FROM hris.employees WHERE id = $1`,
+		employeeID).Scan(&label); err != nil {
+		return err
+	}
+	return writeEmployeeAudit(ctx, q, scheduledResignActor, "employee.resign_schedule_cancel", employeeID, label,
+		map[string]any{"effective_date": effectiveDate, "resign_type": resignType},
+		map[string]any{"cancel_reason": reason})
 }

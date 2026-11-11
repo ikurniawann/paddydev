@@ -125,4 +125,33 @@ func TestScheduledResignInvalidIsCancelled(t *testing.T) {
 	if got := h.scalar(`SELECT is_active::text FROM hris.employees WHERE id = $1`, f.e); got != "true" {
 		t.Fatalf("is_active = %s, want true", got)
 	}
+	expectJobCancelAudit(t, h, f.e, "Tanggal efektif tidak boleh sebelum tanggal masuk (25/11/2026)")
+}
+
+// expectJobCancelAudit: a cancellation by the job is audited with the
+// system actor and its reason (EPIC-105 R4).
+func expectJobCancelAudit(t *testing.T, h *harness, emp, reason string) {
+	t.Helper()
+	got := h.scalar(`SELECT count(*)::text || '|' || coalesce(max(after->>'cancel_reason'), '') || '|' || coalesce(max(before->>'effective_date'), '')
+		FROM audit.audit_log WHERE entity_id::text = $1 AND action = 'employee.resign_schedule_cancel'
+		AND actor_name = 'Sistem (resign terjadwal)'`, emp)
+	if got != "1|"+reason+"|2026-11-20" {
+		t.Fatalf("job cancel audit = %q", got)
+	}
+}
+
+// EPIC-105 R4: a pending schedule of an employee already inactive (written
+// past the trigger) is cancelled by the job and audited.
+func TestRunScheduledResignsInactiveAudited(t *testing.T) {
+	h := newHarness(t)
+	f := newResignFixture(h)
+	expect(t, h.do(&f.hr, http.MethodPost, resignURL(f.e), map[string]any{"effective_date": "2026-11-20", "resign_type": "resign"}), http.StatusOK, "")
+	// Deactivate without the trigger's cancellation: re-open the schedule.
+	h.exec(`UPDATE hris.employees SET is_active = false WHERE id = $1`, f.e)
+	h.exec(`UPDATE hris.scheduled_resignations SET cancelled_at = NULL, cancel_reason = NULL WHERE employee_id = $1`, f.e)
+	applied, cancelled, err := h.svc.RunScheduledResigns(context.Background(), wib(t, "2026-11-21 00:05"))
+	if err != nil || applied != 0 || cancelled != 1 {
+		t.Fatalf("applied %d cancelled %d err %v, want 0/1", applied, cancelled, err)
+	}
+	expectJobCancelAudit(t, h, f.e, "Karyawan sudah nonaktif")
 }
