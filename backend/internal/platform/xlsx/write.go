@@ -24,6 +24,9 @@ type SheetSpec struct {
 	Rows         [][]any
 	ColumnWidths []float64
 	Merges       []Merge
+	// TextColumns formats the first N columns as Text ("@"), so values typed
+	// later in Excel (codes like 0123) stay text.
+	TextColumns int
 }
 
 // Build is buildXlsxBuffer: plain sheets with column widths and merges.
@@ -37,6 +40,16 @@ func Build(sheets ...SheetSpec) ([]byte, error) {
 		}
 		if err := addSheet(f, i, name); err != nil {
 			return nil, err
+		}
+		if spec.TextColumns > 0 {
+			style, err := f.NewStyle(&excelize.Style{NumFmt: 49})
+			if err != nil {
+				return nil, err
+			}
+			last, _ := excelize.ColumnNumberToName(spec.TextColumns)
+			if err := f.SetColStyle(name, "A:"+last, style); err != nil {
+				return nil, err
+			}
 		}
 		for r, row := range spec.Rows {
 			for c, v := range row {

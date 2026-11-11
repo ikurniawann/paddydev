@@ -204,3 +204,32 @@ console.log(JSON.stringify({ matrix, csv, goMatrix }));
 		t.Errorf("Go workbook\n go %q\n ts %q", goMatrix, ts.GoMatrix)
 	}
 }
+
+// EPIC-104 R5: TextColumns formats the first N columns as Text ("@").
+func TestBuildTextColumns(t *testing.T) {
+	data, err := Build(SheetSpec{Name: "Bagan", Rows: [][]any{{"Kode", "Atasan", "Lain"}, {"001", "", "x"}}, TextColumns: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f, err := excelize.OpenReader(bytes.NewReader(data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	for col, want := range map[string]bool{"A": true, "B": true, "C": false} {
+		id, err := f.GetColStyle("Bagan", col)
+		if err != nil {
+			t.Fatal(err)
+		}
+		st, err := f.GetStyle(id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if (st.NumFmt == 49) != want {
+			t.Errorf("column %s NumFmt %d", col, st.NumFmt)
+		}
+	}
+	if v, _ := f.GetCellValue("Bagan", "A2"); v != "001" {
+		t.Errorf("A2 = %q", v)
+	}
+}

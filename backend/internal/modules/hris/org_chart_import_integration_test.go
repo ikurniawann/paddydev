@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/xuri/excelize/v2"
+
 	"nuhabit/backend/internal/modules/hris/domain"
 	"nuhabit/backend/internal/platform/iam"
 	"nuhabit/backend/internal/platform/testutil"
@@ -52,6 +54,17 @@ func TestOrgChartTemplate(t *testing.T) {
 	}
 	if len(m) != 151 {
 		t.Fatalf("rows %d", len(m)-1)
+	}
+	// EPIC-104 R5: every Bagan column is Text, so Excel keeps codes as typed.
+	book, err := excelize.OpenReader(bytes.NewReader(rec.Body.Bytes()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, col := range []string{"A", "B", "M"} {
+		id, _ := book.GetColStyle(domain.OrgChartSheet, col)
+		if st, err := book.GetStyle(id); err != nil || st.NumFmt != 49 {
+			t.Fatalf("column %s style %+v %v", col, st, err)
+		}
 	}
 	if got := strings.Join(m[1][:8], "|"); got != "EXE-001||CEO|Ya|EXE|Executive|L0|Tetap/Kontrak" {
 		t.Fatalf("first row %q", got)

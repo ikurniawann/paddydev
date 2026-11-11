@@ -75,7 +75,8 @@ func orgChartTemplate(v orgVersion, nodes []orgNodeView) (*exportFile, error) {
 		{"Perlu Konfirmasi", "Ya bila masih menunggu jawaban klien."},
 	}
 	data, err := xlsx.Build(
-		xlsx.SheetSpec{Name: domain.OrgChartSheet, Rows: rows, ColumnWidths: []float64{11, 12, 34, 8, 11, 22, 7, 15, 16, 16, 18, 11, 14}},
+		xlsx.SheetSpec{Name: domain.OrgChartSheet, Rows: rows, ColumnWidths: []float64{11, 12, 34, 8, 11, 22, 7, 15, 16, 16, 18, 11, 14},
+			TextColumns: len(domain.OrgChartHeaders)},
 		xlsx.SheetSpec{Name: "Petunjuk", Rows: help, ColumnWidths: []float64{18, 90}},
 	)
 	if err != nil {
