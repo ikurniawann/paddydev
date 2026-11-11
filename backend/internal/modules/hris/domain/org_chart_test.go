@@ -292,3 +292,121 @@ func TestOrgChartPositionUnderGroupingNode(t *testing.T) {
 		}
 	}
 }
+
+// EPIC-102: an ambiguous employee keeps their candidate slots (R3).
+func TestMatchOrgChartAmbiguousCandidates(t *testing.T) {
+	nodes := []OrgNode{
+		{Code: "RTL-011", Title: "Shopkeeper", IsPosition: true, Status: "active", StoreCodes: []string{"PVJ2"}},
+		{Code: "RTL-010", Title: "Shopkeeper", IsPosition: true, Status: "active", StoreCodes: []string{"PVJ1"}},
+	}
+	g := MatchOrgChart(nodes, []OrgEmployee{{ID: "sinta", Name: "Sinta", Title: "Shopkeeper"}}, nil, nil)
+	m := matchOf(g, "sinta")
+	if m.NodeCode != "" || !reflect.DeepEqual(m.Candidates, []string{"RTL-010", "RTL-011"}) {
+		t.Fatalf("match %+v", m)
+	}
+	// A placed or unknown employee carries no candidates.
+	g = MatchOrgChart(nodes, []OrgEmployee{{ID: "a", Title: "Shopkeeper", StoreCode: "PVJ1"}, {ID: "b", Title: "Kasir"}}, nil, nil)
+	if c := matchOf(g, "a").Candidates; c != nil {
+		t.Errorf("placed candidates %v", c)
+	}
+	if c := matchOf(g, "b").Candidates; c != nil {
+		t.Errorf("unknown candidates %v", c)
+	}
+}
+
+func vacancyNode(code, status string) OrgNode {
+	return OrgNode{Code: code, Title: "Jabatan " + code, IsPosition: true, Status: status, DivisionCode: "OPS"}
+}
+
+// R2 order: group skipped, frozen, holder, planned, empty (active/vacant).
+func TestOrgVacanciesStates(t *testing.T) {
+	nodes := []OrgNode{
+		{Code: "G", Title: "Grup", Status: "active"},
+		vacancyNode("A", "active"), vacancyNode("B", "active"), vacancyNode("C", "planned"),
+		vacancyNode("D", "frozen"), vacancyNode("E", "vacant"), vacancyNode("F", "planned"),
+	}
+	g := OrgGap{Holders: map[string][]OrgEmployee{"A": {{ID: "1"}}, "D": {{ID: "2"}}, "F": {{ID: "3"}, {ID: "4"}}}}
+	v := OrgVacancies(nodes, g)
+	if _, ok := v["G"]; ok {
+		t.Errorf("group node counted: %+v", v["G"])
+	}
+	want := map[string]OrgVacancy{
+		"A": {State: VacancyFilled, Holders: 1},
+		"B": {State: VacancyEmpty},
+		"C": {State: VacancyPlanned},
+		"D": {State: VacancyFrozen, Holders: 1},
+		"E": {State: VacancyEmpty},
+		"F": {State: VacancyFilled, Holders: 2},
+	}
+	if len(v) != len(want) {
+		t.Fatalf("len %d: %+v", len(v), v)
+	}
+	for code, w := range want {
+		if got := v[code]; got.State != w.State || got.Holders != w.Holders || len(got.MaybeHolders) != 0 {
+			t.Errorf("%s = %+v, want %+v", code, got, w)
+		}
+	}
+}
+
+// Review Focus 1: an ambiguous employee makes their candidate slots "maybe",
+// never "empty".
+func TestOrgVacanciesAmbiguousIsMaybe(t *testing.T) {
+	nodes := []OrgNode{
+		{Code: "RTL-010", Title: "Shopkeeper", IsPosition: true, Status: "active", StoreCodes: []string{"PVJ1"}},
+		{Code: "RTL-011", Title: "Shopkeeper", IsPosition: true, Status: "active", StoreCodes: []string{"PVJ2"}},
+		{Code: "RTL-012", Title: "Perfumer", IsPosition: true, Status: "active"},
+		{Code: "RTL-013", Title: "Patcher", IsPosition: true, Status: "planned"},
+	}
+	emps := []OrgEmployee{{ID: "sinta", Name: "Sinta", Title: "Shopkeeper"}}
+	v := OrgVacancies(nodes, MatchOrgChart(nodes, emps, nil, nil))
+	for _, code := range []string{"RTL-010", "RTL-011"} {
+		if got := v[code]; got.State != VacancyMaybe || !reflect.DeepEqual(got.MaybeHolders, []string{"Sinta"}) {
+			t.Errorf("%s = %+v", code, got)
+		}
+	}
+	if got := v["RTL-012"]; got.State != VacancyEmpty || got.MaybeHolders != nil {
+		t.Errorf("RTL-012 = %+v", got)
+	}
+	if got := v["RTL-013"]; got.State != VacancyPlanned {
+		t.Errorf("RTL-013 = %+v", got)
+	}
+}
+
+// Two ambiguous employees on the same slots are both listed, sorted.
+func TestOrgVacanciesMaybeHoldersSorted(t *testing.T) {
+	nodes := []OrgNode{
+		{Code: "K1", Title: "Shopkeeper", IsPosition: true, Status: "active"},
+		{Code: "K2", Title: "Shopkeeper", IsPosition: true, Status: "active"},
+	}
+	emps := []OrgEmployee{{ID: "z", Name: "Zahra", Title: "Shopkeeper"}, {ID: "a", Name: "Adi", Title: "Shopkeeper"}}
+	v := OrgVacancies(nodes, MatchOrgChart(nodes, emps, nil, nil))
+	if got := v["K1"].MaybeHolders; !reflect.DeepEqual(got, []string{"Adi", "Zahra"}) {
+		t.Errorf("maybe holders %v", got)
+	}
+}
+
+func TestGroupVacancies(t *testing.T) {
+	node := func(code, div, region string) OrgNode {
+		return OrgNode{Code: code, IsPosition: true, DivisionCode: div, Region: region, Status: "active"}
+	}
+	nodes := []OrgNode{
+		node("R1", "RTL", "Bandung"), node("R2", "RTL", "Bandung"), node("R3", "RTL", ""),
+		node("F1", "FIN", ""), {Code: "G", DivisionCode: "RTL", Region: "Bandung"},
+	}
+	v := map[string]OrgVacancy{
+		"R1": {State: VacancyFilled, Holders: 1}, "R2": {State: VacancyMaybe},
+		"R3": {State: VacancyFrozen}, "F1": {State: VacancyPlanned},
+	}
+	got := GroupVacancies(nodes, v)
+	want := []OrgVacancyGroup{
+		{Division: "FIN", Region: "", Positions: 1, Planned: 1},
+		{Division: "RTL", Region: "", Positions: 1, Frozen: 1},
+		{Division: "RTL", Region: "Bandung", Positions: 2, Filled: 1, Maybe: 1},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("groups %+v", got)
+	}
+	if got := GroupVacancies(nil, nil); got == nil || len(got) != 0 {
+		t.Errorf("empty groups %#v", got)
+	}
+}

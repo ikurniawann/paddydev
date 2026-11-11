@@ -51,6 +51,9 @@ type OrgMatch struct {
 	Problem          string `json:"problem"`
 	ManagerProblem   string `json:"manager_problem"`
 	AliasNeedsReview bool   `json:"alias_needs_review"`
+	// Candidates are the slots an ambiguous employee may hold (EPIC-102 R3),
+	// sorted; nil when the employee is placed or matches no slot.
+	Candidates []string `json:"candidate_codes,omitempty"`
 }
 
 // OrgGap compares the chart with the people.
@@ -240,6 +243,10 @@ func MatchOrgChart(nodes []OrgNode, emps []OrgEmployee, aliases map[string]OrgAl
 			g.Holders[m.NodeCode] = append(g.Holders[m.NodeCode], e)
 		default:
 			m.Problem = fmt.Sprintf("Cocok ke %d posisi bagan — tidak bisa dipastikan", len(cands))
+			for _, n := range cands {
+				m.Candidates = append(m.Candidates, n.Code)
+			}
+			sort.Strings(m.Candidates)
 		}
 		g.Matches = append(g.Matches, m)
 	}
@@ -310,6 +317,104 @@ func MatchOrgChart(nodes []OrgNode, emps []OrgEmployee, aliases map[string]OrgAl
 	sort.Strings(g.StoresOutside)
 	sort.Strings(g.ChartStoresMissing)
 	return g
+}
+
+// Keadaan posisi bagan (EPIC-102 R2); dihitung, tidak disimpan.
+const (
+	VacancyFilled  = "filled"
+	VacancyEmpty   = "empty"
+	VacancyMaybe   = "maybe"
+	VacancyPlanned = "planned"
+	VacancyFrozen  = "frozen"
+)
+
+// OrgVacancy is the computed state of one position slot.
+type OrgVacancy struct {
+	State        string
+	Holders      int
+	MaybeHolders []string // names of ambiguous employees who may hold it
+}
+
+// OrgVacancies gives every position node its state, in the R2 order:
+// frozen, has a holder, planned, candidate of an ambiguous employee, else
+// empty. Group nodes are left out.
+func OrgVacancies(nodes []OrgNode, g OrgGap) map[string]OrgVacancy {
+	maybe := map[string][]string{}
+	for _, m := range g.Matches {
+		for _, c := range m.Candidates {
+			maybe[c] = append(maybe[c], m.Name)
+		}
+	}
+	out := map[string]OrgVacancy{}
+	for _, n := range nodes {
+		if !n.IsPosition {
+			continue
+		}
+		v := OrgVacancy{Holders: len(g.Holders[n.Code])}
+		switch {
+		case n.Status == "frozen":
+			v.State = VacancyFrozen
+		case v.Holders > 0:
+			v.State = VacancyFilled
+		case n.Status == "planned":
+			v.State = VacancyPlanned
+		case len(maybe[n.Code]) > 0:
+			v.State = VacancyMaybe
+			v.MaybeHolders = append([]string(nil), maybe[n.Code]...)
+			sort.Strings(v.MaybeHolders)
+		default:
+			v.State = VacancyEmpty
+		}
+		out[n.Code] = v
+	}
+	return out
+}
+
+// OrgVacancyGroup counts position states per division and region.
+type OrgVacancyGroup struct {
+	Division, Region                                 string
+	Positions, Filled, Empty, Maybe, Planned, Frozen int
+}
+
+// GroupVacancies sums v per (division, region) of the position nodes,
+// sorted by division then region ("" first).
+func GroupVacancies(nodes []OrgNode, v map[string]OrgVacancy) []OrgVacancyGroup {
+	idx := map[[2]string]int{}
+	out := []OrgVacancyGroup{}
+	for _, n := range nodes {
+		st, ok := v[n.Code]
+		if !n.IsPosition || !ok {
+			continue
+		}
+		k := [2]string{n.DivisionCode, n.Region}
+		i, seen := idx[k]
+		if !seen {
+			i = len(out)
+			idx[k] = i
+			out = append(out, OrgVacancyGroup{Division: n.DivisionCode, Region: n.Region})
+		}
+		grp := &out[i]
+		grp.Positions++
+		switch st.State {
+		case VacancyFilled:
+			grp.Filled++
+		case VacancyEmpty:
+			grp.Empty++
+		case VacancyMaybe:
+			grp.Maybe++
+		case VacancyPlanned:
+			grp.Planned++
+		case VacancyFrozen:
+			grp.Frozen++
+		}
+	}
+	sort.Slice(out, func(a, b int) bool {
+		if out[a].Division != out[b].Division {
+			return out[a].Division < out[b].Division
+		}
+		return out[a].Region < out[b].Region
+	})
+	return out
 }
 
 // LoadOrgSeedCSV reads the client seed (paddy_org_positions_seed.csv);
