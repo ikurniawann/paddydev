@@ -47,6 +47,7 @@ func (h handlers) routes() []module.Route {
 		r("GET /api/hris/org-chart/tree", h.withMenu(iam.HrisOrganization, h.orgChartTree)),
 		r("GET /api/hris/org-chart/validation", h.withMenu(iam.HrisOrganization, h.orgChartValidation)),
 		r("GET /api/hris/org-chart/gap", h.withMenu(iam.HrisOrganization, h.orgChartGap)),
+		r("GET /api/hris/org-chart/vacancy", h.withMenu(iam.HrisOrganization, h.orgChartVacancy)),
 		r("GET /api/hris/branches/template", h.withMenu(placementManagers, h.branchCodeTemplate)),
 		r("POST /api/hris/branches/import", h.withAction("update", placementManagers, h.importBranchCodes)),
 		r("PUT /api/hris/branches/{id}/location", h.withMenu(placementManagers, h.putBranchLocation)),

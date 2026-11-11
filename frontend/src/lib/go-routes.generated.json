@@ -2667,6 +2667,11 @@
   {
     "module": "hris",
     "method": "GET",
+    "path": "/api/hris/org-chart/vacancy"
+  },
+  {
+    "module": "hris",
+    "method": "GET",
     "path": "/api/hris/org-chart/validation"
   },
   {
