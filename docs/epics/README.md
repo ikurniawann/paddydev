@@ -106,7 +106,7 @@ deploying-dev · ready-for-qa · blocked · done).
 | [EPIC-101](./EPIC-101-bagan-organisasi-draft6.md) | Bagan Organisasi Draft 6 — Master Data Fase 1 (`MODULE-HRIS`) | done | 2026-11-10 |
 | [EPIC-102](./EPIC-102-posisi-kosong-approve-versi.md) | Posisi Kosong & Persetujuan Versi Bagan — Fase 2a (`MODULE-HRIS`) | review | 2026-11-11 |
 | [EPIC-103](./EPIC-103-impor-versi-bagan.md) | Impor Versi Bagan dari Template Excel — Fase 2b (`MODULE-HRIS`) | review | 2026-11-11 |
-| [EPIC-104](./EPIC-104-rapikan-bagan.md) | Rapikan Bagan Organisasi — Minor EPIC-102 & EPIC-103 (`MODULE-HRIS`) | backlog | 2026-11-11 |
+| [EPIC-104](./EPIC-104-rapikan-bagan.md) | Rapikan Bagan Organisasi — Minor EPIC-102 & EPIC-103 (`MODULE-HRIS`) | review | 2026-11-11 |
 
 Aturan:
 - Epic + registry ini adalah sumber kebenaran status pekerjaan (canonical).

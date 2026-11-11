@@ -1,6 +1,6 @@
 # EPIC-104: Rapikan Bagan Organisasi — Minor EPIC-102 & EPIC-103 (`MODULE-HRIS`)
 
-status: backlog
+status: review
 environment: dev
 retries: 0
 
@@ -19,18 +19,46 @@ Pilihan user 11-11-2026: "Rapikan minor 102+103". Menyelesaikan 10 temuan minor 
   - "Setujui versi" hanya tampil bila `approve`. "Impor versi" dan "Hapus draft" hanya tampil bila `import`. "Unduh template" tetap untuk semua pembaca.
   - Server tetap menolak dengan 403; UI hanya menyembunyikan.
 - **R8 — Tanggal bawaan WIB.** Tanggal berlaku bawaan di dialog Setujui adalah hari ini menurut WIB, sama dengan bawaan server, bukan menurut zona waktu perangkat.
+- **R6a — Region "-" di template = kosong** (temuan review 11-11). Sel Region berisi `-`, `–`, atau `—` dibaca sebagai tanpa region, supaya tidak bentrok dengan filter "Tanpa region".
 - **R9 — Tes lebih ketat.**
   - `TestOrgChartImportRoles` dan `TestOrgChartApproveRoles` memastikan baris grant ada.
   - Sisa baris `_ = iam.HrisOrganization` dihapus.
 
 ## Tasks
 Rencana: `docs/superpowers/plans/2026-11-11-rapikan-bagan.md`.
-- [ ] T1 Approve: pesan kalah balapan + tes dua transaksi + bersihkan tes
-- [ ] T2 Label unik lower + simpan node sekaligus + tes role ketat
-- [ ] T3 Template kolom Teks
-- [ ] T4 Filter "Tanpa region"
-- [ ] T5 Hak tombol + tanggal WIB
-- [ ] T6 Gate, review, QA staging, catatan
+- [x] T1 Approve: pesan kalah balapan + tes dua transaksi + bersihkan tes
+- [x] T2 Label unik lower + simpan node sekaligus + tes role ketat
+- [x] T3 Template kolom Teks
+- [x] T4 Filter "Tanpa region"
+- [x] T5 Hak tombol + tanggal WIB
+- [x] T6 Gate, review, QA staging, catatan
 
 ## Automation Log
 - 2026-11-11: Epic dibuat dari minor yang ditunda di EPIC-102/103. Branch `feat/epic104-rapikan-bagan` di atas PR #98.
+- 2026-11-11: Implementasi selesai (executing-plans inline).
+  - Commit: cceeead T1, df54c06 T2, f3f2bff T3, a9bf430 T4, ce4afdc T5, bae7295 perbaikan review.
+  - Keputusan eksekusi:
+    - Tes konkuren menunggu tx2 tertahan di lock (dicek lewat PID backend-nya) sebelum tx1 commit.
+    - Tes WIB memaksa zona perangkat UTC, karena host sendiri berzona WIB.
+  - Review akhir seluruh branch oleh reviewer terpisah: 0 Critical, 2 Important, 6 Minor.
+    - Diperbaiki: probe lock tes konkuren sekarang per PID; Region "-" dibaca kosong.
+    - Ditunda (minor):
+      - DELETE audit di cleanup tes tidak berefek (audit append-only);
+      - tes konkuren belum mencakup jalur yang sudah punya versi disetujui;
+      - `wibToday` menduplikasi `todayWib`;
+      - endpoint akses membaca grant dua kali;
+      - `versionID` diulang per baris saat insert;
+      - bila endpoint akses gagal, tombol hilang tanpa pemberitahuan.
+  - Gate:
+    - backend di DB baru (593 migrasi): gofmt dan vet bersih, 137 paket lulus, 0 gagal;
+    - frontend: tsc OK, eslint OK, vitest 907 file / 6593 tes lulus.
+    - Flaky yang tidak terkait: `TestPruneDropsExpiredKeys` (ratelimit), lulus saat diulang.
+  - Staging 11-11 14.39: backup `/mnt/hdd1/backup/paddydev/staging-before-e104-20261111-143909.dump`, image `local-20261111-143916`, migrasi `20261116090300` diterapkan.
+  - QA staging:
+    - Endpoint akses: hrd `{approve:true, import:true}`, akun baca saja `{false, false}`.
+    - Indeks `uq_org_chart_versions_label_lower` ada; insert "draft 6" lewat SQL ditolak.
+    - `region=-` mengembalikan 95 posisi HQ (cocok dengan grup tanpa region); semua 149.
+    - Kolom template berformat `@`.
+    - Playwright desktop + HP, akun hrd dan baca saja, 28/28 lulus: tombol mengikuti hak, filter "Tanpa region" berfungsi, tanpa scroll horizontal. Bukti di `.share/qa-epic104/`.
+  - Data QA dihapus; Draft 6 tetap `draft`.
+  - Prod: belum, perlu izin user (bersama EPIC-102/103).
