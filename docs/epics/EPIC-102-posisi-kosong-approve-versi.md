@@ -31,10 +31,10 @@ Masih ditunda (bergantung pada jawaban klien): importer Draft 7 (ORG-06, Q12) da
 - **R8 — Akses.**
   - Membaca tetap memakai menu `hris.organization`.
   - Menyetujui butuh aksi `approve` pada menu itu (`withAction`). Tidak ada menu baru.
-- **R8a — Hak "approve" (keputusan eksekusi 11-11, perlu konfirmasi user sebelum prod).**
-  - Menu daun `hris.organization.org-chart` sebelumnya hanya menawarkan `read`, jadi aksi `approve` tidak bisa diberikan.
-  - Migrasi `20261116090000_org_chart_approval.sql` menambah `approve` ke menu itu dan ke grant yang sudah ada milik `super_admin`, `admin`, `hrd`, `admin_hris` (pola EPIC-067), lalu `iam.sync_hris_staff_roles()`.
-  - Akibatnya `hris_manager`, `hris_non_payroll`, `hris_non_rekrutmen_kpi` juga bisa menyetujui. Bisa dipersempit lewat mask Hak Akses HRIS.
+- **R8a — Hak "approve" (keputusan user 11-11: "Admin HR + Manager").**
+  - Menu daun `hris.organization.org-chart` sebelumnya hanya menawarkan `read`. Migrasi `20261116090000` menambah `approve` ke menu itu dan ke grant yang sudah ada milik `super_admin`, `admin`, `hrd`, `admin_hris` (pola EPIC-067).
+  - Migrasi `20261116090100` menambah masker Hak Akses HRIS untuk `hris_non_payroll` dan `hris_non_rekrutmen_kpi` pada daun itu. Masker itu mewarisi masker yang sedang berlaku (menu tersembunyi tetap tersembunyi) ditambah pengecualian `approve`.
+  - Yang bisa menyetujui: super_admin, admin, hrd, admin_hris, hris_manager. Dua role staf HR hanya membaca. HR bisa mengubahnya per role lewat Hak Akses HRIS.
 - **R9 — Audit.** `audit.audit_log` mendapat action `hris.org_chart.version.approve`, entity `hris.org_chart_versions`, dengan isi:
   - before: status lama;
   - after: status baru, `valid_from`, label versi yang diarsipkan.
@@ -84,4 +84,10 @@ Rencana: `docs/superpowers/plans/2026-11-10-posisi-kosong-approve-versi.md`.
     - Draft 6 dikembalikan ke `draft`, supaya HR yang menyetujui di prod.
     - Role, user, sesi, dan versi QA sementara dihapus.
     - 1 baris audit QA tetap ada (audit append-only).
-  - Prod: belum, perlu izin user (lihat R8a).
+  - 11-11 ±11.50: user memilih "Admin HR + Manager" untuk hak setujui. Ditambahkan migrasi `20261116090100` dan tes `TestOrgChartApproveRoles`.
+    - RED di salinan staging: kedua role staf memegang approve. GREEN setelah migrasi.
+    - Skenario menu tersembunyi tetap tersembunyi; migrasi bisa dijalankan ulang.
+    - Gate DB baru: 591 migrasi, 137 paket lulus.
+    - Staging 11.53: backup `staging-before-e102b-20261111-115350.dump`, image `local-20261111-115358`. Grant Struktur Org: super_admin, admin, hrd, admin_hris, hris_manager memegang approve; hris_non_payroll dan hris_non_rekrutmen_kpi hanya read. Draft 6 tetap draft.
+    - `TestIAMGuards` gagal di salinan prod karena `gym.packages` sudah dihapus di data prod. Juga gagal tanpa EPIC-102, jadi tidak terkait.
+  - Prod: belum, perlu izin user.
