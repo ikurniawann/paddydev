@@ -1,6 +1,6 @@
 # EPIC-105: Tutup Risiko Data dari Minor yang Ditunda (`MODULE-HRIS`, `MODULE-PROCUREMENT`)
 
-status: backlog
+status: review
 environment: dev
 retries: 0
 
@@ -35,13 +35,22 @@ ORG-04 (approver posisi, Q6) dan minor kosmetik lainnya tetap ditunda.
 
 ## Tasks
 Rencana: `docs/superpowers/plans/2026-11-11-risiko-data-minor.md`.
-- [ ] T1 Kunci nomor urut NIP
-- [ ] T2 Impor toko berurutan + deadlock → 409
-- [ ] T3 GRN tanpa kode toko tertanam
-- [ ] T4 Audit pembatalan resign terjadwal
-- [ ] T5 Impor karyawan menolak siklus atasan
-- [ ] T6 Tes flaky
-- [ ] T7 Gate, review, QA staging, catatan, PR
+- [x] T1 Kunci nomor urut NIP
+- [x] T2 Impor toko berurutan + deadlock → 409
+- [x] T3 GRN tanpa kode toko tertanam
+- [x] T4 Audit pembatalan resign terjadwal
+- [x] T5 Impor karyawan menolak siklus atasan
+- [x] T6 Tes flaky
+- [x] T7 Gate, review, QA staging, catatan, PR
 
 ## Automation Log
 - 2026-11-11: Epic dibuat dari minor EPIC-095/098/099/100 (pilihan "Risiko data dulu"). Fakta dikumpulkan agen pencari. Branch `feat/epic105-risiko-data` dari `main` 4b113831.
+- 2026-11-11: Implementasi selesai (executing-plans inline). Commit 1ca52b4..07b3399.
+  - Review akhir: 0 Critical; 1 Important berupa koreksi spec R1 (ubah NIP di luar cakupan); 6 Minor ditunda.
+  - Gate: backend 137 paket dua kali berturut-turut di DB baru, 0 gagal. Frontend: tsc, eslint, vitest 6594 lulus.
+  - Staging 16.53: image `local-20261111-165344`, backup `/mnt/hdd1/backup/paddydev/staging-before-e105-20261111-165336.dump`.
+  - QA:
+    - R1: dua pembuatan bersamaan → satu dibuat, satu 400 "nomor urut terakhir karyawan 677";
+    - R5: pratinjau impor menolak siklus atasan.
+    - Karyawan dan sesi uji dihapus. Untuk menghapus perlu `SET search_path = hris, public`, karena trigger lama `fn_notify_onboarding_changes` merujuk `employees` tanpa skema.
+  - Belum: push dan PR. Prod: perlu izin user.
