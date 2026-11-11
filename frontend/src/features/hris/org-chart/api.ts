@@ -1,8 +1,11 @@
-import { apiGet, apiPost, buildListUrl } from "@/lib/api-client";
+import { apiDelete, apiGet, apiPost, buildListUrl } from "@/lib/api-client";
+import { downloadBlob } from "@/lib/purchasing/report-ui-shared";
 import { fetchAllEmployees } from "@/lib/hris/fetch-all-employees";
 import type { OrgEmployee } from "@/lib/hris/org-chart";
 import type {
   ChartGapResponse,
+  ChartImportInput,
+  ChartImportPreview,
   ChartTreeFilter,
   ChartTreeResponse,
   ChartVacancyFilter,
@@ -73,3 +76,62 @@ export const approveOrgChartVersion = (id: string, body: { valid_from: string; r
   apiPost<{ data: ChartVersion }>(`/api/hris/org-chart/versions/${encodeURIComponent(id)}/approve`, body).then(
     (res) => res.data
   );
+
+/* ── Impor versi bagan (EPIC-103) ── */
+
+/** Template Excel (sheet Bagan) dari versi yang sedang dilihat. */
+export const orgChartTemplateUrl = (version: string) => buildListUrl("/api/hris/org-chart/template", { version: v(version) });
+
+const IMPORT_403 = "Anda tidak punya hak mengimpor versi bagan. Minta admin menambahkan aksi Import pada menu Struktur Org.";
+
+/** Error dengan status HTTP, supaya 409 (file/label berubah) bisa dibedakan. */
+export class OrgChartImportError extends Error {
+  status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.status = status;
+  }
+}
+
+type ImportStep = { step: "preview" | "commit" | "error_file"; fingerprint?: string; ack_warnings?: boolean };
+
+function postOrgChartImport(input: ChartImportInput & ImportStep) {
+  const form = new FormData();
+  form.append("file", input.file);
+  form.append("label", input.label);
+  if (input.base) form.append("base", input.base);
+  form.append("step", input.step);
+  if (input.fingerprint) form.append("fingerprint", input.fingerprint);
+  if (input.ack_warnings) form.append("ack_warnings", "true");
+  return fetch("/api/hris/org-chart/import", { method: "POST", body: form });
+}
+
+async function importFailure(res: Response): Promise<never> {
+  const json = await res.json().catch(() => ({}));
+  const raw = (json as { error?: string }).error;
+  const msg = res.status === 403 || raw === "Insufficient permissions" ? IMPORT_403 : raw || `Impor gagal (${res.status})`;
+  throw new OrgChartImportError(msg, res.status);
+}
+
+/** step=preview → pratinjau; step=commit → versi baru + pesan server. */
+export async function importOrgChartFile(
+  input: ChartImportInput & { step: "preview" | "commit"; fingerprint?: string; ack_warnings?: boolean }
+): Promise<{ data: ChartImportPreview | { version: ChartVersion }; message?: string }> {
+  const res = await postOrgChartImport(input);
+  if (!res.ok) return importFailure(res);
+  return res.json();
+}
+
+/** File yang sama dengan kolom "Keterangan Error". */
+export async function downloadOrgChartImportErrors(input: ChartImportInput): Promise<void> {
+  const res = await postOrgChartImport({ ...input, step: "error_file" });
+  if (!res.ok) return importFailure(res);
+  downloadBlob(await res.blob(), `Error - ${input.file.name}`);
+}
+
+/** Hapus versi draft (versi disetujui/arsip ditolak server). */
+export const deleteOrgChartVersion = (id: string) =>
+  apiDelete(`/api/hris/org-chart/versions/${encodeURIComponent(id)}`).catch((e: unknown) => {
+    const msg = e instanceof Error ? e.message : "";
+    throw new Error(msg === "Insufficient permissions" ? IMPORT_403 : msg || "Gagal menghapus versi");
+  });

@@ -130,3 +130,35 @@ export interface ChartVacancyResponse {
 export interface ChartVacancyFilter extends ChartTreeFilter {
   state: string;
 }
+
+/* ── Impor versi bagan (EPIC-103) ── */
+
+export interface ChartUploadIssue {
+  line: number;
+  column: string;
+  name: string;
+  message: string;
+}
+
+export interface ChartDiff {
+  added: string[];
+  removed: string[];
+  changed: { code: string; title: string; fields: string[] }[];
+}
+
+export interface ChartImportPreview {
+  label: string;
+  base: { label: string };
+  summary: { nodes: number; positions: number; errors: number; warnings: number };
+  errors: ChartUploadIssue[];
+  warnings: ChartUploadIssue[];
+  diff: ChartDiff;
+  vacancy: ChartVacancyCounts;
+  fingerprint: string;
+}
+
+export interface ChartImportInput {
+  file: File;
+  label: string;
+  base: string;
+}
