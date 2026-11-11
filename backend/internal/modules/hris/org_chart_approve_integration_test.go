@@ -225,13 +225,18 @@ func TestOrgChartApproveConcurrent(t *testing.T) {
 		t.Fatalf("approve A: %v", err)
 	}
 	done := make(chan error, 1)
+	pid := make(chan int, 1)
 	go func() {
 		tx2, err := db.Begin(ctx)
 		if err != nil {
+			pid <- 0
 			done <- err
 			return
 		}
 		defer tx2.Rollback(ctx)
+		var p int
+		_ = tx2.QueryRow(ctx, `SELECT pg_backend_pid()`).Scan(&p)
+		pid <- p
 		_, err = approveOrgVersion(ctx, tx2, req, u, ids["QA Race B"], "2026-11-12", nil)
 		if err == nil {
 			err = tx2.Commit(ctx)
@@ -239,10 +244,13 @@ func TestOrgChartApproveConcurrent(t *testing.T) {
 		done <- err
 	}()
 	// Commit only once tx2 waits on tx1's index entry, so the race is real.
+	// Watch tx2's own backend, so a lock wait elsewhere (CI runs packages in
+	// parallel on one database) cannot fool the probe.
+	tx2pid := <-pid
 	waiting := false
-	for i := 0; i < 100 && !waiting; i++ {
+	for i := 0; i < 100 && !waiting && tx2pid != 0; i++ {
 		var n int
-		_ = db.QueryRow(ctx, `SELECT count(*) FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock'`).Scan(&n)
+		_ = db.QueryRow(ctx, `SELECT count(*) FROM pg_stat_activity WHERE pid = $1 AND wait_event_type = 'Lock'`, tx2pid).Scan(&n)
 		waiting = n > 0
 		if !waiting {
 			time.Sleep(50 * time.Millisecond)

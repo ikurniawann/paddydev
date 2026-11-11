@@ -229,3 +229,15 @@ func TestDiffOrgUpload(t *testing.T) {
 		t.Fatalf("diff %+v", d)
 	}
 }
+
+// EPIC-104 review: a Region typed as a dash means "no region", so it never
+// clashes with the "Tanpa region" filter (region=-).
+func TestParseOrgChartUploadDashRegion(t *testing.T) {
+	for _, dash := range []string{"-", "–", "—", " - "} {
+		m := orgMatrix(ceoRow, orgRow{"EXE-002", "EXE-001", "GM", "Ya", "EXE", "Executive", "L1", "", "", dash, "", "", ""})
+		res, _ := ParseOrgChartUpload(m, nil)
+		if len(res.Errors) != 0 || uploadNode(t, res, "EXE-002").Region != "" {
+			t.Fatalf("region %q → %+v %+v", dash, uploadNode(t, res, "EXE-002"), res.Errors)
+		}
+	}
+}
