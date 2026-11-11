@@ -2662,6 +2662,11 @@
   {
     "module": "hris",
     "method": "GET",
+    "path": "/api/hris/org-chart/template"
+  },
+  {
+    "module": "hris",
+    "method": "GET",
     "path": "/api/hris/org-chart/tree"
   },
   {

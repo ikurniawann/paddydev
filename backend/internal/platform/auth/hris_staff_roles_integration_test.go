@@ -85,7 +85,7 @@ func syncTx(t *testing.T) pgx.Tx {
 // staffRoleSpec is the seeded mask of each derived role (EPIC-057 subtrees,
 // EPIC-061: no "delete" on HRIS for the two staff roles; hris.access comes
 // with Task 8 and is hidden from them; EPIC-068 R7: Saldo Cuti stays read
-// only for the two staff roles; EPIC-102 R8a: no "approve" on Struktur Org).
+// only for the two staff roles; EPIC-102 R8a / EPIC-103 R9: no "approve" or "import" on Struktur Org).
 var staffRoleSpec = map[string]struct {
 	excluded []string
 	noDelete bool
@@ -117,7 +117,7 @@ func TestHrisStaffRolesDeriveFromAdminHris(t *testing.T) {
 			}
 			// EPIC-102 R8a: only Admin HR and HR Manager approve a chart version.
 			if spec.noDelete && code == "hris.organization.org-chart" {
-				all = slices.DeleteFunc(all, func(a string) bool { return a == "approve" })
+				all = slices.DeleteFunc(all, func(a string) bool { return a == "approve" || a == "import" })
 			}
 			exp[code] = all
 		}
@@ -283,6 +283,27 @@ func TestOrgChartApproveRoles(t *testing.T) {
 		}
 		if slices.Contains(acts, "approve") || slices.Contains(acts, "delete") {
 			t.Errorf("%s %s = %v, want no approve/delete", role, leaf, acts)
+		}
+	}
+}
+
+// EPIC-103 R9: importing and deleting a draft chart version needs "import" on
+// Struktur Org, held by the same roles that approve (EPIC-102 R8a).
+func TestOrgChartImportRoles(t *testing.T) {
+	tx := syncTx(t)
+	const leaf = "hris.organization.org-chart"
+	if acts := menuActions(t, tx)[leaf]; !slices.Contains(acts, "import") {
+		t.Fatalf("%s does not offer import: %v", leaf, acts)
+	}
+	for _, role := range []string{"admin_hris", "hris_manager", "hrd"} {
+		if acts, ok := roleGrants(t, tx, role)[leaf]; ok && !slices.Contains(acts, "import") {
+			t.Errorf("%s %s = %v, want import", role, leaf, acts)
+		}
+	}
+	for _, role := range []string{"hris_non_payroll", "hris_non_rekrutmen_kpi"} {
+		acts := roleGrants(t, tx, role)[leaf]
+		if !slices.Contains(acts, "read") || slices.Contains(acts, "import") || slices.Contains(acts, "approve") {
+			t.Errorf("%s %s = %v, want read only", role, leaf, acts)
 		}
 	}
 }
