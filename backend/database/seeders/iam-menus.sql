@@ -84,7 +84,7 @@ INSERT INTO iam.menus (code, menu_name, route_path, icon, menu_type, order_numbe
   ('crm.loyalty.avatars', 'Avatars', '/dashboard/crm/avatars', 'star', 'sidebar', 20, '{"actions":["read"]}'::jsonb),
   ('hris.compensation.salary', 'Salary', '/dashboard/hris/salary', 'money', 'sidebar', 20, '{"actions":["read","delete"]}'::jsonb),
   ('hris.insights.reports', 'Laporan HRIS', '/dashboard/hris/reports', 'reports', 'sidebar', 20, '{"actions":["read"]}'::jsonb),
-  ('hris.organization.org-chart', 'Struktur Org', '/dashboard/hris/org-chart', 'sitemap', 'sidebar', 20, '{"actions":["read"]}'::jsonb),
+  ('hris.organization.org-chart', 'Struktur Org', '/dashboard/hris/org-chart', 'sitemap', 'sidebar', 20, '{"actions":["read","approve"]}'::jsonb),
   ('hris.performance.logbook', 'Logbook', '/dashboard/hris/logbook', 'clipboard', 'sidebar', 20, '{"actions":["read"]}'::jsonb),
   ('hris.recruitment.pipeline', 'Pipeline', '/dashboard/hris/pipeline', 'clipboard', 'sidebar', 20, '{"actions":["read"]}'::jsonb),
   ('hris.recruitment.psikotes', 'Psikotes', '/dashboard/hris/psikotes', 'clipboard', 'sidebar', 25, '{"actions":["read","delete"]}'::jsonb),

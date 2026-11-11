@@ -17,7 +17,8 @@ import (
 	"nuhabit/backend/internal/platform/xlsx"
 )
 
-// Bagan organisasi berversi (EPIC-101): baca saja. Versi, pohon node,
+// Bagan organisasi berversi (EPIC-101): baca saja; persetujuan versi ada di
+// org_chart_approve.go (EPIC-102). Versi, pohon node,
 // validasi BR, dan laporan selisih bagan vs karyawan aktif. Tidak ada data
 // karyawan, jabatan, toko, atau approval yang diubah.
 
@@ -28,6 +29,10 @@ type orgVersion struct {
 	SourceFile *string   `json:"source_file"`
 	ImportedAt time.Time `json:"imported_at"`
 	Nodes      int       `json:"nodes"`
+	// EPIC-102: tanggal berlaku dan penyetuju (nil selama belum disetujui).
+	ValidFrom      *string    `json:"valid_from"`
+	ApprovedAt     *time.Time `json:"approved_at"`
+	ApprovedByName *string    `json:"approved_by_name"`
 }
 
 type orgHolder struct {
@@ -65,7 +70,8 @@ func deref(p *string) string {
 
 func orgVersions(ctx context.Context, q database.Querier) ([]orgVersion, error) {
 	rows, err := q.Query(ctx, `SELECT v.id::text, v.label, v.status, v.source_file, v.imported_at,
-		(SELECT count(*) FROM hris.org_chart_nodes n WHERE n.version_id = v.id)
+		(SELECT count(*) FROM hris.org_chart_nodes n WHERE n.version_id = v.id),
+		to_char(v.valid_from, 'YYYY-MM-DD'), v.approved_at, v.approved_by_name
 		FROM hris.org_chart_versions v ORDER BY v.imported_at DESC, v.label`)
 	if err != nil {
 		return nil, err
@@ -74,7 +80,8 @@ func orgVersions(ctx context.Context, q database.Querier) ([]orgVersion, error) 
 	out := []orgVersion{}
 	for rows.Next() {
 		var v orgVersion
-		if err := rows.Scan(&v.ID, &v.Label, &v.Status, &v.SourceFile, &v.ImportedAt, &v.Nodes); err != nil {
+		if err := rows.Scan(&v.ID, &v.Label, &v.Status, &v.SourceFile, &v.ImportedAt, &v.Nodes,
+			&v.ValidFrom, &v.ApprovedAt, &v.ApprovedByName); err != nil {
 			return nil, err
 		}
 		out = append(out, v)
@@ -82,14 +89,25 @@ func orgVersions(ctx context.Context, q database.Querier) ([]orgVersion, error) 
 	return out, rows.Err()
 }
 
-// orgVersionOf resolves ?version= (label); empty = the latest import.
+// orgVersionOf resolves ?version= (label); empty = the approved version,
+// else the latest import (EPIC-102 R7).
 func orgVersionOf(ctx context.Context, q database.Querier, label string) (orgVersion, error) {
 	vs, err := orgVersions(ctx, q)
 	if err != nil {
 		return orgVersion{}, err
 	}
+	if label == "" {
+		for _, v := range vs {
+			if v.Status == "approved" {
+				return v, nil
+			}
+		}
+		if len(vs) > 0 {
+			return vs[0], nil
+		}
+	}
 	for _, v := range vs {
-		if label == "" || v.Label == label {
+		if label != "" && v.Label == label {
 			return v, nil
 		}
 	}
