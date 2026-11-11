@@ -2661,6 +2661,16 @@
   },
   {
     "module": "hris",
+    "method": "POST",
+    "path": "/api/hris/org-chart/import"
+  },
+  {
+    "module": "hris",
+    "method": "GET",
+    "path": "/api/hris/org-chart/template"
+  },
+  {
+    "module": "hris",
     "method": "GET",
     "path": "/api/hris/org-chart/tree"
   },
@@ -2678,6 +2688,11 @@
     "module": "hris",
     "method": "GET",
     "path": "/api/hris/org-chart/versions"
+  },
+  {
+    "module": "hris",
+    "method": "DELETE",
+    "path": "/api/hris/org-chart/versions/{id}"
   },
   {
     "module": "hris",

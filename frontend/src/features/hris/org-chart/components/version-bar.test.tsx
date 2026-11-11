@@ -8,6 +8,10 @@ const api = vi.hoisted(() => ({
   fetchOrgChartVersions: vi.fn(),
   fetchOrgChartValidation: vi.fn(),
   approveOrgChartVersion: vi.fn(),
+  deleteOrgChartVersion: vi.fn(),
+  importOrgChartFile: vi.fn(),
+  downloadOrgChartImportErrors: vi.fn(),
+  orgChartTemplateUrl: (v: string) => `/api/hris/org-chart/template?${new URLSearchParams(v ? { version: v } : {})}`,
 }));
 vi.mock("../api", () => api);
 const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
@@ -30,6 +34,7 @@ beforeEach(() => {
   api.fetchOrgChartVersions.mockReset().mockResolvedValue([draft, approved, archived]);
   api.fetchOrgChartValidation.mockReset().mockResolvedValue({ errors: [], warnings: [] });
   api.approveOrgChartVersion.mockReset().mockResolvedValue({ ...draft, status: "approved" });
+  api.deleteOrgChartVersion.mockReset().mockResolvedValue({ id: "v1", label: "Draft 6" });
   toast.success.mockReset();
   toast.error.mockReset();
 });
@@ -130,4 +135,29 @@ it("tanpa hak approve, pesan 403 server tampil dalam bahasa Indonesia", async ()
   await waitFor(() =>
     expect(toast.error).toHaveBeenCalledWith("Anda tidak punya hak menyetujui versi bagan. Minta admin menambahkan aksi Approve pada menu Struktur Org.")
   );
+});
+
+it("unduh template mengikuti versi yang dilihat; tombol Impor versi tersedia", async () => {
+  setup("Draft 6");
+  const link = await screen.findByRole("link", { name: /Unduh template/ });
+  expect(link.getAttribute("href")).toContain("/api/hris/org-chart/template");
+  expect(link.getAttribute("href")).toContain("version=Draft+6");
+  expect(screen.getByRole("button", { name: "Impor versi" })).toBeTruthy();
+});
+
+it("hapus draft: konfirmasi, panggil API, kembali ke versi bawaan", async () => {
+  const { onChange, invalidate } = setup("Draft 6");
+  fireEvent.click(await screen.findByRole("button", { name: "Hapus draft" }));
+  expect(await screen.findByText("Hapus Draft 6?")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Hapus" }));
+  await waitFor(() => expect(api.deleteOrgChartVersion).toHaveBeenCalledWith("v1"));
+  await waitFor(() => expect(onChange).toHaveBeenCalledWith(""));
+  expect(toast.success).toHaveBeenCalledWith("Versi Draft 6 dihapus");
+  expect(invalidate).toHaveBeenCalledWith({ queryKey: ["hris", "org-chart"] });
+});
+
+it("versi disetujui tidak punya tombol Hapus draft", async () => {
+  setup();
+  await screen.findByText(/berlaku sejak 2026-11-12/);
+  expect(screen.queryByRole("button", { name: "Hapus draft" })).toBeNull();
 });

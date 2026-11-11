@@ -4,14 +4,22 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { approveOrgChartVersion, fetchOrgChartValidation, fetchOrgChartVersions } from "../api";
+import {
+  approveOrgChartVersion,
+  deleteOrgChartVersion,
+  fetchOrgChartValidation,
+  fetchOrgChartVersions,
+  orgChartTemplateUrl,
+} from "../api";
 import { orgChartQueryKeys } from "../query-keys";
 import type { ChartVersion, ChartVersionStatus } from "../types";
+import { ImportVersionDialog } from "./import-version-dialog";
 
 const STATUS: Record<ChartVersionStatus, { label: string; color: string }> = {
   draft: { label: "Draft", color: "bg-yellow-100 text-yellow-800" },
@@ -116,10 +124,23 @@ function ApproveDialog({ target, open, onOpenChange }: { target: ChartVersion; o
  * untuk versi draft; server memeriksa hak "approve" dan error struktur.
  */
 export function VersionBar({ version, onChange }: { version: string; onChange: (label: string) => void }) {
+  const qc = useQueryClient();
   const versions = useQuery({ queryKey: orgChartQueryKeys.versions(), queryFn: fetchOrgChartVersions });
   const [open, setOpen] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const list = versions.data ?? [];
   const shown = shownVersion(list, version);
+  const remove = useMutation({
+    mutationFn: (target: ChartVersion) => deleteOrgChartVersion(target.id),
+    onSuccess: (_res, target) => {
+      toast.success(`Versi ${target.label} dihapus`);
+      setDeleting(false);
+      onChange("");
+      return qc.invalidateQueries({ queryKey: orgChartQueryKeys.all });
+    },
+    onError: (e) => toast.error(e instanceof Error && e.message ? e.message : "Gagal menghapus versi"),
+  });
 
   if (versions.isError) {
     return (
@@ -158,13 +179,43 @@ export function VersionBar({ version, onChange }: { version: string; onChange: (
           ) : null}
         </div>
       ) : null}
-      {shown?.status === "draft" ? (
-        <>
-          <Button size="sm" onClick={() => setOpen(true)}>
-            Setujui versi
+      <div className="flex flex-wrap items-center gap-2">
+        {shown ? (
+          <Button variant="outline" size="sm" asChild>
+            <a href={orgChartTemplateUrl(shown.label)} download>
+              Unduh template
+            </a>
           </Button>
-          {open ? <ApproveDialog key={shown.id} target={shown} open={open} onOpenChange={setOpen} /> : null}
-        </>
+        ) : null}
+        <Button variant="outline" size="sm" onClick={() => setImporting(true)}>
+          Impor versi
+        </Button>
+        {shown?.status === "draft" ? (
+          <>
+            <Button variant="outline" size="sm" onClick={() => setDeleting(true)}>
+              Hapus draft
+            </Button>
+            <Button size="sm" onClick={() => setOpen(true)}>
+              Setujui versi
+            </Button>
+          </>
+        ) : null}
+      </div>
+      {shown?.status === "draft" && open ? <ApproveDialog key={shown.id} target={shown} open={open} onOpenChange={setOpen} /> : null}
+      {importing ? (
+        <ImportVersionDialog open={importing} onOpenChange={setImporting} base={shown?.label ?? ""} onImported={onChange} />
+      ) : null}
+      {shown?.status === "draft" ? (
+        <ConfirmDialog
+          open={deleting}
+          onOpenChange={setDeleting}
+          title={`Hapus ${shown.label}?`}
+          description="Versi draft ini beserta seluruh node-nya dihapus. Versi lain, data karyawan, dan approval tidak berubah."
+          confirmLabel="Hapus"
+          loadingLabel="Menghapus..."
+          loading={remove.isPending}
+          onConfirm={() => remove.mutate(shown)}
+        />
       ) : null}
     </div>
   );
