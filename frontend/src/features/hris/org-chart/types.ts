@@ -162,3 +162,6 @@ export interface ChartImportInput {
   label: string;
   base: string;
 }
+
+/** Filter region untuk node tanpa region (HQ), EPIC-104. */
+export const NO_REGION = "-";

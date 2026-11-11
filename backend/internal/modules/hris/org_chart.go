@@ -255,7 +255,7 @@ func (h handlers) orgChartTree(w http.ResponseWriter, r *http.Request, _ *auth.U
 		if division != "" && n.DivisionCode != division {
 			continue
 		}
-		if region != "" && deref(n.Region) != region {
+		if !regionMatches(region, deref(n.Region)) {
 			continue
 		}
 		for _, e := range res.gap.Holders[n.Code] {

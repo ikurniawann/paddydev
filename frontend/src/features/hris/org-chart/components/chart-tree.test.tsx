@@ -116,3 +116,12 @@ it("gagal memuat ditampilkan sebagai error, bukan bagan kosong", async () => {
   expect((await screen.findByRole("alert")).textContent).toContain("Bagan tidak bisa dimuat");
   expect(screen.queryByText("Tidak ada posisi untuk filter ini")).toBeNull();
 });
+
+it("filter Tanpa region mengirim region \"-\"", async () => {
+  setup();
+  await screen.findByText("CEO");
+  const region = screen.getByLabelText("Region") as HTMLSelectElement;
+  expect([...region.options].map((o) => o.textContent)).toContain("Tanpa region");
+  fireEvent.change(region, { target: { value: "-" } });
+  await waitFor(() => expect(api.fetchOrgChartTree).toHaveBeenLastCalledWith({ division: "", region: "-" }, ""));
+});

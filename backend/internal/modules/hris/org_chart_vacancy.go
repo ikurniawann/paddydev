@@ -58,6 +58,21 @@ type orgVacancyResult struct {
 	Rows    []orgVacancyRow       `json:"rows"`
 }
 
+// NoRegion is the region filter for nodes without a region (EPIC-104 R6).
+const NoRegion = "-"
+
+// regionMatches applies a region filter: "" = every node, "-" = nodes
+// without a region, otherwise the exact region.
+func regionMatches(filter, region string) bool {
+	switch filter {
+	case "":
+		return true
+	case NoRegion:
+		return region == ""
+	}
+	return region == filter
+}
+
 // chartParent is the first ancestor that is a position (group nodes are
 // skipped), guarded against a cyclic chart.
 func chartParent(byCode map[string]orgNodeView, n orgNodeView) (orgNodeView, bool) {
@@ -90,7 +105,7 @@ func buildVacancy(res *orgGapResult, division, region, state string) orgVacancyR
 		if division != "" && n.DivisionCode != division {
 			continue
 		}
-		if region != "" && deref(n.Region) != region {
+		if !regionMatches(region, deref(n.Region)) {
 			continue
 		}
 		kept = append(kept, n)

@@ -110,3 +110,14 @@ it("ringkasan memuat Dibekukan sehingga jumlahnya sama dengan Posisi", async () 
   const tiles = await screen.findByLabelText("Ringkasan posisi");
   expect(within(tiles).getByText("Dibekukan").parentElement?.textContent).toContain("3");
 });
+
+it("filter Tanpa region mengirim region \"-\"", async () => {
+  setup();
+  await screen.findByLabelText("Ringkasan posisi");
+  const region = screen.getByLabelText("Region") as HTMLSelectElement;
+  expect([...region.options].map((o) => o.textContent)).toContain("Tanpa region");
+  fireEvent.change(region, { target: { value: "-" } });
+  await waitFor(() =>
+    expect(api.fetchOrgChartVacancy).toHaveBeenLastCalledWith("", { division: "", region: "-", state: "" })
+  );
+});

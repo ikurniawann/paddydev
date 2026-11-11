@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { fetchOrgChartTree } from "../api";
 import { orgChartQueryKeys } from "../query-keys";
-import type { ChartNode } from "../types";
+import { NO_REGION, type ChartNode } from "../types";
 
 const STATUS: Record<ChartNode["status"], { label: string; color: string }> = {
   active: { label: "Aktif", color: "bg-green-100 text-green-700" },
@@ -89,9 +89,9 @@ export function ChartTree({ version }: { version: string }) {
   });
   const allNodes = all.data?.nodes ?? [];
   const divisions = [...new Map(allNodes.map((n) => [n.division_code, n.division_name])).entries()];
-  const regions = [
-    ...new Set(allNodes.filter((n) => !division || n.division_code === division).map((n) => n.region).filter(Boolean)),
-  ] as string[];
+  const inDivision = allNodes.filter((n) => !division || n.division_code === division);
+  const regions = [...new Set(inDivision.map((n) => n.region).filter(Boolean))] as string[];
+  const hasNoRegion = inDivision.some((n) => !n.region);
 
   const nodes = filtered.data?.nodes ?? [];
   const codes = new Set(nodes.map((n) => n.code));
@@ -133,6 +133,7 @@ export function ChartTree({ version }: { version: string }) {
             onChange={(e) => setRegion(e.target.value)}
           >
             <option value="">Semua region</option>
+            {hasNoRegion ? <option value={NO_REGION}>Tanpa region</option> : null}
             {regions.map((r) => (
               <option key={r} value={r}>
                 {r}
