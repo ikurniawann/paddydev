@@ -6,7 +6,8 @@ import { ChartGap } from "./chart-gap";
 const api = vi.hoisted(() => ({
   fetchOrgChartGap: vi.fn(),
   fetchOrgChartValidation: vi.fn(),
-  orgChartGapXlsxUrl: "/api/hris/org-chart/gap?format=xlsx",
+  orgChartGapXlsxUrl: (version: string) =>
+    version ? `/api/hris/org-chart/gap?version=${encodeURIComponent(version)}&format=xlsx` : "/api/hris/org-chart/gap?format=xlsx",
 }));
 vi.mock("../api", () => api);
 afterEach(cleanup);
@@ -34,7 +35,7 @@ beforeEach(() => {
 it("menampilkan ringkasan selisih, tautan Excel, dan peringatan validasi", async () => {
   render(
     <QueryClientProvider client={new QueryClient()}>
-      <ChartGap />
+      <ChartGap version="" />
     </QueryClientProvider>
   );
   expect(await screen.findByText("318")).toBeTruthy();
@@ -51,11 +52,23 @@ it("gagal memuat laporan ditampilkan sebagai error", async () => {
   api.fetchOrgChartValidation.mockReset().mockRejectedValue(new Error("boom"));
   render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-      <ChartGap />
+      <ChartGap version="" />
     </QueryClientProvider>
   );
   const alerts = await screen.findAllByRole("alert");
   const text = alerts.map((a) => a.textContent).join(" ");
   expect(text).toContain("Laporan selisih tidak bisa dimuat");
   expect(text).toContain("Validasi bagan tidak bisa dimuat");
+});
+
+it("versi yang dipilih dipakai untuk laporan dan Excel", async () => {
+  render(
+    <QueryClientProvider client={new QueryClient()}>
+      <ChartGap version="Draft 7" />
+    </QueryClientProvider>
+  );
+  await screen.findByText("318");
+  expect(api.fetchOrgChartGap).toHaveBeenCalledWith("Draft 7");
+  expect(api.fetchOrgChartValidation).toHaveBeenCalledWith("Draft 7");
+  expect(screen.getByRole("link", { name: /Unduh Excel/ }).getAttribute("href")).toContain("version=Draft%207");
 });

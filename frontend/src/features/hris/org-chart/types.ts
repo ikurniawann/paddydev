@@ -33,8 +33,18 @@ export interface ChartNode {
   holders: ChartHolder[];
 }
 
+export type ChartVersionStatus = "draft" | "approved" | "archived";
+
+/** Versi bagan; field persetujuan berisi null selama belum disetujui (EPIC-102). */
 export interface ChartVersion {
+  id: string;
   label: string;
+  status: ChartVersionStatus;
+  imported_at?: string;
+  valid_from: string | null;
+  approved_at: string | null;
+  approved_by_name: string | null;
+  nodes?: number;
 }
 
 export interface ChartTreeResponse {
@@ -75,4 +85,48 @@ export interface ChartGapResponse {
 export interface ChartTreeFilter {
   division: string;
   region: string;
+}
+
+/* ── Posisi Kosong (EPIC-102) ── */
+
+export type VacancyState = "empty" | "maybe" | "planned" | "frozen";
+
+export interface ChartVacancyCounts {
+  positions: number;
+  filled: number;
+  empty: number;
+  maybe: number;
+  planned: number;
+  frozen: number;
+}
+
+export interface ChartVacancyGroup extends ChartVacancyCounts {
+  division: string;
+  division_name: string;
+  region: string;
+}
+
+export interface ChartVacancyRow {
+  code: string;
+  title: string;
+  division_code: string;
+  division_name: string;
+  region: string;
+  store_codes: string[];
+  parent_code: string;
+  parent_title: string;
+  state: VacancyState;
+  holders: number;
+  maybe_holders: string[];
+}
+
+export interface ChartVacancyResponse {
+  version: ChartVersion;
+  summary: ChartVacancyCounts;
+  groups: ChartVacancyGroup[];
+  rows: ChartVacancyRow[];
+}
+
+export interface ChartVacancyFilter extends ChartTreeFilter {
+  state: string;
 }

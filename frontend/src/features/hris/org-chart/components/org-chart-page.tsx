@@ -19,6 +19,8 @@ import { useOrgEmployees, useOrgDepartments } from "../queries";
 import type { OrgDepartment } from "../types";
 import { ChartGap } from "./chart-gap";
 import { ChartTree } from "./chart-tree";
+import { ChartVacancy } from "./chart-vacancy";
+import { VersionBar } from "./version-bar";
 
 const STATUS_COLORS: Record<string, string> = {
   permanent: "bg-green-100 text-green-700",
@@ -229,24 +231,33 @@ function ActualStructure() {
 
 /**
  * Struktur Organisasi: struktur aktual dari atasan langsung karyawan, bagan
- * Draft 6 dari klien, dan selisih keduanya (EPIC-101).
+ * klien berversi, posisi kosong, dan selisih keduanya (EPIC-101/102). version
+ * "" = versi bawaan server (yang disetujui, bila belum ada impor terbaru).
  */
 export function OrgChartPage() {
+  const [version, setVersion] = useState("");
   return (
     <Tabs defaultValue="actual" className="space-y-4">
       <TabsList>
         <TabsTrigger value="actual">Struktur Aktual</TabsTrigger>
-        <TabsTrigger value="chart">Bagan Draft 6</TabsTrigger>
+        <TabsTrigger value="chart">Bagan</TabsTrigger>
+        <TabsTrigger value="vacancy">Posisi Kosong</TabsTrigger>
         <TabsTrigger value="gap">Selisih</TabsTrigger>
       </TabsList>
       <TabsContent value="actual">
         <ActualStructure />
       </TabsContent>
-      <TabsContent value="chart">
-        <ChartTree />
+      <TabsContent value="chart" className="space-y-4">
+        <VersionBar version={version} onChange={setVersion} />
+        <ChartTree version={version} />
       </TabsContent>
-      <TabsContent value="gap">
-        <ChartGap />
+      <TabsContent value="vacancy" className="space-y-4">
+        <VersionBar version={version} onChange={setVersion} />
+        <ChartVacancy version={version} />
+      </TabsContent>
+      <TabsContent value="gap" className="space-y-4">
+        <VersionBar version={version} onChange={setVersion} />
+        <ChartGap version={version} />
       </TabsContent>
     </Tabs>
   );

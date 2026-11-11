@@ -85,7 +85,7 @@ func syncTx(t *testing.T) pgx.Tx {
 // staffRoleSpec is the seeded mask of each derived role (EPIC-057 subtrees,
 // EPIC-061: no "delete" on HRIS for the two staff roles; hris.access comes
 // with Task 8 and is hidden from them; EPIC-068 R7: Saldo Cuti stays read
-// only for the two staff roles).
+// only for the two staff roles; EPIC-102 R8a: no "approve" on Struktur Org).
 var staffRoleSpec = map[string]struct {
 	excluded []string
 	noDelete bool
@@ -114,6 +114,10 @@ func TestHrisStaffRolesDeriveFromAdminHris(t *testing.T) {
 			}
 			if spec.noDelete && code == "hris.workforce.leave-balances" {
 				all = slices.DeleteFunc(all, func(a string) bool { return a == "update" || a == "import" || a == "export" })
+			}
+			// EPIC-102 R8a: only Admin HR and HR Manager approve a chart version.
+			if spec.noDelete && code == "hris.organization.org-chart" {
+				all = slices.DeleteFunc(all, func(a string) bool { return a == "approve" })
 			}
 			exp[code] = all
 		}
@@ -256,4 +260,29 @@ func TestHrisStaffRoleMasksSurviveSync(t *testing.T) {
 		t.Fatalf("masking read = %v, want the CHECK to refuse", err)
 	}
 	_ = sp.Rollback(ctx)
+}
+
+// EPIC-102 (keputusan user 11-11): menyetujui versi bagan resmi hanya untuk
+// Admin HR dan HR Manager; dua role staf HR tetap bisa membaca Struktur Org
+// tanpa "approve", dan masker itu bertahan setiap sync.
+func TestOrgChartApproveRoles(t *testing.T) {
+	tx := syncTx(t)
+	const leaf = "hris.organization.org-chart"
+	if acts := menuActions(t, tx)[leaf]; !slices.Contains(acts, "approve") {
+		t.Fatalf("%s does not offer approve: %v", leaf, acts)
+	}
+	for _, role := range []string{"admin_hris", "hris_manager"} {
+		if acts, ok := roleGrants(t, tx, role)[leaf]; ok && !slices.Contains(acts, "approve") {
+			t.Errorf("%s %s = %v, want approve", role, leaf, acts)
+		}
+	}
+	for _, role := range []string{"hris_non_payroll", "hris_non_rekrutmen_kpi"} {
+		acts, ok := roleGrants(t, tx, role)[leaf]
+		if !ok || !slices.Contains(acts, "read") {
+			t.Errorf("%s lost read on %s: %v", role, leaf, acts)
+		}
+		if slices.Contains(acts, "approve") || slices.Contains(acts, "delete") {
+			t.Errorf("%s %s = %v, want no approve/delete", role, leaf, acts)
+		}
+	}
 }

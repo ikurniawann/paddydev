@@ -72,19 +72,20 @@ function TreeItem({ node, kids }: { node: ChartNode; kids: Map<string, ChartNode
 }
 
 /**
- * Bagan Draft 6 (EPIC-101): pohon slot jabatan dari bagan klien, dengan
- * status, tanda perlu konfirmasi, toko, dan karyawan yang cocok. Hanya baca.
+ * Bagan (EPIC-101): pohon slot jabatan dari bagan klien, dengan status, tanda
+ * perlu konfirmasi, toko, dan karyawan yang cocok. Hanya baca. version "" =
+ * versi bawaan server (EPIC-102).
  */
-export function ChartTree() {
+export function ChartTree({ version }: { version: string }) {
   const [division, setDivision] = useState("");
   const [region, setRegion] = useState("");
   const all = useQuery({
-    queryKey: orgChartQueryKeys.tree("", ""),
-    queryFn: () => fetchOrgChartTree({ division: "", region: "" }),
+    queryKey: orgChartQueryKeys.tree(version, "", ""),
+    queryFn: () => fetchOrgChartTree({ division: "", region: "" }, version),
   });
   const filtered = useQuery({
-    queryKey: orgChartQueryKeys.tree(division, region),
-    queryFn: () => fetchOrgChartTree({ division, region }),
+    queryKey: orgChartQueryKeys.tree(version, division, region),
+    queryFn: () => fetchOrgChartTree({ division, region }, version),
   });
   const allNodes = all.data?.nodes ?? [];
   const divisions = [...new Map(allNodes.map((n) => [n.division_code, n.division_name])).entries()];

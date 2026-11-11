@@ -2667,12 +2667,22 @@
   {
     "module": "hris",
     "method": "GET",
+    "path": "/api/hris/org-chart/vacancy"
+  },
+  {
+    "module": "hris",
+    "method": "GET",
     "path": "/api/hris/org-chart/validation"
   },
   {
     "module": "hris",
     "method": "GET",
     "path": "/api/hris/org-chart/versions"
+  },
+  {
+    "module": "hris",
+    "method": "POST",
+    "path": "/api/hris/org-chart/versions/{id}/approve"
   },
   {
     "module": "hris",
