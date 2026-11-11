@@ -50,6 +50,8 @@ func (h handlers) routes() []module.Route {
 		r("GET /api/hris/org-chart/vacancy", h.withMenu(iam.HrisOrganization, h.orgChartVacancy)),
 		r("POST /api/hris/org-chart/versions/{id}/approve", h.withAction("approve", iam.HrisOrganization, h.orgChartApprove)),
 		r("GET /api/hris/org-chart/template", h.withMenu(iam.HrisOrganization, h.orgChartTemplateFile)),
+		r("POST /api/hris/org-chart/import", h.withAction("import", iam.HrisOrganization, h.orgChartImport)),
+		r("DELETE /api/hris/org-chart/versions/{id}", h.withAction("import", iam.HrisOrganization, h.orgChartDeleteDraft)),
 		r("GET /api/hris/branches/template", h.withMenu(placementManagers, h.branchCodeTemplate)),
 		r("POST /api/hris/branches/import", h.withAction("update", placementManagers, h.importBranchCodes)),
 		r("PUT /api/hris/branches/{id}/location", h.withMenu(placementManagers, h.putBranchLocation)),
