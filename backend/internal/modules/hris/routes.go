@@ -44,6 +44,7 @@ func (h handlers) routes() []module.Route {
 		r("GET /api/hris/me/placements", h.withActor(h.myPlacements)),
 		r("GET /api/hris/branches", h.withUser(h.listBranches)),
 		r("GET /api/hris/org-chart/versions", h.withMenu(iam.HrisOrganization, h.orgChartVersions)),
+		r("GET /api/hris/org-chart/access", h.withMenu(iam.HrisOrganization, h.orgChartAccess)),
 		r("GET /api/hris/org-chart/tree", h.withMenu(iam.HrisOrganization, h.orgChartTree)),
 		r("GET /api/hris/org-chart/validation", h.withMenu(iam.HrisOrganization, h.orgChartValidation)),
 		r("GET /api/hris/org-chart/gap", h.withMenu(iam.HrisOrganization, h.orgChartGap)),

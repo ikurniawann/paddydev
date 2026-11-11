@@ -217,6 +217,12 @@ func ParseOrgChartUpload(matrix [][]string, activeStores []string) (res OrgUploa
 		n.Vendor = cell(r, "Vendor")
 		tooLong("Vendor", n.Vendor, 100)
 		n.Region = cell(r, "Region")
+		// A dash means "no region" (EPIC-104), so it never clashes with the
+		// "Tanpa region" filter value.
+		switch n.Region {
+		case "-", "–", "—":
+			n.Region = ""
+		}
 		tooLong("Region", n.Region, 60)
 		for _, s := range strings.FieldsFunc(cell(r, "Toko"), func(c rune) bool { return c == ',' || c == ';' }) {
 			s = strings.ToUpper(strings.TrimSpace(s))

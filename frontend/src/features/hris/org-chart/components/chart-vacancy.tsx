@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { fetchOrgChartVacancy, orgChartVacancyXlsxUrl } from "../api";
 import { orgChartQueryKeys } from "../query-keys";
-import type { ChartVacancyCounts, ChartVacancyFilter, VacancyState } from "../types";
+import { NO_REGION, type ChartVacancyCounts, type ChartVacancyFilter, type VacancyState } from "../types";
 
 export const VACANCY_STATE: Record<VacancyState, { label: string; color: string }> = {
   empty: { label: "Kosong", color: "bg-danger-soft text-danger" },
@@ -46,9 +46,9 @@ export function ChartVacancy({ version }: { version: string }) {
   });
   const allGroups = base.data?.groups ?? [];
   const divisions = [...new Map(allGroups.map((g) => [g.division, g.division_name || g.division])).entries()];
-  const regions = [
-    ...new Set(allGroups.filter((g) => !filter.division || g.division === filter.division).map((g) => g.region).filter(Boolean)),
-  ];
+  const inDivision = allGroups.filter((g) => !filter.division || g.division === filter.division);
+  const regions = [...new Set(inDivision.map((g) => g.region).filter(Boolean))];
+  const hasNoRegion = inDivision.some((g) => !g.region);
   const data = res.data;
 
   return (
@@ -79,6 +79,7 @@ export function ChartVacancy({ version }: { version: string }) {
             onChange={(e) => setFilter((f) => ({ ...f, region: e.target.value }))}
           >
             <option value="">Semua region</option>
+            {hasNoRegion ? <option value={NO_REGION}>Tanpa region</option> : null}
             {regions.map((r) => (
               <option key={r} value={r}>
                 {r}

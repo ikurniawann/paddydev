@@ -203,3 +203,42 @@ func TestOrgChartGapWorkbookStates(t *testing.T) {
 		t.Fatalf("states missing: %s", text)
 	}
 }
+
+// EPIC-104 R6 / Review Focus 4: region=- is the nodes without a region (HQ);
+// an empty region still means every node.
+func TestOrgChartRegionNone(t *testing.T) {
+	h := newHarness(t)
+	hr, _ := h.staff("hrd", iam.HrisOrganization, false)
+	all := h.do(&hr, "GET", "/api/hris/org-chart/vacancy?region=", nil)
+	expect(t, all, 200, "")
+	want := 0
+	for _, g := range all.data()["groups"].([]any) {
+		if gm := g.(map[string]any); gm["region"] == "" {
+			want += vacancyNum(t, gm, "positions")
+		}
+	}
+	if vacancyNum(t, all.data()["summary"].(map[string]any), "positions") != 149 || want == 0 {
+		t.Fatalf("all %v, want %d", all.data()["summary"], want)
+	}
+	none := h.do(&hr, "GET", "/api/hris/org-chart/vacancy?region=-", nil)
+	expect(t, none, 200, "")
+	for _, g := range none.data()["groups"].([]any) {
+		if g.(map[string]any)["region"] != "" {
+			t.Fatalf("group with region %v", g)
+		}
+	}
+	if got := vacancyNum(t, none.data()["summary"].(map[string]any), "positions"); got != want {
+		t.Fatalf("region=- positions %d, want %d", got, want)
+	}
+	tree := h.do(&hr, "GET", "/api/hris/org-chart/tree?region=-", nil)
+	expect(t, tree, 200, "")
+	nodes := tree.data()["nodes"].([]any)
+	if len(nodes) == 0 {
+		t.Fatal("no HQ nodes")
+	}
+	for _, n := range nodes {
+		if r := n.(map[string]any)["region"]; r != nil && r != "" {
+			t.Fatalf("tree node with region %v", n)
+		}
+	}
+}

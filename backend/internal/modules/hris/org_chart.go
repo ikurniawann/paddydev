@@ -14,6 +14,7 @@ import (
 	"nuhabit/backend/internal/platform/auth"
 	"nuhabit/backend/internal/platform/database"
 	"nuhabit/backend/internal/platform/httpx"
+	"nuhabit/backend/internal/platform/iam"
 	"nuhabit/backend/internal/platform/xlsx"
 )
 
@@ -255,7 +256,7 @@ func (h handlers) orgChartTree(w http.ResponseWriter, r *http.Request, _ *auth.U
 		if division != "" && n.DivisionCode != division {
 			continue
 		}
-		if region != "" && deref(n.Region) != region {
+		if !regionMatches(region, deref(n.Region)) {
 			continue
 		}
 		for _, e := range res.gap.Holders[n.Code] {
@@ -389,4 +390,19 @@ func orgGapWorkbook(res *orgGapResult, sum map[string]int, titles []orgTitleCoun
 		return nil, err
 	}
 	return &exportFile{data, xlsx.ContentType, "Selisih Bagan " + res.version.Label + ".xlsx"}, nil
+}
+
+// GET /api/hris/org-chart/access: the chart actions this account holds, so
+// the page shows only the buttons it may use (EPIC-104 R7). The routes
+// still check the action themselves.
+func (h handlers) orgChartAccess(w http.ResponseWriter, r *http.Request, u *auth.User) error {
+	approve, err := h.auth.HasMenuAction(r.Context(), u, "approve", iam.HrisOrganization...)
+	if err != nil {
+		return err
+	}
+	imports, err := h.auth.HasMenuAction(r.Context(), u, "import", iam.HrisOrganization...)
+	if err != nil {
+		return err
+	}
+	return ok(w, dataOf(map[string]bool{"approve": approve, "import": imports}))
 }

@@ -272,8 +272,8 @@ func TestOrgChartApproveRoles(t *testing.T) {
 		t.Fatalf("%s does not offer approve: %v", leaf, acts)
 	}
 	for _, role := range []string{"admin_hris", "hris_manager"} {
-		if acts, ok := roleGrants(t, tx, role)[leaf]; ok && !slices.Contains(acts, "approve") {
-			t.Errorf("%s %s = %v, want approve", role, leaf, acts)
+		if acts, ok := roleGrants(t, tx, role)[leaf]; !ok || !slices.Contains(acts, "approve") {
+			t.Errorf("%s %s = %v (row %v), want approve", role, leaf, acts, ok)
 		}
 	}
 	for _, role := range []string{"hris_non_payroll", "hris_non_rekrutmen_kpi"} {
@@ -296,8 +296,8 @@ func TestOrgChartImportRoles(t *testing.T) {
 		t.Fatalf("%s does not offer import: %v", leaf, acts)
 	}
 	for _, role := range []string{"admin_hris", "hris_manager", "hrd"} {
-		if acts, ok := roleGrants(t, tx, role)[leaf]; ok && !slices.Contains(acts, "import") {
-			t.Errorf("%s %s = %v, want import", role, leaf, acts)
+		if acts, ok := roleGrants(t, tx, role)[leaf]; !ok || !slices.Contains(acts, "import") {
+			t.Errorf("%s %s = %v (row %v), want import", role, leaf, acts, ok)
 		}
 	}
 	for _, role := range []string{"hris_non_payroll", "hris_non_rekrutmen_kpi"} {

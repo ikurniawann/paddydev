@@ -4,11 +4,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/xuri/excelize/v2"
 
 	"nuhabit/backend/internal/modules/hris/domain"
 	"nuhabit/backend/internal/platform/iam"
@@ -51,6 +54,17 @@ func TestOrgChartTemplate(t *testing.T) {
 	}
 	if len(m) != 151 {
 		t.Fatalf("rows %d", len(m)-1)
+	}
+	// EPIC-104 R5: every Bagan column is Text, so Excel keeps codes as typed.
+	book, err := excelize.OpenReader(bytes.NewReader(rec.Body.Bytes()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, col := range []string{"A", "B", "M"} {
+		id, _ := book.GetColStyle(domain.OrgChartSheet, col)
+		if st, err := book.GetStyle(id); err != nil || st.NumFmt != 49 {
+			t.Fatalf("column %s style %+v %v", col, st, err)
+		}
 	}
 	if got := strings.Join(m[1][:8], "|"); got != "EXE-001||CEO|Ya|EXE|Executive|L0|Tetap/Kontrak" {
 		t.Fatalf("first row %q", got)
@@ -356,5 +370,40 @@ func TestOrgChartDeleteLastVersion(t *testing.T) {
 		"Versi terakhir tidak bisa dihapus — impor versi lain dulu")
 	if h.orgStatus("Draft 6") != "draft" {
 		t.Fatalf("Draft 6 gone")
+	}
+}
+
+// EPIC-104 R3 / Review Focus 2: the database itself refuses a label that
+// differs only by case, whatever path writes it.
+func TestOrgChartLabelLowerUnique(t *testing.T) {
+	h := newHarness(t)
+	if code := pgErrCodeTx(h, `INSERT INTO hris.org_chart_versions (label) VALUES ('draft 6')`); code != "23505" {
+		t.Fatalf("code %q, want 23505", code)
+	}
+}
+
+// EPIC-104 R4 / Review Focus 3: the 1000-row upper bound is saved whole.
+func TestOrgChartImportMaxRows(t *testing.T) {
+	h := newHarness(t)
+	hr := orgImporter(h)
+	m := [][]string{append([]string{}, domain.OrgChartHeaders...),
+		{"EXE-001", "", "CEO", "Ya", "EXE", "Executive", "L0", "Tetap/Kontrak", "", "", "", "", ""}}
+	for i := 1; i <= 999; i++ {
+		m = append(m, []string{fmt.Sprintf("EXE-X%03d", i), "EXE-001", fmt.Sprintf("Staf %d", i), "Ya", "EXE", "Executive", "L7", "", "", "", "", "", ""})
+	}
+	prev, com := orgPreviewCommit(t, h, &hr, "Draft Besar", m)
+	if listLen(t, prev.data()["errors"]) != 0 {
+		t.Fatalf("errors %v", prev.data()["errors"])
+	}
+	expect(t, com, 200, "")
+	if com.body["message"] != "Versi Draft Besar disimpan sebagai draft (1000 node)" {
+		t.Fatalf("message %v", com.body["message"])
+	}
+	id := com.data()["version"].(map[string]any)["id"].(string)
+	if got := h.scalar(`SELECT count(*)::text || ':' || min(sort_order)::text || ':' || max(sort_order)::text FROM hris.org_chart_nodes WHERE version_id = $1`, id); got != "1000:1:1000" {
+		t.Fatalf("nodes %s", got)
+	}
+	if last := h.scalar(`SELECT code FROM hris.org_chart_nodes WHERE version_id = $1 AND sort_order = 1000`, id); last != "EXE-X999" {
+		t.Fatalf("last %s", last)
 	}
 }

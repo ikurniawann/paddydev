@@ -4,9 +4,16 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
+	"context"
+	"errors"
+	"net/http/httptest"
+
+	"nuhabit/backend/internal/platform/auth"
 	"nuhabit/backend/internal/platform/database"
-	"nuhabit/backend/internal/platform/iam"
+	"nuhabit/backend/internal/platform/httpx"
+	"nuhabit/backend/internal/platform/testutil"
 )
 
 const orgChartLeaf = "hris.organization.org-chart"
@@ -178,7 +185,94 @@ func TestOrgChartApproveReadOnlyStillReads(t *testing.T) {
 	h := newHarness(t)
 	reader, _ := h.staffGrants("hrd", readOnly(orgChartLeaf), false)
 	expect(t, h.do(&reader, "GET", "/api/hris/org-chart/vacancy", nil), 200, "")
-	_ = iam.HrisOrganization
+}
+
+// EPIC-104 R2 / Review Focus 1: two approvals of different drafts at the same
+// time end with one approved version; the loser gets the race message and
+// its version stays draft. Runs on two real committed transactions.
+func TestOrgChartApproveConcurrent(t *testing.T) {
+	db := testutil.DB(t)
+	ctx := context.Background()
+	var approved int
+	if err := db.QueryRow(ctx, `SELECT count(*) FROM hris.org_chart_versions WHERE status = 'approved'`).Scan(&approved); err != nil || approved > 0 {
+		t.Skipf("test database already has an approved version (%d, %v)", approved, err)
+	}
+	staff := testutil.CreateStaff(t, testutil.StaffOptions{Role: "hrd"})
+	u := &auth.User{ID: staff.UserID, FullName: "QA Race"}
+	ids := map[string]string{}
+	for _, label := range []string{"QA Race A", "QA Race B"} {
+		var id string
+		if err := db.QueryRow(ctx, `INSERT INTO hris.org_chart_versions (label, status) VALUES ($1, 'draft') RETURNING id::text`, label).Scan(&id); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := db.Exec(ctx, `INSERT INTO hris.org_chart_nodes (version_id, code, sort_order, title, raw_title, is_position,
+			division_code, division_name, job_level, employment_type) VALUES ($1, 'R-1', 1, 'CEO', 'CEO', true, 'EXE', 'Executive', 'L0', 'PERMANENT_OR_CONTRACT')`, id); err != nil {
+			t.Fatal(err)
+		}
+		ids[label] = id
+	}
+	t.Cleanup(func() {
+		_, _ = db.Exec(context.Background(), `DELETE FROM audit.audit_log WHERE action = 'hris.org_chart.version.approve' AND entity_label LIKE 'QA Race %'`)
+		_, _ = db.Exec(context.Background(), `DELETE FROM hris.org_chart_versions WHERE label LIKE 'QA Race %'`)
+	})
+	req := httptest.NewRequest("POST", "/api/hris/org-chart/versions/x/approve", nil)
+	tx1, err := db.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx1.Rollback(ctx)
+	if _, err := approveOrgVersion(ctx, tx1, req, u, ids["QA Race A"], "2026-11-12", nil); err != nil {
+		t.Fatalf("approve A: %v", err)
+	}
+	done := make(chan error, 1)
+	pid := make(chan int, 1)
+	go func() {
+		tx2, err := db.Begin(ctx)
+		if err != nil {
+			pid <- 0
+			done <- err
+			return
+		}
+		defer tx2.Rollback(ctx)
+		var p int
+		_ = tx2.QueryRow(ctx, `SELECT pg_backend_pid()`).Scan(&p)
+		pid <- p
+		_, err = approveOrgVersion(ctx, tx2, req, u, ids["QA Race B"], "2026-11-12", nil)
+		if err == nil {
+			err = tx2.Commit(ctx)
+		}
+		done <- err
+	}()
+	// Commit only once tx2 waits on tx1's index entry, so the race is real.
+	// Watch tx2's own backend, so a lock wait elsewhere (CI runs packages in
+	// parallel on one database) cannot fool the probe.
+	tx2pid := <-pid
+	waiting := false
+	for i := 0; i < 100 && !waiting && tx2pid != 0; i++ {
+		var n int
+		_ = db.QueryRow(ctx, `SELECT count(*) FROM pg_stat_activity WHERE pid = $1 AND wait_event_type = 'Lock'`, tx2pid).Scan(&n)
+		waiting = n > 0
+		if !waiting {
+			time.Sleep(50 * time.Millisecond)
+		}
+	}
+	if !waiting {
+		t.Fatal("second approval never waited on the first")
+	}
+	if err := tx1.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+	err = <-done
+	var he *httpx.Error
+	if !errors.As(err, &he) || he.Status != 409 || he.Message != "Versi lain baru saja disetujui — muat ulang lalu coba lagi" {
+		t.Fatalf("loser error = %v", err)
+	}
+	var a, b string
+	_ = db.QueryRow(ctx, `SELECT status FROM hris.org_chart_versions WHERE id = $1`, ids["QA Race A"]).Scan(&a)
+	_ = db.QueryRow(ctx, `SELECT status FROM hris.org_chart_versions WHERE id = $1`, ids["QA Race B"]).Scan(&b)
+	if a != "approved" || b != "draft" {
+		t.Fatalf("statuses A=%s B=%s", a, b)
+	}
 }
 
 // pgErrCodeTx runs sql in a savepoint and returns its SQLSTATE ("" = ok).
@@ -189,4 +283,26 @@ func pgErrCodeTx(h *harness, sql string, args ...any) string {
 	h.exec("ROLLBACK TO SAVEPOINT org_probe")
 	h.exec("RELEASE SAVEPOINT org_probe")
 	return database.PgCode(err)
+}
+
+// EPIC-104 R7: the page asks which buttons the account may use.
+func TestOrgChartAccess(t *testing.T) {
+	h := newHarness(t)
+	none, _ := h.staff("pos", nil, false)
+	expect(t, h.do(&none, "GET", "/api/hris/org-chart/access", nil), 403, "")
+	for _, c := range []struct {
+		actions          []string
+		approve, imports bool
+	}{
+		{[]string{"read"}, false, false},
+		{[]string{"read", "approve"}, true, false},
+		{[]string{"read", "approve", "import"}, true, true},
+	} {
+		s, _ := h.staffGrants("hrd", map[string][]string{orgChartLeaf: c.actions}, false)
+		res := h.do(&s, "GET", "/api/hris/org-chart/access", nil)
+		expect(t, res, 200, "")
+		if res.data()["approve"] != c.approve || res.data()["import"] != c.imports {
+			t.Fatalf("%v → %s", c.actions, res.raw)
+		}
+	}
 }
