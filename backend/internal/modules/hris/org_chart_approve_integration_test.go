@@ -276,3 +276,25 @@ func pgErrCodeTx(h *harness, sql string, args ...any) string {
 	h.exec("RELEASE SAVEPOINT org_probe")
 	return database.PgCode(err)
 }
+
+// EPIC-104 R7: the page asks which buttons the account may use.
+func TestOrgChartAccess(t *testing.T) {
+	h := newHarness(t)
+	none, _ := h.staff("pos", nil, false)
+	expect(t, h.do(&none, "GET", "/api/hris/org-chart/access", nil), 403, "")
+	for _, c := range []struct {
+		actions          []string
+		approve, imports bool
+	}{
+		{[]string{"read"}, false, false},
+		{[]string{"read", "approve"}, true, false},
+		{[]string{"read", "approve", "import"}, true, true},
+	} {
+		s, _ := h.staffGrants("hrd", map[string][]string{orgChartLeaf: c.actions}, false)
+		res := h.do(&s, "GET", "/api/hris/org-chart/access", nil)
+		expect(t, res, 200, "")
+		if res.data()["approve"] != c.approve || res.data()["import"] != c.imports {
+			t.Fatalf("%v → %s", c.actions, res.raw)
+		}
+	}
+}

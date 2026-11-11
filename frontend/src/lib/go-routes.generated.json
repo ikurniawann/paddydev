@@ -2657,6 +2657,11 @@
   {
     "module": "hris",
     "method": "GET",
+    "path": "/api/hris/org-chart/access"
+  },
+  {
+    "module": "hris",
+    "method": "GET",
     "path": "/api/hris/org-chart/gap"
   },
   {

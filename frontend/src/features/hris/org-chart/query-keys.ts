@@ -3,6 +3,7 @@ export const orgChartQueryKeys = {
   employees: () => ["hris", "org-chart", "employees"] as const,
   departments: () => ["hris", "org-chart", "departments"] as const,
   versions: () => ["hris", "org-chart", "versions"] as const,
+  access: () => ["hris", "org-chart", "access"] as const,
   tree: (version: string, division: string, region: string) =>
     ["hris", "org-chart", "tree", version, division, region] as const,
   validation: (version: string) => ["hris", "org-chart", "validation", version] as const,

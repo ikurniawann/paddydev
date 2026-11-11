@@ -6,6 +6,7 @@ import type {
   ChartGapResponse,
   ChartImportInput,
   ChartImportPreview,
+  ChartAccess,
   ChartTreeFilter,
   ChartTreeResponse,
   ChartVacancyFilter,
@@ -135,3 +136,7 @@ export const deleteOrgChartVersion = (id: string) =>
     const msg = e instanceof Error ? e.message : "";
     throw new Error(msg === "Insufficient permissions" ? IMPORT_403 : msg || "Gagal menghapus versi");
   });
+
+/** Tombol Setujui/Impor/Hapus hanya untuk akun yang punya aksinya (EPIC-104 R7). */
+export const fetchOrgChartAccess = () =>
+  apiGet<{ data: ChartAccess }>("/api/hris/org-chart/access").then((res) => res.data);

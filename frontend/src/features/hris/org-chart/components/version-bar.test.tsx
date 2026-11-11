@@ -9,6 +9,7 @@ const api = vi.hoisted(() => ({
   fetchOrgChartValidation: vi.fn(),
   approveOrgChartVersion: vi.fn(),
   deleteOrgChartVersion: vi.fn(),
+  fetchOrgChartAccess: vi.fn(),
   importOrgChartFile: vi.fn(),
   downloadOrgChartImportErrors: vi.fn(),
   orgChartTemplateUrl: (v: string) => `/api/hris/org-chart/template?${new URLSearchParams(v ? { version: v } : {})}`,
@@ -35,6 +36,7 @@ beforeEach(() => {
   api.fetchOrgChartValidation.mockReset().mockResolvedValue({ errors: [], warnings: [] });
   api.approveOrgChartVersion.mockReset().mockResolvedValue({ ...draft, status: "approved" });
   api.deleteOrgChartVersion.mockReset().mockResolvedValue({ id: "v1", label: "Draft 6" });
+  api.fetchOrgChartAccess.mockReset().mockResolvedValue({ approve: true, import: true });
   toast.success.mockReset();
   toast.error.mockReset();
 });
@@ -160,4 +162,47 @@ it("versi disetujui tidak punya tombol Hapus draft", async () => {
   setup();
   await screen.findByText(/berlaku sejak 2026-11-12/);
   expect(screen.queryByRole("button", { name: "Hapus draft" })).toBeNull();
+});
+
+it("tanpa hak: tidak ada tombol Setujui/Impor/Hapus, template tetap ada", async () => {
+  api.fetchOrgChartAccess.mockReset().mockResolvedValue({ approve: false, import: false });
+  setup("Draft 6");
+  await screen.findByRole("link", { name: /Unduh template/ });
+  await waitFor(() => expect(api.fetchOrgChartAccess).toHaveBeenCalled());
+  await new Promise((r) => setTimeout(r, 20));
+  for (const name of ["Setujui versi", "Impor versi", "Hapus draft"]) {
+    expect(screen.queryByRole("button", { name })).toBeNull();
+  }
+});
+
+it("selama hak belum termuat tombol aksi tersembunyi", async () => {
+  api.fetchOrgChartAccess.mockReset().mockReturnValue(new Promise(() => {}));
+  setup("Draft 6");
+  await screen.findByRole("link", { name: /Unduh template/ });
+  expect(screen.queryByRole("button", { name: "Setujui versi" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Impor versi" })).toBeNull();
+});
+
+it("hanya approve: Setujui tampil, Impor/Hapus tidak", async () => {
+  api.fetchOrgChartAccess.mockReset().mockResolvedValue({ approve: true, import: false });
+  setup("Draft 6");
+  expect(await screen.findByRole("button", { name: "Setujui versi" })).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "Impor versi" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Hapus draft" })).toBeNull();
+});
+
+it("tanggal berlaku bawaan mengikuti WIB, bukan zona perangkat", async () => {
+  const tz = process.env.TZ;
+  process.env.TZ = "UTC"; // device clock in UTC: still 11-11 locally
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-11-11T18:30:00Z")); // 12-11 01.30 WIB
+  try {
+    expect(new Date().getDate()).toBe(11);
+    setup("Draft 6");
+    fireEvent.click(await screen.findByRole("button", { name: "Setujui versi" }));
+    expect(((await screen.findByLabelText("Tanggal berlaku")) as HTMLInputElement).value).toBe("2026-11-12");
+  } finally {
+    vi.useRealTimers();
+    process.env.TZ = tz;
+  }
 });

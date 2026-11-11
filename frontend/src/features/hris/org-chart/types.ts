@@ -165,3 +165,9 @@ export interface ChartImportInput {
 
 /** Filter region untuk node tanpa region (HQ), EPIC-104. */
 export const NO_REGION = "-";
+
+/** Aksi bagan yang dimiliki akun ini (EPIC-104 R7). */
+export interface ChartAccess {
+  approve: boolean;
+  import: boolean;
+}

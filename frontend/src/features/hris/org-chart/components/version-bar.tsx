@@ -13,6 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   approveOrgChartVersion,
   deleteOrgChartVersion,
+  fetchOrgChartAccess,
   fetchOrgChartValidation,
   fetchOrgChartVersions,
   orgChartTemplateUrl,
@@ -27,11 +28,9 @@ const STATUS: Record<ChartVersionStatus, { label: string; color: string }> = {
   archived: { label: "Arsip", color: "bg-gray-100 text-gray-600" },
 };
 
-/** Hari ini dalam tanggal lokal perangkat (YYYY-MM-DD). */
-function localToday() {
-  const d = new Date();
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+/** Hari ini menurut WIB (YYYY-MM-DD), sama dengan bawaan server (EPIC-104 R8). */
+export function wibToday(now: Date = new Date()) {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jakarta" }).format(now);
 }
 
 /** Pesan gagal setuju; 403 server (bahasa Inggris) diterjemahkan. */
@@ -51,7 +50,7 @@ export function shownVersion(versions: ChartVersion[], version: string): ChartVe
 
 function ApproveDialog({ target, open, onOpenChange }: { target: ChartVersion; open: boolean; onOpenChange: (o: boolean) => void }) {
   const qc = useQueryClient();
-  const [validFrom, setValidFrom] = useState(localToday);
+  const [validFrom, setValidFrom] = useState(() => wibToday());
   const [reason, setReason] = useState("");
   const validation = useQuery({
     queryKey: orgChartQueryKeys.validation(target.label),
@@ -126,6 +125,10 @@ function ApproveDialog({ target, open, onOpenChange }: { target: ChartVersion; o
 export function VersionBar({ version, onChange }: { version: string; onChange: (label: string) => void }) {
   const qc = useQueryClient();
   const versions = useQuery({ queryKey: orgChartQueryKeys.versions(), queryFn: fetchOrgChartVersions });
+  // Until access is known the action buttons stay hidden (Review Focus 5).
+  const access = useQuery({ queryKey: orgChartQueryKeys.access(), queryFn: fetchOrgChartAccess });
+  const canApprove = access.data?.approve === true;
+  const canImport = access.data?.import === true;
   const [open, setOpen] = useState(false);
   const [importing, setImporting] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -187,18 +190,20 @@ export function VersionBar({ version, onChange }: { version: string; onChange: (
             </a>
           </Button>
         ) : null}
-        <Button variant="outline" size="sm" onClick={() => setImporting(true)}>
-          Impor versi
-        </Button>
-        {shown?.status === "draft" ? (
-          <>
-            <Button variant="outline" size="sm" onClick={() => setDeleting(true)}>
-              Hapus draft
-            </Button>
-            <Button size="sm" onClick={() => setOpen(true)}>
-              Setujui versi
-            </Button>
-          </>
+        {canImport ? (
+          <Button variant="outline" size="sm" onClick={() => setImporting(true)}>
+            Impor versi
+          </Button>
+        ) : null}
+        {shown?.status === "draft" && canImport ? (
+          <Button variant="outline" size="sm" onClick={() => setDeleting(true)}>
+            Hapus draft
+          </Button>
+        ) : null}
+        {shown?.status === "draft" && canApprove ? (
+          <Button size="sm" onClick={() => setOpen(true)}>
+            Setujui versi
+          </Button>
         ) : null}
       </div>
       {shown?.status === "draft" && open ? <ApproveDialog key={shown.id} target={shown} open={open} onOpenChange={setOpen} /> : null}
