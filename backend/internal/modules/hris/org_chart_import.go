@@ -1,6 +1,7 @@
 package hris
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -235,25 +236,8 @@ func (s *Service) importOrgChart(r *http.Request, u *auth.User, in orgImportInpu
 		if err != nil {
 			return err
 		}
-		for i, n := range res.Nodes {
-			var confidence *string
-			if n.IsPosition {
-				m := "manual"
-				confidence = &m
-			}
-			stores := n.StoreCodes
-			if stores == nil {
-				stores = []string{}
-			}
-			if _, err := q.Exec(ctx, `INSERT INTO hris.org_chart_nodes (version_id, code, parent_code, sort_order, title, raw_title,
-				is_position, division_code, division_name, job_level, level_confidence, employment_type, vendor, region,
-				store_codes, status, needs_confirm, flags)
-				VALUES ($1, $2, $3, $4, $5, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, '{}')`,
-				id, n.Code, nullIfEmpty(n.ParentCode), i+1, n.Title, n.IsPosition, n.DivisionCode, n.DivisionName,
-				nullIfEmpty(n.Level), confidence, nullIfEmpty(n.EmploymentType), nullIfEmpty(n.Vendor), nullIfEmpty(n.Region),
-				stores, n.Status, n.NeedsConfirm); err != nil {
-				return err
-			}
+		if err := insertOrgNodes(ctx, q, id, res.Nodes); err != nil {
+			return err
 		}
 		name := u.FullName
 		if err := audit.Write(ctx, q, audit.Entry{
@@ -365,4 +349,40 @@ func (h handlers) orgChartDeleteDraft(w http.ResponseWriter, r *http.Request, u 
 		return err
 	}
 	return ok(w, dataMsg(map[string]any{"id": id, "label": label}, "Versi "+label+" dihapus"))
+}
+
+// insertOrgNodes writes every node of a new version in one statement
+// (EPIC-104 R4): 1000 nodes × 16 parameters stays under Postgres' 65535.
+func insertOrgNodes(ctx context.Context, q database.Querier, versionID string, nodes []domain.OrgUploadNode) error {
+	if len(nodes) == 0 {
+		return nil
+	}
+	const cols = 16
+	var sb strings.Builder
+	sb.WriteString(`INSERT INTO hris.org_chart_nodes (version_id, code, parent_code, sort_order, title, raw_title,
+		is_position, division_code, division_name, job_level, level_confidence, employment_type, vendor, region,
+		store_codes, status, needs_confirm, flags) VALUES `)
+	args := make([]any, 0, len(nodes)*cols)
+	for i, n := range nodes {
+		if i > 0 {
+			sb.WriteString(", ")
+		}
+		b := i * cols
+		fmt.Fprintf(&sb, "($%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, '{}')",
+			b+1, b+2, b+3, b+4, b+5, b+5, b+6, b+7, b+8, b+9, b+10, b+11, b+12, b+13, b+14, b+15, b+16)
+		var confidence *string
+		if n.IsPosition {
+			m := "manual"
+			confidence = &m
+		}
+		stores := n.StoreCodes
+		if stores == nil {
+			stores = []string{}
+		}
+		args = append(args, versionID, n.Code, nullIfEmpty(n.ParentCode), i+1, n.Title, n.IsPosition, n.DivisionCode,
+			n.DivisionName, nullIfEmpty(n.Level), confidence, nullIfEmpty(n.EmploymentType), nullIfEmpty(n.Vendor),
+			nullIfEmpty(n.Region), stores, n.Status, n.NeedsConfirm)
+	}
+	_, err := q.Exec(ctx, sb.String(), args...)
+	return err
 }
