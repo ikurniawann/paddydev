@@ -56,7 +56,7 @@ beforeEach(() => {
 function setup() {
   render(
     <QueryClientProvider client={new QueryClient()}>
-      <ChartTree />
+      <ChartTree version="" />
     </QueryClientProvider>
   );
 }
@@ -93,14 +93,24 @@ it("filter divisi memanggil API dengan division", async () => {
   setup();
   await screen.findByText("CEO");
   fireEvent.change(screen.getByLabelText("Divisi"), { target: { value: "RTL" } });
-  await waitFor(() => expect(api.fetchOrgChartTree).toHaveBeenLastCalledWith({ division: "RTL", region: "" }));
+  await waitFor(() => expect(api.fetchOrgChartTree).toHaveBeenLastCalledWith({ division: "RTL", region: "" }, ""));
+});
+
+it("versi yang dipilih dikirim ke API", async () => {
+  render(
+    <QueryClientProvider client={new QueryClient()}>
+      <ChartTree version="Draft 7" />
+    </QueryClientProvider>
+  );
+  await screen.findByText("CEO");
+  expect(api.fetchOrgChartTree).toHaveBeenCalledWith({ division: "", region: "" }, "Draft 7");
 });
 
 it("gagal memuat ditampilkan sebagai error, bukan bagan kosong", async () => {
   api.fetchOrgChartTree.mockReset().mockRejectedValue(new Error("Insufficient permissions"));
   render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-      <ChartTree />
+      <ChartTree version="" />
     </QueryClientProvider>
   );
   expect((await screen.findByRole("alert")).textContent).toContain("Bagan tidak bisa dimuat");

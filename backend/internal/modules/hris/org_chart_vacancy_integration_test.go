@@ -76,7 +76,7 @@ func TestOrgChartVacancyAPI(t *testing.T) {
 		t.Fatalf("Makassar groups %v", groups)
 	}
 	g := groups[0].(map[string]any)
-	if g["division"] != "RTL" || g["region"] != "Makassar" || vacancyNum(t, g, "positions") != 4 {
+	if g["division"] != "RTL" || g["division_name"] != "Retail Operational" || g["region"] != "Makassar" || vacancyNum(t, g, "positions") != 4 {
 		t.Fatalf("Makassar group %v", g)
 	}
 	for _, r := range mks.data()["rows"].([]any) {

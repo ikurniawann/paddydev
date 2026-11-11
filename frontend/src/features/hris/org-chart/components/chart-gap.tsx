@@ -45,9 +45,12 @@ function Issues({ title, issues, tone }: { title: string; issues: ChartIssue[]; 
  * Selisih bagan vs data karyawan (EPIC-101): ringkasan, hasil validasi
  * struktur, dan laporan Excel lengkap untuk ditinjau HR. Tidak mengubah data.
  */
-export function ChartGap() {
-  const gap = useQuery({ queryKey: orgChartQueryKeys.gap(), queryFn: fetchOrgChartGap });
-  const validation = useQuery({ queryKey: orgChartQueryKeys.validation(), queryFn: fetchOrgChartValidation });
+export function ChartGap({ version }: { version: string }) {
+  const gap = useQuery({ queryKey: orgChartQueryKeys.gap(version), queryFn: () => fetchOrgChartGap(version) });
+  const validation = useQuery({
+    queryKey: orgChartQueryKeys.validation(version),
+    queryFn: () => fetchOrgChartValidation(version),
+  });
   const data = gap.data;
 
   return (
@@ -58,7 +61,7 @@ export function ChartGap() {
           Tidak ada data yang diubah.
         </p>
         <Button variant="outline" size="sm" asChild>
-          <a href={orgChartGapXlsxUrl} download>
+          <a href={orgChartGapXlsxUrl(version)} download>
             <ArrowDownTrayIcon className="mr-1.5 h-4 w-4" /> Unduh Excel
           </a>
         </Button>

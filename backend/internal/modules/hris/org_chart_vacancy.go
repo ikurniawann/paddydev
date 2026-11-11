@@ -31,8 +31,9 @@ type orgVacancySummary struct {
 }
 
 type orgVacancyGroupView struct {
-	Division string `json:"division"`
-	Region   string `json:"region"`
+	Division     string `json:"division"`
+	DivisionName string `json:"division_name"`
+	Region       string `json:"region"`
 	orgVacancySummary
 }
 
@@ -77,8 +78,12 @@ func chartParent(byCode map[string]orgNodeView, n orgNodeView) (orgNodeView, boo
 func buildVacancy(res *orgGapResult, division, region, state string) orgVacancyResult {
 	states := domain.OrgVacancies(domainNodes(res.nodes), res.gap)
 	byCode := map[string]orgNodeView{}
+	divisionNames := map[string]string{}
 	for _, n := range res.nodes {
 		byCode[n.Code] = n
+		if divisionNames[n.DivisionCode] == "" {
+			divisionNames[n.DivisionCode] = n.DivisionName
+		}
 	}
 	var kept []orgNodeView
 	for _, n := range res.nodes {
@@ -92,7 +97,7 @@ func buildVacancy(res *orgGapResult, division, region, state string) orgVacancyR
 	}
 	out := orgVacancyResult{Version: res.version, Groups: []orgVacancyGroupView{}, Rows: []orgVacancyRow{}}
 	for _, g := range domain.GroupVacancies(domainNodes(kept), states) {
-		v := orgVacancyGroupView{Division: g.Division, Region: g.Region, orgVacancySummary: orgVacancySummary{
+		v := orgVacancyGroupView{Division: g.Division, DivisionName: divisionNames[g.Division], Region: g.Region, orgVacancySummary: orgVacancySummary{
 			Positions: g.Positions, Filled: g.Filled, Empty: g.Empty, Maybe: g.Maybe, Planned: g.Planned, Frozen: g.Frozen}}
 		out.Groups = append(out.Groups, v)
 		s := &out.Summary
@@ -151,7 +156,7 @@ func orgVacancyWorkbook(v orgVacancyResult) (*exportFile, error) {
 	header := []any{"Divisi", "Region", "Posisi", "Terisi", "Kosong", "Mungkin terisi", "Rencana", "Dibekukan"}
 	summary := [][]any{{"Posisi Kosong " + v.Version.Label}, {""}, header}
 	for _, g := range v.Groups {
-		summary = append(summary, []any{g.Division, g.Region, g.Positions, g.Filled, g.Empty, g.Maybe, g.Planned, g.Frozen})
+		summary = append(summary, []any{g.DivisionName, g.Region, g.Positions, g.Filled, g.Empty, g.Maybe, g.Planned, g.Frozen})
 	}
 	s := v.Summary
 	summary = append(summary, []any{"Total", "", s.Positions, s.Filled, s.Empty, s.Maybe, s.Planned, s.Frozen})
