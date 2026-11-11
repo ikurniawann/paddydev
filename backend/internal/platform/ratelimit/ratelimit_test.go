@@ -142,10 +142,20 @@ func TestPruneDropsExpiredKeys(t *testing.T) {
 	if _, _, err := l.Sliding(ctx, live, 1, time.Hour, time.Now()); err != nil {
 		t.Fatal(err)
 	}
-	if err := l.Prune(ctx, time.Now()); err != nil {
-		t.Fatal(err)
+	// Prune skips rows another replica's prune holds (SKIP LOCKED), and CI
+	// runs packages in parallel on one database: retry briefly (EPIC-105 R6).
+	gone := false
+	for i := 0; i < 20 && !gone; i++ {
+		if err := l.Prune(ctx, time.Now()); err != nil {
+			t.Fatal(err)
+		}
+		if w, _ := l.Peek(ctx, old); w == nil {
+			gone = true
+		} else {
+			time.Sleep(50 * time.Millisecond)
+		}
 	}
-	if w, _ := l.Peek(ctx, old); w != nil {
+	if !gone {
 		t.Fatal("expired key kept")
 	}
 	if ok, _, _ := l.Sliding(ctx, live, 1, time.Hour, time.Now()); ok {
