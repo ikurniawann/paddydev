@@ -349,19 +349,21 @@ func readEmployeeMatrix(data []byte, fileName string) ([][]string, error) {
 func importLookups(ctx context.Context, q database.Querier, l *employeeLists, today string) (domain.EmployeeLookups, error) {
 	lk := domain.EmployeeLookups{Statuses: l.statusCodes, Branches: l.branches, Departments: l.departments,
 		Positions: l.positions, ExistingNIP: map[string]domain.EmployeeRef{}, EmailOwner: map[string]domain.EmployeeRef{},
-		ManagerNIP: map[string]string{}, KTPOwner: map[string]domain.EmployeeRef{}, NPWPOwner: map[string]domain.EmployeeRef{},
-		Today: today}
-	rows, err := q.Query(ctx, `SELECT id::text, nip, full_name, lower(email), is_active, user_id IS NOT NULL,
-		regexp_replace(coalesce(ktp, ''), '\D', '', 'g'), regexp_replace(coalesce(npwp, ''), '\D', '', 'g')
-		FROM hris.employees ORDER BY is_active, updated_at NULLS FIRST`)
+		ManagerNIP: map[string]string{}, ManagerOfNIP: map[string]string{}, KTPOwner: map[string]domain.EmployeeRef{},
+		NPWPOwner: map[string]domain.EmployeeRef{}, Today: today}
+	rows, err := q.Query(ctx, `SELECT e.id::text, e.nip, e.full_name, lower(e.email), e.is_active, e.user_id IS NOT NULL,
+		regexp_replace(coalesce(e.ktp, ''), '\D', '', 'g'), regexp_replace(coalesce(e.npwp, ''), '\D', '', 'g'),
+		coalesce(btrim(m.nip), '')
+		FROM hris.employees e LEFT JOIN hris.employees m ON m.id = e.reporting_to
+		ORDER BY e.is_active, e.updated_at NULLS FIRST`)
 	if err != nil {
 		return lk, err
 	}
 	defer rows.Close()
 	for rows.Next() {
 		var r domain.EmployeeRef
-		var email, ktp, npwp string
-		if err := rows.Scan(&r.ID, &r.NIP, &r.Name, &email, &r.Active, &r.HasLogin, &ktp, &npwp); err != nil {
+		var email, ktp, npwp, manager string
+		if err := rows.Scan(&r.ID, &r.NIP, &r.Name, &email, &r.Active, &r.HasLogin, &ktp, &npwp, &manager); err != nil {
 			return lk, err
 		}
 		if ktp != "" {
@@ -371,6 +373,7 @@ func importLookups(ctx context.Context, q database.Querier, l *employeeLists, to
 			lk.NPWPOwner[npwp] = r
 		}
 		lk.ExistingNIP[r.NIP] = r
+		lk.ManagerOfNIP[r.NIP] = manager
 		lk.EmailOwner[email] = r // active rows come last, so they win
 		if r.Active {
 			lk.ManagerNIP[r.NIP] = r.ID

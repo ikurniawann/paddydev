@@ -2,6 +2,7 @@ package domain
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -85,9 +86,12 @@ type EmployeeLookups struct {
 	ExistingNIP map[string]EmployeeRef
 	EmailOwner  map[string]EmployeeRef
 	ManagerNIP  map[string]string
-	KTPOwner    map[string]EmployeeRef // NIK (digits) → employee
-	NPWPOwner   map[string]EmployeeRef // NPWP (digits) → employee
-	Today       string                 // "" skips the birth-date-in-the-future check
+	// ManagerOfNIP is each existing employee's current manager NIP ("" =
+	// none), for the cycle check of EPIC-105 R5.
+	ManagerOfNIP map[string]string
+	KTPOwner     map[string]EmployeeRef // NIK (digits) → employee
+	NPWPOwner    map[string]EmployeeRef // NPWP (digits) → employee
+	Today        string                 // "" skips the birth-date-in-the-future check
 	// Current is each existing employee's values as the export writes them
 	// (NIP → column key → text; dates ISO). In Replace mode a cell equal
 	// to it is unchanged: not validated again, not overwritten.
@@ -145,6 +149,8 @@ func validEmail(s string) bool {
 func ValidateEmployeeImport(mode string, header []string, rows [][]string, firstLine int, lk EmployeeLookups) ([]EmployeeImportRow, []UploadIssue, []UploadIssue) {
 	var out []EmployeeImportRow
 	errs, warns := []UploadIssue{}, []UploadIssue{}
+	// managerAfter: the manager NIP each row sets (EPIC-105 R5 cycle check).
+	managerAfter, managerLine := map[string]string{}, map[string]int{}
 	keys := make([]string, len(header))
 	hasName := false
 	for i, h := range header {
@@ -367,8 +373,10 @@ func ValidateEmployeeImport(mode string, header []string, rows [][]string, first
 				}
 				if id, ok := lk.ManagerNIP[m]; ok {
 					row.Set["reporting_to"] = id
+					managerAfter[nip], managerLine[nip] = m, line
 				} else if newInFile[m] {
 					row.ManagerNIPNew = m // set after the manager row is inserted
+					managerAfter[nip], managerLine[nip] = m, line
 				} else {
 					fail(k, "NIP atasan "+m+" tidak ditemukan / tidak aktif")
 				}
@@ -423,7 +431,37 @@ func ValidateEmployeeImport(mode string, header []string, rows [][]string, first
 		}
 		out = append(out, row)
 	}
+	errs = append(errs, managerCycles(managerAfter, managerLine, lk.ManagerOfNIP)...)
 	return out, errs, warns
+}
+
+// managerCycles reports each row whose manager chain, as it stands after the
+// import (rows over existing data), comes back to itself (EPIC-105 R5).
+func managerCycles(after map[string]string, lines map[string]int, existing map[string]string) []UploadIssue {
+	next := func(nip string) string {
+		if m, ok := after[nip]; ok {
+			return m
+		}
+		return existing[nip]
+	}
+	nips := make([]string, 0, len(after))
+	for nip := range after {
+		nips = append(nips, nip)
+	}
+	sort.Slice(nips, func(i, j int) bool { return lines[nips[i]] < lines[nips[j]] })
+	var out []UploadIssue
+	for _, start := range nips {
+		path := []string{start}
+		for cur, i := next(start), 0; cur != "" && i < 50; cur, i = next(cur), i+1 {
+			path = append(path, cur)
+			if cur == start {
+				out = append(out, UploadIssue{Line: lines[start], Column: columnHeader["manager_nip"],
+					Message: "NIP Atasan membentuk siklus: " + strings.Join(path, " → ")})
+				break
+			}
+		}
+	}
+	return out
 }
 
 // checkImportNIP is the EPIC-099 check of a new row's NIP: the rule of
