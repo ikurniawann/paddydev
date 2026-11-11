@@ -208,3 +208,24 @@ func TestParseOrgChartUploadBadParentRowNoCascade(t *testing.T) {
 		t.Fatalf("errors %+v", res.Errors)
 	}
 }
+
+// Review fix: a missing or renamed column is refused instead of read as
+// blank (Status would silently become Aktif).
+func TestParseOrgChartUploadMissingColumns(t *testing.T) {
+	m := [][]string{{"Kode", "Kode Atasan", "Jabatan", "Posisi", "Kode Divisi", "Divisi", "Level", "Jenis Kerja", "Vendor", "Region", "Toko"},
+		{"EXE-001", "", "CEO", "Ya", "EXE", "Executive", "L0", "", "", "", ""}}
+	if _, p := ParseOrgChartUpload(m, nil); p != "Kolom tidak ada di file: Status, Perlu Konfirmasi — pakai template dari halaman Struktur Org" {
+		t.Fatalf("problem %q", p)
+	}
+}
+
+// Review fix: the upload diff also sees Vendor, the division name and
+// Perlu Konfirmasi.
+func TestDiffOrgUpload(t *testing.T) {
+	base := []OrgUploadNode{{OrgNode: OrgNode{Code: "A", Title: "T", Vendor: "V1", DivisionCode: "OPS"}, DivisionName: "Operations"}}
+	next := []OrgUploadNode{{OrgNode: OrgNode{Code: "A", Title: "T", Vendor: "V2", DivisionCode: "OPS"}, DivisionName: "Operasional", NeedsConfirm: true}}
+	d := DiffOrgUpload(base, next)
+	if len(d.Changed) != 1 || !reflect.DeepEqual(d.Changed[0].Fields, []string{"Divisi", "Vendor", "Perlu Konfirmasi"}) {
+		t.Fatalf("diff %+v", d)
+	}
+}

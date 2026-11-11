@@ -18,7 +18,7 @@ const preview = (over: Partial<ChartImportPreview> = {}): { data: ChartImportPre
     errors: [],
     warnings: [{ line: 152, column: "Toko", name: "RTL-900", message: "Toko PPMR tidak ada sebagai toko aktif di HRIS" }],
     diff: { added: ["RTL-900"], removed: ["RTL-056"], changed: [{ code: "RTL-054", title: "Store Leader Senior", fields: ["Jabatan"] }] },
-    vacancy: { positions: 149, filled: 130, empty: 10, maybe: 0, planned: 9, frozen: 0 },
+    vacancy: { positions: 149, filled: 128, empty: 10, maybe: 0, planned: 9, frozen: 2 },
     fingerprint: "fp",
     ...over,
   },
@@ -73,7 +73,8 @@ it("pratinjau menampilkan ringkasan, selisih, peringatan; simpan setelah dicenta
   expect(screen.getByText("Diubah 1")).toBeTruthy();
   expect(screen.getByText(/RTL-054 Store Leader Senior \(Jabatan\)/)).toBeTruthy();
   expect(screen.getByText("Baris 152 · Toko: Toko PPMR tidak ada sebagai toko aktif di HRIS")).toBeTruthy();
-  expect(screen.getByText(/Terisi 130/)).toBeTruthy();
+  expect(screen.getByText(/Terisi 128/)).toBeTruthy();
+  expect(screen.getByText(/Dibekukan 2/)).toBeTruthy();
   const save = screen.getByRole("button", { name: "Simpan sebagai draft" }) as HTMLButtonElement;
   expect(save.disabled).toBe(true);
   fireEvent.click(screen.getByLabelText("Saya sudah memeriksa peringatan"));

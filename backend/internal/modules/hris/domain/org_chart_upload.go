@@ -119,6 +119,15 @@ func ParseOrgChartUpload(matrix [][]string, activeStores []string) (res OrgUploa
 	for j, h := range matrix[header] {
 		col[NormalizeHeader(h)] = j
 	}
+	var missing []string
+	for _, h := range OrgChartHeaders {
+		if _, ok := col[NormalizeHeader(h)]; !ok {
+			missing = append(missing, h)
+		}
+	}
+	if len(missing) > 0 {
+		return res, "Kolom tidak ada di file: " + strings.Join(missing, ", ") + " — pakai template dari halaman Struktur Org"
+	}
 	cell := func(r []string, name string) string {
 		j, ok := col[NormalizeHeader(name)]
 		if !ok || j >= len(r) {
@@ -287,8 +296,21 @@ type OrgChartDiff struct {
 
 // DiffOrgCharts lists added, removed and changed codes, each sorted.
 func DiffOrgCharts(base, next []OrgNode) OrgChartDiff {
+	wrap := func(ns []OrgNode) []OrgUploadNode {
+		out := make([]OrgUploadNode, len(ns))
+		for i, n := range ns {
+			out[i] = OrgUploadNode{OrgNode: n}
+		}
+		return out
+	}
+	return DiffOrgUpload(wrap(base), wrap(next))
+}
+
+// DiffOrgUpload is DiffOrgCharts that also compares the division name and
+// Perlu Konfirmasi, which only upload nodes carry.
+func DiffOrgUpload(base, next []OrgUploadNode) OrgChartDiff {
 	d := OrgChartDiff{Added: []string{}, Removed: []string{}, Changed: []OrgNodeChange{}}
-	old := map[string]OrgNode{}
+	old := map[string]OrgUploadNode{}
 	for _, n := range base {
 		old[n.Code] = n
 	}
@@ -309,12 +331,14 @@ func DiffOrgCharts(base, next []OrgNode) OrgChartDiff {
 		add(o.Title != n.Title, "Jabatan")
 		add(o.ParentCode != n.ParentCode, "Atasan")
 		add(o.IsPosition != n.IsPosition, "Posisi")
-		add(o.DivisionCode != n.DivisionCode, "Divisi")
+		add(o.DivisionCode != n.DivisionCode || o.DivisionName != n.DivisionName, "Divisi")
 		add(o.Level != n.Level, "Level")
 		add(o.EmploymentType != n.EmploymentType, "Jenis Kerja")
+		add(o.Vendor != n.Vendor, "Vendor")
 		add(o.Region != n.Region, "Region")
 		add(!slices.Equal(o.StoreCodes, n.StoreCodes), "Toko")
 		add(o.Status != n.Status, "Status")
+		add(o.NeedsConfirm != n.NeedsConfirm, "Perlu Konfirmasi")
 		if len(f) > 0 {
 			d.Changed = append(d.Changed, OrgNodeChange{Code: n.Code, Title: n.Title, Fields: f})
 		}

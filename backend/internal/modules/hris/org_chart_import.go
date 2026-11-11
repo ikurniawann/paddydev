@@ -190,7 +190,11 @@ func (s *Service) importOrgChart(r *http.Request, u *auth.User, in orgImportInpu
 				positions++
 			}
 		}
-		diff := domain.DiffOrgCharts(domainNodes(baseNodes), next)
+		baseUpload := make([]domain.OrgUploadNode, len(baseNodes))
+		for i, n := range domainNodes(baseNodes) {
+			baseUpload[i] = domain.OrgUploadNode{OrgNode: n, DivisionName: baseNodes[i].DivisionName, NeedsConfirm: baseNodes[i].NeedsConfirm}
+		}
+		diff := domain.DiffOrgUpload(baseUpload, res.Nodes)
 		var vac orgVacancySummary
 		for _, v := range domain.OrgVacancies(next, domain.MatchOrgChart(next, emps, aliases, stores)) {
 			vac.Positions++
@@ -335,6 +339,14 @@ func (h handlers) orgChartDeleteDraft(w http.ResponseWriter, r *http.Request, u 
 		}
 		if status != "draft" {
 			return httpx.Conflict(errOrgOnlyDraftDel)
+		}
+		// Lock every version so two deletes cannot both remove "the other".
+		var total int
+		if err := q.QueryRow(ctx, `SELECT count(*) FROM (SELECT id FROM hris.org_chart_versions ORDER BY id FOR UPDATE) v`).Scan(&total); err != nil {
+			return err
+		}
+		if total <= 1 {
+			return httpx.Conflict("Versi terakhir tidak bisa dihapus — impor versi lain dulu")
 		}
 		if err := q.QueryRow(ctx, `SELECT count(*) FROM hris.org_chart_nodes WHERE version_id = $1`, id).Scan(&nodes); err != nil {
 			return err

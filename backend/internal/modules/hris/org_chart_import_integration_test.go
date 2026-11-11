@@ -345,3 +345,16 @@ func TestOrgChartDeleteDraft(t *testing.T) {
 		t.Fatalf("Draft 6 changed")
 	}
 }
+
+// Review fix: the last remaining version cannot be deleted, so HR always
+// has a template to start from.
+func TestOrgChartDeleteLastVersion(t *testing.T) {
+	h := newHarness(t)
+	hr := orgImporter(h)
+	h.exec(`DELETE FROM hris.org_chart_versions WHERE label <> 'Draft 6'`)
+	expect(t, h.do(&hr, "DELETE", "/api/hris/org-chart/versions/"+h.orgVersionID("Draft 6"), nil), 409,
+		"Versi terakhir tidak bisa dihapus — impor versi lain dulu")
+	if h.orgStatus("Draft 6") != "draft" {
+		t.Fatalf("Draft 6 gone")
+	}
+}

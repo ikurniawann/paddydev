@@ -195,7 +195,7 @@ export function ImportVersionDialog({ open, onOpenChange, base, onImported }: Pr
               </p>
               <p className="text-xs text-gray-600">
                 Perkiraan dengan karyawan aktif: Terisi {preview.vacancy.filled} · Kosong {preview.vacancy.empty} · Mungkin terisi{" "}
-                {preview.vacancy.maybe} · Rencana {preview.vacancy.planned}
+                {preview.vacancy.maybe} · Rencana {preview.vacancy.planned} · Dibekukan {preview.vacancy.frozen}
               </p>
               <div className="space-y-2 rounded-lg border p-3">
                 <p className="text-xs text-gray-500">Dibanding {preview.base.label}</p>
