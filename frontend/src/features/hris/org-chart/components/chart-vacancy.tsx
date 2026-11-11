@@ -23,6 +23,7 @@ const TILES: { key: keyof ChartVacancyCounts; label: string }[] = [
   { key: "empty", label: "Kosong" },
   { key: "maybe", label: "Mungkin terisi" },
   { key: "planned", label: "Rencana" },
+  { key: "frozen", label: "Dibekukan" },
 ];
 
 const selectClass = "h-9 w-full rounded-md border border-gray-300 bg-white px-2 text-sm sm:w-48";
@@ -119,7 +120,7 @@ export function ChartVacancy({ version }: { version: string }) {
         </div>
       ) : data ? (
         <>
-          <div aria-label="Ringkasan posisi" className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+          <div aria-label="Ringkasan posisi" className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
             {TILES.map((t) => (
               <Card key={t.key}>
                 <CardContent className="p-3">
@@ -167,7 +168,7 @@ export function ChartVacancy({ version }: { version: string }) {
           {data.rows.length === 0 ? (
             <Card>
               <CardContent className="py-12 text-center text-sm text-gray-400">
-                Semua posisi untuk filter ini sudah terisi
+                {filter.state ? "Tidak ada posisi dengan keadaan ini" : "Semua posisi untuk filter ini sudah terisi"}
               </CardContent>
             </Card>
           ) : (

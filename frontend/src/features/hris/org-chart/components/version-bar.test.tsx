@@ -119,3 +119,15 @@ it("pesan error server ditampilkan sebagai toast", async () => {
   fireEvent.click(submit);
   await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Versi ini sudah tidak berstatus draft"));
 });
+
+it("tanpa hak approve, pesan 403 server tampil dalam bahasa Indonesia", async () => {
+  api.approveOrgChartVersion.mockReset().mockRejectedValue(new Error("Insufficient permissions"));
+  setup("Draft 6");
+  fireEvent.click(await screen.findByRole("button", { name: "Setujui versi" }));
+  const submit = (await screen.findByRole("button", { name: "Setujui" })) as HTMLButtonElement;
+  await waitFor(() => expect(submit.disabled).toBe(false));
+  fireEvent.click(submit);
+  await waitFor(() =>
+    expect(toast.error).toHaveBeenCalledWith("Anda tidak punya hak menyetujui versi bagan. Minta admin menambahkan aksi Approve pada menu Struktur Org.")
+  );
+});

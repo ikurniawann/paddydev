@@ -358,10 +358,14 @@ func orgGapWorkbook(res *orgGapResult, sum map[string]int, titles []orgTitleCoun
 	for _, m := range res.gap.Matches {
 		people = append(people, []any{m.NIP, m.Name, m.Title, m.Canonical, m.NodeCode, m.Problem, m.ManagerProblem, yes(m.AliasNeedsReview)})
 	}
-	empty := [][]any{{"Kode", "Jabatan", "Divisi", "Region", "Toko", "Status"}}
+	// Slots without a holder, with their Posisi Kosong state (EPIC-102 R2/R3):
+	// a planned or maybe-held slot is not "Kosong".
+	states := domain.OrgVacancies(domainNodes(res.nodes), res.gap)
+	empty := [][]any{{"Kode", "Jabatan", "Divisi", "Region", "Toko", "Status Bagan", "Keadaan"}}
 	for _, c := range res.gap.EmptyNodes {
 		n := byCode[c]
-		empty = append(empty, []any{n.Code, n.Title, n.DivisionName, deref(n.Region), strings.Join(n.StoreCodes, ", "), n.Status})
+		empty = append(empty, []any{n.Code, n.Title, n.DivisionName, deref(n.Region), strings.Join(n.StoreCodes, ", "), n.Status,
+			vacancyLabels[states[c].State]})
 	}
 	outside := [][]any{{"Jabatan", "Jumlah Karyawan"}}
 	for _, t := range titles {
@@ -377,7 +381,7 @@ func orgGapWorkbook(res *orgGapResult, sum map[string]int, titles []orgTitleCoun
 	data, err := xlsx.Build(
 		xlsx.SheetSpec{Name: "Ringkasan", Rows: summary, ColumnWidths: []float64{36, 12}},
 		xlsx.SheetSpec{Name: "Karyawan", Rows: people, ColumnWidths: []float64{14, 28, 32, 32, 12, 44, 52, 12}},
-		xlsx.SheetSpec{Name: "Posisi Kosong", Rows: empty, ColumnWidths: []float64{10, 34, 22, 18, 14, 10}},
+		xlsx.SheetSpec{Name: "Tanpa Pemegang", Rows: empty, ColumnWidths: []float64{10, 34, 22, 18, 14, 12, 16}},
 		xlsx.SheetSpec{Name: "Jabatan di Luar Bagan", Rows: outside, ColumnWidths: []float64{40, 16}},
 		xlsx.SheetSpec{Name: "Toko", Rows: stores, ColumnWidths: []float64{12, 48}},
 	)

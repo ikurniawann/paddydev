@@ -26,6 +26,15 @@ function localToday() {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
+/** Pesan gagal setuju; 403 server (bahasa Inggris) diterjemahkan. */
+function approveErrorMessage(e: unknown) {
+  const msg = e instanceof Error ? e.message : "";
+  if (msg === "Insufficient permissions") {
+    return "Anda tidak punya hak menyetujui versi bagan. Minta admin menambahkan aksi Approve pada menu Struktur Org.";
+  }
+  return msg || "Gagal menyetujui versi";
+}
+
 /** Versi yang ditampilkan: pilihan user, bila kosong sama dengan bawaan server (EPIC-102 R7). */
 export function shownVersion(versions: ChartVersion[], version: string): ChartVersion | undefined {
   if (version) return versions.find((v) => v.label === version);
@@ -48,7 +57,7 @@ function ApproveDialog({ target, open, onOpenChange }: { target: ChartVersion; o
       onOpenChange(false);
       return qc.invalidateQueries({ queryKey: orgChartQueryKeys.all });
     },
-    onError: (e) => toast.error(e instanceof Error && e.message ? e.message : "Gagal menyetujui versi"),
+    onError: (e) => toast.error(approveErrorMessage(e)),
   });
   const errors = validation.data?.errors.length ?? 0;
   const blocked = !validation.data || errors > 0 || !/^\d{4}-\d{2}-\d{2}$/.test(validFrom) || approve.isPending;

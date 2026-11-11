@@ -180,3 +180,26 @@ func TestOrgChartVacancyAPI(t *testing.T) {
 		t.Fatalf("maybe summary %v", maybe.data()["summary"])
 	}
 }
+
+// Review fix: the Selisih workbook lists holderless slots under "Tanpa
+// Pemegang" with their Posisi Kosong state, so it never calls a planned or
+// maybe-held slot "kosong".
+func TestOrgChartGapWorkbookStates(t *testing.T) {
+	h := newHarness(t)
+	hr, _ := h.staff("hrd", iam.HrisOrganization, false)
+	book := h.send(&hr, httptest.NewRequest("GET", "/api/hris/org-chart/gap?format=xlsx", nil))
+	if book.Code != 200 {
+		t.Fatalf("xlsx = %d %s", book.Code, book.Body.String())
+	}
+	m, err := xlsx.ParseMatrix(book.Body.Bytes(), xlsx.ReadOptions{PreferSheet: "Tanpa Pemegang"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(m) == 0 || strings.Join(m[0], "|") != "Kode|Jabatan|Divisi|Region|Toko|Status Bagan|Keadaan" {
+		t.Fatalf("header %v", m[0])
+	}
+	text, _ := json.Marshal(m)
+	if !strings.Contains(string(text), `"Rencana"`) || !strings.Contains(string(text), `"Kosong"`) {
+		t.Fatalf("states missing: %s", text)
+	}
+}

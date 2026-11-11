@@ -94,3 +94,19 @@ it("gagal memuat ditampilkan sebagai error", async () => {
   setup();
   expect((await screen.findByRole("alert")).textContent).toContain("Posisi kosong tidak bisa dimuat");
 });
+
+it("filter Keadaan tanpa hasil tidak mengaku semua posisi sudah terisi", async () => {
+  setup();
+  await screen.findByLabelText("Ringkasan posisi");
+  api.fetchOrgChartVacancy.mockResolvedValue({ ...response, rows: [] });
+  fireEvent.change(screen.getByLabelText("Keadaan"), { target: { value: "frozen" } });
+  expect(await screen.findByText("Tidak ada posisi dengan keadaan ini")).toBeTruthy();
+  expect(screen.queryByText("Semua posisi untuk filter ini sudah terisi")).toBeNull();
+});
+
+it("ringkasan memuat Dibekukan sehingga jumlahnya sama dengan Posisi", async () => {
+  api.fetchOrgChartVacancy.mockReset().mockResolvedValue({ ...response, summary: { ...response.summary, empty: 117, frozen: 3 } });
+  setup();
+  const tiles = await screen.findByLabelText("Ringkasan posisi");
+  expect(within(tiles).getByText("Dibekukan").parentElement?.textContent).toContain("3");
+});
