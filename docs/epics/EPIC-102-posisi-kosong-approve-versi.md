@@ -1,6 +1,6 @@
 # EPIC-102: Posisi Kosong & Persetujuan Versi Bagan — Fase 2a (`MODULE-HRIS`)
 
-status: backlog
+status: review
 environment: dev
 retries: 0
 
@@ -31,17 +31,57 @@ Masih ditunda (bergantung pada jawaban klien): importer Draft 7 (ORG-06, Q12) da
 - **R8 — Akses.**
   - Membaca tetap memakai menu `hris.organization`.
   - Menyetujui butuh aksi `approve` pada menu itu (`withAction`). Tidak ada menu baru.
+- **R8a — Hak "approve" (keputusan eksekusi 11-11, perlu konfirmasi user sebelum prod).**
+  - Menu daun `hris.organization.org-chart` sebelumnya hanya menawarkan `read`, jadi aksi `approve` tidak bisa diberikan.
+  - Migrasi `20261116090000_org_chart_approval.sql` menambah `approve` ke menu itu dan ke grant yang sudah ada milik `super_admin`, `admin`, `hrd`, `admin_hris` (pola EPIC-067), lalu `iam.sync_hris_staff_roles()`.
+  - Akibatnya `hris_manager`, `hris_non_payroll`, `hris_non_rekrutmen_kpi` juga bisa menyetujui. Bisa dipersempit lewat mask Hak Akses HRIS.
 - **R9 — Audit.** `audit.audit_log` mendapat action `hris.org_chart.version.approve`, entity `hris.org_chart_versions`, dengan isi:
   - before: status lama;
   - after: status baru, `valid_from`, label versi yang diarsipkan.
 
 ## Tasks
 Rencana: `docs/superpowers/plans/2026-11-10-posisi-kosong-approve-versi.md`.
-- [ ] T1 Domain: kandidat karyawan ambigu + keadaan posisi + ringkasan per divisi/region
-- [ ] T2 API Posisi Kosong (JSON + Excel)
-- [ ] T3 Migrasi + API persetujuan versi + versi bawaan
-- [ ] T4 Frontend: pemilih versi, dialog Setujui, tab Posisi Kosong
-- [ ] T5 Gate, QA staging, catatan epic
+- [x] T1 Domain: kandidat karyawan ambigu + keadaan posisi + ringkasan per divisi/region
+- [x] T2 API Posisi Kosong (JSON + Excel)
+- [x] T3 Migrasi + API persetujuan versi + versi bawaan
+- [x] T4 Frontend: pemilih versi, dialog Setujui, tab Posisi Kosong
+- [x] T5 Gate, QA staging, catatan epic
 
 ## Automation Log
 - 2026-11-10: Epic dibuat dari sisa EPIC-101 R2. User memilih "Vacancy + approve versi". Rencana ditulis, menunggu review user.
+- 2026-11-11: Implementasi selesai di branch `feat/epic102-vacancy-versi` (executing-plans, inline).
+  - Commit: 519cb1a T1 domain, b11788b T2 API Posisi Kosong, 15c2893 T3 migrasi + persetujuan, 7888a7a T4 frontend, eed5eb8 perbaikan review.
+  - Keputusan eksekusi:
+    - hak `approve` (R8a);
+    - grup posisi kosong membawa `division_name`;
+    - pemilih versi memakai `<select>` biasa dengan badge status di sampingnya;
+    - region kosong tampil "Tanpa region";
+    - id versi bukan UUID → 404.
+  - Review akhir seluruh branch (reviewer terpisah): 0 Critical, 2 Important, 8 Minor.
+    - Sheet "Posisi Kosong" di Excel Selisih (arti berbeda) diganti "Tanpa Pemegang" + kolom Keadaan.
+    - Ubin Dibekukan ditambahkan, pesan filter Keadaan tanpa hasil diperbaiki, toast 403 dalam bahasa Indonesia.
+    - Ditunda (minor):
+      - pesan 409 saat kalah balapan;
+      - region "Tanpa region" belum bisa dipilih di filter;
+      - belum ada tes konkuren dua transaksi;
+      - tanggal bawaan memakai zona waktu perangkat;
+      - sisa baris `_ = iam.HrisOrganization` di tes;
+      - tombol Setujui tetap tampil untuk akun baca saja (server menolak 403).
+  - Gate:
+    - backend di DB baru (590 migrasi): gofmt dan vet bersih, `go test ./internal/...` 137 paket lulus, 0 gagal;
+    - frontend: tsc OK, eslint OK, vitest 906 file / 6579 tes lulus.
+    - Catatan: `TestRewardRedeemRateLimit` (memberportal) sempat gagal sekali karena timing di bawah beban paralel; tidak terkait (lulus saat diulang).
+  - Staging 11-11 11.35 WIB: image `local-20261111-113530`, backup `/mnt/hdd1/backup/paddydev/staging-before-e102-20261111-113519.dump`, migrasi `20261116090000` diterapkan.
+  - QA staging (salinan data prod 10-11):
+    - Draft 6 → 149 posisi: 131 terisi, 9 kosong, 0 mungkin terisi, 9 rencana, 0 dibekukan; jumlahnya cocok.
+    - 22 karyawan ambigu hanya cocok ke slot yang sudah punya pemegang (572 kandidat), jadi tidak ada yang "Mungkin terisi".
+    - Makassar 4 posisi (RTL-054 Store Leader kosong).
+    - Excel Posisi Kosong (Ringkasan, Posisi) dan Selisih (Tanpa Pemegang) terbuka.
+    - Tanggal salah → 400. Setujui (akun hrd) → 200 + audit; setujui ulang → 409.
+    - Akun baca saja: baca 200, setujui 403. Versi dengan error BR → 400.
+    - Playwright desktop + HP 10/10 lulus, tanpa scroll horizontal; bukti di `.share/qa-epic102/`.
+  - Setelah QA:
+    - Draft 6 dikembalikan ke `draft`, supaya HR yang menyetujui di prod.
+    - Role, user, sesi, dan versi QA sementara dihapus.
+    - 1 baris audit QA tetap ada (audit append-only).
+  - Prod: belum, perlu izin user (lihat R8a).
