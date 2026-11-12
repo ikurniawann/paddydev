@@ -14,12 +14,14 @@ const fs = require("fs");
 const path = require("path");
 const { Client } = require("pg");
 const { sslForUrl, assertLocalTarget } = require("../scripts/pg-utils");
-const { COMPANY_CODE, BRANCH_CODE, BRANCH_NAME } = require("../scripts/items-business-scope");
+const { BRANCH_CODE, BRANCH_NAME } = require("../scripts/items-business-scope");
 
 // Struktur target EPIC-106; sengaja tidak memakai SEED_HOLDING_CODE supaya nama Paddy Group tidak tertimpa.
 const GROUP = { code: "PADDY", name: "Paddy Group" };
 const OLD_HOLDING_CODE = "PROLOGE";
 const COMPANY_NAME = "CV Cipta Kreasi Kreatif";
+// Kode sendiri, bukan dari scripts/items-business-scope.js: salinan paddydev masih memakai kode lama MIZU.
+const COMPANY_CODE = process.env.SEED_COMPANY_CODE || "ERP";
 
 const ROOT = path.join(__dirname, "..", "..");
 

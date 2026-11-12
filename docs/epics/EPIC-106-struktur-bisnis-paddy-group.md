@@ -56,6 +56,25 @@ Kode ada di `wit-id-indonesia/erp-paddy`, branch `fix/epic106-struktur-bisnis` (
 - **R11 — Seeder** `business-hierarchy.js` sekarang membangun struktur target. ERP dicari per kode di holding mana pun dan dipindah ke Paddy Group, tidak pernah membuat ERP kedua, dan PROLOGE yang kosong dinonaktifkan. `items-business-scope.js` (erp-paddy) mencari scope per kode perusahaan dan cabang; holding hanya disaring bila `SEED_HOLDING_CODE` diisi.
 - **R12 — UI:** pemilih scope akun tidak menawarkan holding, perusahaan, atau cabang nonaktif untuk pilihan baru; pilihan akun lama tetap tampil.
 - **R13 — Migrasi tidak diubah.** DB baru dari nol masih membangun PROLOGE → ERP dari delta `business_hierarchy`. Menambah migrasi struktur akan menjalankannya otomatis di staging/prod tanpa pratinjau dan izin, jadi untuk DB baru struktur target dibangun dengan seeder.
+- **R15 — Review akhir (reviewer terpisah, 12-11). Temuan Important diperbaiki, masing-masing dengan tes merah lalu hijau:**
+  - "Penempatan utama" sekarang = yang berlaku **hari ini WIB** (`start_date <= hari ini <= end_date`, karyawan aktif), satu definisi untuk gaji, user, dan laporan.
+  - Akun ber-scope perusahaan/holding tetap di perusahaannya.
+  - BLOKIR baru:
+    - `outlet_di_cabang_pindahan`, `penempatan_masa_depan_beda_perusahaan`, `karyawan_ganda`, `penempatan_perusahaan_lain`;
+    - `payroll_belum_dibayar` (status selain `paid`, termasuk `completed`), `payroll_periode_ganda`.
+  - Pratinjau mencetak `USER` per orang di cabang pindahan.
+  - Pembalik membalik semua snapshot yang belum dibalik (terbaru dulu).
+  - `-v eksekusi=0` tetap pratinjau; pemindaian tabel lewat pg_catalog.
+  - Seeder memakai kode perusahaan sendiri (`ERP`), karena salinan paddydev `scripts/items-business-scope.js` masih bernilai `MIZU`.
+- **R16 — Keputusan user sebelum eksekusi staging.** Pratinjau staging memblokir 2 orang:
+  - **Febri Ayu Astiani:** penempatan utama HQ Bandung, outlet default di gudang Pudak.
+  - **Adrianus Adrian Chandra:** penempatan utama HQ Bandung, outlet default di gudang Salam.
+
+  Mengikuti penempatan akan membuat outlet mereka berada di luar scope. Pilihan:
+  - (a) HR memindah outlet default mereka ke HQ;
+  - (b) HR memindah penempatan utama mereka ke toko, sehingga mereka ikut PADDY-RETAIL dan gajinya ikut pindah; tetapi payroll draft ERP November memuat mereka, jadi draft dihapus atau dihitung ulang dulu.
+
+  Selain itu, 35 staf berpenempatan HQ tercatat absen di Pudak/Salam (365 dari 433 absen dalam 30 hari). Bila mereka sebenarnya kru toko, penempatan utamanya perlu dibetulkan HR **sebelum** skrip dijalankan.
 - **R14 — Urutan dan izin:**
   1. PR dengan CI hijau, lalu merge (deploy staging tidak menjalankan skrip).
   2. Backup staging.
@@ -71,7 +90,8 @@ Rencana: `docs/superpowers/plans/2026-11-12-struktur-bisnis-paddy-group.md`.
 - [x] T1 Laporan dampak (read-only) dan gladi di salinan staging
 - [x] T2 Skrip SQL struktur + pembalik + tes integrasi Go (8 tes)
 - [x] T3 Kode yang bergantung pada PROLOGE/holding: seeder, skrip scope, pemilih scope UI, peringatan skrip gabung
-- [ ] T4 Gate lokal 2× + review akhir; PR ke erp-paddy development, CI hijau, merge
+- [x] T4a Gate lokal 2× + review akhir + perbaikan temuan
+- [ ] T4b PR ke erp-paddy development, CI hijau, merge
 - [ ] T5 Staging: backup, pratinjau ke user, eksekusi berizin, verifikasi
 - [ ] T6 Production: gladi di salinan prod terbaru, menunggu izin user
 - [ ] T7 Catatan epic, memori, sinkron dokumen
@@ -86,3 +106,7 @@ Rencana: `docs/superpowers/plans/2026-11-12-struktur-bisnis-paddy-group.md`.
   - **HISTORY tetap:** absensi 387, penempatan 19, alokasi payroll 37, gudang 2, delegasi jadwal 3.
   - **Jalan kedua:** 0 baris.
   - **Pembalik:** 162 baris dengan angka per tabel yang sama. md5 struktur kembali identik dengan staging asli. Pembalik kedua 0 baris.
+- 2026-11-12: Review akhir: 5 temuan Important diperbaiki (R15). Tes struktur 11/11 hijau (11 kasus penghalang).
+- 2026-11-12: Gladi ulang di salinan staging yang baru:
+  - **Pratinjau (dan `-v eksekusi=0`):** 37 baris USER, terdiri dari 35 ke ERP-BANDUNG/ERP, 1 Silvi tetap di Pudak lalu ke PADDY-RETAIL, dan 1 IT Paddy tetap di Salam lalu ke PADDY-RETAIL. **BLOKIR 2:** Febri dan Adrian (`outlet_di_cabang_pindahan`).
+  - **Simulasi keputusan (a) di salinan:** outlet keduanya dipindah ke HQ. Eksekusi 162 baris dengan 0 penghalang dan semua INVARIAN OK. Jalan kedua 0 baris. Pembalik 162 baris dari 1 snapshot. Pembalik kedua tidak menemukan snapshot. md5 kembali identik.
