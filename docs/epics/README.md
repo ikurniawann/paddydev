@@ -10,6 +10,8 @@ deploying-dev · ready-for-qa · blocked · done).
 > **tetap ditulis dan di-merge di repo ini**. Setelah merge, jalankan `bash tools/sync-docs-erp-paddy.sh`
 > untuk menyalinnya ke `~/WORK/erp-paddy/docs` (salinan lokal untuk dibaca, diabaikan git).
 > Epic baru tetap dicatat di `docs/epics/` di sini.
+> Jangan menulis dokumen atau seeder langsung di `~/WORK/erp-paddy/docs` dan `~/WORK/erp-paddy/apps/backend/database/seeders`:
+> isinya ditimpa setiap kali sinkron.
 
 | Epic | Judul | Status | Update terakhir |
 |------|-------|--------|-----------------|
