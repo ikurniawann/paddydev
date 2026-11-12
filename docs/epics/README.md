@@ -117,7 +117,7 @@ deploying-dev · ready-for-qa · blocked · done).
 | [EPIC-103](./EPIC-103-impor-versi-bagan.md) | Impor Versi Bagan dari Template Excel — Fase 2b (`MODULE-HRIS`) | review | 2026-11-11 |
 | [EPIC-104](./EPIC-104-rapikan-bagan.md) | Rapikan Bagan Organisasi — Minor EPIC-102 & EPIC-103 (`MODULE-HRIS`) | review | 2026-11-11 |
 | [EPIC-105](./EPIC-105-risiko-data-minor.md) | Tutup Risiko Data dari Minor yang Ditunda (`MODULE-HRIS`, `MODULE-PROCUREMENT`) | backlog | 2026-11-11 |
-| [EPIC-106](./EPIC-106-struktur-bisnis-paddy-group.md) | Struktur Bisnis Paddy Group — Satu Holding, Dua Perusahaan Sejajar (`MODULE-CONFIGURATION`, lintas modul) | coding | 2026-11-12 |
+| [EPIC-106](./EPIC-106-struktur-bisnis-paddy-group.md) | Struktur Bisnis Paddy Group — Satu Holding, Dua Perusahaan Sejajar (`MODULE-CONFIGURATION`, lintas modul) | ready-for-qa | 2026-11-12 |
 
 Aturan:
 - Epic + registry ini adalah sumber kebenaran status pekerjaan (canonical).

@@ -1,6 +1,6 @@
 # EPIC-106: Struktur Bisnis Paddy Group — Satu Holding, Dua Perusahaan Sejajar (`MODULE-CONFIGURATION`, lintas modul)
 
-status: coding
+status: ready-for-qa
 environment: dev
 retries: 0
 
@@ -91,8 +91,8 @@ Rencana: `docs/superpowers/plans/2026-11-12-struktur-bisnis-paddy-group.md`.
 - [x] T2 Skrip SQL struktur + pembalik + tes integrasi Go (8 tes)
 - [x] T3 Kode yang bergantung pada PROLOGE/holding: seeder, skrip scope, pemilih scope UI, peringatan skrip gabung
 - [x] T4a Gate lokal 2× + review akhir + perbaikan temuan
-- [ ] T4b PR ke erp-paddy development, CI hijau, merge
-- [ ] T5 Staging: backup, pratinjau ke user, eksekusi berizin, verifikasi
+- [x] T4b PR ke erp-paddy development, CI hijau, merge (#1, a4548e2)
+- [x] T5 Staging: backup, pratinjau ke user, eksekusi berizin, verifikasi data (QA UI login oleh HR)
 - [ ] T6 Production: gladi di salinan prod terbaru, menunggu izin user
 - [ ] T7 Catatan epic, memori, sinkron dokumen
 
@@ -117,3 +117,18 @@ Rencana: `docs/superpowers/plans/2026-11-12-struktur-bisnis-paddy-group.md`.
   - USER 37: 35 dari Pudak/Salam ke ERP-BANDUNG dengan perusahaan tetap ERP, 2 ke PADDY-RETAIL.
   - **BLOKIR 2:** outlet Febri Ayu Astiani (Pudak) dan Adrianus Adrian Chandra (Salam).
   - **Eksekusi menunggu keputusan user untuk R16 dan izin.**
+- 2026-11-12 21:45 WIB: keputusan user R16 = (a): outlet Febri dan Adrian dipindah ke Gudang 1 HQ (ERP-BANDUNG); outlet toko dinonaktifkan; audit `user.outlet_update`. Untuk 35 staf HQ data penempatan dipakai apa adanya; HR membetulkan bila keliru.
+- 2026-11-12 21:46 WIB: pratinjau ulang staging: 162 baris, 0 penghalang, semua INVARIAN OK. User mengizinkan eksekusi.
+- 2026-11-12 21:50 WIB: backup `/mnt/hdd1/backup/paddydev/staging-before-struktur-bisnis-20261112-215051.dump` (495 tabel data, mode 600), lalu **EKSEKUSI di staging**:
+  - 162 baris diubah, yaitu branches 2, kantor pusat 1, companies 1, holdings 1, users 157, dan salary 0.
+  - Semua INVARIAN OK. Audit tercatat sebagai `data_restructure.business` urutan 1.
+  - Pratinjau sesudahnya 0 baris.
+- 2026-11-12 21:52 WIB: verifikasi staging:
+  - `/api/ready` 200.
+  - **Struktur:** Paddy Group > CV Cipta Kreasi Kreatif (ERP: ERP-BANDUNG ★, ODOO-WAREHOUSE-PADDY) dan Paddy (PADDY-RETAIL: 43 aktif / 54 cabang, termasuk Pudak/Salam; Event PVJ, Kopo, PVJ nonaktif). Holding "CV Cipta Kreasi Kreatif" (PROLOGE) nonaktif dengan 0 perusahaan.
+  - **Pudak/Salam:** absensi 236/151, gudang aktif 1/1, penempatan aktif 0/1.
+  - **Per perusahaan:** ERP 155 user dan 129 gaji aktif, payroll 2026-11 draft. PADDY-RETAIL 194 user dan 135 gaji aktif.
+  - **Akun:** super admin 4 tidak berubah; user hrd ada di PADDY/ERP.
+  - Log api tanpa error sejak eksekusi.
+  - **Belum:** QA UI dengan login super admin/HR (akun asli, oleh HR/user).
+  - **Catatan:** payroll draft ERP November perlu dihitung ulang (PERHATIAN alokasi 37 baris ke Pudak/Salam).
