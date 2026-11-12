@@ -1,6 +1,6 @@
 # EPIC-107: Kode Toko Massal Tanpa Ketik Ulang + Pindah Toko Karyawan Massal (Penempatan, Akun, Gaji) (`MODULE-HRIS`, `MODULE-CONFIGURATION`)
 
-status: review
+status: ready-for-qa
 environment: dev
 retries: 0
 
@@ -103,7 +103,7 @@ Rencana: `docs/superpowers/plans/2026-11-12-pindah-toko-massal.md`.
 - [x] T4 Antrean + job harian untuk tanggal berlaku masa depan
 - [x] T5 Template Pindah Toko Massal (unduh, pratinjau, simpan)
 - [x] T6 UI: dialog Pindah Toko Massal + kolom akun di pratinjau + tautan dari Kode & Status Toko
-- [ ] T7 Gate, review akhir, PR ke erp-paddy development, QA staging
+- [x] T7 Gate, review akhir, PR ke erp-paddy development, QA staging
 
 ## Acceptance Criteria
 - [ ] Satu klik "Hapus awalan ODOO-" di staging menampilkan pratinjau 49 toko (`ODOO-PADDY-PUDAK` → `PADDY-PUDAK`, nama tetap). Simpan mengganti semua kode; absensi, penempatan, dan gudang toko-toko itu tetap; audit `branch.update` per toko.
@@ -150,3 +150,17 @@ Rencana: `docs/superpowers/plans/2026-11-12-pindah-toko-massal.md`.
   - tsc, eslint, dan vitest 922 file / 6.672 tes.
 
   PR wit-id-indonesia/erp-paddy#2 ke `development`.
+- 2026-11-12 23:24 WIB: PR wit-id-indonesia/erp-paddy#2 (CI 4/4 hijau) di-squash-merge ke development (8631e8f). Deploy Staging sukses, `/api/ready` 200, tabel `hris.account_branch_syncs` ada.
+- 2026-11-12 23:47 – 2026-11-13 00:50 WIB: **QA staging** (izin user "Ya, QA staging"). Backup `/mnt/hdd1/backup/paddydev/staging-before-qa-e107-20261112-234756.dump`, sesi QA sementara.
+  - **Kode & Status Toko, saran hapus-odoo:** `X-Suggested-Count: 49` (juga lewat proxy Next). Pratinjau 49 toko berubah kode, 0 error, 0 nama berubah, 49 peringatan template lama. **Tidak disimpan**, karena mengganti kode toko di staging/prod adalah keputusan user/HR.
+  - **Template Pindah Toko:** semua = 321 karyawan aktif; per toko HQ = 93.
+  - **Pratinjau 1 staf HQ asli → Pudak:** akun ERP → PADDY-RETAIL, gaji pindah, peringatan "payroll ERP 2026-11 draft — hitung ulang". Tidak disimpan.
+  - **Simpan untuk 3 karyawan QA:**
+    - tanpa centang peringatan → 400; dengan centang → "3 karyawan dipindahkan";
+    - QA1 HQ → Pudak: penempatan HQ berakhir 11-11; akun Pudak/PADDY-RETAIL/outlet Pudak; gaji PADDY-RETAIL;
+    - QA2 PPGA → PPBA tanpa akun;
+    - QA3 HQ → Salam bertanggal 13-11: penempatan tercatat, akun dan gaji tetap, antrean pending.
+  - **"Pindahkan ke toko" (13-11):** QA1 Pudak → HQ lintas perusahaan; akun ERP/HQ/outlet HQ; gaji kembali ke ERP. Pada 12-11, pindah ulang di hari yang sama dilewati ("ubah lewat Kelola"), sesuai aturan EPIC-070.
+  - **Job 00:44 WIB:** `applied 1` (QA3), akun Salam/PADDY-RETAIL/outlet Salam, gaji PADDY-RETAIL.
+  - **Pengembalian:** karyawan, akun, sesi, dan antrean QA dihapus. Baris audit tetap (append-only). Perbandingan md5 dengan backup **SAMA** untuk branches, companies, users, user_warehouses, employees, placements, salary, dan jadwal mendatang. Masih 49 kode `ODOO-`.
+  - **Belum:** QA UI di browser oleh HR dengan akun asli, dan klik "Hapus awalan ODOO-" → Simpan oleh HR/user bila setuju.
