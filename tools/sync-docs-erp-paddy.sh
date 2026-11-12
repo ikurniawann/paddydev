@@ -14,10 +14,14 @@ set -euo pipefail
 
 ERP_DIR="${1:-$HOME/WORK/erp-paddy}"
 REF="${SYNC_REF:-paddydev/main}"
-cd "$(dirname "$0")/.."
+# Absolute before the cd below, so a relative path means the caller's folder.
+ERP_DIR="$(cd "$ERP_DIR" 2>/dev/null && pwd -P)" || { echo "Folder tidak ada: ${1:-$HOME/WORK/erp-paddy}" >&2; exit 1; }
+cd "$(git -C "$(dirname "$0")" rev-parse --show-toplevel)"
 
-if ! git -C "$ERP_DIR" rev-parse --git-dir >/dev/null 2>&1; then
-  echo "Bukan repo git: $ERP_DIR" >&2
+# The target must be the root of a git repo, never a subfolder of another one:
+# rsync --delete below removes ignored files that git cannot bring back.
+if [ "$(git -C "$ERP_DIR" rev-parse --show-toplevel 2>/dev/null)" != "$ERP_DIR" ]; then
+  echo "Bukan akar repo git: $ERP_DIR" >&2
   exit 1
 fi
 # Jangan menyalin ke jalur yang akan muncul sebagai perubahan di erp-paddy.
@@ -31,10 +35,28 @@ if [ "$REF" = "paddydev/main" ]; then
 fi
 git rev-parse --verify -q "$REF^{commit}" >/dev/null || { echo "Ref tidak ditemukan: $REF" >&2; exit 1; }
 
+for p in docs backend/database/seeders; do
+  git cat-file -e "$REF:$p" 2>/dev/null || { echo "Folder $p tidak ada di $REF" >&2; exit 1; }
+done
+# Nothing git sees may live in the targets (tracked, or untracked and not
+# ignored): --delete would remove it.
+if [ -n "$(git -C "$ERP_DIR" ls-files -co --exclude-standard -- docs apps/backend/database/seeders)" ]; then
+  echo "Ada file erp-paddy yang dilacak/tidak diabaikan git di docs/ atau seeders/ — batal" >&2
+  exit 1
+fi
+
 before="$(git -C "$ERP_DIR" status --porcelain)"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 git archive "$REF" docs backend/database/seeders | tar -x -C "$tmp"
+# Every incoming file must be ignored by erp-paddy (a negation rule would
+# turn it into a change there) — checked before anything is copied.
+(cd "$tmp" && find docs backend/database/seeders -type f | sed 's#^backend/#apps/backend/#') > "$tmp/.incoming"
+ignored=$(git -C "$ERP_DIR" check-ignore --stdin < "$tmp/.incoming" | wc -l || true)
+if [ "$ignored" -ne "$(wc -l < "$tmp/.incoming")" ]; then
+  echo "Sebagian file tujuan tidak diabaikan git erp-paddy (aturan negasi?) — batal" >&2
+  exit 1
+fi
 
 mkdir -p "$ERP_DIR/docs" "$ERP_DIR/apps/backend/database/seeders"
 rsync -a --delete "$tmp/docs/" "$ERP_DIR/docs/"

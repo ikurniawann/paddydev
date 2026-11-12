@@ -25,8 +25,8 @@
 
 ## Review Focus
 
-1. **Skrip dijalankan dari branch paddydev selain `main`:** skrip menolak berjalan, supaya dokumen yang belum di-merge tidak tersalin. Test: T1 langkah 2.
-2. **`.gitignore` erp-paddy berubah** (misalnya `/docs/` dihapus): skrip berhenti sebelum menyalin, supaya ratusan file tidak muncul sebagai perubahan di erp-paddy. Test: T1 langkah 2.
+1. **Skrip dijalankan dari branch paddydev selain `main`:** hanya isi yang sudah di-merge yang tersalin, karena skrip membaca ref `paddydev/main` lewat `git archive`, bukan working tree. `SYNC_REF` bisa sengaja menunjuk ref lain. Test: simulasi dari branch fitur menyalin isi 9c4bb841.
+2. **`.gitignore` erp-paddy berubah** (`/docs/` dihapus, ada file ter-track di target, atau aturan negasi): skrip berhenti **sebelum** menyalin. Test: `tools/sync-docs-erp-paddy.test.sh` kasus A dan B.
 3. **File dokumen yang dihapus di paddydev** ikut terhapus dari salinan (`rsync --delete`), tetapi hanya di dua folder target. Test: T1 langkah 4.
 
 ---
@@ -39,15 +39,16 @@
 **Interfaces:**
 - `tools/sync-docs-erp-paddy.sh [ERP_DIR]`. Bawaan `ERP_DIR=$HOME/WORK/erp-paddy`.
 - Exit 0 bila sukses dan mencetak `docs: <n> file, seeders: <m> file → <ERP_DIR>`.
-- Exit 1 dengan pesan bila:
-  - branch paddydev saat ini bukan `main` atau worktree tidak bersih: `Jalankan dari paddydev main yang bersih`;
-  - `git -C ERP_DIR check-ignore docs/x.md` atau `apps/backend/database/seeders/x.sql` gagal: `Jalur tujuan tidak diabaikan git erp-paddy — batal`.
+- Sumber selalu ref `paddydev/main` (`git fetch` lalu `git archive`), bukan working tree, jadi skrip boleh dijalankan dari branch mana pun.
+- Exit 1 dengan pesan, semuanya sebelum ada file yang disalin, bila:
+  - `ERP_DIR` bukan akar repo git (subfolder repo lain ikut ditolak): `Bukan akar repo git`;
+  - `docs/x.md` atau `apps/backend/database/seeders/x.sql` tidak diabaikan: `Jalur tujuan tidak diabaikan git erp-paddy — batal`;
+  - ada file ter-track, atau tak-diabaikan, di kedua target: `Ada file erp-paddy yang dilacak…`;
+  - ada file masuk yang tidak diabaikan (aturan negasi): `Sebagian file tujuan tidak diabaikan…`.
 - Menyalin `docs/` → `ERP_DIR/docs/` dan `backend/database/seeders/` → `ERP_DIR/apps/backend/database/seeders/`, dengan `rsync -a --delete`.
 
 - [ ] **Step 1:** Tulis skrip dengan `set -euo pipefail`.
-- [ ] **Step 2: Uji penolakan.**
-  - Jalankan dari worktree branch `docs/erp-paddy-lokal`. Hasilnya harus exit 1 dengan pesan pertama.
-  - Jalankan dengan `ERP_DIR` sebuah repo git kosong sementara yang tidak mengabaikan `docs/`. Hasilnya harus exit 1 dengan pesan kedua.
+- [ ] **Step 2: Uji penolakan dan salin.** `SYNC_REF=refs/remotes/paddydev/main bash tools/sync-docs-erp-paddy.test.sh` → `PASS` untuk A (file ter-track), B (negasi), C (subfolder repo lain), dan D (salin bersih). Exit 0.
 - [ ] **Step 3: Commit** `tools: sinkron dokumen paddydev ke salinan lokal erp-paddy`
 
 ### Task 2: Catatan arah kerja di registry epic
