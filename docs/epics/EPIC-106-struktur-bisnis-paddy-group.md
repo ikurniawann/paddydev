@@ -1,6 +1,6 @@
 # EPIC-106: Struktur Bisnis Paddy Group — Satu Holding, Dua Perusahaan Sejajar (`MODULE-CONFIGURATION`, lintas modul)
 
-status: backlog
+status: coding
 environment: dev
 retries: 0
 
@@ -9,58 +9,80 @@ Keputusan user 12-11-2026 (target "Sesudah"):
 
 | Tingkat | | |
 |---|---|---|
-| Holding | **Paddy Group** (kode `PADDY`) | |
-| Perusahaan (sejajar) | **CV Cipta Kreasi Kreatif** (kode `ERP`) | **Paddy** (kode `PADDY-RETAIL`) |
-| Cabang | Paddy HQ Bandung (`ERP-BANDUNG`) ★ Kantor Pusat<br>Warehouse Paddy (`ODOO-WAREHOUSE-PADDY`) | semua toko, termasuk Paddy Pudak (`ODOO-PADDY-PUDAK`) dan Paddy Salam (`ODOO-PADDY-SALAM`) |
+| Holding | **Paddy Group** (`PADDY`) | |
+| Perusahaan (sejajar) | **CV Cipta Kreasi Kreatif** (`ERP`, dulu "Paddy Kantor Pusat") | **Paddy** (`PADDY-RETAIL`) |
+| Cabang | Paddy HQ Bandung (`ERP-BANDUNG`) ★ Kantor Pusat<br>Warehouse Paddy (`ODOO-WAREHOUSE-PADDY`) | semua toko, ditambah Paddy Pudak (`ODOO-PADDY-PUDAK`) dan Paddy Salam (`ODOO-PADDY-SALAM`); cabang nonaktif (Event PVJ, Paddy Store Kopo/PVJ, dst.) tetap di sini |
 
-"CV Cipta Kreasi Kreatif" yang tadinya **holding** (kode `PROLOGE`) turun menjadi **perusahaan** dan sejajar dengan Paddy. Nama itu warisan migrasi template `business_hierarchy` (holding "Prologe"), yang diganti nama oleh seeder `paddy-branding.js` pada 15-10. **Tidak ada penggabungan perusahaan.** Skrip `2026-11-11_gabung_paddy_ke_kantor_pusat.sql` tidak dipakai.
+- Holding lama `PROLOGE` ("CV Cipta Kreasi Kreatif", warisan template Mizu dan rebrand 15-10) **dinonaktifkan, tidak dihapus**.
+- **Tidak ada penggabungan perusahaan.** Skrip `2026-11-11_gabung_paddy_ke_kantor_pusat.sql` tidak dipakai dan sekarang diberi peringatan "JANGAN DIJALANKAN".
+- Kode ERP, PADDY-RETAIL, dan id cabang tidak berubah.
 
-**Eksekusi di staging menunggu struktur dan daftar orang terdampak dikonfirmasi user.** Perubahan ini memengaruhi hak akses, gaji/payroll, dan semua modul yang memakai cakupan perusahaan atau holding. Production di luar epic ini.
+Kode ada di `wit-id-indonesia/erp-paddy`, branch `fix/epic106-struktur-bisnis` (PR ke `development`). Epic dan rencana ada di repo paddydev ini.
 
 ## Kondisi staging (read-only, 12-11-2026)
-- **Holding:** `PROLOGE` "CV Cipta Kreasi Kreatif" berisi 1 perusahaan (ERP). `PADDY` "Paddy Group" berisi 1 perusahaan (PADDY-RETAIL).
-- **ERP "Paddy Kantor Pusat":** 4 cabang (HQ Bandung, Warehouse Paddy, Paddy Pudak, Paddy Salam), belum ada Kantor Pusat, 157 user, 254 baris gaji, 1 payroll run `draft`, 26 pemetaan jurnal.
-- **PADDY-RETAIL "Paddy":** 52 cabang (49 toko + 3 nonaktif), 192 user, 349 baris gaji, COA 204 akun, 1 tahun fiskal, 10 pemetaan jurnal.
-- **Kolom `company_id` di data:** dari 121 tabel ber-`company_id`, hanya 7 yang berisi data, yaitu `configuration.branches`, `configuration.users`, `hris.employee_salary`, `hris.payroll_runs`, `accounting.chart_of_accounts`, `accounting.fiscal_years`, dan `accounting.journal_mappings`.
-  - Jadwal, penempatan, absensi, gudang, dan transaksi menempel ke **cabang** (`branch_id`). ID cabang tidak berubah, jadi semuanya ikut tanpa disalin.
-- **Data yang menempel ke Paddy Pudak dan Paddy Salam:** 1 penempatan aktif, **37 user** dengan cabang default di sana (perusahaan ERP), 15 baris gaji ERP, **387 absensi dalam 30 hari terakhir**, dan 2 gudang. Angka ini mengisyaratkan staf kantor pusat yang tercatat di sana, jadi harus dikonfirmasi (R4).
-- **Kode program:** tidak ada yang menulis kode holding/perusahaan secara tertanam. Hak akses (`platform/scope`) membaca holding, perusahaan, dan cabang dari data user.
+- **Holding:** `PROLOGE` berisi ERP; `PADDY` berisi PADDY-RETAIL.
+- **ERP "Paddy Kantor Pusat":** 4 cabang (HQ Bandung, Warehouse Paddy, Pudak, Salam), belum ada kantor pusat, 157 user, 1 payroll run `draft` November.
+- **PADDY-RETAIL "Paddy":** 52 cabang (41 aktif, 11 nonaktif) dan 192 user. Ada 4 super admin tanpa holding/perusahaan.
+- **Tabel ber-`company_id`:** 121 tabel; yang berisi data hanya `branches`, `users`, `employee_salary`, `payroll_runs`, COA (PADDY-RETAIL), `fiscal_years` (PADDY-RETAIL), dan `journal_mappings`. Untuk `holding_id`, 2 tabel (`companies`, `users`). Tidak ada baris lain milik ERP yang menempel ke cabang Pudak/Salam.
+- **Pudak/Salam:**
+  - 37 user dengan cabang default di sana. **35 di antaranya punya penempatan utama aktif di HQ Bandung** (penempatan Pudak/Salam mereka berakhir 09–15 Okt) dengan gaji ERP. Absen mereka 30 hari terakhir: 365 di Pudak/Salam dan 68 di HQ.
+  - Penempatan utama aktif di Pudak/Salam hanya 1 orang ("IT Paddy", tanpa gaji). 1 user lagi (Silvi) berpenempatan di toko PPGA dengan gaji ERP.
+  - History: 387 absensi, 19 penempatan, 2 gudang, 37 alokasi payroll draft, dan 3 delegasi jadwal.
+- **Selisih yang sudah ada sebelumnya:** 9 karyawan aktif yang gajinya hanya di perusahaan lain dari penempatan utamanya. Dilaporkan, tidak diubah.
 
 ## Ruling
-- **R1 — Kode dan ID tidak berubah.** `ERP`, `PADDY-RETAIL`, `PADDY` dan semua ID cabang tetap; yang berubah hanya nama dan relasi. Holding `PROLOGE` dihapus bila tidak ada lagi yang merujuknya. Bila masih ada, skrip BLOKIR dengan rincian.
-- **R2 — Perusahaan ERP:** nama menjadi `CV Cipta Kreasi Kreatif`, `holding_id` menjadi Paddy Group.
-- **R3 — Paddy Pudak dan Paddy Salam** pindah ke PADDY-RETAIL (keputusan user 12-11).
-- **R4 — Orang mengikuti cabang, setelah dikonfirmasi.**
-  - Invarian: `users.company_id` = perusahaan dari `users.branch_id`, dan `users.holding_id` = holding perusahaannya.
-  - Baris `hris.employee_salary` yang masih berlaku mengikuti perusahaan cabang penempatan utama aktif karyawannya.
-  - **Daftar 37 user, 15 baris gaji, dan pemilik 387 absensi** di Pudak/Salam dikirim ke user/HR dulu. Yang ternyata staf kantor pusat dipindah dulu cabang default-nya ke Paddy HQ Bandung (lewat UI atau lampiran skrip), baru skrip struktur dijalankan.
-- **R5 — Kantor Pusat:** `ERP-BANDUNG` ditandai `is_primary`. PADDY-RETAIL tidak punya kantor pusat.
-- **R6 — Payroll dan akuntansi:**
-  - Payroll run `draft` yang memuat karyawan yang pindah perusahaan menghalangi eksekusi. HR menghapus atau menyusun ulang draft itu.
-  - Run yang sudah `approved/paid` tidak diubah.
-  - COA, tahun fiskal, dan pemetaan jurnal tidak dipindah, karena masing-masing tetap di perusahaannya.
-- **R7 — Skrip satu file, pratinjau bawaan.** Mengikuti pola skrip gabung erp-paddy:
-  - mode pratinjau (semua di-ROLLBACK) dan `-v eksekusi=1`;
-  - output NOTICE `PINDAH`/`INVARIAN`/`BLOKIR`/`HASIL`;
-  - idempoten: jalan kedua mengubah 0 baris.
-- **R8 — Urutan dan izin:**
-  1. PR skrip dan tes ke erp-paddy `development`. Deploy staging tidak menjalankan skrip.
-  2. Laporan dampak dikonfirmasi user.
-  3. Backup DB staging.
-  4. Pratinjau di staging.
-  5. Izin user.
-  6. Eksekusi.
-  7. QA lintas modul.
+- **R1 — Kode dan id tetap;** yang berubah hanya nama dan relasi. Holding `PROLOGE` dinonaktifkan.
+- **R2 — Perusahaan ERP** diganti nama menjadi `CV Cipta Kreasi Kreatif` dan pindah ke holding PADDY.
+- **R3 — Pudak dan Salam** pindah ke PADDY-RETAIL; tanda kantor pusatnya dilepas.
+- **R4 — Perusahaan user mengikuti penempatan utama aktif (brief langkah c).**
+  - User yang cabang default-nya Pudak/Salam tetapi penempatan utamanya di perusahaan lain (35 staf HQ): cabang default diganti ke cabang penempatan utama (HQ Bandung), perusahaan tetap ERP.
+  - Alasannya: hak akses ber-scope cabang (`scope.RowInScope`) mensyaratkan perusahaan user sama dengan perusahaan barisnya, sedangkan absen memakai penempatan, bukan `users.branch_id` (`placements.go` `ClockPlacements`). Jadi absen masuk tidak terganggu.
+  - Selain itu user mengikuti cabangnya (PADDY-RETAIL).
+- **R5 — Gaji:** hanya gaji **aktif** karyawan yang penempatan utama aktifnya di Pudak/Salam yang pindah ke PADDY-RETAIL; gaji tidak aktif adalah riwayat. Hasil di staging: 0 baris.
+- **R6 — Holding user** mengikuti holding perusahaannya. User tanpa perusahaan di PROLOGE pindah ke PADDY. Super admin tanpa holding tidak disentuh.
+- **R7 — ERP-BANDUNG** ditandai kantor pusat. COA, tahun fiskal, pemetaan jurnal, dan payroll run tidak dipindah karena milik perusahaan, bukan cabang.
+- **R8 — Payroll draft ERP November** mengalokasikan 37 baris biaya ke Pudak/Salam (staf ERP yang absen di toko). Ini **PERHATIAN, bukan BLOKIR**: draft dihitung ulang sebelum diproses. Run ERP yang belum final dan memuat karyawan yang **gajinya** pindah memblokir eksekusi.
+- **R9 — Penghalang (BLOKIR):**
+  - perusahaan lain masih di holding lama;
+  - kode cabang bentrok di PADDY-RETAIL;
+  - kantor pusat ERP lain;
+  - gaji ganda;
+  - payroll belum final memuat karyawan yang gajinya pindah;
+  - tabel lain dengan `company_id` ERP dan `branch_id` Pudak/Salam;
+  - tabel lain yang merujuk holding lama;
+  - history berubah;
+  - invarian gagal.
+- **R10 — Pembalik** `…_balik.sql` mengembalikan baris dari snapshot di `audit.audit_log` (action `data_restructure.business`), dengan angka per tabel yang sama.
+- **R11 — Seeder** `business-hierarchy.js` sekarang membangun struktur target. ERP dicari per kode di holding mana pun dan dipindah ke Paddy Group, tidak pernah membuat ERP kedua, dan PROLOGE yang kosong dinonaktifkan. `items-business-scope.js` (erp-paddy) mencari scope per kode perusahaan dan cabang; holding hanya disaring bila `SEED_HOLDING_CODE` diisi.
+- **R12 — UI:** pemilih scope akun tidak menawarkan holding, perusahaan, atau cabang nonaktif untuk pilihan baru; pilihan akun lama tetap tampil.
+- **R13 — Migrasi tidak diubah.** DB baru dari nol masih membangun PROLOGE → ERP dari delta `business_hierarchy`. Menambah migrasi struktur akan menjalankannya otomatis di staging/prod tanpa pratinjau dan izin, jadi untuk DB baru struktur target dibangun dengan seeder.
+- **R14 — Urutan dan izin:**
+  1. PR dengan CI hijau, lalu merge (deploy staging tidak menjalankan skrip).
+  2. Backup staging.
+  3. Pratinjau, angkanya dilaporkan ke user.
+  4. Izin user.
+  5. Eksekusi.
+  6. Verifikasi.
 
-  Production butuh epic dan izin tersendiri.
+  Production butuh izin tersendiri dan gladi di salinan prod.
 
 ## Tasks
 Rencana: `docs/superpowers/plans/2026-11-12-struktur-bisnis-paddy-group.md`.
-- [ ] T1 Laporan dampak orang dan data (read-only), konfirmasi user
-- [ ] T2 Skrip SQL struktur + tes integrasi (erp-paddy)
-- [ ] T3 PR ke erp-paddy development
-- [ ] T4 Backup, pratinjau, dan eksekusi di staging (dengan izin), QA lintas modul
-- [ ] T5 Catatan epic, memori, sinkron dokumen
+- [x] T1 Laporan dampak (read-only) dan gladi di salinan staging
+- [x] T2 Skrip SQL struktur + pembalik + tes integrasi Go (8 tes)
+- [x] T3 Kode yang bergantung pada PROLOGE/holding: seeder, skrip scope, pemilih scope UI, peringatan skrip gabung
+- [ ] T4 Gate lokal 2× + review akhir; PR ke erp-paddy development, CI hijau, merge
+- [ ] T5 Staging: backup, pratinjau ke user, eksekusi berizin, verifikasi
+- [ ] T6 Production: gladi di salinan prod terbaru, menunggu izin user
+- [ ] T7 Catatan epic, memori, sinkron dokumen
 
 ## Automation Log
-- 2026-11-12: Epic dibuat. Struktur target dikonfirmasi user ("yang di sesudah target"). Belum ada data yang diubah. Pratinjau skrip gabung erp-paddy di staging sudah di-ROLLBACK.
+- 2026-11-12: Epic dibuat. Struktur target dikonfirmasi user ("yang di sesudah target").
+- 2026-11-12: Brief eksekusi user diterima: PROLOGE dinonaktifkan (bukan dihapus), langkah c mengikuti penempatan utama, ditambah SQL pembalik dan tes.
+- 2026-11-12: Gladi di salinan staging (pg_dump → DB `stg_e106` di container uji; staging tidak disentuh):
+  - **Pratinjau:** 0 penghalang, semua INVARIAN OK.
+  - **STRUKTUR sesudah:** PADDY > ERP "CV Cipta Kreasi Kreatif" (ERP-BANDUNG★, ODOO-WAREHOUSE-PADDY) dan PADDY-RETAIL (43 aktif / 54 cabang termasuk Pudak, Salam). PROLOGE nonaktif dengan 0 perusahaan.
+  - **Eksekusi:** 162 baris, yaitu branches 2, kantor pusat 1, companies 1, holdings 1, users 157 (37 perusahaan/cabang, 157 holding), dan salary 0.
+  - **HISTORY tetap:** absensi 387, penempatan 19, alokasi payroll 37, gudang 2, delegasi jadwal 3.
+  - **Jalan kedua:** 0 baris.
+  - **Pembalik:** 162 baris dengan angka per tabel yang sama. md5 struktur kembali identik dengan staging asli. Pembalik kedua 0 baris.

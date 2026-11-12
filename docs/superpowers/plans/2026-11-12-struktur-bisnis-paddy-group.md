@@ -2,120 +2,89 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Staging mengikuti struktur Paddy Group → {CV Cipta Kreasi Kreatif (HQ + Warehouse), Paddy (semua toko)} tanpa kehilangan riwayat, setelah orang yang terdampak dikonfirmasi.
+**Goal:** Staging (lalu production, dengan izin) mengikuti struktur Paddy Group → {CV Cipta Kreasi Kreatif (HQ ★ + Warehouse), Paddy (semua toko + Pudak + Salam)} tanpa kehilangan riwayat; holding PROLOGE nonaktif.
 
 **Architecture:**
-- **Langkah 1 — laporan read-only.** Daftar orang dan data di Pudak/Salam untuk dikonfirmasi user.
-- **Langkah 2 — satu skrip SQL** di erp-paddy (`apps/backend/database/sql/fixes/`) dengan pola skrip gabung yang sudah ada: pratinjau bawaan (ROLLBACK), `-v eksekusi=1`, dan NOTICE terstruktur. Skrip disertai tes integrasi Go.
-- **Langkah 3 — eksekusi di staging** hanya setelah backup, pratinjau, dan izin user.
+- **Satu skrip SQL ops** di erp-paddy `apps/backend/database/sql/fixes/` dengan pola skrip gabung:
+  - pratinjau bawaan (ROLLBACK), `-v eksekusi=1`;
+  - NOTICE `STRUKTUR`/`PINDAH`/`RINCI`/`HISTORY`/`PERHATIAN`/`INVARIAN`/`BLOKIR`/`HASIL`;
+  - snapshot nilai lama di `audit.audit_log`, yang dibaca oleh skrip pembalik.
+- **Kode yang bergantung pada holding** ikut diperbaiki: seeder, skrip scope, dan pemilih scope UI.
+- **Eksekusi manual** lewat psql setelah backup dan izin user. Deploy tidak menjalankan skrip.
 
-**Tech Stack:** PostgreSQL 16 (plpgsql DO block, psql), Go 1.26 integration tests (pgx), erp-paddy monorepo (`apps/backend`).
+**Tech Stack:** PostgreSQL 16 (plpgsql), Go 1.26 integration tests (pgx), Next.js/Vitest, Node `node:test`.
 
-**Spec:** `docs/epics/EPIC-106-struktur-bisnis-paddy-group.md` (R1–R8), di repo paddydev (dokumen). Kode di `wit-id-indonesia/erp-paddy`.
+**Spec:** `docs/epics/EPIC-106-struktur-bisnis-paddy-group.md` (R1–R14) dan brief eksekusi user 12-11-2026.
 
 ## Global Constraints
 
-- **Tidak ada perubahan data staging atau production tanpa izin eksplisit user** (R8). Production di luar rencana ini.
-- **Kode tetap:** kode holding/perusahaan (`PADDY`, `ERP`, `PADDY-RETAIL`) dan semua ID cabang tidak berubah (R1). Nama baru persis `CV Cipta Kreasi Kreatif`.
-- **Kode di erp-paddy:** branch dari `development` di worktree terpisah (bukan `~/WORK/erp-paddy`, karena itu checkout deploy staging), lalu PR ke `development`.
-- **Dokumen di paddydev:** epic dan log di repo paddydev, disinkron dengan `tools/sync-docs-erp-paddy.sh`.
-- **Tes Go:** jalankan di DB uji yang baru dimigrasi (`paddydev-sdd-testdb`, port 55499) dengan migrasi erp-paddy.
-- **Backup staging** ke `/mnt/hdd1/backup/paddydev/staging-before-e106-<stamp>.dump`. Deploy erp-paddy tidak membuat backup.
+- **Izin:** tidak ada perubahan data staging/production tanpa izin eksplisit user. Production juga menghindari jam 07–08, 13, 16–17, dan 21 WIB, dengan backup dulu dan tanpa sesi/akun sementara.
+- **Kode:** `PADDY`, `ERP`, `PADDY-RETAIL`, id cabang tetap. Nama baru persis `CV Cipta Kreasi Kreatif`.
+- **Lokasi kerja erp-paddy:** worktree `.worktrees/erp-epic106` (bukan `~/WORK/erp-paddy`, yang merupakan checkout deploy staging), branch `fix/epic106-struktur-bisnis` dari `development`, PR ke `development`.
+- **Tes Go:** jalankan di DB uji baru yang dimigrasi (`paddydev-sdd-testdb` port 55499, DB `e106_test`).
+- **Backup:** staging ke `/mnt/hdd1/backup/paddydev/staging-before-struktur-bisnis-<stamp>.dump` (`umask 077` di subshell).
 
 ## Review Focus
 
-1. **Staf kantor pusat yang cabang default-nya Pudak/Salam** tidak boleh ikut pindah ke perusahaan Paddy tanpa konfirmasi. User yang ada di `struktur.hq_users` tetap di ERP dengan cabang `ERP-BANDUNG`. Eksekusi tanpa `struktur.hq_users` padahal ada user ERP di Pudak/Salam → BLOKIR (pratinjau tetap mencetak daftarnya). Untuk menyatakan "semua ikut toko", isi dengan `-`. Test: T2 `TestBusinessStructureKeepsConfirmedHQUsers`, `TestBusinessStructureBlocksUnconfirmedUsers`.
-2. **4 user tanpa perusahaan (super admin)** tidak tersentuh. Test: T2 `TestBusinessStructureLeavesUnscopedUsers`.
-3. **Payroll run `draft` yang memuat karyawan pindah perusahaan** memblokir eksekusi; run `approved/paid` tidak berubah. Test: T2 `TestBusinessStructureBlocksDraftPayroll`.
-4. **Holding `PROLOGE` yang masih dirujuk tabel lain** tidak dihapus paksa: BLOKIR dengan nama tabel. Test: T2 `TestBusinessStructureBlocksReferencedHolding`.
-5. **Skrip dijalankan dua kali** → jalan kedua mengubah 0 baris dan invarian tetap lulus. Riwayat absensi, penempatan, dan jadwal sama jumlahnya sebelum dan sesudah. Test: T2 `TestBusinessStructureIdempotentAndKeepsHistory`.
+1. **Staf HQ yang cabang default-nya toko pindahan** tetap di ERP dengan cabang default = cabang penempatan utama. Test: `TestBusinessStructureMovesToTarget` (hq user), `TestBusinessStructureKeepsUsersInScope`.
+2. **Super admin tanpa holding dan user toko lain** tidak tersentuh. Test: `TestBusinessStructureMovesToTarget` (super admin, retail user).
+3. **Payroll yang belum final memuat karyawan yang gajinya pindah** → BLOKIR. Gaji tidak aktif tetap di ERP. Test: `TestBusinessStructureRefusesWhatNeedsReview/payroll_belum_final`, `…MovesToTarget` (ended salary).
+4. **Dijalankan dua kali / dibalik dua kali** → 0 baris, `updated_at` tidak berubah, dan pembalik mengembalikan baris yang sama. Test: `TestBusinessStructureSecondRunChangesNothing`, `TestBusinessStructureRevertRestoresTheSameRows`.
+5. **Seeder dijalankan ulang setelah perubahan** tidak membuat ERP kedua, tidak menimpa nama Paddy Group, dan tidak mengaktifkan PROLOGE lagi. Test: verifikasi seeder 2× di DB uji (Task 3), `items-business-scope.test.js`.
 
 ---
 
-### Task 1: Laporan dampak (read-only) dan konfirmasi user
+### Task 1: Dampak dan gladi (read-only) ✅
+- [x] Kueri read-only staging: struktur, 37 user Pudak/Salam (35 berpenempatan HQ), history per FK cabang, tabel `company_id`/`holding_id` berisi data, dan selisih gaji-penempatan.
+- [x] Gladi di salinan staging (`stg_e106`): pratinjau, eksekusi, jalan kedua, pembalik, md5 identik. Angka tercatat di Automation Log epic.
 
+### Task 2: Skrip SQL + pembalik + tes integrasi ✅
 **Files:**
-- Create (paddydev): `docs/hris/struktur-bisnis-20261112/dampak-pudak-salam.md` dan `.csv` (di `.share/` bila berisi data pribadi).
+- `apps/backend/database/sql/fixes/2026-11-12_struktur_bisnis_paddy_group.sql`
+- `apps/backend/database/sql/fixes/2026-11-12_struktur_bisnis_paddy_group_balik.sql`
+- `apps/backend/internal/modules/hris/business_structure_integration_test.go`
 
 **Interfaces:**
-- Produces: daftar konfirmasi `hq_users.csv` (`user_id, email, nama, keputusan` = `HQ` | `TOKO`), dipakai T2/T4.
+- Parameter `struktur.holding|holding_lama|pusat|nama_pusat|toko|kantor_pusat|cabang_pindah` (PGOPTIONS), dengan default kode staging.
+- Mode `struktur.mode` diaktifkan oleh `-v eksekusi=1`.
+- Audit `data_restructure.business`: `before` = snapshot, `after.pindah` = jumlah per tabel. Pembalik menulis `data_restructure.business_revert`.
 
-- [ ] **Step 1:** Jalankan kueri read-only (`SET default_transaction_read_only = on`) di DB staging untuk:
-  - 37 user ERP dengan `branch_id` Pudak/Salam (nama, email, role, jabatan karyawan, penempatan utama aktif);
-  - 15 baris gaji ERP milik karyawan yang ditempatkan di sana (berlaku/tidak);
-  - pemilik 387 absensi 30 hari terakhir (nama, jumlah hari, penempatan utamanya);
-  - 2 gudang di Pudak/Salam (nama, aktif);
-  - payroll run ERP `draft` (periode, jumlah karyawan, apakah memuat orang di atas);
-  - holding `PROLOGE`: semua tabel yang merujuknya, termasuk `users.holding_id`.
-- [ ] **Step 2:** Tulis ringkasan dan CSV-nya. Kirim ke user dengan pertanyaan per orang: tetap kantor pusat (HQ) atau ikut toko (TOKO).
-- [ ] **Step 3: Stop.** Lanjut ke T4 hanya setelah user mengembalikan keputusan. T2 dan T3 boleh dikerjakan paralel karena tidak mengubah data.
+- [x] Tes merah (file belum ada), lalu skrip ditulis, lalu 8/8 hijau:
+  - `PreviewChangesNothing`, `MovesToTarget`, `KeepsHistoryOnBranches`, `SecondRunChangesNothing`;
+  - `KeepsUsersInScope`, `PayrollCountsMovedStoresInRetail`;
+  - `RefusesWhatNeedsReview` (6 kasus), `RevertRestoresTheSameRows`.
 
-### Task 2: Skrip SQL struktur + tes integrasi (erp-paddy)
+### Task 3: Kode yang bergantung pada PROLOGE/holding ✅
+- [x] `apps/frontend/src/lib/configuration/business-scope.ts` `selectableScopeItems` dipakai `business-scope-picker.tsx`. Tes: `business-scope.selectable.test.ts` (RED → GREEN).
+- [x] `apps/backend/database/scripts/items-business-scope.js`: holding default PADDY, filter holding hanya bila `SEED_HOLDING_CODE` diisi. Tes: `items-business-scope.test.js` (`node --test`, DB uji; RED → GREEN).
+- [x] Seeder paddydev `backend/database/seeders/business-hierarchy.js` membangun struktur target. RED: di DB berstruktur baru ia menimpa nama Paddy Group. GREEN: 2× jalan di DB baru maupun lama menghasilkan PADDY > ERP "CV Cipta Kreasi Kreatif", PROLOGE nonaktif.
+- [x] Peringatan "JANGAN DIJALANKAN" di `2026-11-11_gabung_paddy_ke_kantor_pusat.sql`.
+- Tidak diubah, karena aman:
+  - login (`identity/service.go` hanya memeriksa password dan banned);
+  - `scope.Load` (tanpa join holding);
+  - halaman Struktur Bisnis (memuat semua holding dan menampilkan badge Nonaktif);
+  - `paddy-branding.js` (hanya rename nama PROLOGE, no-op);
+  - migrasi (R13).
 
-**Files:**
-- Create: `apps/backend/database/sql/fixes/2026-11-12_struktur_bisnis_paddy_group.sql`
-- Create: `apps/backend/internal/modules/configuration/settings/business_structure_integration_test.go`. Pola: `hris/company_merge_integration_test.go`, yang menjalankan file SQL lewat psql/pgx di DB uji.
+### Task 4: Gate, review, PR
+- [ ] gofmt, go vet, `go test ./...` di DB uji 2× berturut-turut, tsc, eslint, vitest penuh.
+- [ ] Review akhir oleh reviewer terpisah. Temuan Critical/Important diperbaiki dengan tes merah lalu hijau, kemudian gate diulang.
+- [ ] Push, PR ke `development`, CI hijau, merge (deploy staging otomatis, skrip tidak ikut jalan).
 
-**Interfaces:**
-- **Pemakaian skrip:**
-  - `psql "$URL" -v ON_ERROR_STOP=1 -f …sql` untuk pratinjau (ROLLBACK);
-  - `-v eksekusi=1` untuk eksekusi;
-  - `PGOPTIONS='-c struktur.hq_users=<uuid>,<uuid>'` untuk user yang dikonfirmasi HQ (T1), dibaca dengan `current_setting('struktur.hq_users', true)` seperti `gabung.dari` di skrip gabung. Cabang default mereka dipindah ke `ERP-BANDUNG` sebelum aturan "orang mengikuti cabang".
-- **Urutan di dalam satu transaksi:**
-  1. user `hq_users`: `branch_id` → cabang `ERP-BANDUNG`;
-  2. cabang `ODOO-PADDY-PUDAK` dan `ODOO-PADDY-SALAM`: `company_id` → PADDY-RETAIL;
-  3. perusahaan `ERP`: `name` → `CV Cipta Kreasi Kreatif`, `holding_id` → holding `PADDY`;
-  4. `configuration.users` dengan perusahaan: `company_id` = perusahaan dari `branch_id` (bila `branch_id` terisi), dan `holding_id` = holding perusahaannya;
-  5. `hris.employee_salary` yang masih berlaku: `company_id` = perusahaan cabang penempatan utama aktif;
-  6. `configuration.branches.is_primary` = true untuk `ERP-BANDUNG`;
-  7. hapus holding `PROLOGE` bila tidak dirujuk.
-- **BLOKIR** (eksekusi ditolak, pratinjau tetap mencetak):
-  - payroll run `draft` memuat karyawan yang `company_id` gajinya berubah;
-  - `PROLOGE` masih dirujuk;
-  - ada id di `hq_users` yang tidak ada atau bukan user ERP;
-  - `struktur.hq_users` kosong padahal ada user ERP di Pudak/Salam (isi `-` bila semua ikut toko).
-- **NOTICE:**
-  - `PINDAH <tabel> <n>`;
-  - `HISTORY <tabel> <sebelum> <sesudah>` untuk attendance, employee_placements, work_schedules (bila ada), warehouses;
-  - `INVARIAN <nama> OK|GAGAL <n>`;
-  - `HASIL PRATINJAU|EKSEKUSI <ringkasan>`.
+### Task 5: Staging
+- [ ] Backup: `(umask 077; docker exec paddydev-db pg_dump -U paddydev -d paddydev -Fc > /mnt/hdd1/backup/paddydev/staging-before-struktur-bisnis-<stamp>.dump)`.
+- [ ] Pratinjau dari checkout yang sudah merge, lalu laporkan angkanya ke user dan **tunggu izin**.
+- [ ] Eksekusi, lalu jalankan pratinjau lagi (semua `PINDAH … 0`, `INVARIAN … OK`).
+- [ ] Verifikasi:
+  - halaman Struktur Bisnis;
+  - jadwal, penempatan, karyawan, payroll, POS, dan gudang Pudak/Salam;
+  - login super admin dan HR;
+  - `/api/ready` 200.
+- [ ] Bila keliru: jalankan pembalik atau restore backup, perbaiki, ulangi.
 
-- [ ] **Step 1: Failing tests** (fixture minimal di DB uji: dua holding, dua perusahaan, empat cabang, user, gaji, payroll run, absensi):
-  - `TestBusinessStructurePreviewChangesNothing`: pratinjau → semua tabel sama persis.
-  - `TestBusinessStructureMovesToTarget`: eksekusi menghasilkan:
-    - ERP bernama `CV Cipta Kreasi Kreatif` di holding PADDY;
-    - Pudak/Salam di PADDY-RETAIL;
-    - user dan gaji mengikuti cabang;
-    - `ERP-BANDUNG` `is_primary`;
-    - `PROLOGE` hilang.
-  - `TestBusinessStructureKeepsConfirmedHQUsers`: user di `hq_users` tetap ERP dengan cabang `ERP-BANDUNG`.
-  - `TestBusinessStructureBlocksUnconfirmedUsers`: eksekusi tanpa `struktur.hq_users` saat ada user ERP di Pudak → BLOKIR. Dengan `-` → lanjut dan user ikut PADDY-RETAIL.
-  - `TestBusinessStructureLeavesUnscopedUsers`: user tanpa `company_id` tidak berubah.
-  - `TestBusinessStructureBlocksDraftPayroll`: draft run memuat karyawan pindah → BLOKIR, tidak ada yang berubah. Run `approved` tidak menghalangi dan tidak berubah.
-  - `TestBusinessStructureBlocksReferencedHolding`: baris lain merujuk `PROLOGE` → BLOKIR dengan nama tabelnya.
-  - `TestBusinessStructureIdempotentAndKeepsHistory`: eksekusi dua kali → jalan kedua `PINDAH … 0`, dan jumlah absensi/penempatan/gudang sama.
-- [ ] **Step 2:** Jalankan → FAIL (file belum ada).
-- [ ] **Step 3:** Tulis skrip.
-- [ ] **Step 4:** `go test ./internal/modules/configuration/settings -run BusinessStructure -count=1` → PASS. Lalu jalankan suite backend penuh di DB baru.
-- [ ] **Step 5: Commit** `fix(settings): skrip struktur bisnis Paddy Group (EPIC-106)`
+### Task 6: Production (menunggu izin)
+- [ ] Gladi di salinan DB prod terbaru (pratinjau, eksekusi, jalan kedua, pembalik), lalu laporkan ke user.
+- [ ] Eksekusi hanya dengan izin eksplisit, di jam sepi, setelah backup prod; caranya saat rilis prod pertama dari erp-paddy atau lewat psql di VPS, sesuai keputusan user.
 
-### Task 3: PR ke erp-paddy `development`
-
-- [ ] **Step 1:** Push branch, buka PR ber-base `development`, dan tunggu CI hijau. Merge memicu deploy staging otomatis, tapi skrip tidak ikut dijalankan.
-- [ ] **Step 2:** Review seluruh branch oleh reviewer terpisah. Critical/Important diperbaiki test-first sebelum merge.
-
-### Task 4: Staging — backup, pratinjau, izin, eksekusi, QA
-
-- [ ] **Step 1:** Syarat: T1 sudah dikonfirmasi user, dan T3 sudah merge.
-- [ ] **Step 2:** `df -h /`, lalu backup `(umask 077; docker exec paddydev-db pg_dump -Fc …) > /mnt/hdd1/backup/paddydev/staging-before-e106-<stamp>.dump`.
-- [ ] **Step 3:** Pratinjau dengan `PGOPTIONS='-c struktur.hq_users=…'` dari T1. Kirim output NOTICE lengkap ke user dan **tunggu izin**.
-- [ ] **Step 4:** Eksekusi. Jalankan pratinjau lagi dan pastikan semua `PINDAH … 0` dan `INVARIAN … OK`.
-- [ ] **Step 5: QA staging** (sesi sementara, data uji dihapus):
-  - Struktur Bisnis menampilkan Paddy Group → CV Cipta Kreasi Kreatif (HQ ★, Warehouse) dan Paddy (toko);
-  - HRIS: daftar karyawan per perusahaan, jadwal toko Pudak/Salam, penempatan, absensi hari ini, dan pratinjau payroll per perusahaan;
-  - user HQ dan user toko login: cakupan menu dan data sesuai perusahaannya;
-  - POS/gudang Pudak/Salam masih bisa dibuka.
-
-### Task 5: Catatan
-
-- [ ] Update Automation Log epic, registry, dan memori. Merge dokumen di paddydev, lalu jalankan `bash tools/sync-docs-erp-paddy.sh`.
+### Task 7: Catatan
+- [ ] Automation Log epic, registry, dan memori diperbarui. Merge dokumen di paddydev, lalu `bash tools/sync-docs-erp-paddy.sh`.
