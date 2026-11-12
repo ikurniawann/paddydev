@@ -431,3 +431,28 @@ func TestLegacyDeliveries(t *testing.T) {
 		t.Fatalf("vendor delivery = %s", r.Raw)
 	}
 }
+
+// EPIC-105 R3 / Review Focus 2: a warehouse with an active branch and
+// company keeps its own scope; one without gets a clear 400 instead of the
+// old hard-coded MIZU-BANDUNG fallback.
+func TestReceivingScopeNoBusiness(t *testing.T) {
+	e := newEnv(t)
+	f := e.fixtures()
+	staff := e.staff(itemsAll)
+	supply := e.supplyItem()
+	grn := func(wh string) resp {
+		po := e.id(`INSERT INTO purchasing.purchase_orders (nomor_po, vendor_id, status, module_type) VALUES ('GT-PO-'||$1, $2, 'approved', 'general') RETURNING id::text`, suffix(), f.Vendor)
+		item := e.id(`INSERT INTO purchasing.purchase_order_items (purchase_order_id, supply_item_id, qty_ordered, harga_satuan) VALUES ($1, $2, 2, 1000) RETURNING id::text`, po, supply)
+		return e.do(&staff, "POST", "/api/purchasing/grn", map[string]any{"po_id": po, "module_type": "general", "warehouse_id": wh,
+			"items": []any{map[string]any{"purchase_order_item_id": item, "supply_item_id": supply, "qty_diterima": 2, "qty_ditolak": 0}}})
+	}
+	company, branch, active := e.warehouse()
+	r := grn(active)
+	e.expect(r, 201, "")
+	if got := e.scalar(`SELECT company_id::text || '/' || branch_id::text FROM purchasing.grn WHERE id = $1`, r.data()["id"]); got != company+"/"+branch {
+		t.Fatalf("active warehouse scope %v, want %s/%s", got, company, branch)
+	}
+	_, closedBranch, orphan := e.warehouse()
+	e.exec(`UPDATE configuration.branches SET is_active = false WHERE id = $1`, closedBranch)
+	e.expect(grn(orphan), 400, "Gudang tidak terhubung ke toko dan perusahaan yang aktif")
+}

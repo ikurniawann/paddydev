@@ -6,7 +6,6 @@
 import { ApiError, type ApiUser } from "@/lib/api/auth";
 import {
   getApiUserScope,
-  resolveBusinessScopeByCodes,
   resolveBusinessScopeFromWarehouse,
   validateWarehouseForReceivingScope,
 } from "@/lib/api/scope";
@@ -122,12 +121,14 @@ async function resolveModuleTypeFromPo(
   return poModuleType;
 }
 
-/** Scope bisnis mengikuti gudang penerimaan (mis. Company Paddy / Cabang Paddy Bandung). */
+/**
+ * Scope bisnis mengikuti gudang penerimaan. Tanpa fallback kode toko yang
+ * tertanam (EPIC-105 R3); rute ini dilayani Go, yang menolak gudang tanpa
+ * toko/perusahaan aktif.
+ */
 async function resolveReceivingScope(warehouseId: string): Promise<BusinessScope> {
   const scope = await getApiUserScope();
-  const businessScope =
-    (await resolveBusinessScopeFromWarehouse(warehouseId)) ??
-    (await resolveBusinessScopeByCodes("MIZU", "MIZU-BANDUNG"));
+  const businessScope = await resolveBusinessScopeFromWarehouse(warehouseId);
 
   const warehouseCheck = await validateWarehouseForReceivingScope(
     warehouseId,

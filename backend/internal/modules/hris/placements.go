@@ -355,7 +355,7 @@ func placementError(err error) error {
 	case pg.Code == "23503":
 		return httpx.BadRequest("Toko atau karyawan tidak ditemukan")
 	}
-	return err
+	return retryableLockError(err)
 }
 
 // CreatePlacement places an employee at a store. A new primary placement

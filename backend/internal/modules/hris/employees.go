@@ -62,27 +62,32 @@ func (s *Service) CreateEmployee(ctx context.Context, in employeeInput) (*Row, e
 	}
 	keys := in.keys()
 	keys.NIP = &nip
-	if conflict, err := s.repo.EmployeeKeyConflict(ctx, keys, ""); err != nil {
-		return nil, err
-	} else if conflict != nil {
-		return nil, httpx.BadRequest(conflict.Message())
-	}
-	// EPIC-099: YYYYMM of the join date + the next number of the series.
-	if err := s.repo.CheckNewNIP(ctx, nip, strOr(in.joinDate.Val), strOr(in.employmentStatus.Val)); err != nil {
-		return nil, err
-	}
-	exists, err := s.repo.EmployeeExists(ctx, "email", strOr(in.email.Val), nil)
-	if err != nil {
-		return nil, err
-	}
-	if exists {
-		return nil, httpx.BadRequest("Email sudah digunakan")
-	}
-
-	f := in.columns()
-	f.set("nip", nip)
-	f.set("phone", strOr(nilIfEmpty(in.phone.Val)))
-	row, err := s.repo.InsertEmployee(ctx, f)
+	// EPIC-105 R1: the NIP check and the insert share one transaction, so
+	// the sequence lock taken by CheckNewNIP covers the write.
+	var row *Row
+	err = s.repo.InTx(ctx, func(repo Repository) error {
+		if conflict, err := repo.EmployeeKeyConflict(ctx, keys, ""); err != nil {
+			return err
+		} else if conflict != nil {
+			return httpx.BadRequest(conflict.Message())
+		}
+		// EPIC-099: YYYYMM of the join date + the next number of the series.
+		if err := repo.CheckNewNIP(ctx, nip, strOr(in.joinDate.Val), strOr(in.employmentStatus.Val)); err != nil {
+			return err
+		}
+		exists, err := repo.EmployeeExists(ctx, "email", strOr(in.email.Val), nil)
+		if err != nil {
+			return err
+		}
+		if exists {
+			return httpx.BadRequest("Email sudah digunakan")
+		}
+		f := in.columns()
+		f.set("nip", nip)
+		f.set("phone", strOr(nilIfEmpty(in.phone.Val)))
+		row, err = repo.InsertEmployee(ctx, f)
+		return err
+	})
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
 		// A concurrent write won the race past the pre-check.

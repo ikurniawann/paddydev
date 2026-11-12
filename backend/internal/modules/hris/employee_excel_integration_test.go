@@ -3,6 +3,7 @@ package hris
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"mime/multipart"
 	"net/http"
@@ -245,5 +246,30 @@ func TestEmployeeImportManagerInSameFile(t *testing.T) {
 	expect(t, uploadEmployees(t, h, &hr, map[string]string{"mode": "replace", "step": "commit"}, move), http.StatusOK, "")
 	if got := h.scalar(`SELECT m.nip FROM hris.employees e JOIN hris.employees m ON m.id = e.reporting_to WHERE e.nip = $1`, staff); got != spv2 {
 		t.Fatalf("moved manager = %q, want %q", got, spv2)
+	}
+}
+
+// EPIC-105 R5: a replace file that makes an existing employee report to
+// their own report is refused, and nothing is written.
+func TestEmployeeImportManagerCycle(t *testing.T) {
+	h := newHarness(t)
+	hr, _ := h.staff("hrd", iam.HrisKepegawaian, false)
+	boss := h.employee(emp{name: "Bos Siklus"})
+	staff := h.employee(emp{name: "Staf Siklus"})
+	h.exec(`UPDATE hris.employees SET reporting_to = $2 WHERE id = $1`, staff, boss)
+	bossNIP := h.scalar(`SELECT nip FROM hris.employees WHERE id = $1`, boss)
+	staffNIP := h.scalar(`SELECT nip FROM hris.employees WHERE id = $1`, staff)
+	header := []string{"NIP", "Nama Lengkap *", "Email *", "Tanggal Masuk *", "Status Kepegawaian *", "Tipe Jadwal *", "Cabang Utama *", "NIP Atasan"}
+	file := employeeFile(t, header, []string{bossNIP, "Bos Siklus", "", "", "", "", "", staffNIP})
+	pre := uploadEmployees(t, h, &hr, map[string]string{"mode": "replace", "step": "preview"}, file)
+	expect(t, pre, http.StatusOK, "")
+	raw, _ := json.Marshal(pre.data()["errors"])
+	if want := "NIP Atasan membentuk siklus: " + bossNIP + " → " + staffNIP + " → " + bossNIP; !strings.Contains(string(raw), want) {
+		t.Fatalf("errors %s, want %q", raw, want)
+	}
+	expect(t, uploadEmployees(t, h, &hr, map[string]string{"mode": "replace", "step": "commit"}, file),
+		http.StatusBadRequest, "File masih punya error — perbaiki lalu unggah ulang")
+	if got := h.scalar(`SELECT coalesce(reporting_to::text, '') FROM hris.employees WHERE id = $1`, boss); got != "" {
+		t.Fatalf("boss reporting_to = %q", got)
 	}
 }

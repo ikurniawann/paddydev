@@ -47,7 +47,12 @@ type collEnv struct {
 	mux      http.Handler
 	notifier *collNotifier
 	loyalty  *collLoyalty
+	svc      *Service
 }
+
+// pinClock fixes the service clock so time-window assertions do not depend
+// on how long the requests took (EPIC-105 R6).
+func (e collEnv) pinClock(at time.Time) { e.svc.now = func() time.Time { return at } }
 
 func collSetup(t *testing.T) collEnv {
 	t.Helper()
@@ -55,6 +60,7 @@ func collSetup(t *testing.T) collEnv {
 	env := collEnv{notifier: &collNotifier{sent: make(chan string, 8)}, loyalty: &collLoyalty{}}
 	m.handler.svc.notifier = env.notifier
 	m.handler.svc.loyalty = env.loyalty
+	env.svc = m.handler.svc
 	env.mux = testutil.Mux(m)
 	return env
 }
@@ -290,6 +296,7 @@ func TestRewardsCatalogAndRedeem(t *testing.T) {
 
 func TestRewardRedeemRateLimit(t *testing.T) {
 	env := collSetup(t)
+	env.pinClock(time.Now())
 	member, _ := collMember(t, 0, false)
 	for i := 0; i < domain.RedeemRateLimitCount; i++ {
 		status, body, _ := collDo(t, env, &member, "POST", "/rewards", map[string]any{"reward_id": "x"})

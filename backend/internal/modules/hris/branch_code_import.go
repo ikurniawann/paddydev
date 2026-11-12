@@ -221,6 +221,12 @@ func (s *Service) ImportBranchCodes(ctx context.Context, a *Actor, in branchCode
 	var errFile *exportFile
 	err = s.repo.InTx(ctx, func(r Repository) error {
 		q := r.querier()
+		if in.Step == "commit" {
+			// EPIC-105 R2: two imports save one after the other.
+			if _, err := q.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext('hris.branch-code-import'))`); err != nil {
+				return err
+			}
+		}
 		validate := func() (domain.BranchCodeResult, []domain.BranchRef, error) {
 			branches, err := loadBranchRows(ctx, q)
 			if err != nil {
@@ -328,7 +334,7 @@ func (s *Service) ImportBranchCodes(ctx context.Context, a *Actor, in branchCode
 		out = map[string]any{"summary": sum, "message": msg}
 		return nil
 	})
-	return out, errFile, err
+	return out, errFile, retryableLockError(err)
 }
 
 /* ── HTTP ────────────────────────────────────────────────────────────── */

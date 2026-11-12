@@ -7,7 +7,9 @@ import (
 
 	"github.com/jackc/pgx/v5/pgconn"
 
+	"github.com/jackc/pgx/v5"
 	"nuhabit/backend/internal/modules/recruitment/domain"
+
 	"nuhabit/backend/internal/platform/database"
 	"nuhabit/backend/internal/platform/employeekeys"
 	"nuhabit/backend/internal/platform/httpx"
@@ -91,11 +93,18 @@ func (s *Service) Promote(ctx context.Context, in promotionInput) (*promotion, e
 	if conflict != nil {
 		return nil, httpx.BadRequest(conflict.Message())
 	}
-	// EPIC-099: YYYYMM of the join date + the next number of the series.
-	if err := employeekeys.CheckNewNIP(ctx, s.db, nip, joinDate, status); err != nil {
-		return nil, err
-	}
-	employeeID, err := s.repo.PromoteCandidate(ctx, s.db, c.ID, joinDate, status, emptyToNil(in.DepartmentID), emptyToNil(in.ReportingTo), nip)
+	// EPIC-099: YYYYMM of the join date + the next number of the series,
+	// checked in the promotion's transaction so the sequence lock covers
+	// the insert (EPIC-105 R1).
+	var employeeID *string
+	err = database.WithTx(ctx, s.db, func(tx pgx.Tx) error {
+		if err := employeekeys.CheckNewNIP(ctx, tx, nip, joinDate, status); err != nil {
+			return err
+		}
+		var err error
+		employeeID, err = s.repo.PromoteCandidate(ctx, tx, c.ID, joinDate, status, emptyToNil(in.DepartmentID), emptyToNil(in.ReportingTo), nip)
+		return err
+	})
 	if err != nil {
 		// A concurrent write won the race past the NIP pre-check.
 		var pgErr *pgconn.PgError

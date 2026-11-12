@@ -794,28 +794,30 @@ var warehouseScopeErrors = map[string]string{
 	"not_found":       "Gudang tidak ditemukan",
 	"inactive":        "Gudang tidak aktif",
 	"branch_mismatch": "Gudang tidak sesuai cabang yang diizinkan untuk penerimaan ini",
+	"no_business":     "Gudang tidak terhubung ke toko dan perusahaan yang aktif",
 }
 
 // receivingScope is resolveReceivingScope: the warehouse's company and
-// branch (or the MIZU fallback), checked against the user's scope.
+// branch, checked against the user's scope. A warehouse without an active
+// branch and company is refused (EPIC-105 R3); the old hard-coded
+// MIZU / MIZU-BANDUNG fallback is gone.
 func (s *Service) receivingScope(ctx context.Context, q database.Querier, warehouseID string, scope *pscope.Scope) (*BusinessIDs, error) {
 	business, err := s.ports.Locations.WarehouseScope(ctx, q, warehouseID)
 	if err != nil {
 		return nil, err
 	}
-	if business == nil {
-		if business, err = s.ports.Locations.ScopeByCodes(ctx, q, "MIZU", "MIZU-BANDUNG"); err != nil {
-			return nil, err
-		}
-	}
-	var contextBranch *string
+	contextBranch := (*string)(nil)
 	if business != nil {
 		contextBranch = &business.BranchID
 	}
+	// not_found / inactive of the warehouse itself keep their own message.
 	if code, err := s.validateWarehouse(ctx, q, warehouseID, scope, contextBranch); err != nil {
 		return nil, err
 	} else if code != "" {
 		return nil, badRequest(warehouseScopeErrors[code])
+	}
+	if business == nil {
+		return nil, badRequest(warehouseScopeErrors["no_business"])
 	}
 	return business, nil
 }

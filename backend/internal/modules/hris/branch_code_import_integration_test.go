@@ -156,3 +156,27 @@ func TestBranchCodeImport(t *testing.T) {
 		t.Fatalf("error file body = %s", et)
 	}
 }
+
+// EPIC-105 R2: the commit step holds the import lock until its transaction
+// ends, so two imports run one after the other.
+func TestBranchCodeImportTakesLock(t *testing.T) {
+	h := newHarness(t)
+	hr, _ := h.staff("hrd", iam.HrisPlacements, false)
+	sfx := strings.ToUpper(testutil.RandomHex(3))
+	code := "KL" + sfx
+	h.scalar(`INSERT INTO configuration.branches (company_id, name, code)
+		SELECT id, $1, $2 FROM configuration.companies ORDER BY created_at LIMIT 1 RETURNING id::text`, code+" - Toko Kunci", code)
+	file := branchCodeFile(t, [4]string{code, code + "2", "", ""})
+	pre, _ := uploadBranchCodes(t, h, &hr, map[string]string{"step": "preview"}, file)
+	expect(t, pre, 200, "")
+	held := `SELECT count(*)::text FROM pg_locks WHERE locktype = 'advisory' AND pid = pg_backend_pid()
+		AND objid = (hashtext('hris.branch-code-import')::bigint & 4294967295)::oid`
+	if n := h.scalar(held); n != "0" {
+		t.Fatalf("preview took the lock: %s", n)
+	}
+	com, _ := uploadBranchCodes(t, h, &hr, map[string]string{"step": "commit", "fingerprint": pre.data()["fingerprint"].(string), "ack_warnings": "true"}, file)
+	expect(t, com, 200, "")
+	if n := h.scalar(held); n != "1" {
+		t.Fatalf("commit lock held = %s", n)
+	}
+}

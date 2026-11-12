@@ -375,3 +375,49 @@ func TestValidateEmployeeImportReplaceKeepsOldNIP(t *testing.T) {
 		t.Fatalf("an old NIP updated in mode Timpa is not checked: %+v", errs)
 	}
 }
+
+// EPIC-105 R5: managers as they stand after the import must not loop.
+// Existing: Feti (202505272) → Bos (202310037); Cici (202310038) has none.
+func cycleLK() EmployeeLookups {
+	l := lk()
+	l.ExistingNIP["202310037"] = EmployeeRef{ID: "m1", NIP: "202310037", Name: "Bos", Active: true}
+	l.ExistingNIP["202310038"] = EmployeeRef{ID: "m2", NIP: "202310038", Name: "Cici", Active: true}
+	l.ManagerNIP["202505272"] = "e1"
+	l.ManagerNIP["202310038"] = "m2"
+	l.ManagerOfNIP = map[string]string{"202505272": "202310037", "202310037": "", "202310038": ""}
+	return l
+}
+
+func replaceRow(nip, name, manager string) []string {
+	return []string{nip, name, "", "", "", "", "", "", "", "", "", manager}
+}
+
+func TestValidateEmployeeImportCycleWithExisting(t *testing.T) {
+	_, errs, _ := ValidateEmployeeImport("replace", mgrHdr, [][]string{replaceRow("202310037", "Bos", "202505272")}, 2, cycleLK())
+	if !issueText(errs, "Baris 2, kolom NIP Atasan: NIP Atasan membentuk siklus: 202310037 → 202505272 → 202310037") {
+		t.Fatalf("errors %+v", errs)
+	}
+}
+
+func TestValidateEmployeeImportCycleInFile(t *testing.T) {
+	rows := [][]string{
+		mgrRow("202610521", "Satu", "a1@x.id", "202610522"),
+		mgrRow("202610522", "Dua", "a2@x.id", "202610521"),
+	}
+	_, errs, _ := ValidateEmployeeImport("add", mgrHdr, rows, 2, cycleLK())
+	if !issueText(errs, "Baris 2, kolom NIP Atasan: NIP Atasan membentuk siklus: 202610521 → 202610522 → 202610521") ||
+		!issueText(errs, "Baris 3, kolom NIP Atasan: NIP Atasan membentuk siklus: 202610522 → 202610521 → 202610522") {
+		t.Fatalf("errors %+v", errs)
+	}
+}
+
+// Review Focus 3: a chain that loops only before the import is not a cycle.
+func TestValidateEmployeeImportSwapIsNotCycle(t *testing.T) {
+	rows := [][]string{replaceRow("202505272", "Feti", "202310038"), replaceRow("202310037", "Bos", "202505272")}
+	_, errs, _ := ValidateEmployeeImport("replace", mgrHdr, rows, 2, cycleLK())
+	for _, e := range errs {
+		if strings.Contains(e.Message, "siklus") {
+			t.Fatalf("false cycle %+v", errs)
+		}
+	}
+}

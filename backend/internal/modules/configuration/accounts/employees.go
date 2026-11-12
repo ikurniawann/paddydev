@@ -261,10 +261,6 @@ func (s *service) createUser(ctx context.Context, actorID string, b *employeeBod
 	if err := s.keyConflict(ctx, b, nip, ""); err != nil {
 		return nil, err
 	}
-	// EPIC-099: YYYYMM of the join date + the next number of the series.
-	if err := employeekeys.CheckNewNIP(ctx, s.db, nip, *b.str("join_date"), *b.str("employment_status")); err != nil {
-		return nil, err
-	}
 	cols := []Column{
 		{"nip", nip}, {"full_name", *b.str("full_name")}, {"email", email}, {"phone", orEmpty(b.str("phone"))},
 		{"join_date", *b.str("join_date")}, {"employment_status", *b.str("employment_status")},
@@ -281,6 +277,11 @@ func (s *service) createUser(ctx context.Context, actorID string, b *employeeBod
 	var id string
 	movedAccount := false
 	err = database.WithTx(ctx, s.db, func(tx pgx.Tx) error {
+		// EPIC-099 + EPIC-105 R1: the sequence check holds its lock until
+		// this transaction writes the employee.
+		if err := employeekeys.CheckNewNIP(ctx, tx, nip, *b.str("join_date"), *b.str("employment_status")); err != nil {
+			return err
+		}
 		var prev *string
 		if owner != nil {
 			archive := archiveEmail(owner.NIP)

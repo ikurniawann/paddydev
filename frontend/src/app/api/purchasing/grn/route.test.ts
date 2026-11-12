@@ -280,6 +280,24 @@ describe("POST /api/purchasing/grn — module_type follows the parent PO (EPIC-0
     expect(insertedGrn.supplier_id).toBeNull();
   });
 
+  it("no hard-coded store fallback: MIZU / MIZU-BANDUNG is never looked up (EPIC-105 R3)", async () => {
+    const scopeMod = await import("@/lib/api/scope");
+    vi.mocked(scopeMod.resolveBusinessScopeByCodes).mockClear();
+    vi.mocked(scopeMod.resolveBusinessScopeFromWarehouse).mockClear();
+    deliveryResultRef = { valid: true, errors: [], delivery: productDelivery, items: [] };
+    fakeDbRef = createFakeDb({ purchase_orders: [{ data: { module_type: "product" }, error: null }] });
+    const { POST } = await import("./route");
+    await POST(
+      makeRequest({
+        delivery_id: DELIVERY_ID,
+        warehouse_id: WAREHOUSE_ID,
+        items: [{ purchase_order_item_id: PO_ITEM_ID, product_id: PRODUCT_ID, qty_diterima: 1, qty_ditolak: 0, kondisi: "baik" }],
+      })
+    );
+    expect(vi.mocked(scopeMod.resolveBusinessScopeFromWarehouse)).toHaveBeenCalled();
+    expect(vi.mocked(scopeMod.resolveBusinessScopeByCodes)).not.toHaveBeenCalled();
+  });
+
   it("product PO, body module_type: raw_material → 400 tidak sesuai purchase order, no grn insert", async () => {
     deliveryResultRef = {
       valid: true,

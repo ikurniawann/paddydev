@@ -2,6 +2,7 @@ package memberportal
 
 import (
 	"testing"
+	"time"
 
 	"nuhabit/backend/internal/platform/testutil"
 )
@@ -31,6 +32,9 @@ func TestIntegrationIPBrakeIsSharedAcrossReplicas(t *testing.T) {
 
 func TestIntegrationRedeemBrakeIsSharedAcrossReplicas(t *testing.T) {
 	a, b := collSetup(t), collSetup(t)
+	now := time.Now()
+	a.pinClock(now)
+	b.pinClock(now)
 	member := newMember(t)
 	for i := range 10 {
 		env := a
