@@ -1,6 +1,6 @@
 # EPIC-107: Kode Toko Massal Tanpa Ketik Ulang + Pindah Toko Karyawan Massal (Penempatan, Akun, Gaji) (`MODULE-HRIS`, `MODULE-CONFIGURATION`)
 
-status: backlog
+status: review
 environment: dev
 retries: 0
 
@@ -96,13 +96,13 @@ Penegasan user (12-11, "Sesuai pakai native"):
 
 ## Tasks
 Rencana: `docs/superpowers/plans/2026-11-12-pindah-toko-massal.md`.
-- [ ] T0 Kode & Status Toko: saran hapus `ODOO-`, pratinjau satu klik, tombol di Struktur Bisnis
-- [ ] T1 Keputusan sinkron akun (domain, unit test)
-- [ ] T2 Sinkron akun + gaji dalam transaksi (integrasi)
-- [ ] T3 "Pindahkan ke toko" ikut sinkron akun/gaji
-- [ ] T4 Antrean + job harian untuk tanggal berlaku masa depan
-- [ ] T5 Template Pindah Toko Massal (unduh, pratinjau, simpan)
-- [ ] T6 UI: dialog Pindah Toko Massal + kolom akun di pratinjau + tautan dari Kode & Status Toko
+- [x] T0 Kode & Status Toko: saran hapus `ODOO-`, pratinjau satu klik, tombol di Struktur Bisnis
+- [x] T1 Keputusan sinkron akun (domain, unit test)
+- [x] T2 Sinkron akun + gaji dalam transaksi (integrasi)
+- [x] T3 "Pindahkan ke toko" ikut sinkron akun/gaji
+- [x] T4 Antrean + job harian untuk tanggal berlaku masa depan
+- [x] T5 Template Pindah Toko Massal (unduh, pratinjau, simpan)
+- [x] T6 UI: dialog Pindah Toko Massal + kolom akun di pratinjau + tautan dari Kode & Status Toko
 - [ ] T7 Gate, review akhir, PR ke erp-paddy development, QA staging
 
 ## Acceptance Criteria
@@ -120,3 +120,33 @@ Rencana: `docs/superpowers/plans/2026-11-12-pindah-toko-massal.md`.
 ## Automation Log
 - 2026-11-12: User memilih **Native** dan menegaskan inti: kode toko massal (hapus ODOO-) dan nonaktifkan toko tutup lewat template. R0/T0 ditambahkan sebagai tugas pertama. Cek staging: 49 kode ODOO- tanpa bentrok.
 - 2026-11-12: Permintaan user. EPIC-070, EPIC-100 dan kode `placements.go`, `branch_code_import.go`, `accounts/input.go`, `scheduled_resign.go` diperiksa. Keputusan user: penempatan + akun sekaligus, lewat template, UI ramah. Rencana ditulis; belum dieksekusi.
+- 2026-11-12: **Eksekusi Native** di erp-paddy branch `feat/epic107-pindah-toko-massal` (dari `development` a4548e2).
+  - **T0** b37d5a5: saran `hapus-odoo`, tombol "Hapus awalan ODOO-", tombol di Struktur Bisnis.
+  - **T1** 71b6e8f: `PlanAccountSync`.
+  - **T2** f51251b: `syncEmployeeAccount` (akun, outlet, gaji lintas perusahaan; error per baris).
+  - **T3** 9f9825c: `moveEmployeeTx` dipakai "Pindahkan ke toko" (savepoint per karyawan; kolom Akun/Gaji di pratinjau).
+  - **T4** ef80757: antrean `hris.account_branch_syncs` dan job per jam.
+  - **T5** 077114d: template dan impor Pindah Toko Massal (preview, commit, error_file; fingerprint; R9 pesan).
+  - **T6** d82e741: dialog UI.
+- 2026-11-12: **Review akhir (opus):** Critical 0, Important 6, Minor 7. Perbaikan 41f123f (semua dengan tes merah lalu hijau):
+  - kode toko ganda lintas perusahaan ditolak;
+  - sumber gaji = perusahaan toko lama ∪ perusahaan akun;
+  - pindah bertanggal diperiksa sekarang, ditambah `attempts` dan audit kegagalan;
+  - job mengikuti penempatan;
+  - jadwal toko lama mulai tanggal pindah dihapus;
+  - file error memuat error simulasi.
+
+  Minor ditunda:
+  - fingerprint tanpa tanggal/outlet;
+  - audit kurang holding;
+  - retry tanpa backoff;
+  - gaji/payroll `company_id` NULL;
+  - pratinjau Kode & Status Toko tidak diperbarui otomatis;
+  - `branch_id` template tidak valid → kosong;
+  - `willChange` bulk.
+- 2026-11-12: **Gate:**
+  - gofmt, vet, dan manifest route ok;
+  - `go test ./...` 2× di DB uji baru: 140/140;
+  - tsc, eslint, dan vitest 922 file / 6.672 tes.
+
+  PR wit-id-indonesia/erp-paddy#2 ke `development`.

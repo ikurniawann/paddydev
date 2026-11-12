@@ -118,7 +118,7 @@ deploying-dev · ready-for-qa · blocked · done).
 | [EPIC-104](./EPIC-104-rapikan-bagan.md) | Rapikan Bagan Organisasi — Minor EPIC-102 & EPIC-103 (`MODULE-HRIS`) | review | 2026-11-11 |
 | [EPIC-105](./EPIC-105-risiko-data-minor.md) | Tutup Risiko Data dari Minor yang Ditunda (`MODULE-HRIS`, `MODULE-PROCUREMENT`) | backlog | 2026-11-11 |
 | [EPIC-106](./EPIC-106-struktur-bisnis-paddy-group.md) | Struktur Bisnis Paddy Group — Satu Holding, Dua Perusahaan Sejajar (`MODULE-CONFIGURATION`, lintas modul) | ready-for-qa | 2026-11-12 |
-| [EPIC-107](./EPIC-107-pindah-toko-massal.md) | Pindah Toko Karyawan Massal — Penempatan, Akun, dan Gaji Sekaligus (`MODULE-HRIS`, `MODULE-CONFIGURATION`) | backlog | 2026-11-12 |
+| [EPIC-107](./EPIC-107-pindah-toko-massal.md) | Kode Toko Massal + Pindah Toko Karyawan Massal (`MODULE-HRIS`, `MODULE-CONFIGURATION`) | review | 2026-11-12 |
 
 Aturan:
 - Epic + registry ini adalah sumber kebenaran status pekerjaan (canonical).
