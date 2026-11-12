@@ -110,3 +110,10 @@ Rencana: `docs/superpowers/plans/2026-11-12-struktur-bisnis-paddy-group.md`.
 - 2026-11-12: Gladi ulang di salinan staging yang baru:
   - **Pratinjau (dan `-v eksekusi=0`):** 37 baris USER, terdiri dari 35 ke ERP-BANDUNG/ERP, 1 Silvi tetap di Pudak lalu ke PADDY-RETAIL, dan 1 IT Paddy tetap di Salam lalu ke PADDY-RETAIL. **BLOKIR 2:** Febri dan Adrian (`outlet_di_cabang_pindahan`).
   - **Simulasi keputusan (a) di salinan:** outlet keduanya dipindah ke HQ. Eksekusi 162 baris dengan 0 penghalang dan semua INVARIAN OK. Jalan kedua 0 baris. Pembalik 162 baris dari 1 snapshot. Pembalik kedua tidak menemukan snapshot. md5 kembali identik.
+- 2026-11-12 20:22 WIB: erp-paddy PR #1 (CI 4/4 hijau) di-squash-merge ke development (a4548e2). Deploy Staging sukses, `/api/ready` 200.
+- 2026-11-12 20:50 WIB: backup staging `/mnt/hdd1/backup/paddydev/staging-before-struktur-bisnis-20261112-205052.dump` (3,9 MB, 495 tabel data, mode 600).
+- 2026-11-12 20:51 WIB: **pratinjau di staging** (ROLLBACK; staging tidak berubah):
+  - PINDAH: branches 2, users 157, salary 0.
+  - USER 37: 35 dari Pudak/Salam ke ERP-BANDUNG dengan perusahaan tetap ERP, 2 ke PADDY-RETAIL.
+  - **BLOKIR 2:** outlet Febri Ayu Astiani (Pudak) dan Adrianus Adrian Chandra (Salam).
+  - **Eksekusi menunggu keputusan user untuk R16 dan izin.**
