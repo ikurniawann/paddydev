@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 /**
- * Seeder: Business hierarchy kantor pusat — PROLOGE → MIZU → MIZU-BANDUNG (kode warisan migrasi,
- * dipertahankan); nama tampil Paddy: CV Cipta Kreasi Kreatif → Paddy Kantor Pusat.
- * Toko Paddy (PADDY → PADDY-RETAIL → PD-PVJ / PD-KOPO) dibuat seeders/paddy-spa.js.
+ * Seeder: Business hierarchy kantor pusat (EPIC-106) — holding Paddy Group (PADDY) dengan perusahaan
+ * CV Cipta Kreasi Kreatif (ERP), sejajar dengan Paddy (PADDY-RETAIL, toko, dibuat seeders/paddy-spa.js).
+ * Perusahaan ERP dicari per kode di holding mana pun (dulu di holding PROLOGE) lalu dipindah ke Paddy
+ * Group: tidak pernah membuat perusahaan ERP kedua. Holding lama PROLOGE yang kosong dinonaktifkan.
  *
  * Usage:
  *   node database/seeders/business-hierarchy.js
@@ -13,12 +14,14 @@ const fs = require("fs");
 const path = require("path");
 const { Client } = require("pg");
 const { sslForUrl, assertLocalTarget } = require("../scripts/pg-utils");
-const {
-  HOLDING_CODE,
-  COMPANY_CODE,
-  BRANCH_CODE,
-  BRANCH_NAME,
-} = require("../scripts/items-business-scope");
+const { BRANCH_CODE, BRANCH_NAME } = require("../scripts/items-business-scope");
+
+// Struktur target EPIC-106; sengaja tidak memakai SEED_HOLDING_CODE supaya nama Paddy Group tidak tertimpa.
+const GROUP = { code: "PADDY", name: "Paddy Group" };
+const OLD_HOLDING_CODE = "PROLOGE";
+const COMPANY_NAME = "CV Cipta Kreasi Kreatif";
+// Kode sendiri, bukan dari scripts/items-business-scope.js: salinan paddydev masih memakai kode lama MIZU.
+const COMPANY_CODE = process.env.SEED_COMPANY_CODE || "ERP";
 
 const ROOT = path.join(__dirname, "..", "..");
 
@@ -63,30 +66,57 @@ async function main() {
     await client.query("BEGIN");
 
     await client.query(
-      `INSERT INTO configuration.holdings (name, code)
-       VALUES ('CV Cipta Kreasi Kreatif', $1)
-       ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name, updated_at = NOW()`,
-      [HOLDING_CODE]
+      `INSERT INTO configuration.holdings (name, code) VALUES ($1, $2) ON CONFLICT (code) DO NOTHING`,
+      [GROUP.name, GROUP.code]
     );
 
     const { rows: holdingRows } = await client.query(
       `SELECT id, name FROM configuration.holdings WHERE code = $1 LIMIT 1`,
-      [HOLDING_CODE]
+      [GROUP.code]
     );
     const holdingId = holdingRows[0].id;
 
-    await client.query(
-      `INSERT INTO configuration.companies (holding_id, name, code)
-       VALUES ($1, 'Paddy Kantor Pusat', $2)
-       ON CONFLICT (holding_id, code) DO UPDATE SET name = EXCLUDED.name, updated_at = NOW()`,
+    // ERP di holding mana pun (dulu PROLOGE) dipindah ke Paddy Group; baru dibuat bila belum ada sama sekali.
+    const { rows: existing } = await client.query(
+      `SELECT id FROM configuration.companies WHERE code = $2 ORDER BY (holding_id = $1) DESC, created_at LIMIT 1`,
       [holdingId, COMPANY_CODE]
     );
+    if (existing[0]) {
+      await client.query(
+        `UPDATE configuration.companies SET holding_id = $2, name = $3, updated_at = NOW()
+         WHERE id = $1 AND (holding_id, name) IS DISTINCT FROM ($2, $3)`,
+        [existing[0].id, holdingId, COMPANY_NAME]
+      );
+    } else {
+      await client.query(
+        `INSERT INTO configuration.companies (holding_id, name, code) VALUES ($1, $2, $3)`,
+        [holdingId, COMPANY_NAME, COMPANY_CODE]
+      );
+    }
 
     const { rows: companyRows } = await client.query(
       `SELECT id, name FROM configuration.companies WHERE holding_id = $1 AND code = $2 LIMIT 1`,
       [holdingId, COMPANY_CODE]
     );
     const companyId = companyRows[0].id;
+
+    // Akun perusahaan ini ikut holding-nya; holding lama yang kosong dinonaktifkan (tidak dihapus).
+    await client.query(
+      `UPDATE configuration.users SET holding_id = $1, updated_at = NOW()
+       WHERE company_id = $2 AND holding_id IS DISTINCT FROM $1`,
+      [holdingId, companyId]
+    );
+    await client.query(
+      `UPDATE configuration.users SET holding_id = $1, updated_at = NOW()
+       WHERE company_id IS NULL AND holding_id = (SELECT id FROM configuration.holdings WHERE code = $2)`,
+      [holdingId, OLD_HOLDING_CODE]
+    );
+    await client.query(
+      `UPDATE configuration.holdings h SET is_active = false, updated_at = NOW()
+       WHERE h.code = $1 AND h.is_active
+         AND NOT EXISTS (SELECT 1 FROM configuration.companies c WHERE c.holding_id = h.id)`,
+      [OLD_HOLDING_CODE]
+    );
 
     const { rows: legacyBranches } = await client.query(
       `SELECT id, code, name
