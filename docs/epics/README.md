@@ -4,6 +4,15 @@ Registry kanonik status epic (lihat `~/.agentic-workflows/claude-codex-docs-work
 untuk vocabulary status: backlog · on-progress · coding · review · testing ·
 deploying-dev · ready-for-qa · blocked · done).
 
+> **Sejak 12-11-2026, kode dikerjakan di [wit-id-indonesia/erp-paddy](https://github.com/wit-id-indonesia/erp-paddy)**
+> (PR ke branch `development`; merge ke `development` otomatis dideploy ke staging).
+> Repo erp-paddy sengaja tidak menyimpan `docs/` dan seeder di git, jadi dokumen (epic, rencana, acuan HRIS)
+> **tetap ditulis dan di-merge di repo ini**. Setelah merge, jalankan `bash tools/sync-docs-erp-paddy.sh`
+> untuk menyalinnya ke `~/WORK/erp-paddy/docs` (salinan lokal untuk dibaca, diabaikan git).
+> Epic baru tetap dicatat di `docs/epics/` di sini.
+> Jangan menulis dokumen atau seeder langsung di `~/WORK/erp-paddy/docs` dan `~/WORK/erp-paddy/apps/backend/database/seeders`:
+> isinya ditimpa setiap kali sinkron.
+
 | Epic | Judul | Status | Update terakhir |
 |------|-------|--------|-----------------|
 | [EPIC-001](./EPIC-001-recruitment-pipeline-revamp.md) | Recruitment Pipeline Revamp | ready-for-qa | 2026-07-25 |
