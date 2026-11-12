@@ -1,4 +1,4 @@
-# EPIC-107: Pindah Toko Karyawan Massal — Penempatan, Akun, dan Gaji Sekaligus (`MODULE-HRIS`, `MODULE-CONFIGURATION`)
+# EPIC-107: Kode Toko Massal Tanpa Ketik Ulang + Pindah Toko Karyawan Massal (Penempatan, Akun, Gaji) (`MODULE-HRIS`, `MODULE-CONFIGURATION`)
 
 status: backlog
 environment: dev
@@ -12,18 +12,34 @@ Permintaan user 12-11-2026:
 
 Keputusan user (AskUserQuestion): **penempatan utama dan cabang akun berubah sekaligus**, lewat template.
 
+Penegasan user (12-11, "Sesuai pakai native"):
+
+> intinya ini bulky update branch toko / retail mudah contoh … (Paddy Pudak-ODOO-PADDY-PUDAK) ODOO nya mau di hapus, tapi odoo nya banyak jadi nya satu2 … Update kode branch secara massal melalui template. lalu … Nonaktifkan store tutup/ganti kode, histori tetap tersimpan.
+
+**Data staging 12-11:**
+- 49 kode berawalan `ODOO-` (41 aktif).
+- Bila awalan dihapus: 0 pola salah, 0 bentrok dengan kode lain, 0 ganda.
+- Nama toko tidak berubah: awalan nama sudah tanpa ODOO-, dan EPIC-100 R3 hanya mengganti awalan `<kode pendek> - `.
+- Tidak ada kode atau integrasi yang bergantung pada awalan `ODOO-` (`org_chart.go` dan `branch_code_upload.go` membuang awalan secara generik).
+
 ## Yang sudah ada (tidak dibangun ulang)
 - **Kode & Status Toko** (EPIC-100, halaman Penempatan): template untuk ganti kode, nama, dan aktif/nonaktif toko massal; histori tetap.
   - Menonaktifkan toko **ditolak selama masih ada karyawan aktif** ("pindahkan dulu lewat Penempatan").
 - **Pindahkan ke toko** (EPIC-070): pilih banyak karyawan, satu toko tujuan, pratinjau lalu simpan (`POST /api/hris/employee-placements/bulk`, mode `move`).
 
 ## Celah yang membuat HR tetap mengubah satu per satu
+0. **Kode & Status Toko masih harus diketik per baris.** Template EPIC-100 mengosongkan Kode Baru, sehingga menghapus `ODOO-` dari 49 toko berarti mengetik 49 kode. Tombolnya juga hanya ada di halaman Penempatan, bukan di Settings → Struktur Bisnis tempat HR/admin mengedit toko satu per satu.
 1. **Pindah penempatan tidak menyentuh akun.** `users.branch_id`, `company_id`, `holding_id`, outlet default, dan `user_warehouses` tetap di toko lama, sehingga akun harus diedit satu per satu di Pengguna.
    - Sejak EPIC-106 ini juga merusak akses: user ber-scope cabang hanya melihat baris yang perusahaannya sama (`scope.RowInScope`).
 2. **Satu toko tujuan per aksi.** Menutup atau memecah toko dengan karyawan yang tersebar ke banyak toko butuh banyak aksi.
 3. **Pindah lintas perusahaan** (contoh: staf HQ/ERP ke Pudak/Paddy) tidak memindahkan gaji aktif. Payroll memilih karyawan menurut perusahaan gaji (`employee_salary.company_id`), sehingga karyawan tetap digaji perusahaan lama.
 
 ## Ruling
+- **R0 — Inti permintaan: kode toko massal tanpa ketik ulang (dikerjakan pertama).**
+  - **Template dengan saran.** Template Kode & Status Toko bisa diunduh dengan saran `hapus-odoo`: Kode Baru terisi otomatis dengan kode tanpa awalan `ODOO-` untuk setiap toko berawalan itu; baris lain kosong. HR boleh mengubah atau mengosongkan baris sebelum unggah.
+  - **Satu klik.** Di dialog, tombol "Hapus awalan ODOO- (N toko)" langsung membuat file saran itu dan menjalankan **pratinjau** tanpa unduh-unggah. Simpan tetap lewat pratinjau, fingerprint, dan centang peringatan (EPIC-100 R7–R8).
+  - **Akses dari Struktur Bisnis.** Settings → Struktur Bisnis menampilkan tombol "Kode & Status Toko (massal)" yang membuka dialog yang sama, hanya untuk user yang punya akses menu Penempatan (`placementManagers`).
+  - Nonaktifkan toko tutup tetap lewat kolom Status Baru (EPIC-100 R4). Toko yang masih punya karyawan diarahkan ke Pindah Toko Massal (R9).
 - **R1 — Satu aksi "pindah toko" = penempatan utama + akun + gaji.**
   - Penempatan lama diakhiri H-1 (tidak dihapus) dan penempatan utama baru dibuat, dengan aturan EPIC-070 (`domain.PlanPlacementMove`).
   - Akun dan gaji ikut menurut R2–R4.
@@ -80,6 +96,7 @@ Keputusan user (AskUserQuestion): **penempatan utama dan cabang akun berubah sek
 
 ## Tasks
 Rencana: `docs/superpowers/plans/2026-11-12-pindah-toko-massal.md`.
+- [ ] T0 Kode & Status Toko: saran hapus `ODOO-`, pratinjau satu klik, tombol di Struktur Bisnis
 - [ ] T1 Keputusan sinkron akun (domain, unit test)
 - [ ] T2 Sinkron akun + gaji dalam transaksi (integrasi)
 - [ ] T3 "Pindahkan ke toko" ikut sinkron akun/gaji
@@ -89,6 +106,8 @@ Rencana: `docs/superpowers/plans/2026-11-12-pindah-toko-massal.md`.
 - [ ] T7 Gate, review akhir, PR ke erp-paddy development, QA staging
 
 ## Acceptance Criteria
+- [ ] Satu klik "Hapus awalan ODOO-" di staging menampilkan pratinjau 49 toko (`ODOO-PADDY-PUDAK` → `PADDY-PUDAK`, nama tetap). Simpan mengganti semua kode; absensi, penempatan, dan gudang toko-toko itu tetap; audit `branch.update` per toko.
+- [ ] Tombol "Kode & Status Toko (massal)" muncul di Settings → Struktur Bisnis bagi HR/admin HR, dan tidak muncul bagi user tanpa akses Penempatan.
 - [ ] Template (semua / per toko) berisi karyawan aktif dengan toko, perusahaan, dan cabang akun saat ini, plus dropdown kode toko aktif.
 - [ ] 3 karyawan Pudak dipindah ke 3 toko berbeda dalam satu file. Penempatan lama berakhir H-1, penempatan utama baru dimulai hari ini, akun ikut toko baru (cabang, perusahaan, holding, outlet), dan absensi lama tetap di Pudak.
 - [ ] Staf HQ (ERP) dipindah ke Pudak (PADDY-RETAIL): akun ke PADDY-RETAIL dan gaji aktif ke PADDY-RETAIL. Bila ada di payroll ERP `completed`, baris itu error dengan alasan.
@@ -99,4 +118,5 @@ Rencana: `docs/superpowers/plans/2026-11-12-pindah-toko-massal.md`.
 - [ ] Gate hijau: Go `./...` 2× di DB uji baru, vitest, tsc, eslint, dan CI PR.
 
 ## Automation Log
+- 2026-11-12: User memilih **Native** dan menegaskan inti: kode toko massal (hapus ODOO-) dan nonaktifkan toko tutup lewat template. R0/T0 ditambahkan sebagai tugas pertama. Cek staging: 49 kode ODOO- tanpa bentrok.
 - 2026-11-12: Permintaan user. EPIC-070, EPIC-100 dan kode `placements.go`, `branch_code_import.go`, `accounts/input.go`, `scheduled_resign.go` diperiksa. Keputusan user: penempatan + akun sekaligus, lewat template, UI ramah. Rencana ditulis; belum dieksekusi.

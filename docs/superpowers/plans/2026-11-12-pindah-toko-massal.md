@@ -1,8 +1,8 @@
-# Pindah Toko Karyawan Massal Implementation Plan
+# Kode Toko Massal + Pindah Toko Karyawan Massal Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** HR memindah banyak karyawan ke banyak toko sekaligus lewat template (dan lewat "Pindahkan ke toko"), sehingga penempatan utama, akun (cabang, perusahaan, holding, outlet), dan gaji lintas perusahaan ikut dalam satu aksi, dengan histori tetap.
+**Goal:** HR mengganti kode toko massal tanpa ketik ulang (hapus `ODOO-` satu klik, juga dari Struktur Bisnis), dan memindah banyak karyawan ke banyak toko sekaligus lewat template (dan lewat "Pindahkan ke toko"), sehingga penempatan utama, akun (cabang, perusahaan, holding, outlet), dan gaji lintas perusahaan ikut dalam satu aksi, dengan histori tetap.
 
 **Architecture:**
 - **Inti bersama:** satu fungsi transaksi per karyawan, `moveEmployeeTx`, yang mengakhiri penempatan lama, membuat penempatan utama baru, lalu menyinkronkan akun dan gaji (atau mengantre sinkron bila tanggalnya di masa depan).
@@ -36,6 +36,45 @@
 5. **Toko ditutup setelah semua karyawannya dipindah** → Nonaktif di Kode & Status Toko lolos. Test: T5 `TestStoreMoveThenDeactivateBranch`.
 
 ---
+
+### Task 0: Kode & Status Toko — saran hapus `ODOO-`, pratinjau satu klik, tombol di Struktur Bisnis
+
+**Files:**
+- Modify: `apps/backend/internal/modules/hris/branch_code_import.go` (`BranchCodeTemplate`, handler `branchCodeTemplate`)
+- Modify: `apps/backend/internal/modules/hris/domain/branch_code_upload.go` (fungsi saran)
+- Test: `apps/backend/internal/modules/hris/branch_code_import_integration_test.go`, `domain/branch_code_upload_test.go`
+- Modify: `apps/frontend/src/features/hris/placements/api.ts`, `components/branch-code-dialog.tsx` (+ test)
+- Modify: halaman Settings → Struktur Bisnis (`apps/frontend/src/features/configuration/business/components/business-configuration-page.tsx`) (+ test)
+
+**Interfaces:**
+- **Backend:**
+  ```go
+  // SuggestBranchCode returns the new code a suggestion fills, "" when none.
+  func SuggestBranchCode(code, suggestion string) string // suggestion "hapus-odoo": "ODOO-PPGA" -> "PPGA", "PD-KOPO" -> ""
+  ```
+  - `GET /api/hris/branches/template?saran=hapus-odoo` → kolom Kode Baru terisi saran. Tanpa `saran`, perilakunya sama seperti sekarang. `saran` lain → 400 "Saran tidak dikenal".
+  - Header `X-Suggested-Count: <n>` berisi jumlah baris terisi.
+- **Frontend:**
+  - `downloadBranchCodeTemplate(suggestion?: "hapus-odoo")`;
+  - `fetchBranchCodeTemplateFile(suggestion: "hapus-odoo"): Promise<{ file: File; count: number }>`;
+  - `BranchCodeDialog` mendapat tombol "Hapus awalan ODOO- (N toko)". Tombol itu memanggil `fetchBranchCodeTemplateFile` lalu langsung `importBranchCodeFile(file, "preview")`. N dari header; tombol disembunyikan bila N = 0.
+
+- [ ] **Step 1: Tes gagal:**
+  - Unit `TestSuggestBranchCode`:
+    - `ODOO-PADDY-PUDAK` → `PADDY-PUDAK`, `odoo-ppga` → `PPGA`;
+    - `PD-KOPO` → `""`, `ODOO-` → `""` (sisa kosong/pola salah tidak disarankan).
+  - Integrasi `TestBranchCodeTemplateSuggestion`:
+    - template `saran=hapus-odoo` → baris `ODOO-…` berisi Kode Baru tanpa awalan, baris lain kosong, header count benar;
+    - unggah file itu apa adanya → preview tanpa error; commit → kode berganti, nama tetap, penempatan/absensi tetap di branch id yang sama;
+    - `saran=x` → 400.
+  - Vitest `branch-code-dialog.test.tsx`: tombol "Hapus awalan ODOO- (2 toko)" memanggil preview dengan file hasil fetch dan menampilkan tabel pratinjau.
+  - Vitest halaman Struktur Bisnis: tombol "Kode & Status Toko (massal)" tampil bila user punya akses menu Penempatan, dan tidak tampil bila tidak.
+- [ ] **Step 2:** `go test ./internal/modules/hris/... -run 'SuggestBranchCode|BranchCodeTemplateSuggestion' -count=1` dan vitest kedua berkas → FAIL.
+- [ ] **Step 3:** Implementasikan:
+  - saran memakai pola dan aturan unik EPIC-100 R6; saran yang bentrok tetap ditulis, dan pratinjau menolaknya per baris;
+  - tombol di Struktur Bisnis memakai komponen `BranchCodeDialog` yang sama dan cek akses menu yang sudah dipakai halaman itu/aplikasi.
+- [ ] **Step 4:** PASS. Tes `BranchCode` yang sudah ada tetap PASS.
+- [ ] **Step 5: Commit** `feat(hris): kode toko massal tanpa ketik ulang — saran hapus ODOO- (EPIC-107)`
 
 ### Task 1: Keputusan sinkron akun (domain)
 
