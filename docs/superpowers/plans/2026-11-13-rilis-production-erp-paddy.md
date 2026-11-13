@@ -1,6 +1,6 @@
 # Rencana Rilis Production Pertama dari erp-paddy
 
-**Status:** Fase 0 dan gladi rilis penuh 0.8 selesai 13-11 (lihat Log Fase 0 dan 0.8). Keputusan user sudah masuk; Fase 1 menunggu keputusan soal logout massal dan izin jam rilis. Setiap fase butuh izin eksplisit user.
+**Status:** Fase 0, gladi 0.8, dan perbaikan cookie (erp-paddy #4, c4c3c8a, gladi ulang lulus) selesai 13-11. Fase 1 menunggu izin user untuk jam rilis. Setiap fase butuh izin eksplisit user.
 **Dibuat:** 13-11-2026, atas permintaan user ("rencana rilis production").
 
 ## Tujuan
@@ -134,7 +134,14 @@ Syarat tambahan dari user: "rilis production harus QA dulu, jangan sampai tidak 
   - Perbaikan ada di PR wit-id-indonesia/erp-paddy#4 (`fix/cookie-sesi-lama`, 374e149): Go dan Next membaca `erp_session`, lalu `nuhabit_session`, lalu `arkiv_session`. Logout menghapus sesi dari ketiga nama cookie. Cookie stall lama juga tetap dibaca.
   - Bukti: tes gagal lebih dulu, lalu lulus. Gerbang lokal: Go 140 paket ok, vitest 6.675 lulus, tsc dan eslint 0. CI GitHub hijau. Review independen tidak menemukan temuan material.
   - Minor yang ditunda: komentar `setSessionCookie` dan route active-stall masih menyebut cookie lama dihapus saat login; `signOut` di `pg/create-client.ts` hanya menghapus token pertama (fungsi itu tidak dipakai).
-  - Sisa langkah: merge ke `development` (staging otomatis ter-deploy), gladi ulang commit baru dengan cookie `nuhabit_session` dari salinan production, lalu PR #3 otomatis ikut membawa perbaikan ini.
+  - 13-11 ±13.35 WIB: user mengizinkan merge ("Ya, merge"). Squash ke `development` sebagai **c4c3c8a**. Staging ter-deploy otomatis dengan image `local-20261113-135008` dan sehat. PR #3 sekarang ber-head c4c3c8a dengan CI hijau.
+  - **Gladi ulang (14.00 WIB)** di salinan production 08.33, dengan urutan seperti malam rilis:
+    1. Versi production lama berjalan, dan sesi `nuhabit_session` milik super admin, HR, dan karyawan dibuat. `/api/auth/me` 200.
+    2. Migrasi memakai image c4c3c8a: 38 migrasi dalam 1 detik, verify 0 selisih. Container diganti ke image baru.
+    3. **Cookie yang sama tetap login:** `/api/auth/me` 200 dan dashboard 200 untuk ketiga peran.
+    4. Logout dengan cookie lama: ketiga cookie di-expire, sesi di DB terhapus, lalu `/me` 401.
+    5. Crawl penuh dengan cookie lama: super admin 432, HR 430, karyawan 429, publik 67 halaman. 0 halaman terlempar ke login, **0 regresi** dibanding baseline production lama, dan log API tanpa error. Satu-satunya temuan tetap CRM Partners, yang sudah ada di production sekarang.
+  - Gerbang go/no-go baris 1 dan 2 terpenuhi untuk c4c3c8a.
 - **Kunci penyimpanan browser POS berganti nama** (`arkiv-pos-db` menjadi `erp-pos-db`, begitu juga setelan printer). Production punya 0 order POS, jadi tidak ada antrean offline yang hilang; setelan printer struk hanya perlu diisi ulang bila nanti POS dipakai.
 
 ## Risiko utama
