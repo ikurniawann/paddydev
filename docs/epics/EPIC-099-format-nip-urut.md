@@ -1,6 +1,6 @@
 # EPIC-099: Format NIP YYYYMM + Nomor Urut (`MODULE-HRIS`)
 
-status: review
+status: ready-for-qa
 environment: dev
 retries: 0
 
@@ -78,3 +78,4 @@ Lihat `docs/superpowers/plans/2026-11-10-format-nip-urut.md`.
   - Diterima: `202611677` (probation), DW `202611096`, PUT phone saja.
   - Pratinjau impor: nomor 678 dua kali → error baris 3; `202611650` → error.
   - Data dan sesi uji sudah dihapus.
+- 2026-11-13: Registry dirapikan, status review → ready-for-qa. Kode sudah ada di erp-paddy `development` (impor monorepo e815cee) dan jalan di staging (image `local-20261112-234046`). Sisa: QA UI oleh HR, lalu rilis production dengan izin user.

@@ -1,6 +1,6 @@
 # EPIC-098: Impor Karyawan Excel Ditolak karena NIP Atasan (`MODULE-HRIS`)
 
-status: review
+status: ready-for-qa
 environment: dev
 retries: 0
 
@@ -57,3 +57,4 @@ Lihat `docs/superpowers/plans/2026-11-10-impor-karyawan-nip-atasan.md`.
     - B3: pesan "sudah dipakai Naisya Septya Wardhani (nonaktif) — … pakai mode Timpa".
     - Data dan sesi uji sudah dihapus.
   - Deploy staging pertama gagal karena cache build Docker modul Go rusak (excelize `lib.go`), kemungkinan sisa disk penuh 09-11. Build `--no-cache` berhasil dan deploy ulang lancar.
+- 2026-11-13: Registry dirapikan, status review → ready-for-qa. Kode sudah ada di erp-paddy `development` (impor monorepo e815cee) dan jalan di staging (image `local-20261112-234046`). Sisa: QA UI oleh HR, lalu rilis production dengan izin user.

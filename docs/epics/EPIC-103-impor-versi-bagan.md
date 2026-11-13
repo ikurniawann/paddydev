@@ -1,6 +1,6 @@
 # EPIC-103: Impor Versi Bagan dari Template Excel — Fase 2b (`MODULE-HRIS`)
 
-status: review
+status: ready-for-qa
 environment: dev
 retries: 0
 
@@ -118,3 +118,4 @@ Rencana: `docs/superpowers/plans/2026-11-11-impor-versi-bagan.md`.
     - Playwright desktop + HP 14/14 lulus, tanpa scroll horizontal. Bukti di `.share/qa-epic103/`.
   - Setelah QA: Draft 6 kembali `draft`; versi, role, user, dan sesi QA dihapus. Baris audit QA tetap ada (append-only).
   - Prod: belum, perlu izin user (bersama EPIC-102, PR #97).
+- 2026-11-13: Registry dirapikan, status review → ready-for-qa. Kode sudah ada di erp-paddy `development` (impor monorepo e815cee) dan jalan di staging (image `local-20261112-234046`). Sisa: QA UI oleh HR, lalu rilis production dengan izin user.

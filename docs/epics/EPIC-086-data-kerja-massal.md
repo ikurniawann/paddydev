@@ -1,6 +1,6 @@
 # EPIC-086: Pengisian Massal Data Kerja Karyawan (Jadwal, Shift, Penempatan) via Template Excel (`MODULE-HRIS`)
 
-status: review
+status: ready-for-qa
 environment: dev
 retries: 0
 
@@ -166,3 +166,4 @@ Rencana: `docs/superpowers/plans/2026-11-03-data-kerja-massal.md`.
     - `/login` dan `/api/ready` 200.
   - Runner: `~/Desktop/paddydev-backups/prod084/run.sh`.
   - EPIC-086: alat ops sudah ada di main. Langkah apply di production tetap menunggu file HR, pratinjau, dan izin tertulis user + HR.
+- 2026-11-13: Registry dirapikan, status review → ready-for-qa. Alat ops sudah live di production sejak 03-11; yang tersisa hanya `apply` data, menunggu file HR, pratinjau, dan izin tertulis user + HR.

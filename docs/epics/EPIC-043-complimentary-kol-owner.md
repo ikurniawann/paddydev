@@ -1,5 +1,7 @@
 # EPIC-043 — Complimentary Orders (KOL & Owner)
 
+status: ready-for-qa
+
 **Status:** Fase 1+2 selesai (2026-08-24)
 **Keputusan owner:** 2026-08-23 — transaksi gratis harus tetap tercatat penuh,
 teridentifikasi jenisnya, dan ada jejak siapa yang menyetujui.

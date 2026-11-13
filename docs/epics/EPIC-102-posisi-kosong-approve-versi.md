@@ -1,6 +1,6 @@
 # EPIC-102: Posisi Kosong & Persetujuan Versi Bagan — Fase 2a (`MODULE-HRIS`)
 
-status: review
+status: ready-for-qa
 environment: dev
 retries: 0
 
@@ -91,3 +91,4 @@ Rencana: `docs/superpowers/plans/2026-11-10-posisi-kosong-approve-versi.md`.
     - Staging 11.53: backup `staging-before-e102b-20261111-115350.dump`, image `local-20261111-115358`. Grant Struktur Org: super_admin, admin, hrd, admin_hris, hris_manager memegang approve; hris_non_payroll dan hris_non_rekrutmen_kpi hanya read. Draft 6 tetap draft.
     - `TestIAMGuards` gagal di salinan prod karena `gym.packages` sudah dihapus di data prod. Juga gagal tanpa EPIC-102, jadi tidak terkait.
   - Prod: belum, perlu izin user.
+- 2026-11-13: Registry dirapikan, status review → ready-for-qa. Kode sudah ada di erp-paddy `development` (impor monorepo e815cee) dan jalan di staging (image `local-20261112-234046`). Sisa: QA UI oleh HR, lalu rilis production dengan izin user.
