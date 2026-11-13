@@ -1,6 +1,6 @@
 # Rencana Rilis Production Pertama dari erp-paddy
 
-**Status:** Fase 0, gladi 0.8, dan perbaikan cookie (erp-paddy #4, c4c3c8a, gladi ulang lulus) selesai 13-11. Fase 1 menunggu izin user untuk jam rilis. Setiap fase butuh izin eksplisit user.
+**Status:** Fase 0, gladi 0.8, dan perbaikan cookie (erp-paddy #4, c4c3c8a, gladi ulang lulus) selesai 13-11. Fase 1 menunggu izin user untuk jam rilis. **Update 13-11 17.45:** `development` sekarang memuat EPIC-108 Plan 1 (#5 16429d8, #6 c2c96dc), dan user meminta batas lembur 32 jam (EPIC-109, rencana `2026-11-13-batas-lembur-32-jam.md`) masuk sebelum rilis. Gladi c4c3c8a tidak berlaku lagi, jadi gladi 0.8 diulang untuk head final setelah EPIC-109 di-merge. Setiap fase butuh izin eksplisit user.
 **Dibuat:** 13-11-2026, atas permintaan user ("rencana rilis production").
 
 ## Tujuan
@@ -43,6 +43,7 @@ Ada 32 migrasi yang ada di erp-paddy dan tidak ada di paddydev main (`2026110809
 - [ ] Backup DB production dan folder source lama sudah dibuat dan bisa dibaca (`pg_restore -l` berhasil).
 - [ ] Image build di VPS sukses. Build terjadi sebelum container diganti, jadi kalau gagal production tetap jalan.
 - [ ] Ada izin eksplisit user untuk jam rilis tersebut.
+- [ ] EPIC-109 (batas lembur 32 jam) sudah ada di `development` dan lolos QA staging, atau user memutuskan menundanya.
 
 1. Cek tulis terakhir di production (tidak ada proses payroll atau impor yang sedang berjalan).
 2. Backup DB production (`pg_dump -Fc` ke `~/backups/prod-db-before-erp-paddy-<stamp>.dump`) dan salin folder source lama (`~/paddydev-src.before-erp-paddy-<stamp>`).
