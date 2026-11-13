@@ -130,6 +130,11 @@ Syarat tambahan dari user: "rilis production harus QA dulu, jangan sampai tidak 
   - Nama cookie sesi berganti dari `nuhabit_session` (production lama) menjadi `erp_session`, dan kode baru tidak lagi membaca cookie lama. Kode lama punya cadangan untuk `arkiv_session`; cadangan itu hilang saat rename.
   - Di salinan production ada **584 sesi aktif milik 280 user**, dan absensi 7 hari terakhir 1.363. Setelah rilis semuanya harus login ulang, dan yang lupa password tidak bisa absen.
   - Usulan perbaikan: kode baru membaca `erp_session`, lalu `nuhabit_session`, lalu `arkiv_session`; logout menghapus ketiganya. Perubahannya kecil (Go `platform/auth`, `identity`; Next `lib/auth`, route logout) dan disertai tes. Jalurnya PR ke `development`, staging, lalu gladi ulang.
+- **Keputusan user (13-11): "jangan sampe logout massal pakai cookies lama".**
+  - Perbaikan ada di PR wit-id-indonesia/erp-paddy#4 (`fix/cookie-sesi-lama`, 374e149): Go dan Next membaca `erp_session`, lalu `nuhabit_session`, lalu `arkiv_session`. Logout menghapus sesi dari ketiga nama cookie. Cookie stall lama juga tetap dibaca.
+  - Bukti: tes gagal lebih dulu, lalu lulus. Gerbang lokal: Go 140 paket ok, vitest 6.675 lulus, tsc dan eslint 0. CI GitHub hijau. Review independen tidak menemukan temuan material.
+  - Minor yang ditunda: komentar `setSessionCookie` dan route active-stall masih menyebut cookie lama dihapus saat login; `signOut` di `pg/create-client.ts` hanya menghapus token pertama (fungsi itu tidak dipakai).
+  - Sisa langkah: merge ke `development` (staging otomatis ter-deploy), gladi ulang commit baru dengan cookie `nuhabit_session` dari salinan production, lalu PR #3 otomatis ikut membawa perbaikan ini.
 - **Kunci penyimpanan browser POS berganti nama** (`arkiv-pos-db` menjadi `erp-pos-db`, begitu juga setelan printer). Production punya 0 order POS, jadi tidak ada antrean offline yang hilang; setelan printer struk hanya perlu diisi ulang bila nanti POS dipakai.
 
 ## Risiko utama
