@@ -1,6 +1,6 @@
 # EPIC-109: Batas Lembur 32 Jam per Periode (`MODULE-HRIS`)
 
-status: backlog
+status: review
 environment: dev
 retries: 0
 
@@ -36,3 +36,7 @@ Rencana: `docs/superpowers/plans/2026-11-13-batas-lembur-32-jam.md`.
 ## Automation Log
 - 13-11-2026: rencana ditulis. Data live dicek read-only (prod cutoff 21; 1 karyawan > 32 jam di periode 22 Okt – 21 Nov). Menunggu persetujuan rencana dan K-1.
 - 13-11-2026: user memilih K-1 = A ("A: tetap bisa approve"): pengajuan pending lama tetap bisa di-approve; batas 32 untuk pengajuan baru dan koreksi yang menambah jam.
+- 13-11-2026: diimplementasikan (eksekusi native) di erp-paddy branch `feat/lembur-batas-32-jam`, PR wit-id-indonesia/erp-paddy#7 (fffc4d5 backend, 69baa11 UI). Test baru RED→GREEN. Gerbang lokal: gofmt 0, vet ok, `go test ./...` 141 ok, vitest 6.699 passed, tsc 0, eslint 0. Review independen (opus): Critical 0, Important 0.
+  - Ruling: test approve K-1 memakai baris `source='employee'`, karena penugasan `company` hanya bisa dikonfirmasi karyawannya sendiri (403).
+  - Minor ditunda: koreksi HR pindah tanggal tetap dicek batas walau jam turun (perilaku lama; perhatikan saat QA HR); test memakai cutoff 0; urutan pesan minggu→periode tidak dipin test gabungan; fallback Next tidak menegakkan 18/32.
+  - Berikutnya: merge PR #7 (izin user) → deploy staging otomatis → QA HR → gladi ulang head final → Fase 1.
