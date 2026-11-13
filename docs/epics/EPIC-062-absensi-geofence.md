@@ -176,3 +176,9 @@ Rekomendasi di bawah dipakai sebagai ruling rencana (R1–R11). **User perlu men
   - Audit menyimpan daftar id dan tidak ditulis bila jumlahnya 0.
 
   Gladi ulang di salinan prod: 45 catatan, audit 1 baris berisi 45 id, jalankan ulang 0.
+
+- 2026-11-09 22.06 WIB: **Lokasi tidak akurat LIVE di production** atas izin user, terpisah dari PR #89 (keputusan user: dua deploy, karena #89 belum diuji di staging dan rollback #90 harus bisa berdiri sendiri).
+  - **Deploy:** image `local-20261109-220009` = main `f4fd3ce9` (PR #90). Build 408 detik, production tidak bisa diakses ±5,4 detik (3 sampel 502). Migrasi `20261114090000` tercatat. Kedua container sehat, `/api/ready` dan `/login` 200, log API tanpa panic. Setelan sisa cuti bawaan dan PPh21/BPJS tetap mati.
+  - **Backup dan rollback:** `~/backups/prod-db-before-geofence-imprecise-20261109-220000.dump` (diambil sebelum migrasi, 452 TABLE DATA). Rollback ke image `local-20261109-130944` + `~/paddydev-src.before-geofence-imprecise-20261109-220000`.
+  - **Relabel data lama (22.09):** pratinjau segar 49 catatan (24 masuk, 25 pulang). Selisih 4 dari gladi berasal dari clock-out 09-11 setelah salinan diambil; semuanya akurasi ±2000 m. Dijalankan dengan `-v expected=49`, 6 karyawan, 1 baris audit `data_fix.geofence_imprecise` berisi 49 id. Log `~/backups/relabel-geofence-imprecise-20261109.log`.
+  - **Sisa:** QA HR dengan akun asli (popup dan panduan Lokasi Akurat di HP Android dan iPhone, label amber di Absensi Tim/Monitoring). Commit tata letak `9d097d32` belum dicoba di staging karena disk host penuh.
