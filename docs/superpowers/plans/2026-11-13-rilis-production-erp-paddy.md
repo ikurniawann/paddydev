@@ -1,6 +1,6 @@
 # Rencana Rilis Production Pertama dari erp-paddy
 
-**Status:** Fase 0, gladi 0.8, dan perbaikan cookie (erp-paddy #4, c4c3c8a, gladi ulang lulus) selesai 13-11. Fase 1 menunggu izin user untuk jam rilis. **Update 13-11 17.45:** `development` sekarang memuat EPIC-108 Plan 1 (#5 16429d8, #6 c2c96dc), dan user meminta batas lembur 32 jam (EPIC-109, rencana `2026-11-13-batas-lembur-32-jam.md`) masuk sebelum rilis. Gladi c4c3c8a tidak berlaku lagi, jadi gladi 0.8 diulang untuk head final setelah EPIC-109 di-merge. Setiap fase butuh izin eksplisit user.
+**Status:** Fase 0, gladi 0.8, dan perbaikan cookie (erp-paddy #4, c4c3c8a, gladi ulang lulus) selesai 13-11. Fase 1 menunggu izin user untuk jam rilis. **Update 13-11 17.45:** `development` sekarang memuat EPIC-108 Plan 1 (#5 16429d8, #6 c2c96dc), dan user meminta batas lembur 32 jam (EPIC-109, rencana `2026-11-13-batas-lembur-32-jam.md`) masuk sebelum rilis. Gladi c4c3c8a tidak berlaku lagi, jadi gladi 0.8 diulang untuk head final setelah EPIC-109 di-merge. **18.35:** EPIC-109 di-merge sebagai 38d9683 (head PR #3 sekarang 38d9683) dan sudah ter-deploy di staging; gladi ulang dijalankan untuk 38d9683. Setiap fase butuh izin eksplisit user.
 **Dibuat:** 13-11-2026, atas permintaan user ("rencana rilis production").
 
 ## Tujuan
