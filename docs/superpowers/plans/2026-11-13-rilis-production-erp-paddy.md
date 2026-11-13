@@ -1,6 +1,6 @@
 # Rencana Rilis Production Pertama dari erp-paddy
 
-**Status:** Fase 0, gladi 0.8, dan perbaikan cookie (erp-paddy #4, c4c3c8a, gladi ulang lulus) selesai 13-11. Fase 1 menunggu izin user untuk jam rilis. **Update 13-11 17.45:** `development` sekarang memuat EPIC-108 Plan 1 (#5 16429d8, #6 c2c96dc), dan user meminta batas lembur 32 jam (EPIC-109, rencana `2026-11-13-batas-lembur-32-jam.md`) masuk sebelum rilis. Gladi c4c3c8a tidak berlaku lagi, jadi gladi 0.8 diulang untuk head final setelah EPIC-109 di-merge. **18.35:** EPIC-109 di-merge sebagai 38d9683 (head PR #3 sekarang 38d9683) dan sudah ter-deploy di staging; gladi ulang dijalankan untuk 38d9683. Setiap fase butuh izin eksplisit user.
+**Status:** Fase 0, gladi 0.8, dan perbaikan cookie (erp-paddy #4, c4c3c8a, gladi ulang lulus) selesai 13-11. Fase 1 menunggu izin user untuk jam rilis. **Update 13-11 17.45:** `development` sekarang memuat EPIC-108 Plan 1 (#5 16429d8, #6 c2c96dc), dan user meminta batas lembur 32 jam (EPIC-109, rencana `2026-11-13-batas-lembur-32-jam.md`) masuk sebelum rilis. Gladi c4c3c8a tidak berlaku lagi, jadi gladi 0.8 diulang untuk head final setelah EPIC-109 di-merge. **18.35:** EPIC-109 di-merge sebagai 38d9683 (head PR #3 sekarang 38d9683) dan sudah ter-deploy di staging; gladi ulang ke-2 untuk 38d9683 **lulus** (lihat 0.8). Setiap fase butuh izin eksplisit user.
 **Dibuat:** 13-11-2026, atas permintaan user ("rencana rilis production").
 
 ## Tujuan
@@ -143,6 +143,16 @@ Syarat tambahan dari user: "rilis production harus QA dulu, jangan sampai tidak 
     4. Logout dengan cookie lama: ketiga cookie di-expire, sesi di DB terhapus, lalu `/me` 401.
     5. Crawl penuh dengan cookie lama: super admin 432, HR 430, karyawan 429, publik 67 halaman. 0 halaman terlempar ke login, **0 regresi** dibanding baseline production lama, dan log API tanpa error. Satu-satunya temuan tetap CRM Partners, yang sudah ada di production sekarang.
   - Gerbang go/no-go baris 1 dan 2 terpenuhi untuk c4c3c8a.
+- **Gladi ulang ke-2 untuk 38d9683** (13-11 ±18.55–19.40 WIB, izin user "Ya, jalankan gladi"). Head ini memuat EPIC-108 Plan 1 (#5, #6) dan EPIC-109 batas lembur 32 jam (#7). Image yang dipakai adalah image staging `local-20261113-183310`. Lingkungan sama dengan sebelumnya: jaringan `--internal` (egress diuji tertutup), DB tmpfs dari salinan prod 08.33, tanpa akun sementara.
+  1. Sesi `nuhabit_session` dibuat di app prod lama (4fcac55e): `/me` 200 untuk 3 role.
+  2. Migrasi dengan image 38d9683: **43 migrasi dalam 2 detik** (38 + 5 EPIC-108), verify 11.913 objek dengan 0 selisih. `/`, `/login`, `/api/health`, `/api/ready` semuanya 200.
+  3. Cookie lama setelah rilis: `/me` 200 untuk super admin, HR, dan karyawan (karyawan diarahkan ke `/dashboard/hris`, sama seperti sebelum rilis). Logout meng-expire 3 cookie, sesi di DB terhapus, lalu `/me` 401. Login dengan password salah 401.
+  4. Crawl penuh dengan cookie lama: super admin 432, HR 430, karyawan 429, publik 67 halaman. 0 terlempar ke login, **0 regresi** dibanding baseline, 0 respons 5xx publik, log API tanpa error. Temuan tetap hanya CRM Partners (sudah ada di prod). Halaman baru EPIC-108 `/dashboard/me/persetujuan-pr` 200 tanpa error untuk 3 role.
+  5. EPIC-108 di data prod: workflow `PR default` ter-seed dan aktif; prod punya 0 PR, jadi tidak ada data lama yang dikonversi.
+  6. EPIC-109 di data prod: periode berjalan menurut sistem adalah **21 Okt – 21 Nov** (mengikuti periode lalu yang sudah closing). Satu karyawan sudah 41,25 jam (angka 37,75 di EPIC-109 dihitung dari 22 Okt). Pengajuan barunya ditolak dengan pesan "Lembur periode 21 Okt – 21 Nov 2026 sudah 41,25 jam; maksimal 32 jam per periode (sisa 0 jam)". Pengajuan pending lamanya tetap bisa di-approve HR (200, K-1 = A).
+  7. Rollback (image lama 4fcac55e di skema baru 43 migrasi): sesi 3 role tetap 200; crawl HR 430 dan super admin 431 dengan **0 regresi**; log API tanpa error. Catatan: app lama tidak mengenal kolom/status PR EPIC-108, jadi selama rollback jangan membuat PR baru. Prod saat ini punya 0 PR.
+  8. Lingkungan dibongkar (container, jaringan, token, password DB dihapus).
+  - **Gerbang go/no-go baris 1 dan 2 terpenuhi untuk 38d9683.** Merge baru ke `development` sebelum Fase 1 berarti gladi diulang lagi.
 - **Kunci penyimpanan browser POS berganti nama** (`arkiv-pos-db` menjadi `erp-pos-db`, begitu juga setelan printer). Production punya 0 order POS, jadi tidak ada antrean offline yang hilang; setelan printer struk hanya perlu diisi ulang bila nanti POS dipakai.
 
 ## Risiko utama
