@@ -1,6 +1,6 @@
 # Rencana Rilis Production Pertama dari erp-paddy
 
-**Status:** Fase 0 dijalankan 13-11 (lihat Log Fase 0); Fase 1 dan 2 belum. Setiap fase butuh izin eksplisit user.
+**Status:** Fase 0 dan gladi rilis penuh 0.8 selesai 13-11 (lihat Log Fase 0 dan 0.8). Keputusan user sudah masuk; Fase 1 menunggu keputusan soal logout massal dan izin jam rilis. Setiap fase butuh izin eksplisit user.
 **Dibuat:** 13-11-2026, atas permintaan user ("rencana rilis production").
 
 ## Tujuan
@@ -37,14 +37,21 @@ Ada 32 migrasi yang ada di erp-paddy dan tidak ada di paddydev main (`2026110809
 
 ## Fase 1 — Rilis kode (izin user, jam sepi)
 
+**Gerbang go/no-go (semua wajib ya, kalau tidak, rilis ditunda):**
+- [ ] Gladi 0.8 lulus untuk **commit yang persis akan dirilis**. Kalau ada commit baru (mis. perbaikan cookie), gladi diulang.
+- [ ] Keputusan soal logout massal sudah diambil: diperbaiki dulu, atau diterima dan HR mengumumkan "login ulang" sebelum jam kerja.
+- [ ] Backup DB production dan folder source lama sudah dibuat dan bisa dibaca (`pg_restore -l` berhasil).
+- [ ] Image build di VPS sukses. Build terjadi sebelum container diganti, jadi kalau gagal production tetap jalan.
+- [ ] Ada izin eksplisit user untuk jam rilis tersebut.
+
 1. Cek tulis terakhir di production (tidak ada proses payroll atau impor yang sedang berjalan).
 2. Backup DB production (`pg_dump -Fc` ke `~/backups/prod-db-before-erp-paddy-<stamp>.dump`) dan salin folder source lama (`~/paddydev-src.before-erp-paddy-<stamp>`).
 3. Merge PR `development` → `production`, lalu deploy sesuai jalur 0.3. `deploy-paddydev.sh` membangun image, menjalankan migrasi sebelum container baru, cek kesehatan, dan otomatis kembali ke image lama kalau gagal.
-4. **Smoke test:** `/`, `/login`, `/api/health`, `/api/ready` 200, dan 0 error API di log 10 menit pertama. Log job latar menunjukkan `hris pindah toko terjadwal` dan resign terjadwal berjalan tanpa error.
+4. **Smoke test:** `/`, `/login`, `/api/health`, `/api/ready` 200, dan 0 error API di log 10 menit pertama. Crawler publik (tanpa login, tanpa akun sementara) dijalankan ke 67 halaman publik production: target 0 respons 5xx. Halaman dashboard dicek HR dengan akun asli: login, Data Karyawan, Absensi, Payroll, Kode & Status Toko. Log job latar menunjukkan `hris pindah toko terjadwal` dan resign terjadwal berjalan tanpa error.
 5. **Cek baca-saja setelah rilis:** kode `ERP` dan `ERP-BANDUNG` ada, `MIZU` tidak ada; jumlah karyawan, gaji aktif, dan payroll run sama dengan sebelum rilis; 49 kode `ODOO-` masih utuh (belum diubah).
 
 **Rollback:**
-- Kalau masalahnya hanya di aplikasi, jalankan image lama dan folder source lama.
+- Kalau masalahnya hanya di aplikasi, jalankan image lama dan folder source lama. `deploy-paddydev.sh` melakukannya otomatis bila health check gagal, dan migrasi tidak dibatalkan. Gladi 0.8 menguji image lama di atas skema baru (sesudah EPIC-106): hasilnya dicatat di bawah.
 - Kalau migrasi data harus dibatalkan (mis. rename MIZU → ERP), restore dari backup langkah 2. Tulisan yang masuk setelah backup akan hilang, jadi keputusan rollback diambil dalam 30 menit pertama.
 
 ## Fase 2 — Operasi data (setiap butir izin terpisah, setelah Fase 1 stabil minimal 1 hari)
@@ -88,12 +95,42 @@ Production tidak diubah: hanya `docker ps`/`inspect`, `SELECT` dalam `BEGIN READ
   - Karena gaji yang pindah 0, BLOKIR `payroll_belum_dibayar` tidak muncul. Artinya 2a **tidak harus menunggu** payroll November dibayar, asal draft November dihitung ulang sesudahnya.
   - **Urutan wajib:** 2a sebelum 2b. Skrip EPIC-106 mencari `ODOO-PADDY-PUDAK`/`ODOO-PADDY-SALAM`. Kalau 2b lebih dulu, skrip butuh `struktur.cabang_pindah=PADDY-PUDAK,PADDY-SALAM`.
 
-**Keputusan yang dibutuhkan sebelum Fase 1:**
-1. Jalur deploy: SSH manual (usulan) atau mengisi secret GitHub.
-2. Keputusan R16 untuk production: outlet Febri dan Adrian dipindah ke Gudang 1 HQ, sama seperti staging.
-3. EPIC-105 R3: GRN ke gudang di toko nonaktif ditolak (GRN production masih 0).
-4. Waktu 2a: segera setelah Fase 1 lalu draft November dihitung ulang (usulan), atau setelah payroll November dibayar.
-5. Sign-off QA HR (0.6) dan tim WIT (0.7).
+**Keputusan user (13-11-2026 ±11.30 WIB):**
+1. Jalur deploy: **SSH** (rsync source erp-paddy ke `~/paddydev-src`, lalu `tools/deploy-paddydev.sh` di VPS). Secret GitHub tidak diisi.
+2. R16 production: outlet Febri Ayu Astiani dan Adrianus Adrian Chandra dipindah ke **Gudang 1 HQ (kantor pusat)**, sama seperti staging.
+3. EPIC-105 R3: **disetujui**. GRN ke gudang yang tokonya nonaktif ditolak.
+4. Waktu 2a: **segera** setelah Fase 1 stabil, lalu draft payroll ERP November dihitung ulang.
+5. Sign-off: **disetujui** untuk fitur HRIS dan fitur tim WIT (produksi, sales order, distribusi).
+
+Syarat tambahan dari user: "rilis production harus QA dulu, jangan sampai tidak bisa diakses dan error atau terjadi bug". Ini dijawab dengan gladi rilis penuh 0.8 dan gerbang go/no-go di Fase 1.
+
+## 0.8 Gladi rilis penuh (13-11-2026, lokal, production tidak diubah)
+
+**Cara:**
+- Image kandidat rilis adalah image staging `local-20261112-234046`, yang dibangun dari erp-paddy `8631e8f`, sama dengan head PR #3.
+- Image itu dijalankan di atas salinan production 08.33 dalam jaringan Docker `--internal`. Container tidak punya akses internet (sudah dicek), sehingga tidak ada WA, email, atau push yang terkirim ke karyawan.
+- Pembanding (baseline) memakai image production lama (paddydev `4fcac55e`, di-build lokal) di salinan yang belum dimigrasi.
+- Crawler Chromium membuka setiap halaman, lalu mencatat status, error JavaScript, respons 5xx/4xx, dan teks error.
+
+| Uji | Hasil |
+|---|---|
+| Migrasi seperti `deploy-paddydev.sh` (`migrate -apply`, `-verify` dari image) | 38 migrasi dalam **5 detik**; verify 11.832 objek, 0 selisih |
+| Health (`/`, `/login`, `/api/health`, `/api/ready`, `api -healthcheck`) | Semua 200 |
+| Login sungguhan (salinan akun HR, password diganti di DB gladi) | Login 200 dan cookie `erp_session` terpasang; `/api/auth/me` 200; password salah 401 |
+| Crawl semua halaman: super admin 432, HR 430, karyawan 429, publik 67, ditambah 10 halaman detail HR dengan ID asli | Semua 200, **0 respons 5xx**. Satu halaman bermasalah: `/dashboard/crm/partners` (React #418 dan 403), tetapi **sudah sama di production sekarang** |
+| Dibandingkan dengan baseline production lama (414–416 halaman yang sama) | **0 regresi** dan 0 respons 4xx baru, untuk super admin, HR, dan karyawan |
+| EPIC-106 setelah R16 (skrip `r16-outlet-hq.sql` mencari Gudang 1 lewat kode cabang dan menolak bila orangnya bukan tepat 2) | Pratinjau 162 baris, 0 penghalang, INVARIAN OK. Eksekusi 162 baris; pratinjau ulang 0 |
+| Crawl ulang dashboard setelah EPIC-106 (HR 363, super admin 364) | 0 masalah baru; log API tanpa error |
+| 2b hapus `ODOO-` lewat API sebagai HR (template, pratinjau, commit) | Saran 49, pratinjau 49 kode, commit "49 toko diperbarui", sisa `ODOO-` 0 |
+| **Rollback**: image production lama di atas skema baru setelah EPIC-106 dan 2b (crawl HR 363, super admin 363) | 0 regresi dibanding baseline dan log API tanpa error, jadi rollback aplikasi aman tanpa membatalkan migrasi. Catatan: setelah rollback, pengguna yang sudah login di versi baru harus login ulang (cookie `erp_session` tidak dikenal versi lama) |
+| Env production (hanya nama variabel, dibaca lewat SSH) | Tidak ada env yang hilang. `MIZU_LEGACY_HOST_REDIRECTS` (dihapus di kode baru) tidak dipakai production. `XENDIT_MOCK` dan OTP demo tidak ada di production |
+
+**Temuan yang perlu keputusan sebelum Fase 1:**
+- **Semua pengguna ter-logout saat rilis.**
+  - Nama cookie sesi berganti dari `nuhabit_session` (production lama) menjadi `erp_session`, dan kode baru tidak lagi membaca cookie lama. Kode lama punya cadangan untuk `arkiv_session`; cadangan itu hilang saat rename.
+  - Di salinan production ada **584 sesi aktif milik 280 user**, dan absensi 7 hari terakhir 1.363. Setelah rilis semuanya harus login ulang, dan yang lupa password tidak bisa absen.
+  - Usulan perbaikan: kode baru membaca `erp_session`, lalu `nuhabit_session`, lalu `arkiv_session`; logout menghapus ketiganya. Perubahannya kecil (Go `platform/auth`, `identity`; Next `lib/auth`, route logout) dan disertai tes. Jalurnya PR ke `development`, staging, lalu gladi ulang.
+- **Kunci penyimpanan browser POS berganti nama** (`arkiv-pos-db` menjadi `erp-pos-db`, begitu juga setelan printer). Production punya 0 order POS, jadi tidak ada antrean offline yang hilang; setelan printer struk hanya perlu diisi ulang bila nanti POS dipakai.
 
 ## Risiko utama
 
@@ -104,3 +141,42 @@ Production tidak diubah: hanya `docker ps`/`inspect`, `SELECT` dalam `BEGIN READ
 | Rename MIZU → ERP mengubah tampilan kode di laporan/akun yang masih memakai kode lama | Cek 0.2; komunikasikan ke HR/finance sebelum rilis |
 | Fitur tim WIT belum siap untuk pengguna production | Sign-off 0.7; menu bisa disembunyikan lewat IAM kalau perlu |
 | EPIC-106 mengubah gaji di tengah periode payroll | Jadwal 2a setelah payroll November `paid`; skrip punya BLOKIR dan skrip balik |
+
+## Lampiran A: skrip R16 untuk production (dijalankan sesaat sebelum 2a, setelah backup)
+
+Sudah diuji di gladi 0.8. Skrip ini gagal (ROLLBACK) bila Gudang 1 HQ tidak ketemu atau orangnya bukan tepat 2.
+
+```sql
+BEGIN;
+DO $o$
+DECLARE
+  v_hq uuid;
+  r record;
+  n int := 0;
+BEGIN
+  SELECT w.id INTO STRICT v_hq FROM configuration.warehouses w JOIN configuration.branches b ON b.id = w.branch_id
+   WHERE b.code IN ('ERP-BANDUNG','MIZU-BANDUNG') AND w.name = 'Gudang 1' AND w.is_active;
+  FOR r IN SELECT u.id, u.full_name, u.default_warehouse_id,
+                  (SELECT jsonb_agg(jsonb_build_object('warehouse_id', uw.warehouse_id, 'is_active', uw.is_active)) FROM configuration.user_warehouses uw WHERE uw.user_id = u.id) AS outlets
+           FROM configuration.users u WHERE u.full_name IN ('Febri Ayu Astiani', 'Adrianus Adrian Chandra')
+  LOOP
+    INSERT INTO configuration.user_warehouses (user_id, warehouse_id, is_active)
+    SELECT r.id, v_hq, true WHERE NOT EXISTS (SELECT 1 FROM configuration.user_warehouses WHERE user_id = r.id AND warehouse_id = v_hq);
+    UPDATE configuration.user_warehouses SET is_active = true, updated_at = now() WHERE user_id = r.id AND warehouse_id = v_hq AND NOT is_active;
+    UPDATE configuration.users SET default_warehouse_id = v_hq, updated_at = now() WHERE id = r.id;
+    UPDATE configuration.user_warehouses uw SET is_active = false, updated_at = now()
+    FROM configuration.warehouses w JOIN configuration.branches b ON b.id = w.branch_id
+    WHERE uw.user_id = r.id AND w.id = uw.warehouse_id AND b.code IN ('ODOO-PADDY-PUDAK', 'ODOO-PADDY-SALAM') AND uw.is_active;
+    INSERT INTO audit.audit_log (actor_id, actor_name, action, entity, entity_id, entity_label, before, after, reason)
+    VALUES (NULL, 'Ops (Claude Code atas persetujuan user)', 'user.outlet_update', 'configuration.users', r.id::text, r.full_name,
+            jsonb_build_object('default_warehouse_id', r.default_warehouse_id, 'outlets', r.outlets),
+            jsonb_build_object('default_warehouse_id', v_hq),
+            'EPIC-106 R16: outlet staf HQ dipindah dari toko Pudak/Salam ke Gudang 1 HQ (keputusan user 13-11-2026)');
+    n := n + 1;
+    RAISE NOTICE 'OUTLET % -> Gudang 1 HQ', r.full_name;
+  END LOOP;
+  IF n <> 2 THEN RAISE EXCEPTION 'R16: harus tepat 2 orang, ketemu %', n; END IF;
+END
+$o$;
+COMMIT;
+```
