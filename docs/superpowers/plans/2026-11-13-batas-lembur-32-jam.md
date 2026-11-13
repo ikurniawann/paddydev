@@ -21,9 +21,9 @@
 - Dokumen (epic, rencana, acuan) hanya ditaruh di repo paddydev, karena .gitignore erp-paddy menolak docs.
 - Production tidak diubah oleh rencana ini. Perubahan naik ke production lewat Fase 1 rencana rilis, setelah gladi ulang dan izin eksplisit user.
 
-## Keputusan terbuka
+## Keputusan
 
-**K-1: pengajuan pending yang sudah ada dan membuat total di atas 32.** Saat ini approve **tanpa** koreksi jam tidak mengecek batas sama sekali (`overtime.go:446`, hanya bila `correctedHours > 0`). Data live untuk periode 22 Okt – 21 Nov (read-only, 13-11 17.40 WIB):
+**K-1 (diputuskan user 13-11: A):** pengajuan pending yang sudah ada dan membuat total di atas 32.** Saat ini approve **tanpa** koreksi jam tidak mengecek batas sama sekali (`overtime.go:446`, hanya bila `correctedHours > 0`). Data live untuk periode 22 Okt – 21 Nov (read-only, 13-11 17.40 WIB):
 - prod: 1 karyawan, 37,75 jam, 8 baris **pending**;
 - staging: 1 karyawan, 36,25 jam.
 
@@ -31,7 +31,7 @@ Pilihan:
 - **A (rekomendasi): pengajuan yang sudah masuk tetap bisa di-approve.** Atasan/HR masih bisa menolak atau mengoreksi jamnya. Batas 32 berlaku untuk pengajuan baru dan koreksi yang menambah jam. Pilihan ini tidak menambah kode; Task 1 Step 6 mengunci perilakunya dengan test.
 - **B: approve tanpa koreksi juga dicek.** Hitungannya: total **approved** + jam baris itu ≤ 32 (dan ≤ 18 per minggu). Pending tidak ikut dihitung, supaya atasan bisa memilih baris mana yang di-approve. Ini dikerjakan di Task 3. Dampaknya di prod: dari 37,75 jam pending, atasan hanya bisa meng-approve sampai 32 jam.
 
-Rencana ini memakai **A** kecuali user memilih B. Kalau B, Task 3 dikerjakan dan test Step 6 di Task 1 dibalik.
+User memilih **A** (13-11-2026, "A: tetap bisa approve"). Task 3 tidak dikerjakan.
 
 ## Review Focus
 
@@ -176,7 +176,7 @@ git add apps/frontend/src/lib/hris/overtime-rules.ts apps/frontend/src/lib/hris/
 git commit -m "feat(hris-ui): hint batas lembur 32 jam/periode (EPIC-109)"
 ```
 
-### Task 3: (hanya bila K-1 = B) Approve tanpa koreksi ikut dicek
+### Task 3: (TIDAK DIKERJAKAN — K-1 = A) Approve tanpa koreksi ikut dicek
 
 **Files:**
 - Modify: `apps/backend/internal/modules/hris/overtime.go:446-454`, `overtime_tnc.go`, repository lembur (lokasi `OvertimeHoursUsed`)
