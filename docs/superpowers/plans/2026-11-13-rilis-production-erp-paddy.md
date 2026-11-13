@@ -1,6 +1,6 @@
 # Rencana Rilis Production Pertama dari erp-paddy
 
-**Status:** rencana, belum ada yang dijalankan. Setiap fase butuh izin eksplisit user.
+**Status:** Fase 0 dijalankan 13-11 (lihat Log Fase 0); Fase 1 dan 2 belum. Setiap fase butuh izin eksplisit user.
 **Dibuat:** 13-11-2026, atas permintaan user ("rencana rilis production").
 
 ## Tujuan
@@ -51,7 +51,7 @@ Ada 32 migrasi yang ada di erp-paddy dan tidak ada di paddydev main (`2026110809
 
 | # | Operasi | Kapan | Catatan |
 |---|---|---|---|
-| 2a | **EPIC-106 struktur bisnis** (skrip `2026-11-12_struktur_bisnis_paddy_group.sql`: pratinjau, lalu eksekusi) | **Setelah payroll November dibayar** (status `paid`), sebelum draft Desember dibuat | BLOKIR `payroll_belum_dibayar` menahan eksekusi kalau payroll belum final memuat karyawan yang gajinya pindah. Keputusan untuk orang yang terblokir (seperti Febri/Adrian di staging) diambil dari gladi 0.5 |
+| 2a | **EPIC-106 struktur bisnis** (skrip `2026-11-12_struktur_bisnis_paddy_group.sql`: pratinjau, lalu eksekusi) | Setelah Fase 1 stabil. Gladi 13-11: gaji yang pindah 0, jadi payroll tidak menghalangi; draft November dihitung ulang sesudahnya (lihat Log Fase 0) | BLOKIR `payroll_belum_dibayar` menahan eksekusi kalau payroll belum final memuat karyawan yang gajinya pindah. Keputusan untuk orang yang terblokir (seperti Febri/Adrian di staging) diambil dari gladi 0.5 |
 | 2b | **EPIC-107 hapus awalan ODOO-** (49 toko) | Setelah 2a | Dijalankan oleh HR di UI: Kode & Status Toko → "Hapus awalan ODOO-" → periksa → Simpan. Setelah itu file Data Kerja/Jadwal diunduh ulang |
 | 2c | **EPIC-086 apply data kerja** | Saat file HR siap | Alur yang sama seperti sebelumnya: template → pratinjau → izin tertulis user + HR → apply |
 | 2d | **QA HR di production** dengan akun asli | Setelah 2a dan 2b | Tanpa akun atau sesi sementara di production |
@@ -61,6 +61,39 @@ Ada 32 migrasi yang ada di erp-paddy dan tidak ada di paddydev main (`2026110809
 - Automation Log setiap epic: waktu, image, backup, hasil smoke.
 - Registry: epic → `done` setelah QA HR di production lulus.
 - Memori proyek diperbarui; dokumen disinkron ke erp-paddy (`tools/sync-docs-erp-paddy.sh`).
+
+## Log Fase 0 (13-11-2026, izin user "sesuai jalan kan rencana")
+
+Production tidak diubah: hanya `docker ps`/`inspect`, `SELECT` dalam `BEGIN READ ONLY`, dan `pg_dump`. Gladi berjalan lokal.
+
+- **0.1 Kondisi production:**
+  - Image `local-20261109-221156` (paddydev main 4fcac55e), container sehat, disk 41% terpakai.
+  - 587 migrasi terpasang. **38 migrasi** dari erp-paddy belum jalan, dan tidak ada migrasi production yang hilang dari erp-paddy.
+  - Caddy me-mount `~/paddydev-src/tools/vps/Caddyfile`, dan isinya **identik** dengan erp-paddy, jadi `rsync --delete` aman untuk Caddy. Storage di volume `paddydev-storage`, tidak di folder source.
+  - **EPIC-081 sudah live:** migrasi `20261105090000` sudah terpasang sejak rilis 03-11.
+- **0.2 Data:**
+  - NIP ganda setelah trim: 0. Tabel bagan belum ada (dibuat oleh migrasi). Kode `ERP-BANDUNG` belum dipakai; `MIZU-BANDUNG` ada (akan di-rename).
+  - 49 kode `ODOO-`. Karyawan aktif 319, gaji aktif 266. `purchasing.grn` 0.
+  - Payroll: **MIZU 2026-11 `draft`**.
+- **0.3 Jalur deploy:** repo erp-paddy **tidak punya secret** (`VPS_SSH_KEY`, `VPS_KNOWN_HOSTS`), sehingga `deploy-vps.yml` belum bisa dipakai. Usulan: deploy lewat SSH seperti rilis 09-11 (rsync source erp-paddy ke `~/paddydev-src`, lalu `tools/deploy-paddydev.sh` di VPS), tanpa menyimpan kunci di GitHub.
+- **0.4:** PR wit-id-indonesia/erp-paddy#3 (`development` → `production`) dibuka, **tidak di-merge**.
+- **0.5 Gladi lokal** di salinan production `/mnt/hdd1/backup/paddydev/prod-copy-gladi-erp-paddy-20261113-083343.dump` (mode 600, berisi data pribadi). Salinan di-restore ke container uji lokal, dan DB gladi sudah dihapus setelah gladi.
+  - Migrasi: **38 diterapkan dalam 10 detik**, exit 0. `migrate -verify`: 11.832 objek, 0 hilang, 0 berbeda.
+  - Setelah migrasi: perusahaan `ERP` dan `PADDY-RETAIL`, `ERP-BANDUNG` ada, gaji aktif tetap 266.
+  - **EPIC-106 pratinjau:**
+    - 157 user dan 2 branch; gaji yang pindah **0**.
+    - **BLOKIR 2** (orang yang sama dengan staging): outlet Febri Ayu Astiani (Pudak) dan Adrianus Adrian Chandra (Salam).
+    - Simulasi keputusan R16 (a), outlet dipindah ke Gudang 1 HQ: **162 baris, 0 penghalang, semua INVARIAN OK**. Eksekusi lulus, jalan kedua 0 baris, dan pembalik mengembalikan 162 baris dari 1 snapshot.
+    - PERHATIAN: payroll draft ERP November punya 37 baris alokasi ke Pudak/Salam (perlu dihitung ulang), dan 6 karyawan gajinya berada di perusahaan lain dari penempatannya.
+  - Karena gaji yang pindah 0, BLOKIR `payroll_belum_dibayar` tidak muncul. Artinya 2a **tidak harus menunggu** payroll November dibayar, asal draft November dihitung ulang sesudahnya.
+  - **Urutan wajib:** 2a sebelum 2b. Skrip EPIC-106 mencari `ODOO-PADDY-PUDAK`/`ODOO-PADDY-SALAM`. Kalau 2b lebih dulu, skrip butuh `struktur.cabang_pindah=PADDY-PUDAK,PADDY-SALAM`.
+
+**Keputusan yang dibutuhkan sebelum Fase 1:**
+1. Jalur deploy: SSH manual (usulan) atau mengisi secret GitHub.
+2. Keputusan R16 untuk production: outlet Febri dan Adrian dipindah ke Gudang 1 HQ, sama seperti staging.
+3. EPIC-105 R3: GRN ke gudang di toko nonaktif ditolak (GRN production masih 0).
+4. Waktu 2a: segera setelah Fase 1 lalu draft November dihitung ulang (usulan), atau setelah payroll November dibayar.
+5. Sign-off QA HR (0.6) dan tim WIT (0.7).
 
 ## Risiko utama
 
