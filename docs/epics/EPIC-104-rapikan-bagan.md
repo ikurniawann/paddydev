@@ -1,6 +1,6 @@
 # EPIC-104: Rapikan Bagan Organisasi — Minor EPIC-102 & EPIC-103 (`MODULE-HRIS`)
 
-status: review
+status: ready-for-qa
 environment: dev
 retries: 0
 
@@ -62,3 +62,4 @@ Rencana: `docs/superpowers/plans/2026-11-11-rapikan-bagan.md`.
     - Playwright desktop + HP, akun hrd dan baca saja, 28/28 lulus: tombol mengikuti hak, filter "Tanpa region" berfungsi, tanpa scroll horizontal. Bukti di `.share/qa-epic104/`.
   - Data QA dihapus; Draft 6 tetap `draft`.
   - Prod: belum, perlu izin user (bersama EPIC-102/103).
+- 2026-11-13: Registry dirapikan, status review → ready-for-qa. Kode sudah ada di erp-paddy `development` (impor monorepo e815cee) dan jalan di staging (image `local-20261112-234046`). Sisa: QA UI oleh HR, lalu rilis production dengan izin user.

@@ -1,6 +1,6 @@
 # EPIC-100: Kode & Status Toko Massal lewat Template (`MODULE-HRIS`, `MODULE-CONFIGURATION`)
 
-status: review
+status: ready-for-qa
 environment: dev
 retries: 0
 
@@ -97,3 +97,4 @@ Lihat `docs/superpowers/plans/2026-11-10-kode-status-toko-massal.md`.
   - `ODOO-TWLK` → `TWLK`: 17 absen dan 3 penempatan tetap di toko yang sama;
   - hapus `ODOO-PPGA` di Settings ditolak;
   - semua perubahan dikembalikan (dibandingkan dengan diff: sama). 4 baris audit uji tetap ada karena `audit.audit_log` append-only. Sesi uji dihapus.
+- 2026-11-13: Registry dirapikan, status review → ready-for-qa. Kode sudah ada di erp-paddy `development` (impor monorepo e815cee) dan jalan di staging (image `local-20261112-234046`). Sisa: QA UI oleh HR, lalu rilis production dengan izin user.

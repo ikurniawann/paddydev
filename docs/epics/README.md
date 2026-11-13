@@ -47,14 +47,16 @@ deploying-dev · ready-for-qa · blocked · done).
 | [EPIC-030](./EPIC-030-arkiv-os-native-desktop-app.md) | Arkiv OS Native Desktop App (Ide) | backlog | 2026-07-25 |
 | [EPIC-031](./EPIC-031-ticketing-kapasitas-timed-entry.md) | Ticketing — Kuota Harian, Kapasitas & Timed-Entry | ready-for-qa | 2026-07-25 |
 | [EPIC-032](./EPIC-032-promo-engine.md) | Engine Promosi — Promo Code, Voucher, Diskon & Gifting | ready-for-qa | 2026-07-26 |
-| [EPIC-033](./EPIC-033-crm-lifecycle-campaign.md) | CRM Lifecycle Campaign — Win-back & Kampanye WA Member | backlog | 2026-07-26 |
+| [EPIC-033](./EPIC-033-crm-lifecycle-campaign.md) | CRM Lifecycle Campaign — Win-back & Kampanye WA Member | on-progress | 2026-07-26 |
 | [EPIC-034](./EPIC-034-gift-card-stored-value.md) | Gift Card / Stored Value — Saldo Prepaid Lintas Kanal | ready-for-qa | 2026-07-27 |
-| [EPIC-035](./EPIC-035-habitat-instance-kedua.md) | Habitat — Duplikasi Instance Kedua (Fork Repo, DB Baru) | ready-for-qa | 2026-07-27 |
-| [EPIC-036](./EPIC-036-kalender-hari-libur-nasional.md) | Kalender Hari Libur Nasional — Master Libur, Cuti Bersama & Dampaknya ke Cuti/Lembur | coding | 2026-07-29 |
-
 | [EPIC-035](./EPIC-035-habitat-instance-kedua.md) | Habitat — Duplikasi Instance Kedua (Fork Repo, DB Baru, Deploy GitLab CI) | ready-for-qa | 2026-07-28 |
+| [EPIC-036](./EPIC-036-kalender-hari-libur-nasional.md) | Kalender Hari Libur Nasional — Master Libur, Cuti Bersama & Dampaknya ke Cuti/Lembur | ready-for-qa | 2026-07-29 |
 | [EPIC-037](./EPIC-037-desktop-owner-insight.md) | Desktop Arkiv OS — Widget Report & Insight Owner | on-progress | 2026-07-29 |
 | [EPIC-039](./EPIC-039-merchandise-ecommerce-omnichannel.md) | Merchandise & E-commerce — Storefront, Kurir, Xendit & Omnichannel Shopee | ready-for-qa | 2026-08-02 |
+| [EPIC-040](./EPIC-040-konfigurasi-struk-pos.md) | Konfigurasi Struk POS — Header & Footer Bisa Dikonfigurasi | ready-for-qa | — |
+| [EPIC-041](./EPIC-041-pos-struk-nfc-pin-order-detail.md) | POS — Struk ARK/XP, PIN Kartu NFC, & Pembenahan Order List/Detail | backlog | 2026-08-20 |
+| [EPIC-042](./EPIC-042-open-api-tokens.md) | Open API Tokens (Akses Agent Eksternal) | ready-for-qa | 2026-08-23 |
+| [EPIC-043](./EPIC-043-complimentary-kol-owner.md) | Complimentary Orders (KOL & Owner) | ready-for-qa | 2026-08-24 |
 | [EPIC-044](./EPIC-044-mobile-app-member.md) | Mobile App Member — Expo/React Native (QR Member & Push Notif) | on-progress | 2026-08-25 |
 | [EPIC-045](./EPIC-045-resort-akomodasi.md) | Resort & Akomodasi (`MODULE-RESORT`) | deploying-dev | 2026-09-06 |
 | [EPIC-046](./EPIC-046-tenant-dusun-bambu.md) | Tenant Dusun Bambu (`MODULE-DUSUN-BAMBU`) | ready-for-qa | 2026-09-06 |
@@ -92,12 +94,12 @@ deploying-dev · ready-for-qa · blocked · done).
 | [EPIC-078](./EPIC-078-jam-kerja-hq-operations.md) | Jam Kerja HQ & Operations untuk Penilaian Terlambat (`MODULE-HRIS`) | ready-for-qa | 2026-11-02 |
 | [EPIC-079](./EPIC-079-jam-kerja-sistem-shift.md) | Jam Kerja Sistem Shift, Libur Nasional & Cuti Bersama (`MODULE-HRIS`) | ready-for-qa | 2026-11-02 |
 | [EPIC-080](./EPIC-080-checkout-otomatis.md) | Checkout Otomatis per Jabatan & 2 Shift dalam Sehari (`MODULE-HRIS`) | ready-for-qa | 2026-11-02 |
-| [EPIC-081](./EPIC-081-nip-manual.md) | NIP Karyawan Diisi Manual, Wajib (`MODULE-HRIS`) | review | 2026-11-02 |
+| [EPIC-081](./EPIC-081-nip-manual.md) | NIP Karyawan Diisi Manual, Wajib (`MODULE-HRIS`) | ready-for-qa | 2026-11-13 |
 | [EPIC-082](./EPIC-082-pph21-bpjs-nonaktif.md) | Saklar Nonaktif PPh 21 & BPJS di Pengaturan Gaji (`MODULE-PAYROLL`) | ready-for-qa | 2026-11-02 |
 | [EPIC-083](./EPIC-083-cleanup-data-20-oktober.md) | Cleanup Data HRIS per 20 Oktober 2026 — DM-01 (`MODULE-HRIS`) | done | 2026-11-03 |
 | [EPIC-084](./EPIC-084-ketentuan-cuti-izin.md) | Ketentuan Cuti & Izin + SLA Pengajuan terhadap Payroll (`MODULE-HRIS`) | ready-for-qa | 2026-11-03 |
 | [EPIC-085](./EPIC-085-ketentuan-lembur.md) | Ketentuan Lembur + Batas 72 Jam per Cut Off (`MODULE-HRIS`) | ready-for-qa | 2026-11-03 |
-| [EPIC-086](./EPIC-086-data-kerja-massal.md) | Pengisian Massal Data Kerja (Jadwal, Shift, Penempatan) via Template Excel (`MODULE-HRIS`) | review | 2026-11-03 |
+| [EPIC-086](./EPIC-086-data-kerja-massal.md) | Pengisian Massal Data Kerja (Jadwal, Shift, Penempatan) via Template Excel (`MODULE-HRIS`) | ready-for-qa | 2026-11-13 |
 | [EPIC-087](./EPIC-087-foto-profil.md) | Upload Foto Profil Akun (`MODULE-IDENTITY`) | done | 2026-11-09 |
 | [EPIC-088](./EPIC-088-verifikasi-lampiran-cuti.md) | Verifikasi Lampiran Cuti/Izin oleh HR (`MODULE-HRIS`, ES-11) | done | 2026-11-09 |
 | [EPIC-089](./EPIC-089-lembur-lebih-4-jam.md) | Lembur Lebih dari 4 Jam dengan Keterangan, Dokumentasi Opsional (`MODULE-HRIS`) | done | 2026-11-09 |
@@ -109,14 +111,14 @@ deploying-dev · ready-for-qa · blocked · done).
 | [EPIC-095](./EPIC-095-resign-terjadwal.md) | Resign Terjadwal — Tanggal Efektif di Masa Depan (`MODULE-HRIS`) | done | 2026-11-09 |
 | [EPIC-096](./EPIC-096-pemetaan-data-karyawan-hr.md) | Pemetaan Data Karyawan dari File HR ke Production (`MODULE-HRIS`) | done | 2026-11-09 |
 | [EPIC-097](./EPIC-097-pilihan-atasan-terpotong.md) | Pilihan Manager (Atasan Langsung) Terpotong 200 Karyawan (`MODULE-HRIS`) | done | 2026-11-09 |
-| [EPIC-098](./EPIC-098-impor-karyawan-nip-atasan.md) | Impor Karyawan Excel Ditolak karena NIP Atasan (`MODULE-HRIS`) | review | 2026-11-10 |
-| [EPIC-099](./EPIC-099-format-nip-urut.md) | Format NIP YYYYMM + Nomor Urut (`MODULE-HRIS`) | review | 2026-11-10 |
-| [EPIC-100](./EPIC-100-kode-status-toko-massal.md) | Kode & Status Toko Massal lewat Template (`MODULE-HRIS`, `MODULE-CONFIGURATION`) | review | 2026-11-10 |
+| [EPIC-098](./EPIC-098-impor-karyawan-nip-atasan.md) | Impor Karyawan Excel Ditolak karena NIP Atasan (`MODULE-HRIS`) | ready-for-qa | 2026-11-13 |
+| [EPIC-099](./EPIC-099-format-nip-urut.md) | Format NIP YYYYMM + Nomor Urut (`MODULE-HRIS`) | ready-for-qa | 2026-11-13 |
+| [EPIC-100](./EPIC-100-kode-status-toko-massal.md) | Kode & Status Toko Massal lewat Template (`MODULE-HRIS`, `MODULE-CONFIGURATION`) | ready-for-qa | 2026-11-13 |
 | [EPIC-101](./EPIC-101-bagan-organisasi-draft6.md) | Bagan Organisasi Draft 6 — Master Data Fase 1 (`MODULE-HRIS`) | done | 2026-11-10 |
-| [EPIC-102](./EPIC-102-posisi-kosong-approve-versi.md) | Posisi Kosong & Persetujuan Versi Bagan — Fase 2a (`MODULE-HRIS`) | review | 2026-11-11 |
-| [EPIC-103](./EPIC-103-impor-versi-bagan.md) | Impor Versi Bagan dari Template Excel — Fase 2b (`MODULE-HRIS`) | review | 2026-11-11 |
-| [EPIC-104](./EPIC-104-rapikan-bagan.md) | Rapikan Bagan Organisasi — Minor EPIC-102 & EPIC-103 (`MODULE-HRIS`) | review | 2026-11-11 |
-| [EPIC-105](./EPIC-105-risiko-data-minor.md) | Tutup Risiko Data dari Minor yang Ditunda (`MODULE-HRIS`, `MODULE-PROCUREMENT`) | backlog | 2026-11-11 |
+| [EPIC-102](./EPIC-102-posisi-kosong-approve-versi.md) | Posisi Kosong & Persetujuan Versi Bagan — Fase 2a (`MODULE-HRIS`) | ready-for-qa | 2026-11-13 |
+| [EPIC-103](./EPIC-103-impor-versi-bagan.md) | Impor Versi Bagan dari Template Excel — Fase 2b (`MODULE-HRIS`) | ready-for-qa | 2026-11-13 |
+| [EPIC-104](./EPIC-104-rapikan-bagan.md) | Rapikan Bagan Organisasi — Minor EPIC-102 & EPIC-103 (`MODULE-HRIS`) | ready-for-qa | 2026-11-13 |
+| [EPIC-105](./EPIC-105-risiko-data-minor.md) | Tutup Risiko Data dari Minor yang Ditunda (`MODULE-HRIS`, `MODULE-PROCUREMENT`) | ready-for-qa | 2026-11-13 |
 | [EPIC-106](./EPIC-106-struktur-bisnis-paddy-group.md) | Struktur Bisnis Paddy Group — Satu Holding, Dua Perusahaan Sejajar (`MODULE-CONFIGURATION`, lintas modul) | ready-for-qa | 2026-11-12 |
 | [EPIC-107](./EPIC-107-pindah-toko-massal.md) | Kode Toko Massal + Pindah Toko Karyawan Massal (`MODULE-HRIS`, `MODULE-CONFIGURATION`) | ready-for-qa | 2026-11-13 |
 

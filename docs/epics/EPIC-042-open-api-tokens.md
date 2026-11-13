@@ -1,5 +1,7 @@
 # EPIC-042 — Open API Tokens (akses agent eksternal)
 
+status: ready-for-qa
+
 **Status:** Fase 1 selesai (2026-08-23)
 **Pemilik:** Owner (ilham@wit.id)
 **Konsumen pertama:** Agent OpenClaw milik owner — Add/Edit/Delete lewat API.

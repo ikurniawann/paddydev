@@ -1,6 +1,6 @@
 # EPIC-081: NIP Karyawan Diisi Manual, Wajib (`MODULE-HRIS`)
 
-status: review
+status: ready-for-qa
 environment: dev
 retries: 0
 
@@ -53,4 +53,4 @@ Pertanyaan user 02-11-2026: "untuk NIK (nomor induk karyawan) bisa ga tidak auto
   - Frontend: tsc 0, eslint, vitest 6429 tes.
 - Data staging: tidak ada NIP ganda setelah trim, dan tidak ada NIP kosong.
 - **Urutan deploy**: migrasi `20261105090000` harus jalan bersama Go (deploy script menjalankan migrasi sebelum container baru).
-
+- 2026-11-13: Registry dirapikan, status review → ready-for-qa. Kode sudah ada di erp-paddy `development` (impor monorepo e815cee) dan jalan di staging (image `local-20261112-234046`). Sisa: QA UI oleh HR, lalu rilis production dengan izin user.

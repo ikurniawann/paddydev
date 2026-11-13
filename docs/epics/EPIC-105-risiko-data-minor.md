@@ -1,6 +1,6 @@
 # EPIC-105: Tutup Risiko Data dari Minor yang Ditunda (`MODULE-HRIS`, `MODULE-PROCUREMENT`)
 
-status: review
+status: ready-for-qa
 environment: dev
 retries: 0
 
@@ -54,3 +54,4 @@ Rencana: `docs/superpowers/plans/2026-11-11-risiko-data-minor.md`.
     - R5: pratinjau impor menolak siklus atasan.
     - Karyawan dan sesi uji dihapus. Untuk menghapus perlu `SET search_path = hris, public`, karena trigger lama `fn_notify_onboarding_changes` merujuk `employees` tanpa skema.
   - Belum: push dan PR. Prod: perlu izin user.
+- 2026-11-13: Registry dirapikan, status review → ready-for-qa. Kode sudah ada di erp-paddy `development` (impor monorepo e815cee) dan jalan di staging (image `local-20261112-234046`). Sisa: QA UI oleh HR, lalu rilis production dengan izin user.
