@@ -49,4 +49,8 @@ Rencana: `docs/superpowers/plans/2026-11-18-paket-perbaikan-pra-rilis.md`.
   - slip menampilkan baris katalog walau Rp 0; hari cuti dibayar tidak disimpan;
   - `CreateAnnouncement` tidak menulis ke `public.notifications`;
   - backend sudah mendukung HR mengajukan cuti atas nama karyawan; kalender ESS menelan error jadwal dan menyembunyikan jam shift di layar ponsel.
-- 2026-11-18: Rencana ditulis, menunggu review dan keputusan user.
+- 2026-11-18: Rencana ditulis. Keputusan user:
+  - **K-A1:** input HR dari kalender menunggu persetujuan atasan langsung (bukan langsung disetujui);
+  - **K-B1:** tim = rekan terjadwal di toko yang sama pada tanggal itu, fallback atasan langsung yang sama;
+  - **K-F1:** 8 absen bentrok dan 1 koreksi yang diduga duplikat tidak dimigrasi, didaftar untuk HR;
+  - eksekusi Native.

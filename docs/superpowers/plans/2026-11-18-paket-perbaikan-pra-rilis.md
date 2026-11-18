@@ -25,8 +25,8 @@
 
 ## Keputusan yang Dipakai Rencana Ini
 
-Rekomendasi di bawah dipakai sampai user memilih lain di handoff:
-- **K-A1:** cuti/izin yang HR input dari kalender langsung **disetujui** (approver = akun HR, tercatat di audit). Kuota, aturan jenis cuti, overlap, dan lampiran wajib tetap diperiksa.
+Diputuskan user 18-11-2026:
+- **K-A1:** cuti/izin yang HR input dari kalender **menunggu persetujuan atasan langsung**, sama dengan pengajuan biasa. Backend tidak diubah: `CreateLeave` sudah menerima `employee_id` dari HR dan melewati cek H-n serta cut-off.
 - **K-B1:** "tim" di kalender ESS = rekan yang terjadwal di **toko/branch yang sama pada tanggal itu**. Untuk staf tanpa jadwal toko, tim = rekan dengan atasan langsung yang sama.
 - **K-F1:** dari 40 absen staging-only, 8 baris yang bentrok dengan baris production (karyawan dan tanggal sama) **tidak** dimigrasi. Ke-8 baris itu masuk daftar untuk dicek HR. Koreksi absen yang diduga duplikat juga tidak dimigrasi.
 - **K-G1:** celah aturan izin/sakit (surat sakit ≥ 2 hari, kuota Izin Pribadi 3/bulan, potongan cuti melahirkan) **tidak** diubah sebelum Senin. Tes mengunci perilaku sekarang dan laporan cross-check menyebut setiap selisihnya dengan acuan.
@@ -128,16 +128,14 @@ Data 18-11 (baca-saja): di production keempat aturan nonaktif (3 "semua lokasi" 
 
 **Files:**
 - Modify: `apps/frontend/src/components/hris/AttendanceDayDialog.tsx`, `features/hris/attendance/.../attendance-recap-tab.tsx` (l.~303), `features/hris/leaves/components/new-leave-page.tsx`
-- Modify (K-A1): `apps/backend/internal/modules/hris/leaves.go` (l.258-345)
-- Test: `hris/leave_hr_direct_integration_test.go` (baru), `components/hris/AttendanceDayDialog.test.tsx` (baru), `new-leave-page.test.tsx`
+- Test: `components/hris/AttendanceDayDialog.test.tsx` (baru), `new-leave-page.test.tsx`
 
 **Interfaces:**
 - Produces: props `AttendanceDayDialog` `{ employeeId?: string; canFileLeave?: boolean }`; `new-leave-page` membaca `?employee_id=&date=` sebagai nilai awal.
 
-- [ ] **Step 1: Tes gagal (Go).** `TestHRFiledLeaveIsApproved`: HR mengajukan untuk karyawan lain → status `approved`, approver = karyawan HR, saldo terpotong, ada audit. `TestHRFiledLeaveStillChecksQuota`: kuota habis → ditolak dengan pesan kuota.
-- [ ] **Step 2: Implementasi** di `CreateLeave`: bila `a.IsHR && !isSelf`, sisipkan dengan status `approved` lewat jalur persetujuan yang sudah ada, sehingga saldo, absen, dan notifikasi karyawan ikut. Notifikasi ke atasan tidak dikirim.
+- [ ] **Step 1–2:** tidak ada perubahan backend (K-A1). Pengajuan HR berstatus `pending` dan atasan langsung mendapat notifikasi seperti biasa.
 - [ ] **Step 3: Tes gagal (vitest).** Dialog hari dengan `canFileLeave` menampilkan tombol "Input cuti/izin" yang menuju `/dashboard/hris/leaves/insert?employee_id=E&date=2026-11-20`. Tanpa `canFileLeave`, tombol tidak ada. `new-leave-page` mengisi karyawan dan tanggal dari query string.
-- [ ] **Step 4: Implementasi**, lalu jalankan tes Go hris, vitest, dan tsc. Expected: PASS, 0 error.
+- [ ] **Step 4: Implementasi**, lalu jalankan vitest dan tsc. Expected: PASS, 0 error.
 - [ ] **Step 5: Commit** `feat(hris): HR input cuti/izin dadakan dari kalender absensi (EPIC-117)`.
 
 ### Task 6: Kalender ESS: jadwal tidak kosong dan info tim (B)
