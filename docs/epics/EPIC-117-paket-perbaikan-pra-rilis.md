@@ -66,3 +66,12 @@ Rencana: `docs/superpowers/plans/2026-11-18-paket-perbaikan-pra-rilis.md`.
   - 23f8cbf F skrip migrasi staging-only ke production + pemuat CSV + pembalik (K-F1).
 - Temuan data (baca-saja production): kedua potongan izin/sakit aktif; 7 pengajuan cuti periode ini masih pending dan harus diputus sebelum payroll dihitung; 51 dari 315 karyawan aktif berakun tidak punya jadwal sama sekali (kalender kosong karena data).
 - Gerbang: vitest 6896 lulus, tsc 0, eslint 0. Go suite penuh dan review akhir sedang berjalan.
+- 2026-11-18 23.4x: Review akhir oleh reviewer segar (opus): 0 kritis, 3 penting, 7 minor. Diperbaiki (42df89c):
+  - pembalik migrasi menolak bila payroll sudah dihitung sesudah migrasi;
+  - pemuat CSV memakai `HEADER MATCH`, jadi kolom yang tertukar ditolak (diuji dengan psql nyata);
+  - lembur yang bentrok dengan pengajuan aktif production dilaporkan, tidak menggagalkan migrasi;
+  - skrip kunci login mengunci tabel akun selama transaksi.
+
+  Minor yang ditunda: retry 403 jadwal (~3 dtk), run lama menampilkan "Cuti dibayar 0 hari" sampai dihitung ulang, md5 pembalik rapuh terhadap ALTER TABLE, komentar basi di `payslip_pdf.go`, tim kantor pusat bisa panjang, nama karyawan kosong bila `employee_id` di URL tidak ada di daftar.
+- Gerbang akhir: semua paket Go ok, vitest 6896 lulus, tsc 0, eslint 0. Branch belum di-push; PR, staging, gladi, dan production menunggu izin user.
+- Runbook: migrasi delta sebelum binary Go baru; migrasi F sebelum payroll Senin dihitung; pembalik F hanya sebelum payroll; foto absen staging tidak ikut pindah.
