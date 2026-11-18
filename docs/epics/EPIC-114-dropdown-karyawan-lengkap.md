@@ -1,6 +1,6 @@
 # EPIC-114: Dropdown Karyawan Menampilkan Semua Data (`MODULE-HRIS`)
 
-status: review
+status: ready-for-qa
 environment: dev
 retries: 0
 
@@ -43,3 +43,4 @@ Rencana: `docs/superpowers/plans/2026-11-18-dropdown-karyawan-lengkap.md` (beris
   - keterangan pencarian juga muncul bila hasil pencarian tepat 25;
   - sekitar 650 opsi tanpa virtualisasi.
 - 2026-11-18: Gerbang: vitest 6874 lulus, tsc 0 error, lint ok. PR [wit-id-indonesia/erp-paddy#17](https://github.com/wit-id-indonesia/erp-paddy/pull/17) ke `development` dibuka. Merge, deploy staging, dan QA HR menunggu izin user. Production tidak disentuh.
+- 2026-11-18 17.25 WIB: PR #17 di-merge (235de7c) atas izin user; CI development dan Deploy Staging sukses (image `local-20261118-172504`); staging `/login` dan `/api/ready` 200. QA HR di staging belum.
