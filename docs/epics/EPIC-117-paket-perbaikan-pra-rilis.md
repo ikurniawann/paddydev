@@ -1,6 +1,6 @@
 # EPIC-117: Paket Perbaikan Pra-Rilis (`MODULE-HRIS`, `MODULE-PAYROLL`)
 
-status: backlog
+status: review
 environment: dev
 retries: 0
 
@@ -75,3 +75,10 @@ Rencana: `docs/superpowers/plans/2026-11-18-paket-perbaikan-pra-rilis.md`.
   Minor yang ditunda: retry 403 jadwal (~3 dtk), run lama menampilkan "Cuti dibayar 0 hari" sampai dihitung ulang, md5 pembalik rapuh terhadap ALTER TABLE, komentar basi di `payslip_pdf.go`, tim kantor pusat bisa panjang, nama karyawan kosong bila `employee_id` di URL tidak ada di daftar.
 - Gerbang akhir: semua paket Go ok, vitest 6896 lulus, tsc 0, eslint 0. Branch belum di-push; PR, staging, gladi, dan production menunggu izin user.
 - Runbook: migrasi delta sebelum binary Go baru; migrasi F sebelum payroll Senin dihitung; pembalik F hanya sebelum payroll; foto absen staging tidak ikut pindah.
+- 2026-11-19: Izin user ("Yes, open PR", lalu "Yes, check and merge"). PR [wit-id-indonesia/erp-paddy#21](https://github.com/wit-id-indonesia/erp-paddy/pull/21) dibuka; CI hijau (audit, Go, lint, unit test). Di-merge ke `development` (squash 622b25f).
+- Sisa, masing-masing butuh izin user:
+  - deploy staging;
+  - kunci login staging (Task 7);
+  - gladi rilis + migrasi F di salinan production;
+  - production sebelum payroll Senin;
+  - HR memutus 7 pengajuan cuti yang masih pending.
