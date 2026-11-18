@@ -1,7 +1,7 @@
 # EPIC-117: Paket Perbaikan Pra-Rilis (`MODULE-HRIS`, `MODULE-PAYROLL`)
 
-status: review
-environment: dev
+status: ready-for-qa
+environment: production
 retries: 0
 
 ## Goal
@@ -82,3 +82,42 @@ Rencana: `docs/superpowers/plans/2026-11-18-paket-perbaikan-pra-rilis.md`.
   - gladi rilis + migrasi F di salinan production;
   - production sebelum payroll Senin;
   - HR memutus 7 pengajuan cuti yang masih pending.
+- 2026-11-19 00.45–02.00 WIB: **Rilis production** atas instruksi user ("deploy prod untuk PR semua epic yg kita kerjakan lakukan jadwal malam ini … pertama lancar dlu di development baru di prod"):
+  - EPIC-113 (PR #16) di-rebase ke atas EPIC-117 (konflik `postgres_runs.go`, `slip_lines.go`, `calculator.go`, slip view digabung). Tes hris dan payroll hijau, CI hijau. Di-merge ke `development` (56fab25). Staging otomatis ter-deploy (`local-20261119-013453`, 657 migrasi, 0 error API).
+  - Gladi di salinan production 00.49:
+    - 26 migrasi dalam 1 dtk, verify 12.379 objek dengan 0 selisih;
+    - jumlah data tetap;
+    - health 200;
+    - crawl super admin 379, HR 378, karyawan 377 halaman: 0 masalah baru (CRM Partners #418 sudah ada sebelumnya);
+    - log API 0 error;
+    - migrasi F: pratinjau, eksekusi, jalan kedua 0, pembalik md5 identik.
+  - Gladi menemukan bug: skrip F gagal `relation "employees" does not exist` karena psql di server tidak memakai search_path aplikasi. Diperbaiki dengan RED→GREEN (PR #23).
+  - Backup `~/backups/prod-db-before-rilis-epic117-20261119-014*.dump` (4.397 entri, salinan di `/mnt/hdd1/backup/paddydev/`, sha cocok) dan `~/paddydev-src.before-rilis-epic117-*`.
+  - PR [#22](https://github.com/wit-id-indonesia/erp-paddy/pull/22) `development` → `production` (80afcce, tree = 56fab25). Deploy 01.46–01.55 WIB, image `local-20261119-014657`: 26 migrasi, verify 0 selisih, "Deploy selesai".
+  - Smoke production:
+    - `/login`, `/api/health`, `/api/ready` 200;
+    - 0 error API selama 20 menit;
+    - karyawan 648, gaji aktif 313, payroll run 0 (sama dengan sebelum rilis);
+    - 610 sesi tetap aktif (tidak ada logout massal);
+    - crawl 67 halaman publik: 0 masalah.
+- 2026-11-19 ±01.58: **Migrasi F di production.** Cek ulang menyeluruh staging vs production (semua tabel hris/configuration/public/auth): staging adalah salinan production 10-11 05.52 WIB, jadi data 21-10 s.d. 10-11 sudah ada di production. Data baru karyawan/HR di staging sesudahnya hanya 40 absen, 1 lembur, dan 1 koreksi absen.
+  - Tidak dibawa, karena production lebih baru:
+    - roster 200 baris (production punya roster sendiri untuk tanggal yang sama);
+    - 8 penempatan (production sudah berubah; Amyrah sudah resign);
+    - koreksi absen Pasha 10-11 (production sudah punya koreksi manual yang disetujui);
+    - payroll run uji HR 18-11;
+    - perubahan kode toko EPIC-107 (menunggu QA HR).
+  - Backup `prod-db-before-migrasi-staging-*.dump` (4.596 entri). 69 foto absen disalin (1 foto sudah hilang di staging).
+  - Eksekusi: **32 absen + 1 lembur (Gantari Garini 18-11) masuk**, jalan kedua 0, 0 error API.
+  - **8 absen bentrok untuk dicek HR** (staging vs production, jam masuk):
+    - Asriani 16-11 (07.14 vs 10.51);
+    - Deny Maulana Ramdhani 13-11 (07.59 vs 10.14);
+    - Ifatul Fauziah 13-11 (13.07 vs 13.15);
+    - Nasya Vilana Mardiansyah Putri 11-11 (15.21 vs 06.38) dan 16-11 (22.15 vs 15.57);
+    - Pasha Mauludfi Lesmana 10-11 (13.32 vs 08.00) dan 11-11 (07.52 vs 08.00);
+    - Yana Suryana 10-11 (09.07 vs 18.12).
+- 2026-11-19 ±02.00: **Login staging dikunci** (backup `staging-before-tutup-login-*.dump`): 348 akun dikunci, 27 sesi dihapus; yang tersisa bisa login hanya hrd 1 dan super_admin 4.
+- Sisa:
+  - PR [#23](https://github.com/wit-id-indonesia/erp-paddy/pull/23) (search_path skrip) belum bisa di-merge karena GitHub Actions menolak menjalankan job (pembayaran akun gagal / batas belanja). Deploy staging otomatis juga ikut tertahan.
+  - HR memutus 7 pengajuan cuti pending dan mengecek 8 absen bentrok sebelum payroll Senin.
+  - QA HR dengan akun asli.
