@@ -54,3 +54,15 @@ Rencana: `docs/superpowers/plans/2026-11-18-paket-perbaikan-pra-rilis.md`.
   - **K-B1:** tim = rekan terjadwal di toko yang sama pada tanggal itu, fallback atasan langsung yang sama;
   - **K-F1:** 8 absen bentrok dan 1 koreksi yang diduga duplikat tidak dimigrasi, didaftar untuk HR;
   - eksekusi Native.
+- 2026-11-18 malam: Eksekusi Native dengan TDD di erp-paddy `fix/epic117-pra-rilis` (dari cbcf50a), 9 commit:
+  - 0bbf93d C slip: baris Rp 0 disembunyikan; kolom `paid_leave_days`; Cuti dibayar/tanpa bayaran di web dan PDF;
+  - 222f73e G tes aturan izin/sakit dari baris cuti sampai potongan (laporan: `docs/hris/acuan-mom-20261019/crosscheck-izin-sakit-2026-11.md`);
+  - 5c48776 E aturan checkout otomatis per lokasi mengalahkan aturan semua lokasi;
+  - 0ee888a H pengumuman membunyikan lonceng (`notified_at`, loop 5 menit), tautan ke detail, beranda/feed selalu dimuat ulang;
+  - e73041b A tombol Input cuti/izin di detail hari kalender Rekap Absensi (pengajuan tetap menunggu atasan, K-A1);
+  - 5aba937 B roster per tanggal mengalahkan pola mingguan, error jadwal tampil, label jam di ponsel;
+  - dbd06eb B lapisan tim `GET /api/hris/me/team-calendar` (K-B1);
+  - 7e10a13 D skrip tutup login staging (ban 2999-12-31, bukan `infinity` yang lolos di login Next);
+  - 23f8cbf F skrip migrasi staging-only ke production + pemuat CSV + pembalik (K-F1).
+- Temuan data (baca-saja production): kedua potongan izin/sakit aktif; 7 pengajuan cuti periode ini masih pending dan harus diputus sebelum payroll dihitung; 51 dari 315 karyawan aktif berakun tidak punya jadwal sama sekali (kalender kosong karena data).
+- Gerbang: vitest 6896 lulus, tsc 0, eslint 0. Go suite penuh dan review akhir sedang berjalan.
