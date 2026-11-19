@@ -1,6 +1,6 @@
 # EPIC-120: Redesign Halaman Detail Run Payroll (`MODULE-PAYROLL`)
 
-status: backlog
+status: review
 environment: dev
 retries: 0
 
@@ -36,7 +36,19 @@ Kode: `apps/frontend/src/features/hris/payroll/components/payroll-detail-page.ts
 - Di luar cakupan: daftar karyawan yang dilewati saat Hitung tidak tersimpan di database, jadi tetap hanya tampil sesudah klik Hitung. Perbandingan dengan bulan lalu juga tidak termasuk.
 
 ## Tasks
-Lihat rencana. Belum dieksekusi.
+- [x] Task 1: Ringkasan kehadiran dan tanda di detail run (Go + Next fallback)
+- [x] Task 2: Fungsi murni tanda, filter, urut, halaman
+- [x] Task 3: State filter di URL
+- [x] Task 4: Tab Karyawan
+- [x] Task 5: Tab Biaya per Toko sebagai tabel
+- [x] Task 6: Tab Komponen Manual
+- [x] Task 7: Susun ulang halaman detail
+- [ ] Task 8: Gerbang akhir, PR, staging, QA HR
 
 ## Automation Log
-- 19-11-2026: kritik dan rencana ditulis, menunggu review user.
+- 19-11-2026: kritik dan rencana ditulis; mockup interaktif (`docs/mockup/epic120-detail-run-payroll.html`) disetujui user ("sesuai, kerjakan pakai subagent").
+- Branch `feat/epic120-detail-run-payroll` (erp-paddy) dari `6cf7944`: Task 1 `6c43198`, Task 2 `ff4e5df`, Task 3 `67b3bf7`, Task 4 `1732d27..aa3dea0`, Task 5 `2a6d68f`, Task 6 `0f80bc9`, Task 7 `7af96bd..1a94b2f`, perbaikan review akhir `f0be0c8..0a7eb22`. Setiap task lolos review; review akhir 1 Important diperbaiki.
+- Ruling: `employee.position` berbentuk `{title}` mengikuti embed yang ada.
+- Ruling: alokasi kosong (`[]` atau tidak dikirim) = tidak diketahui, bukan "Tanpa toko"; slip sebelum fitur alokasi toko tidak lagi ditandai.
+- Ruling: chip tanda dengan jumlah (sesuai mockup) menggantikan pilihan Tanda di rencana; "termasuk manual Rp X" per baris tidak dibuat karena nominal manual tidak ada di data baris.
+- Ruling: filter disimpan lewat `history.replaceState` (tanpa request server per klik); ganti tab mempertahankan halaman.
