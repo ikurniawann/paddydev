@@ -45,3 +45,4 @@ Rencana: [2026-11-19-slip-gaji-password-edit-payroll.md](../superpowers/plans/20
 - Review akhir: 4 temuan Important (layar ESS terkunci lagi saat masa buka habis, cache slip HR sesudah Edit, unduh PDF di iPhone, password di cache mutasi) diperbaiki di `68d5929` dan direview ulang bersih.
 - PR [#25](https://github.com/wit-id-indonesia/erp-paddy/pull/25). GitHub Actions tidak berjalan (billing); gerbang CI dijalankan lokal dengan perintah yang sama.
 - Belum: QA manual di iPhone Safari dan browser WhatsApp Android.
+- 19-11-2026: di-merge ke development (#25) dan live di staging `6cf7944`. Tombol tutup banner STAGING (#26) ikut.

@@ -52,3 +52,5 @@ Rencana: [2026-11-19-gaji-hq-cuti-ultah-koreksi-terlambat.md](../superpowers/pla
 - Review akhir: label ekspor kantor pusat, kuota cuti ulang tahun lintas aturan lama, dan pengaman skrip Bungsu (lock_timeout, tolak eksekusi kedua, tolak roster) diperbaiki di `9de4ee0`.
 - Merge EPIC-118 ke branch ini (`d5b266c`): aturan kantor pusat dipindah ke `calcEnv`/`calcOne` supaya hitung penuh dan hitung ulang satu karyawan sama (`TestRecalcEmployeeHeadOfficeNotSplit`).
 - PR [#24](https://github.com/wit-id-indonesia/erp-paddy/pull/24), di-merge sesudah #25.
+- 19-11-2026: #23, #25, #24 di-merge ke development; deploy staging manual (workflow_dispatch, CI GitHub mati karena billing) di `691b29f`, smoke test lulus.
+- Temuan staging: kantor pusat di staging berkode `HQ-PADDY`, bukan `ERP-BANDUNG`, jadi tidak ada cabang bertanda kantor pusat. Migrasi `20261219100100` menandai `HQ-PADDY` (production tidak punya kode itu). PR #27, staging `6cf7944`. Run November staging (draft) perlu dihitung ulang HR.
