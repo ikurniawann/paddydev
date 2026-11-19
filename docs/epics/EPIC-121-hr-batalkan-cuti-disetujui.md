@@ -28,3 +28,6 @@ Lihat rencana. Belum dieksekusi.
 
 ## Automation Log
 - 20-11-2026: temuan production dicek read-only; rencana ditulis, menunggu review user.
+- 20-11-2026 00.36 WIB: atas permintaan user ("production status tgl 16 ... izin pribadi cancel atau di hapus aja agar ketika payroll tidak kepotong thp nya"), Izin Pribadi Sri Wardani 16-11 **dibatalkan langsung di production** sebelum EPIC-121 rilis: backup `~/backups/prod-db-before-batal-izin-sri-20261120-0036.dump`, satu transaksi dengan penjaga (id, karyawan, status approved), audit `leave.cancel` beralasan "Batal, karyawan masuk (clock in 08.17, clock out 17.16)". Percobaan pertama batal sendiri karena trigger `fn_notify_leave_changes` butuh search_path aplikasi; diulang dengan `SET LOCAL search_path` (lihat memori ops-sql-search-path). Production belum punya run payroll, jadi tidak ada yang perlu dihitung ulang.
+- Implementasi: branch `feat/epic121-batalkan-cuti` (9669bee, 0d92ded, perbaikan review akhir 9931671). Branch rilis `release/epic121-prod` = production 80afcce + 3 commit itu (tanpa EPIC-118/119/120).
+
