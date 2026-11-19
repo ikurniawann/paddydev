@@ -53,3 +53,4 @@ Kode: `apps/frontend/src/features/hris/payroll/components/payroll-detail-page.ts
 - Ruling: chip tanda dengan jumlah (sesuai mockup) menggantikan pilihan Tanda di rencana; "termasuk manual Rp X" per baris tidak dibuat karena nominal manual tidak ada di data baris.
 - Ruling: filter disimpan lewat `history.replaceState` (tanpa request server per klik); ganti tab mempertahankan halaman.
 - 19-11-2026: PR #28 di-merge ke development (`2bd481f`) dan dideploy ke staging (workflow_dispatch, smoke test lulus). Belum: cek visual dan QA HR di run November staging.
+- 19-11-2026: temuan QA user: chip "Perlu dicek 2" dengan filter toko Event PVJ menampilkan daftar kosong (hitungan chip atas semua karyawan). Diperbaiki PR #29 (`63db00c`): hitungan chip mengikuti filter aktif, kartu Perlu dicek melepas filter. Live di staging.
