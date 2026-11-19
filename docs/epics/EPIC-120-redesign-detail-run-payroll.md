@@ -52,3 +52,4 @@ Kode: `apps/frontend/src/features/hris/payroll/components/payroll-detail-page.ts
 - Ruling: alokasi kosong (`[]` atau tidak dikirim) = tidak diketahui, bukan "Tanpa toko"; slip sebelum fitur alokasi toko tidak lagi ditandai.
 - Ruling: chip tanda dengan jumlah (sesuai mockup) menggantikan pilihan Tanda di rencana; "termasuk manual Rp X" per baris tidak dibuat karena nominal manual tidak ada di data baris.
 - Ruling: filter disimpan lewat `history.replaceState` (tanpa request server per klik); ganti tab mempertahankan halaman.
+- 19-11-2026: PR #28 di-merge ke development (`2bd481f`) dan dideploy ke staging (workflow_dispatch, smoke test lulus). Belum: cek visual dan QA HR di run November staging.
