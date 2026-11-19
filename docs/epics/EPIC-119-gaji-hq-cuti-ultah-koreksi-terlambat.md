@@ -49,3 +49,6 @@ Rencana: [2026-11-19-gaji-hq-cuti-ultah-koreksi-terlambat.md](../superpowers/pla
 - Ruling: `AllocateHeadOffice` menerima rentang periode (start, end) agar hari dihitung sama dengan `AllocateSlip`.
 - Ruling: pembalik skrip Bungsu memakai sidik md5 baris (jam, jadwal, status terlambat; timestamp sebagai epoch) karena `updated_at` tidak berubah dalam satu transaksi dan bergantung TimeZone sesi.
 - Ruling: daftar HR memakai "tanggal tanpa jadwal per karyawan", bukan "tanpa jadwal sama sekali", supaya Yudho (pola berakhir 02-11) ikut.
+- Review akhir: label ekspor kantor pusat, kuota cuti ulang tahun lintas aturan lama, dan pengaman skrip Bungsu (lock_timeout, tolak eksekusi kedua, tolak roster) diperbaiki di `9de4ee0`.
+- Merge EPIC-118 ke branch ini (`d5b266c`): aturan kantor pusat dipindah ke `calcEnv`/`calcOne` supaya hitung penuh dan hitung ulang satu karyawan sama (`TestRecalcEmployeeHeadOfficeNotSplit`).
+- PR [#24](https://github.com/wit-id-indonesia/erp-paddy/pull/24), di-merge sesudah #25.
