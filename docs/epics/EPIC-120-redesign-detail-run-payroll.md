@@ -1,6 +1,6 @@
 # EPIC-120: Redesign Halaman Detail Run Payroll (`MODULE-PAYROLL`)
 
-status: review
+status: ready-for-qa
 environment: dev
 retries: 0
 

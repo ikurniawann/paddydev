@@ -1,6 +1,6 @@
 # EPIC-119: Gaji HQ Tidak Dibagi, Cuti Ulang Tahun 2 Bulan, Koreksi Terlambat Bungsu (`MODULE-HRIS`, `MODULE-PAYROLL`)
 
-status: review
+status: ready-for-qa
 environment: dev
 retries: 0
 

@@ -1,6 +1,6 @@
 # EPIC-122: Pembulatan Jam Lembur per Pengajuan (`MODULE-PAYROLL`)
 
-status: review
+status: ready-for-qa
 environment: dev
 retries: 0
 

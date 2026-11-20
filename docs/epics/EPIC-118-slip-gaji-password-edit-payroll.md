@@ -1,6 +1,6 @@
 # EPIC-118: Slip Gaji Ringkas, Password ESS, Edit Payroll per Karyawan (`MODULE-PAYROLL`)
 
-status: review
+status: ready-for-qa
 environment: dev
 retries: 0
 
