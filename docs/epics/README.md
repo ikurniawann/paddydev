@@ -128,6 +128,7 @@ deploying-dev · ready-for-qa · blocked · done).
 | [EPIC-121](./EPIC-121-hr-batalkan-cuti-disetujui.md) | HR Membatalkan Cuti/Izin yang Sudah Disetujui (`MODULE-HRIS`) | ready-for-qa | 2026-11-20 |
 | [EPIC-122](./EPIC-122-pembulatan-jam-lembur.md) | Pembulatan Jam Lembur per Pengajuan (`MODULE-PAYROLL`) | review | 2026-11-20 |
 | [EPIC-123](./EPIC-123-lembur-batas-dan-tampilan-dibulatkan.md) | Batas, Keterangan, dan Tampilan Lembur Memakai Jam Dibulatkan (`MODULE-HRIS`) | ready-for-qa | 2026-11-20 |
+| [EPIC-124](./EPIC-124-slip-izin-sakit-pribadi-tunjangan-penuh.md) | Slip Izin Sakit & Izin Pribadi Sesuai Hitungan HR, Tunjangan Penuh (`MODULE-PAYROLL`) | review | 2026-11-20 |
 
 Aturan:
 - Epic + registry ini adalah sumber kebenaran status pekerjaan (canonical).
