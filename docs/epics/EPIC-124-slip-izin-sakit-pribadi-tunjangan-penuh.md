@@ -29,9 +29,9 @@ Kasus acuan: Shafa Triya Auliya, November 2026. Gaji pokok 1.800.000, makan 600.
 - Bruto slip naik sebesar pergeseran tunjangan. Kolom baru `leave_allowance_shift` (per slip dan per alokasi toko) menyimpan angkanya. Dasar PPh21 (fallback YTD TER Desember) dan jurnal `PAYROLL_ACCRUAL` (perusahaan dan per toko) memakai bruto dikurangi pergeseran, jadi pajak dan jurnal sama dengan sebelumnya.
 
 ## Tasks
-- Task 1: kalkulator (erp-paddy `d658cf3`).
-- Task 1b (ruling R1): persist `leave_allowance_shift`, YTD Desember dan jurnal akrual memakai bruto − pergeseran (erp-paddy `49e460e`).
-- Task 2: golden 17 kasus dan bukti invarian (erp-paddy `035f95b`).
+- Task 1: kalkulator (erp-paddy `5c24eab`).
+- Task 1b (ruling R1): persist `leave_allowance_shift`, YTD Desember dan jurnal akrual memakai bruto − pergeseran (erp-paddy `17d598d`).
+- Task 2: golden 17 kasus dan bukti invarian (erp-paddy `d96014a`).
 - Task 3: dokumen acuan dan epic ini (repo paddydev).
 
 ## Acceptance Criteria
@@ -44,9 +44,9 @@ Kasus acuan: Shafa Triya Auliya, November 2026. Gaji pokok 1.800.000, makan 600.
 
 ## Automation Log
 - 20-11-2026: keputusan Izin Sakit, Izin Pribadi, Subsidi BPJS, dan K1 dikonfirmasi user (kutipan di tabel keputusan). Rencana ditulis.
-- 20-11-2026: implementasi di erp-paddy branch `fix/epic124-slip-izin-tunjangan-penuh`: Task 1 `d658cf3` (kalkulator), Task 1b `49e460e` (kolom `leave_allowance_shift` di `hris.payroll_details` dan `hris.payroll_detail_allocations`, migrasi `20261221090000_payroll_leave_allowance_shift.sql`), Task 2 `035f95b` (golden). Ruling R1: review Task 1 menemukan YTD TER Desember dan jurnal `PAYROLL_ACCRUAL` ikut naik oleh pergeseran, maka Task 1b menyimpan pergeseran dan keduanya memakai bruto − pergeseran. Review tiap task: Approved, tanpa Critical/Important tersisa.
+- 20-11-2026: implementasi di erp-paddy branch `fix/epic124-slip-izin-tunjangan-penuh`: Task 1 `5c24eab` (kalkulator), Task 1b `17d598d` (kolom `leave_allowance_shift` di `hris.payroll_details` dan `hris.payroll_detail_allocations`, migrasi `20261221090000_payroll_leave_allowance_shift.sql`), Task 2 `d96014a` (golden). Ruling R1: review Task 1 menemukan YTD TER Desember dan jurnal `PAYROLL_ACCRUAL` ikut naik oleh pergeseran, maka Task 1b menyimpan pergeseran dan keduanya memakai bruto − pergeseran. Review tiap task: Approved, tanpa Critical/Important tersisa.
 - 20-11-2026: invarian golden (17 kasus; 6 baru: TER, annualized, campuran, intern, `daily`, setting off) dibandingkan dengan kalkulator `d6d90ec`: PPh21, TaxableIncome, DPP, BPJS TK dan Kes identik di semua kasus; bruto baru − pergeseran = bruto lama; Δnet 0 di semua kasus kecuali intern K1 (+52.174 = transport + makan sehari); 11 kasus lama hanya mendapat kunci baru bernilai 0. Ruling R2: batas dokumen ≤ Rp3 (tiga pembulatan terpisah), hasil teramati 0.
-- 20-11-2026: PR ke development: (menyusul). Sebelum PR, rebase ke `origin/development` (sudah di 778d0bd, EPIC-123; merge-tree bersih) lalu jalankan ulang tes payroll dan golden. Catatan minor yang ditunda: komentar usang di `golden_test.go`, tes integrasi acuan belum menegaskan net/PPh, pergeseran multi-toko non-nol baru diuji di domain.
+- 20-11-2026: PR ke development: (menyusul). Branch sudah di-rebase ke `origin/development` 778d0bd (EPIC-123); hash commit di atas adalah hash setelah rebase, tes payroll dan akuntansi lulus tanpa DB. Catatan minor yang ditunda: komentar usang di `golden_test.go`, tes integrasi acuan belum menegaskan net/PPh, pergeseran multi-toko non-nol baru diuji di domain.
 - Langkah rilis (setelah PR disetujui):
   1. Merge PR ke `development`.
   2. Gladi di salinan production. Migrasi `20261221090000_payroll_leave_allowance_shift.sql` jalan bersama deploy (aditif, default 0).
