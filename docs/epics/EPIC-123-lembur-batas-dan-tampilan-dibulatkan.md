@@ -1,6 +1,6 @@
 # EPIC-123: Batas, Keterangan, dan Tampilan Lembur Memakai Jam Dibulatkan (`MODULE-HRIS`)
 
-status: review
+status: ready-for-qa
 environment: dev
 retries: 0
 
@@ -46,3 +46,4 @@ Lihat rencana.
 - 20-11-2026: gate lokal (Actions tertahan billing): gofmt 0, go vet ok, `go test ./...` 143 paket ok (`TestGapDigestWarnsWithoutRecipients` gagal hanya saat full run paralel, lulus sendiri, tidak terkait lembur), vitest 7.078 lulus, tsc 0, eslint 0. Review akhir: 2 Important + 2 Minor diperbaiki, 1 Minor ditunda (invalidasi kuota pada koreksi HR atas baris sendiri).
 - 20-11-2026 18.20 WIB: deploy staging dari branch PR, image `local-20261120-182014` (sebelumnya `local-20261120-170645`), tanpa migrasi, verify 0 selisih. Backup `/mnt/hdd1/backup/paddydev/staging-db-before-epic123-20261120-181958.dump`. Endpoint kuota 401 tanpa sesi, bundle memuat form kuota. QA UI di staging menunggu user (login staging dikunci untuk karyawan).
 - 20-11-2026 18.37 WIB: QA user — baris "X jam dibayar (durasi …)" di form Input Lembur ESS dihapus atas permintaan user ("keterangan di tandain dihilangkan aja ga usah ada"); layar lain tetap. Commit 3bbc7e6 di PR #35, staging `local-20261120-183733` (backup `staging-db-before-epic123b-20261120-183725.dump`).
+- 20-11-2026: atas perintah user ("merge PR #35"), PR #35 di-merge ke `development` (778d0bd). CI Actions tidak berjalan (billing: "recent account payments have failed"), gate lokal hijau. Tree `development` = 3bbc7e6 = staging `local-20261120-183733`. Production belum; rilis bersama EPIC-118 s.d. 122 setelah gladi, lalu hitung ulang run payroll November.
