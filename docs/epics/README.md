@@ -125,7 +125,7 @@ deploying-dev · ready-for-qa · blocked · done).
 | [EPIC-118](./EPIC-118-slip-gaji-password-edit-payroll.md) | Slip Gaji Ringkas, Password ESS, Edit Payroll per Karyawan (`MODULE-PAYROLL`) | review | 2026-11-19 |
 | [EPIC-119](./EPIC-119-gaji-hq-cuti-ultah-koreksi-terlambat.md) | Gaji HQ Tidak Dibagi, Cuti Ulang Tahun 2 Bulan, Koreksi Terlambat Bungsu (`MODULE-HRIS`, `MODULE-PAYROLL`) | review | 2026-11-19 |
 | [EPIC-120](./EPIC-120-redesign-detail-run-payroll.md) | Redesign Halaman Detail Run Payroll (`MODULE-PAYROLL`) | review | 2026-11-19 |
-| [EPIC-121](./EPIC-121-hr-batalkan-cuti-disetujui.md) | HR Membatalkan Cuti/Izin yang Sudah Disetujui (`MODULE-HRIS`) | backlog | 2026-11-20 |
+| [EPIC-121](./EPIC-121-hr-batalkan-cuti-disetujui.md) | HR Membatalkan Cuti/Izin yang Sudah Disetujui (`MODULE-HRIS`) | ready-for-qa | 2026-11-20 |
 
 Aturan:
 - Epic + registry ini adalah sumber kebenaran status pekerjaan (canonical).
