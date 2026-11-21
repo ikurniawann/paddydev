@@ -99,7 +99,7 @@ Acuan:
     - LeadDays n: `start − hari ini (WIB) ≥ n` → "{Label} diajukan paling lambat H-{n} (mulai {tanggal} atau sesudahnya)".
     - SameDayOnly: `start = hari ini` → "Sakit diajukan pada hari sakit (tanggal mulai = hari ini)".
   - Jenis mendadak (berkabung, istri melahirkan/keguguran, keguguran, Izin Leader, Izin Pribadi) tidak punya H-n. Mundurnya hanya dibatasi R3.
-- **R3 Kunci periode (ES-13).** Pengajuan milik sendiri untuk tanggal yang periodenya **sudah lewat tanggal akhirnya** (hari ini > `end_date` periode) ditolak dengan 409 "Periode {label} sudah lewat cut off; pengajuan untuk tanggal ini ditutup".
+- **R3 Kunci periode (ES-13).** *Diganti EPIC-125 (21-11-2026): pengajuan milik sendiri terbuka sampai periode di-closing.* Pengajuan milik sendiri untuk tanggal yang periodenya **sudah lewat tanggal akhirnya** (hari ini > `end_date` periode) ditolak dengan 409 "Periode {label} sudah lewat cut off; pengajuan untuk tanggal ini ditutup".
   - Berlaku untuk cuti/izin (tanggal mulai), lembur, dan pengajuan absensi (koreksi absen; K-20 = "semua pengajuan").
   - Dasarnya `end_date`, bukan tanggal closing. Dengan begitu jendela closing HR (offset 3 hari) tetap ada untuk koreksi oleh HR, sementara karyawan sudah terkunci sejak hari sesudah cut off.
   - Kunci periode tertutup yang lama tetap berlaku.
