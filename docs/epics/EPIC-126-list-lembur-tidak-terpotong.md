@@ -1,6 +1,6 @@
 # EPIC-126: Semua List Lembur Tampil Utuh, dengan Cari dan Halaman (`MODULE-HRIS`)
 
-status: review
+status: ready-for-qa
 environment: dev
 retries: 0
 
@@ -46,8 +46,9 @@ Rencana: [2026-11-21-list-lembur-tidak-terpotong.md](../superpowers/plans/2026-1
 - [x] Antrean Persetujuan Tim dan Riwayat Tim memuat semua lembur bawahan.
 - [x] Rentang bulan tetap bulan kalender (31 Okt dan 1 Des tidak ikut November).
 - [x] HR Lembur, Riwayat Lembur ESS, dan Riwayat Tim membagi tampilan per halaman. Mengubah filter kembali ke halaman 1.
-- [ ] QA staging: list November HR menampilkan semua baris di staging.
-- [ ] QA production: list November HR menampilkan 281+ baris termasuk 1–5 Nov (contoh Sri Wardani 1 dan 3 Nov).
+- [x] QA staging: image `local-20261121-223955` sehat, `/api/ready` dan `/login` 200, UI baru ada di bundle, endpoint lembur dilayani Go baru, log tanpa error.
+- [x] Gladi salinan production (kode yang sama): list November 281/281 termasuk 65 baris tgl 1–5 Nov dan Sri Wardani 1, 3, 14, 15 Nov; tanpa bulan 390/390.
+- [ ] QA HR di production: buka HRIS → Lembur bulan November, cek tanggal 1–5 Nov tampil di halaman akhir dan pencarian "Sri Wardani" menampilkan 4 lembur.
 
 ## Di luar cakupan
 - Widget Beranda ESS "5 lembur terbaru" tetap 5: itu ringkasan, dan riwayat lengkap ada di menu Lembur.
@@ -58,3 +59,13 @@ Rencana: [2026-11-21-list-lembur-tidak-terpotong.md](../superpowers/plans/2026-1
   - Tes paket `hris` di DB tes sementara: baseline lulus; tes baru RED → GREEN; paket lulus.
   - Vitest penuh 7089 lulus; tsc dan eslint bersih.
   - Tanpa migrasi.
+- 21-11-2026 review akhir (opus): siap merge, 0 Critical, 0 Important; 5 minor ditunda (page state tidak ditulis balik, pending lama bisa di halaman 2+ pada "Semua Status", pager hilang bila 1 halaman, fallback Next tanpa tes, `paginate` diimpor dari lib/payroll).
+- PR [erp-paddy#42](https://github.com/wit-id-indonesia/erp-paddy/pull/42) di-merge ke `development` (211c759). CI GitHub tidak jalan (billing Actions), sama seperti PR sebelumnya; tes lokal di atas jadi gerbang.
+  - Staging 22.39: backup `/mnt/hdd1/backup/paddydev/staging-db-before-epic126-20261121-223947.dump`, image `local-20261121-223955`, QA lulus.
+- Gladi 22.40 di salinan production (`/mnt/hdd1/backup/paddydev/prod-copy-gladi-epic126-20261121-224010.dump`): go.
+- **Rilis production ke-7, 21-11-2026 ±22.44–22.50 WIB:**
+  - backup `~/backups/prod-db-before-rilis-epic126-20261121-2244.dump` dan `~/paddydev-src.before-rilis-epic126-20261121-2244`;
+  - PR [erp-paddy#43](https://github.com/wit-id-indonesia/erp-paddy/pull/43) → `production` f02aa50 (tree f541d39); rsync 14 berkas, 0 dihapus;
+  - image `local-20261121-224555`, tanpa migrasi (verify 12.395 objek, 0 beda);
+  - `/api/ready` dan `/login` 200, container sehat, log API tanpa error; data lembur tetap 390/281;
+  - rollback: image `local-20261121-094459` + backup di atas.
