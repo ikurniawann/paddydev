@@ -1,0 +1,450 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mockup Detail Run Payroll</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#fbf5f0; --card:#fffdfb; --ink:#2a1420; --muted:#7a6670; --line:#eee3dc;
+  --primary:#e2007a; --primary-soft:#fde7f1; --plum:#3b1030;
+  --green:#15803d; --red:#dc2626;
+  --amber:#b45309; --amber-soft:#fff6e0; --amber-line:#f3d48a; --blue-soft:#eaf1ff; --blue:#1d4ed8;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:Nunito,system-ui,sans-serif;font-size:14px}
+button,input,select{font:inherit;color:inherit}
+.mock-note{background:var(--plum);color:#fff;text-align:center;padding:6px 16px;font-size:12px}
+.wrap{max-width:1320px;margin:0 auto;padding:20px 16px 60px}
+.back{display:inline-flex;align-items:center;gap:6px;border:0;background:none;padding:4px 0;font-weight:700;cursor:pointer}
+.head{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;justify-content:space-between;margin-top:8px}
+h1{font-size:26px;font-weight:800;margin:0 0 6px}
+.meta{display:flex;flex-wrap:wrap;gap:6px;align-items:center;color:var(--muted)}
+.badge{display:inline-flex;align-items:center;gap:4px;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:700;white-space:nowrap}
+.b-ink{background:var(--plum);color:#fff}.b-info{background:var(--blue-soft);color:var(--blue)}
+.b-draft{background:#f1ece8;color:var(--ink)}.b-muted{background:#f3eeea;color:var(--muted)}
+.btn{display:inline-flex;align-items:center;gap:6px;white-space:nowrap;border-radius:999px;border:1px solid var(--line);background:var(--card);padding:8px 16px;font-weight:700;cursor:pointer}
+.btn:hover{border-color:#d9c9bf}
+.btn-primary{background:var(--primary);border-color:var(--primary);color:#fff}
+.btn-primary:disabled{opacity:.45;cursor:not-allowed}
+.btn-sm{padding:5px 12px;font-size:13px}
+.btn-ghost{border-color:transparent;background:none}
+.card{background:var(--card);border:1px solid var(--line);border-radius:18px}
+.status{margin-top:18px;padding:14px 16px;display:grid;gap:12px}
+.steps{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.step{display:flex;align-items:center;gap:6px;font-weight:700;color:var(--muted);font-size:13px}
+.dot{width:20px;height:20px;border-radius:50%;display:grid;place-items:center;font-size:11px;background:#efe6e0;color:var(--muted)}
+.step.done .dot{background:var(--green);color:#fff}
+.step.cur{color:var(--ink)}.step.cur .dot{background:var(--primary);color:#fff}
+.sep{width:28px;height:2px;background:var(--line)}
+.status-row{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;justify-content:space-between}
+.lock{display:flex;gap:8px;align-items:flex-start;background:var(--amber-soft);border:1px solid var(--amber-line);border-radius:12px;padding:8px 12px;color:#7c3d06;font-size:13px;flex:1;min-width:260px}
+.calc{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.chk{display:flex;gap:6px;align-items:center;font-weight:600;cursor:pointer}
+.kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-top:14px}
+.kpi{padding:14px 16px}
+.kpi .l{color:var(--muted);font-size:13px;font-weight:600}
+.kpi .v{font-size:22px;font-weight:800;margin-top:6px;font-variant-numeric:tabular-nums}
+.kpi .h{color:var(--muted);font-size:12px;margin-top:2px}
+.kpi.warn{background:var(--amber-soft);border-color:var(--amber-line);cursor:pointer;text-align:left}
+.kpi.warn .v{color:var(--amber)}
+.kpi.warn:hover{border-color:var(--amber)}
+.v.red{color:var(--red)}.v.green{color:var(--green)}
+.tabs{display:flex;gap:4px;margin-top:22px;border-bottom:1px solid var(--line);overflow-x:auto}
+.tab{border:0;background:none;padding:10px 14px;font-weight:700;color:var(--muted);border-bottom:3px solid transparent;cursor:pointer;white-space:nowrap}
+.tab[aria-selected=true]{color:var(--primary);border-bottom-color:var(--primary)}
+.count{background:#f1e8e2;color:var(--muted);border-radius:999px;padding:0 8px;font-size:12px;margin-left:4px}
+.tab[aria-selected=true] .count{background:var(--primary-soft);color:var(--primary)}
+.panel{margin-top:14px}
+.toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:12px}
+.search{flex:1 1 220px;display:flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:999px;padding:7px 12px;background:#fff}
+.search input{border:0;outline:0;flex:1;min-width:0;background:none}
+select.sel{border:1px solid var(--line);border-radius:999px;padding:7px 12px;background:#fff;max-width:220px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;padding:0 12px 10px}
+.chip{border:1px solid var(--line);background:#fff;border-radius:999px;padding:4px 10px;font-size:12px;font-weight:700;cursor:pointer;color:var(--muted)}
+.chip[aria-pressed=true]{background:var(--primary-soft);border-color:var(--primary);color:var(--primary)}
+.chip .n{opacity:.7;margin-left:3px}
+.result{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;padding:0 14px 10px;color:var(--muted);font-size:13px}
+.tw{overflow-x:auto}
+table{width:100%;border-collapse:collapse;min-width:980px}
+th{text-align:left;font-size:12px;color:var(--muted);font-weight:700;padding:10px 12px;border-bottom:1px solid var(--line);white-space:nowrap;background:var(--card)}
+th.r,td.r{text-align:right}
+th.sortable{cursor:pointer}th.sortable:hover{color:var(--ink)}
+td{padding:10px 12px;border-bottom:1px solid #f4ece6;vertical-align:top}
+tr:hover td{background:#fdf8f4}
+td.num{font-variant-numeric:tabular-nums;white-space:nowrap}
+.sticky{position:sticky;left:0;background:var(--card);z-index:1;min-width:280px}
+td.sticky .sub{white-space:nowrap}
+tr:hover td.sticky{background:#fdf8f4}
+.name{font-weight:700}
+.sub{color:var(--muted);font-size:12px}
+.flags{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+.flag{font-size:11px;font-weight:700;border-radius:6px;padding:1px 6px;background:#f3eeea;color:var(--muted)}
+.flag.w{background:var(--amber-soft);color:var(--amber)}
+.store{display:inline-flex;gap:4px;border:1px solid var(--line);border-radius:999px;padding:1px 8px;font-size:12px;margin:0 4px 4px 0;white-space:nowrap}
+.store b{font-weight:800}
+.att{font-size:13px;max-width:190px}
+.att .bad{color:var(--amber);font-weight:700}
+.acts{display:flex;gap:6px;justify-content:flex-end}
+tfoot td{font-weight:800;background:#fbf4ee;border-top:2px solid var(--line)}
+.pager{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;padding:12px 14px}
+.pages{display:flex;gap:4px;flex-wrap:wrap}
+.pg{min-width:34px;height:34px;border-radius:10px;border:1px solid var(--line);background:#fff;cursor:pointer;font-weight:700}
+.pg[aria-current=page]{background:var(--primary);border-color:var(--primary);color:#fff}
+.pg:disabled{opacity:.4;cursor:not-allowed}
+.empty{padding:40px;text-align:center;color:var(--muted)}
+.warnbox{margin:12px;display:flex;gap:8px;background:var(--amber-soft);border:1px solid var(--amber-line);border-radius:12px;padding:10px 12px;color:#7c3d06;font-size:13px}
+.split{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;padding:14px 14px 0}
+.split h2{font-size:16px;margin:0}
+.overlay{position:fixed;inset:0;background:rgba(40,10,30,.45);display:none;align-items:center;justify-content:center;padding:16px;z-index:50}
+.overlay.open{display:flex}
+.dialog{background:var(--card);border-radius:18px;max-width:560px;width:100%;padding:20px;max-height:90vh;overflow:auto}
+.dialog h3{margin:0 0 4px;font-size:18px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+.field label{display:block;font-size:12px;color:var(--muted);font-weight:700;margin-bottom:4px}
+.field input,.field select{width:100%;border:1px solid var(--line);border-radius:12px;padding:9px 12px;background:#fff}
+.dfoot{display:flex;justify-content:flex-end;gap:8px;margin-top:16px;flex-wrap:wrap}
+.toast{position:fixed;bottom:20px;right:20px;background:var(--plum);color:#fff;padding:10px 16px;border-radius:12px;display:none;z-index:60;max-width:calc(100% - 40px)}
+@media (max-width:1100px){.kpis{grid-template-columns:repeat(3,1fr)}}
+@media (max-width:640px){
+  .kpis{grid-template-columns:1fr 1fr}.kpis .kpi:last-child{grid-column:span 2}
+  h1{font-size:22px}.kpi .v{font-size:18px}
+  select.sel{flex:1 1 45%;max-width:none}
+  .grid2{grid-template-columns:1fr}
+  .sep{display:none}
+}
+</style>
+</head>
+<body>
+<div class="mock-note">Mockup EPIC-120 · data contoh, bukan data karyawan asli · tombol, filter, dan halaman bisa diklik</div>
+<div class="wrap">
+  <button class="back">← Kembali</button>
+
+  <div class="head">
+    <div>
+      <h1>Payroll November 2026</h1>
+      <div class="meta">
+        <span class="badge b-ink">Paddy Group</span>
+        <span class="badge b-info">Kantor Pusat</span>
+        <span class="badge b-draft">● Draft</span>
+        <span>Absensi 21 Okt – 20 Nov 2026</span>
+        <span>·</span>
+        <span>Dihitung terakhir 19-11-2026 12.47</span>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn">⬇ Export CSV</button>
+    </div>
+  </div>
+
+  <section class="card status" aria-label="Status payroll">
+    <div class="steps" aria-label="Langkah payroll">
+      <span class="step done"><span class="dot">✓</span>Buat</span><span class="sep"></span>
+      <span class="step done"><span class="dot">✓</span>Hitung</span><span class="sep"></span>
+      <span class="step cur"><span class="dot">3</span>Proses &amp; setujui</span><span class="sep"></span>
+      <span class="step"><span class="dot">4</span>Dibayar</span>
+    </div>
+    <div class="status-row">
+      <div class="lock" role="note">
+        <span aria-hidden="true">🔒</span>
+        <span><b>Process terkunci sampai periode absensi di-closing.</b> Closing otomatis 22-11-2026. Absensi masih bisa berubah sebelum itu, jadi hitung ulang sesudah closing.</span>
+      </div>
+      <div class="calc">
+        <label class="chk"><input type="checkbox"> Sertakan THR</label>
+        <button class="btn" id="recalc">↻ Hitung ulang</button>
+        <button class="btn btn-primary" disabled title="Periode absensi belum di-closing">Process</button>
+      </div>
+    </div>
+  </section>
+
+  <div class="kpis" id="kpis"></div>
+  <div class="tabs" role="tablist" id="tabs"></div>
+  <div class="panel" id="panel"></div>
+</div>
+
+<div class="overlay" id="dlg-edit" role="dialog" aria-modal="true" aria-labelledby="edit-title">
+  <div class="dialog">
+    <h3 id="edit-title">Edit payroll</h3>
+    <p class="sub" id="edit-sub"></p>
+    <div id="edit-summary" style="margin-top:12px"></div>
+    <div class="grid2">
+      <div class="field"><label>Komponen</label><select><option>Bonus</option><option>Insentif</option><option>Natura</option><option>Denda</option><option>Potongan lain</option></select></div>
+      <div class="field"><label>Nominal (Rp)</label><input placeholder="cth. 500.000"></div>
+      <div class="field" style="grid-column:1/-1"><label>Catatan</label><input placeholder="Opsional"></div>
+    </div>
+    <div class="dfoot">
+      <button class="btn btn-ghost" data-close>Batal</button>
+      <button class="btn" data-close data-toast="Slip dihitung ulang">Hitung ulang</button>
+      <button class="btn btn-primary" data-close data-toast="Komponen tersimpan dan slip dihitung ulang">Simpan &amp; hitung ulang</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="dlg-add" role="dialog" aria-modal="true" aria-labelledby="add-title">
+  <div class="dialog">
+    <h3 id="add-title">Tambah komponen manual</h3>
+    <p class="sub">Komponen masuk ke slip sesudah payroll dihitung ulang.</p>
+    <div class="grid2">
+      <div class="field" style="grid-column:1/-1"><label>Karyawan</label><select id="add-emp"></select></div>
+      <div class="field"><label>Komponen</label><select><option>Bonus</option><option>Insentif</option><option>Natura</option><option>Denda</option><option>Potongan lain</option></select></div>
+      <div class="field"><label>Nominal (Rp)</label><input placeholder="cth. 500.000"></div>
+      <div class="field" style="grid-column:1/-1"><label>Catatan</label><input placeholder="Opsional"></div>
+    </div>
+    <div class="dfoot">
+      <button class="btn btn-ghost" data-close>Batal</button>
+      <button class="btn btn-primary" data-close data-toast="Komponen tersimpan. Klik Hitung ulang agar masuk ke slip.">Simpan</button>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+let seed = 7;
+const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+const pick = a => a[Math.floor(rnd() * a.length)];
+const FIRST = ["Andi","Bunga","Citra","Dimas","Eka","Fajar","Gita","Hana","Indra","Joko","Kirana","Lestari","Mega","Nanda","Oki","Putri","Rani","Sinta","Tegar","Utami","Vina","Wulan","Yoga","Zahra","Bagus","Dewi","Rizky","Salsa","Arif","Nadia"];
+const LAST = ["Pratama","Saputra","Wijaya","Lestari","Hidayat","Nugraha","Permata","Kusuma","Ramadhan","Anggraini","Setiawan","Maharani","Firmansyah","Puspita","Santoso"];
+const DEPTS = ["Retail Operational","Marketing","Warehouse","HRGA","Finance & Accounting","SCM","Product RnD"];
+const POS = {"Retail Operational":["Store Leader","Sales Associate","Kasir"],"Marketing":["Marketing Staff","Brand Lead"],"Warehouse":["Staff Gudang","Admin Gudang"],"HRGA":["HR Staff","GA Staff"],"Finance & Accounting":["Staff Finance","Accounting"],"SCM":["SCM Staff"],"Product RnD":["Product Developer"]};
+const STORES = ["PBSA - Paddy Bags Studio Soka","PLRM - Paddy Parfume Labs","PPAY - Paddy Playstore Dreamscape","PLBM - Paddy Parfume Labs Blok M","PLMR - Paddy Parfume Labs Makassar","MPIK - Mini Paddy Playstore PIK","MUBM - Mini Paddy Playstore MU+KU","PLAY - Paddy Parfume Labs Bogor","MPSL - Mini Paddy Playstore Paskal 23","MTSM - Mini Paddy Playstore TSM","MBIP - Mini Paddy Playstore BIP","Event PVJ"];
+const HQ = "Paddy HQ Bandung", WH = "Warehouse Paddy";
+const fmt = n => "Rp " + Math.round(n).toLocaleString("id-ID");
+const N = 237;
+const employees = [];
+for (let i = 0; i < N; i++) {
+  const dept = i < 150 ? "Retail Operational" : pick(DEPTS.slice(1));
+  const working = 22;
+  const unpaid = rnd() < 0.08 ? 1 + Math.floor(rnd() * 2) : 0;
+  const paid = rnd() < 0.15 ? 1 + Math.floor(rnd() * 2) : 0;
+  const late = rnd() < 0.3 ? 1 + Math.floor(rnd() * 4) : 0;
+  const present = working - unpaid - paid - (rnd() < 0.1 ? 1 : 0);
+  let alloc;
+  if (dept === "Retail Operational") {
+    const s1 = pick(STORES);
+    alloc = rnd() < 0.18 ? [[s1, 62.5], [pick(STORES.filter(s => s !== s1)), 37.5]] : [[s1, 100]];
+  } else if (dept === "Warehouse") alloc = [[WH, 100]];
+  else if (dept === "SCM" && rnd() < 0.5) alloc = [[WH, 36.7], [HQ, 63.3]];
+  else alloc = [[HQ, 100]];
+  if (i % 97 === 5) alloc = [];
+  const base = dept === "Retail Operational" ? 2300000 + rnd() * 1500000 : 3000000 + rnd() * 9000000;
+  const manual = rnd() < 0.06 ? Math.round(rnd() * 8) * 100000 + 200000 : 0;
+  const zero = i === 41;
+  const gross = zero ? 0 : base + manual;
+  const ded = zero ? 0 : unpaid * 110000 + (rnd() < 0.05 ? 1000000 : 0) + late * 15000;
+  const closure = alloc.length && alloc[0][0] === "Event PVJ" ? "Toko tutup 15-11, gaji diprorata" : null;
+  employees.push({ id: i, name: pick(FIRST) + " " + pick(LAST), nip: String(2016 + Math.floor(rnd() * 10)) + String(100000 + i).slice(1),
+    dept, pos: pick(POS[dept]), working, present, late, paid, unpaid, alloc, gross, ded, net: gross - ded, manual, closure, legacy: i === 200,
+    comp: pick(["Bonus","Insentif","Natura"]), note: pick(["Target toko Oktober","Lembur event","Bonus campaign 11.11",""]) });
+}
+const FLAG_LABEL = {potongan:"Ada potongan",manual:"Komponen manual",cuti_unpaid:"Cuti tanpa bayaran",terlambat:"Terlambat",toko_tutup:"Toko tutup",tanpa_toko:"Tanpa toko",multi_toko:"Lebih dari 1 toko",thp_nol:"THP Rp 0"};
+const REVIEW = ["tanpa_toko","toko_tutup","thp_nol","cuti_unpaid","manual"];
+employees.forEach(e => {
+  const f = [];
+  if (!e.alloc.length) f.push("tanpa_toko");
+  if (e.closure) f.push("toko_tutup");
+  if (e.net <= 0) f.push("thp_nol");
+  if (e.unpaid) f.push("cuti_unpaid");
+  if (e.manual) f.push("manual");
+  if (e.alloc.length > 1) f.push("multi_toko");
+  if (e.late) f.push("terlambat");
+  if (e.ded > 0) f.push("potongan");
+  e.flags = f;
+});
+const needsReview = e => e.flags.some(f => REVIEW.includes(f));
+const S = {tab:"karyawan", q:"", dept:"", toko:"", tanda:"", urut:"nama", hal:1, per:25};
+
+function renderKpis(){
+  const sum = k => employees.reduce((a,e)=>a+e[k],0);
+  const nr = employees.filter(needsReview).length;
+  document.getElementById("kpis").innerHTML = `
+    <div class="card kpi"><div class="l">Karyawan</div><div class="v">${N}</div><div class="h">Dalam run ini</div></div>
+    <div class="card kpi"><div class="l">Total pendapatan</div><div class="v">${fmt(sum("gross"))}</div><div class="h">Termasuk komponen manual ${fmt(sum("manual"))}</div></div>
+    <div class="card kpi"><div class="l">Total potongan</div><div class="v red">${fmt(sum("ded"))}</div><div class="h">PPh 21 Rp 0 · BPJS nonaktif</div></div>
+    <div class="card kpi"><div class="l">Take home pay</div><div class="v green">${fmt(sum("net"))}</div><div class="h">Rata-rata ${fmt(sum("net")/N)}</div></div>
+    <button class="card kpi warn" id="kpi-review"><div class="l">Perlu dicek</div><div class="v">${nr} karyawan</div><div class="h">Klik untuk menyaring daftar →</div></button>`;
+  document.getElementById("kpi-review").onclick = () => { Object.assign(S,{tab:"karyawan",tanda:"perlu_dicek",hal:1}); render(); document.getElementById("tabs").scrollIntoView({behavior:"smooth"}); };
+}
+
+function renderTabs(){
+  const storeCount = new Set(employees.flatMap(e=>e.alloc.map(a=>a[0]))).size + (employees.some(e=>!e.alloc.length)?1:0);
+  const T = [["karyawan","Karyawan",N],["komponen","Komponen Manual",employees.filter(e=>e.manual).length],["toko","Biaya per Toko",storeCount],["rekap","Rekap Rule",18]];
+  document.getElementById("tabs").innerHTML = T.map(([k,l,c]) =>
+    `<button class="tab" role="tab" aria-selected="${S.tab===k}" data-tab="${k}">${l}<span class="count">${c}</span></button>`).join("");
+  document.querySelectorAll("[data-tab]").forEach(b => b.onclick = () => { S.tab = b.dataset.tab; render(); });
+}
+
+function filtered(){
+  const q = S.q.trim().toLowerCase();
+  const rows = employees.filter(e =>
+    (!q || e.name.toLowerCase().includes(q) || e.nip.includes(q)) &&
+    (!S.dept || e.dept === S.dept) &&
+    (!S.toko || (S.toko === "none" ? !e.alloc.length : e.alloc.some(a => a[0] === S.toko))) &&
+    (!S.tanda || (S.tanda === "perlu_dicek" ? needsReview(e) : e.flags.includes(S.tanda))));
+  const byName = (a,b)=>a.name.localeCompare(b.name);
+  const by = {nama:byName, thp_desc:(a,b)=>b.net-a.net||byName(a,b), thp_asc:(a,b)=>a.net-b.net||byName(a,b), potongan_desc:(a,b)=>b.ded-a.ded||byName(a,b)};
+  return rows.sort(by[S.urut]);
+}
+function attendance(e){
+  if (e.legacy) return `<span class="sub" title="Slip format lama">–</span>`;
+  const parts = [`Hadir ${e.present}/${e.working}`];
+  if (e.late) parts.push(`<span class="bad">Terlambat ${e.late}×</span>`);
+  if (e.paid) parts.push(`Cuti ${e.paid}`);
+  if (e.unpaid) parts.push(`<span class="bad">Unpaid ${e.unpaid}</span>`);
+  return `<div class="att">${parts.join(" · ")}</div>`;
+}
+function pageList(cur,total){
+  if (total <= 7) return Array.from({length:total},(_,i)=>i+1);
+  const arr = [...new Set([1,total,cur-1,cur,cur+1].filter(p=>p>=1&&p<=total))].sort((a,b)=>a-b), out=[];
+  arr.forEach((p,i)=>{ if(i && p-arr[i-1]>1) out.push("…"); out.push(p); });
+  return out;
+}
+function renderEmployees(){
+  const rows = filtered();
+  const totalPages = Math.max(1, Math.ceil(rows.length / S.per));
+  S.hal = Math.min(Math.max(1, S.hal), totalPages);
+  const start = (S.hal - 1) * S.per, page = rows.slice(start, start + S.per);
+  const active = S.q || S.dept || S.toko || S.tanda;
+  const allStores = [HQ, WH, ...STORES];
+  const flagCount = k => k==="perlu_dicek" ? employees.filter(needsReview).length : employees.filter(e=>e.flags.includes(k)).length;
+  const sum = k => rows.reduce((a,e)=>a+e[k],0);
+  const opt = (v,l,cur) => `<option value="${v}" ${cur===v?"selected":""}>${l}</option>`;
+  const sortMark = k => S.urut===k ? " ↓" : "";
+  document.getElementById("panel").innerHTML = `
+  <section class="card">
+    <div class="toolbar">
+      <label class="search"><span aria-hidden="true">🔍</span><input id="q" placeholder="Cari nama atau NIP" value="${S.q}" aria-label="Cari nama atau NIP"></label>
+      <select class="sel" id="dept" aria-label="Departemen">${opt("","Semua departemen",S.dept)}${DEPTS.map(d=>opt(d,d,S.dept)).join("")}</select>
+      <select class="sel" id="toko" aria-label="Toko">${opt("","Semua toko",S.toko)}${opt("none","Tanpa toko",S.toko)}${allStores.map(s=>opt(s,s,S.toko)).join("")}</select>
+      <select class="sel" id="urut" aria-label="Urutkan">${opt("nama","Urut: Nama A-Z",S.urut)}${opt("thp_desc","Urut: THP terbesar",S.urut)}${opt("thp_asc","Urut: THP terkecil",S.urut)}${opt("potongan_desc","Urut: Potongan terbesar",S.urut)}</select>
+      ${active?`<button class="btn btn-sm btn-ghost" id="reset">Reset filter</button>`:""}
+    </div>
+    <div class="chips" role="group" aria-label="Saring tanda">
+      ${["perlu_dicek",...REVIEW,"terlambat","multi_toko","potongan"].map(k=>`<button class="chip" aria-pressed="${S.tanda===k}" data-flag="${k}">${k==="perlu_dicek"?"⚠ Perlu dicek":FLAG_LABEL[k]}<span class="n">${flagCount(k)}</span></button>`).join("")}
+    </div>
+    <div class="result">
+      <span>${rows.length ? `Menampilkan ${start+1}–${start+page.length} dari ${rows.length} karyawan` : "Tidak ada karyawan yang cocok"}${rows.length!==N?` · total run ${N}`:""}</span>
+      <label>Per halaman <select class="sel" id="per" style="padding:3px 8px">${[25,50,100].map(n=>`<option ${S.per===n?"selected":""}>${n}</option>`).join("")}</select></label>
+    </div>
+    <div class="tw">
+      <table>
+        <thead><tr>
+          <th class="sticky sortable" data-sort="nama">Karyawan${sortMark("nama")}</th><th>Toko</th><th>Kehadiran</th>
+          <th class="r">Pendapatan</th><th class="r sortable" data-sort="potongan_desc">Potongan${sortMark("potongan_desc")}</th><th class="r sortable" data-sort="thp_desc">Take home pay${sortMark("thp_desc")}</th><th class="r">Aksi</th>
+        </tr></thead>
+        <tbody>${page.length ? page.map(e=>`
+          <tr>
+            <td class="sticky"><div class="name">${e.name}</div><div class="sub">${e.nip} · ${e.dept} · ${e.pos}</div>
+              ${e.flags.length?`<div class="flags">${e.flags.map(f=>`<span class="flag ${REVIEW.includes(f)?"w":""}" ${f==="toko_tutup"?`title="${e.closure}"`:""}>${FLAG_LABEL[f]}</span>`).join("")}</div>`:""}</td>
+            <td>${e.alloc.length ? e.alloc.map(([s,p])=>`<span class="store" title="${s}">${s.split(" - ")[0]}${e.alloc.length>1?` <b>${p}%</b>`:""}</span>`).join("") : `<span class="sub">–</span>`}</td>
+            <td>${attendance(e)}</td>
+            <td class="r num">${fmt(e.gross)}${e.manual?`<div class="sub">termasuk manual ${fmt(e.manual)}</div>`:""}</td>
+            <td class="r num" style="color:${e.ded?"var(--red)":"var(--muted)"}">${fmt(e.ded)}</td>
+            <td class="r num" style="font-weight:800;color:${e.net>0?"var(--green)":"var(--red)"}">${fmt(e.net)}</td>
+            <td><div class="acts"><button class="btn btn-sm" data-edit="${e.id}">✎ Edit</button><button class="btn btn-sm" data-slip="${e.id}">Slip</button></div></td>
+          </tr>`).join("") : `<tr><td colspan="7" class="empty">Tidak ada karyawan yang cocok dengan filter ini.<br><button class="btn btn-sm" id="reset2" style="margin-top:8px">Reset filter</button></td></tr>`}
+        </tbody>
+        ${rows.length?`<tfoot><tr><td class="sticky">Total ${rows.length===N?"semua":"tersaring"} (${rows.length})</td><td></td><td></td><td class="r num">${fmt(sum("gross"))}</td><td class="r num" style="color:var(--red)">${fmt(sum("ded"))}</td><td class="r num" style="color:var(--green)">${fmt(sum("net"))}</td><td></td></tr></tfoot>`:""}
+      </table>
+    </div>
+    <div class="pager">
+      <span class="sub">Halaman ${S.hal} dari ${totalPages}</span>
+      <div class="pages">
+        <button class="pg" data-page="${S.hal-1}" ${S.hal===1?"disabled":""} aria-label="Halaman sebelumnya">‹</button>
+        ${pageList(S.hal,totalPages).map(p=>p==="…"?`<span style="padding:6px">…</span>`:`<button class="pg" data-page="${p}" ${p===S.hal?'aria-current="page"':""}>${p}</button>`).join("")}
+        <button class="pg" data-page="${S.hal+1}" ${S.hal===totalPages?"disabled":""} aria-label="Halaman berikutnya">›</button>
+      </div>
+    </div>
+  </section>`;
+  const q = document.getElementById("q");
+  q.oninput = () => { S.q = q.value; S.hal = 1; renderEmployees(); const n=document.getElementById("q"); n.focus(); n.setSelectionRange(n.value.length,n.value.length); };
+  ["dept","toko","urut"].forEach(id => document.getElementById(id).onchange = ev => { S[id] = ev.target.value; S.hal = 1; renderEmployees(); });
+  document.getElementById("per").onchange = ev => { S.per = +ev.target.value; S.hal = 1; renderEmployees(); };
+  document.querySelectorAll("[data-flag]").forEach(b => b.onclick = () => { S.tanda = S.tanda===b.dataset.flag ? "" : b.dataset.flag; S.hal = 1; renderEmployees(); });
+  document.querySelectorAll("[data-page]").forEach(b => b.onclick = () => { S.hal = +b.dataset.page; renderEmployees(); });
+  document.querySelectorAll("[data-sort]").forEach(b => b.onclick = () => { S.urut = b.dataset.sort; S.hal = 1; renderEmployees(); });
+  document.querySelectorAll("#reset,#reset2").forEach(b => b.onclick = () => { Object.assign(S,{q:"",dept:"",toko:"",tanda:"",hal:1}); renderEmployees(); });
+  document.querySelectorAll("[data-edit]").forEach(b => b.onclick = () => openEdit(employees[+b.dataset.edit]));
+  document.querySelectorAll("[data-slip]").forEach(b => b.onclick = () => toast("Membuka slip. Tombol Kembali di slip membawa ke filter dan halaman ini lagi."));
+}
+
+function renderManual(){
+  const rows = employees.filter(e=>e.manual).sort((a,b)=>a.name.localeCompare(b.name));
+  document.getElementById("panel").innerHTML = `
+  <section class="card">
+    <div class="split"><div><h2>Komponen manual</h2><p class="sub" style="margin:4px 0 0">Bonus, insentif, natura, denda, dan potongan lain di run ini. Masuk ke slip sesudah hitung ulang.</p></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-sm">Impor CSV</button><button class="btn btn-sm btn-primary" id="add">+ Tambah komponen</button></div></div>
+    <div class="toolbar"><label class="search"><span aria-hidden="true">🔍</span><input id="mq" placeholder="Cari nama atau NIP" aria-label="Cari komponen"></label>
+      <span class="badge b-muted">${rows.length} komponen</span><span class="badge b-muted">Pendapatan ${fmt(rows.reduce((a,e)=>a+e.manual,0))}</span><span class="badge b-muted">Potongan Rp 0</span></div>
+    <div class="tw"><table style="min-width:640px"><thead><tr><th>Karyawan</th><th>Komponen</th><th class="r">Nominal</th><th>Catatan</th><th class="r">Aksi</th></tr></thead>
+    <tbody id="mrows"></tbody></table></div>
+  </section>`;
+  const paint = q => document.getElementById("mrows").innerHTML = rows.filter(e=>!q||e.name.toLowerCase().includes(q)||e.nip.includes(q)).map(e=>`<tr><td><div class="name">${e.name}</div><div class="sub">${e.nip}</div></td><td>${e.comp}</td><td class="r num">${fmt(e.manual)}</td><td class="sub">${e.note||"–"}</td><td class="r"><button class="btn btn-sm btn-ghost" style="color:var(--red)">Hapus</button></td></tr>`).join("") || `<tr><td colspan="5" class="empty">Tidak ada komponen yang cocok.</td></tr>`;
+  paint("");
+  document.getElementById("mq").oninput = ev => paint(ev.target.value.trim().toLowerCase());
+  document.getElementById("add").onclick = () => open("dlg-add");
+}
+
+let storeSort = {k:"cost",dir:-1};
+function renderStores(){
+  const m = new Map();
+  employees.forEach(e => { const list = e.alloc.length ? e.alloc : [["Tanpa toko",100]];
+    list.forEach(([s,p]) => { const r = m.get(s) || {s,emp:0,fte:0,cost:0}; r.emp++; r.fte += p/100; r.cost += e.gross*p/100; m.set(s,r); }); });
+  const rows = [...m.values()].sort((a,b)=> storeSort.k==="s" ? a.s.localeCompare(b.s)*storeSort.dir : (a[storeSort.k]-b[storeSort.k])*storeSort.dir);
+  const tot = rows.reduce((a,r)=>({emp:a.emp+r.emp,fte:a.fte+r.fte,cost:a.cost+r.cost}),{emp:0,fte:0,cost:0});
+  const maxCost = Math.max(...rows.map(r=>r.cost));
+  const none = employees.filter(e=>!e.alloc.length);
+  const arrow = k => storeSort.k===k ? (storeSort.dir<0?" ↓":" ↑") : "";
+  document.getElementById("panel").innerHTML = `
+  <section class="card">
+    <div class="split"><h2>Biaya gaji per toko</h2><a href="#" class="sub" style="color:var(--primary);font-weight:700">Laporan lengkap →</a></div>
+    ${none.length?`<div class="warnbox"><span aria-hidden="true">⚠</span><span><b>${none.length} karyawan tanpa toko</b> (${none.map(e=>e.name).join(", ")}). Biayanya masuk "Tanpa toko". Atur di Penempatan Karyawan, lalu hitung ulang.</span></div>`:""}
+    <div class="tw"><table style="min-width:620px">
+      <thead><tr><th class="sortable" data-ss="s">Toko${arrow("s")}</th><th class="r sortable" data-ss="emp">Karyawan${arrow("emp")}</th><th class="r sortable" data-ss="fte">FTE${arrow("fte")}</th><th class="r sortable" data-ss="cost">Biaya gaji${arrow("cost")}</th><th class="r">Porsi</th></tr></thead>
+      <tbody>${rows.map(r=>`<tr><td class="name" style="${r.s==="Tanpa toko"?"color:var(--amber)":""}">${r.s}</td><td class="r num">${r.emp}</td><td class="r num">${r.fte.toLocaleString("id-ID",{maximumFractionDigits:2})}</td><td class="r num">${fmt(r.cost)}</td>
+        <td class="r" style="width:170px"><div style="display:flex;align-items:center;gap:6px;justify-content:flex-end"><span class="sub">${(r.cost/tot.cost*100).toFixed(1)}%</span><span style="display:inline-block;width:70px;height:6px;border-radius:3px;background:#f1e8e2"><span style="display:block;height:6px;border-radius:3px;background:var(--primary);width:${r.cost/maxCost*100}%"></span></span></div></td></tr>`).join("")}</tbody>
+      <tfoot><tr><td>Total ${rows.length} toko</td><td class="r num">${tot.emp}</td><td class="r num">${tot.fte.toLocaleString("id-ID",{maximumFractionDigits:2})}</td><td class="r num">${fmt(tot.cost)}</td><td></td></tr></tfoot>
+    </table></div>
+    <p class="sub" style="padding:10px 14px">Kolom beban perusahaan tidak tampil karena semuanya Rp 0 (BPJS nonaktif). Karyawan di lebih dari 1 toko terhitung di setiap tokonya.</p>
+  </section>`;
+  document.querySelectorAll("[data-ss]").forEach(h => h.onclick = () => { const k=h.dataset.ss; storeSort = {k, dir: storeSort.k===k ? -storeSort.dir : (k==="s"?1:-1)}; renderStores(); });
+}
+
+function renderRecap(){
+  const L = ["Gaji pokok","Tunjangan jabatan","Tunjangan makan","Tunjangan transport","Tunjangan kesehatan","Lembur","Insentif","Bonus","Natura","Total pendapatan","Potongan izin pribadi","Potongan sakit","Potongan cuti tanpa bayaran","Potongan terlambat","Denda","Cicilan kasbon","Total potongan","Take home pay"];
+  const g = employees.reduce((a,e)=>a+e.gross,0), d = employees.reduce((a,e)=>a+e.ded,0);
+  const vals = [g*.72,g*.05,g*.09,g*.09,0,g*.01,g*.02,g*.02,0,g,d*.2,d*.1,d*.4,d*.2,0,d*.1,d,g-d];
+  document.getElementById("panel").innerHTML = `<section class="card"><div class="split"><h2>Rekap per baris slip</h2><span class="sub">Total ${N} slip</span></div>
+    <div class="tw"><table style="min-width:420px"><thead><tr><th>Baris</th><th class="r">Total</th></tr></thead>
+    <tbody>${L.map((l,i)=>`<tr style="${l.startsWith("Total")||l==="Take home pay"?"font-weight:800;background:#fbf4ee":""}"><td>${l}</td><td class="r num">${fmt(vals[i])}</td></tr>`).join("")}</tbody></table></div></section>`;
+}
+
+function open(id){ document.getElementById(id).classList.add("open"); }
+function openEdit(e){
+  document.getElementById("edit-title").textContent = "Edit payroll · " + e.name;
+  document.getElementById("edit-sub").textContent = `NIP ${e.nip} · ${e.dept}. Ubah komponen manual, lalu hitung ulang slip karyawan ini saja.`;
+  document.getElementById("edit-summary").innerHTML = `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
+    <div class="card" style="padding:8px 10px"><div class="sub">Pendapatan</div><b>${fmt(e.gross)}</b></div>
+    <div class="card" style="padding:8px 10px"><div class="sub">Potongan</div><b style="color:var(--red)">${fmt(e.ded)}</b></div>
+    <div class="card" style="padding:8px 10px"><div class="sub">THP</div><b style="color:var(--green)">${fmt(e.net)}</b></div></div>
+    <p class="sub" style="margin:8px 0 0">${e.legacy?"Slip format lama":`Hadir ${e.present}/${e.working} hari · terlambat ${e.late}× · cuti ${e.paid} · unpaid ${e.unpaid}`}</p>`;
+  open("dlg-edit");
+}
+document.getElementById("add-emp").innerHTML = employees.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(e=>`<option>${e.name} · ${e.nip}</option>`).join("");
+document.querySelectorAll(".overlay").forEach(o => o.addEventListener("click", ev => {
+  const t = ev.target.closest("[data-close]");
+  if (ev.target === o || t) { o.classList.remove("open"); if (t && t.dataset.toast) toast(t.dataset.toast); }
+}));
+document.addEventListener("keydown", ev => { if (ev.key === "Escape") document.querySelectorAll(".overlay.open").forEach(o=>o.classList.remove("open")); });
+document.getElementById("recalc").onclick = () => toast("Menghitung ulang 237 karyawan…");
+let tt; function toast(m){ const t=document.getElementById("toast"); t.textContent=m; t.style.display="block"; clearTimeout(tt); tt=setTimeout(()=>t.style.display="none",2600); }
+
+function render(){
+  renderTabs();
+  ({karyawan:renderEmployees,komponen:renderManual,toko:renderStores,rekap:renderRecap})[S.tab]();
+}
+renderKpis(); render();
+</script>
+</body>
+</html>

@@ -121,6 +121,16 @@ deploying-dev · ready-for-qa · blocked · done).
 | [EPIC-105](./EPIC-105-risiko-data-minor.md) | Tutup Risiko Data dari Minor yang Ditunda (`MODULE-HRIS`, `MODULE-PROCUREMENT`) | ready-for-qa | 2026-11-13 |
 | [EPIC-106](./EPIC-106-struktur-bisnis-paddy-group.md) | Struktur Bisnis Paddy Group — Satu Holding, Dua Perusahaan Sejajar (`MODULE-CONFIGURATION`, lintas modul) | ready-for-qa | 2026-11-12 |
 | [EPIC-107](./EPIC-107-pindah-toko-massal.md) | Kode Toko Massal + Pindah Toko Karyawan Massal (`MODULE-HRIS`, `MODULE-CONFIGURATION`) | ready-for-qa | 2026-11-13 |
+| [EPIC-117](./EPIC-117-paket-perbaikan-pra-rilis.md) | Paket Perbaikan Pra-Rilis (`MODULE-HRIS`, `MODULE-PAYROLL`) | ready-for-qa | 2026-11-18 |
+| [EPIC-118](./EPIC-118-slip-gaji-password-edit-payroll.md) | Slip Gaji Ringkas, Password ESS, Edit Payroll per Karyawan (`MODULE-PAYROLL`) | ready-for-qa | 2026-11-20 |
+| [EPIC-119](./EPIC-119-gaji-hq-cuti-ultah-koreksi-terlambat.md) | Gaji HQ Tidak Dibagi, Cuti Ulang Tahun 2 Bulan, Koreksi Terlambat Bungsu (`MODULE-HRIS`, `MODULE-PAYROLL`) | ready-for-qa | 2026-11-20 |
+| [EPIC-120](./EPIC-120-redesign-detail-run-payroll.md) | Redesign Halaman Detail Run Payroll (`MODULE-PAYROLL`) | ready-for-qa | 2026-11-20 |
+| [EPIC-121](./EPIC-121-hr-batalkan-cuti-disetujui.md) | HR Membatalkan Cuti/Izin yang Sudah Disetujui (`MODULE-HRIS`) | ready-for-qa | 2026-11-20 |
+| [EPIC-122](./EPIC-122-pembulatan-jam-lembur.md) | Pembulatan Jam Lembur per Pengajuan (`MODULE-PAYROLL`) | ready-for-qa | 2026-11-20 |
+| [EPIC-123](./EPIC-123-lembur-batas-dan-tampilan-dibulatkan.md) | Batas, Keterangan, dan Tampilan Lembur Memakai Jam Dibulatkan (`MODULE-HRIS`) | ready-for-qa | 2026-11-20 |
+| [EPIC-124](./EPIC-124-slip-izin-sakit-pribadi-tunjangan-penuh.md) | Slip Izin Sakit & Izin Pribadi Sesuai Hitungan HR, Tunjangan Penuh (`MODULE-PAYROLL`) | ready-for-qa | 2026-11-20 |
+| [EPIC-125](./EPIC-125-pengajuan-sampai-closing.md) | Pengajuan Karyawan Terbuka sampai Closing Periode (`MODULE-HRIS`) | ready-for-qa | 2026-11-21 |
+| [EPIC-126](./EPIC-126-list-lembur-tidak-terpotong.md) | Semua List Lembur Tampil Utuh, dengan Cari dan Halaman (`MODULE-HRIS`) | ready-for-qa | 2026-11-21 |
 
 Aturan:
 - Epic + registry ini adalah sumber kebenaran status pekerjaan (canonical).

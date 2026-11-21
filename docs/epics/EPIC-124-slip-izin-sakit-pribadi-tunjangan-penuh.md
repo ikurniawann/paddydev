@@ -1,0 +1,71 @@
+# EPIC-124: Slip Izin Sakit & Izin Pribadi Sesuai Hitungan HR, Tunjangan Penuh (`MODULE-PAYROLL`)
+
+status: ready-for-qa
+environment: dev
+retries: 0
+
+## Goal
+Slip gaji menampilkan Tunjangan Transport dan Makan penuh, lalu memotongnya lewat baris Izin Sakit dan Izin Pribadi, persis seperti sheet manual HR. Sebelumnya tunjangan `per_day` "hilang" lewat hari hadir, sehingga potongan di slip lebih kecil dari hitungan HR dan HR bertanya dari mana angka 78.261.
+
+Rencana: [2026-11-20-slip-izin-sakit-pribadi-tunjangan-penuh.md](../superpowers/plans/2026-11-20-slip-izin-sakit-pribadi-tunjangan-penuh.md).
+
+Kasus acuan: Shafa Triya Auliya, November 2026. Gaji pokok 1.800.000, makan 600.000, transport 600.000 (keduanya `per_day`), 23 hari terjadwal, hadir 20, sakit 2, Izin Pribadi 1. Hitungan HR: Izin Sakit 104.348, Izin Pribadi 130.435, THP 2.765.217. Slip lama: transport dan makan masing-masing 521.739, Izin Pribadi 78.261, THP 2.765.217.
+
+## Keputusan user (20-11-2026)
+| No | Pertanyaan | Keputusan |
+| --- | --- | --- |
+| Izin Sakit | Apa yang dipotong | Hanya Tunjangan Transport + Makan per hari. Kutipan: "sakit motong tunjangan transport dan makan aja" |
+| Izin Pribadi | Apa yang dipotong | 1 hari THP (Gaji Pokok + Jabatan + Transport + Makan). Subsidi BPJS tidak dipotong. Kutipan: "jika ada izin pribadi yang dipotong dari THP tp untuk subsidi BPJS tidak dipotong ya" |
+| K1 | Intern yang Izin Pribadi | Dibayar penuh, termasuk transport + makan hari itu. Kutipan: "Yes, pay in full" |
+| Ruling R2 | Batas THP | Berubah hanya karena pembulatan (≤ Rp3); hasil golden: selisih 0 |
+
+## Temuan
+- Hari sakit dan hari Izin Pribadi tidak dihitung hadir, jadi transport/makan `per_day` ikut berkurang di baris tunjangan. Baris potongan hanya mengambil bagian komponen `flat`.
+- Akibatnya baris Izin Pribadi (78.261 = 1.800.000 / 23) tampak jauh di bawah hitungan manual (130.435), padahal THP akhir sama.
+
+## Perubahan
+- Hari sakit dan hari Izin Pribadi yang dipotong dihitung sebagai hari tunjangan untuk komponen `per_day`; baris Izin Sakit = (Transport + Makan) per hari × hari sakit; baris Izin Pribadi = 1 hari dari 4 komponen untuk semua mode.
+- Subsidi BPJS tidak dipotong dan tidak ikut hari tunjangan. Cuti Melahirkan tetap full paid.
+- Bruto slip naik sebesar pergeseran tunjangan. Kolom baru `leave_allowance_shift` (per slip dan per alokasi toko) menyimpan angkanya. Dasar PPh21 (fallback YTD TER Desember) dan jurnal `PAYROLL_ACCRUAL` (perusahaan dan per toko) memakai bruto dikurangi pergeseran, jadi pajak dan jurnal sama dengan sebelumnya.
+- Bruto di slip, total run, dan kolom "Gaji kotor" per toko memakai bruto baru (termasuk pergeseran). Jurnal akrual, YTD Desember, dan "Biaya tenaga kerja" per toko (`labor_cost` = bruto − pergeseran + beban perusahaan) tidak memuat pergeseran, jadi tetap cocok dengan buku. Akibatnya di laporan "Biaya Gaji per Toko", bruto + beban perusahaan lebih besar dari biaya tenaga kerja sebesar pergeseran (ada catatan kaki di UI).
+
+## Tasks
+- Task 1: kalkulator (erp-paddy `5c24eab`).
+- Task 1b (ruling R1): persist `leave_allowance_shift`, YTD Desember dan jurnal akrual memakai bruto − pergeseran (erp-paddy `17d598d`).
+- Task 2: golden 17 kasus dan bukti invarian (erp-paddy `d96014a`).
+- Task 3: dokumen acuan dan epic ini (repo paddydev).
+
+## Acceptance Criteria
+- Slip Shafa: Transport 600.000, Makan 600.000, Potongan Izin Sakit 104.348, Potongan Izin Pribadi 130.435, THP 2.765.217 (sama dengan sheet manual HR).
+- Izin Sakit hanya memotong transport + makan; Subsidi BPJS tidak terpotong oleh Izin Sakit maupun Izin Pribadi.
+- PPh21, `TaxableIncome`, DPP TER, dan BPJS sama persis dengan sebelum perubahan.
+- THP berubah hanya karena pembulatan (≤ Rp3), kecuali intern K1 (+ transport + makan untuk hari Izin Pribadi).
+- Pengaturan `sick_leave_deduction` / `personal_leave_deduction` off: hari itu tidak menjadi hari tunjangan berbayar.
+- Mode `flat` tidak berubah. Jurnal `PAYROLL_ACCRUAL` sama dengan sebelumnya.
+
+## Automation Log
+- 20-11-2026: keputusan Izin Sakit, Izin Pribadi, Subsidi BPJS, dan K1 dikonfirmasi user (kutipan di tabel keputusan). Rencana ditulis.
+- 20-11-2026: implementasi di erp-paddy branch `fix/epic124-slip-izin-tunjangan-penuh`: Task 1 `5c24eab` (kalkulator), Task 1b `17d598d` (kolom `leave_allowance_shift` di `hris.payroll_details` dan `hris.payroll_detail_allocations`, migrasi `20261221090000_payroll_leave_allowance_shift.sql`), Task 2 `d96014a` (golden). Ruling R1: review Task 1 menemukan YTD TER Desember dan jurnal `PAYROLL_ACCRUAL` ikut naik oleh pergeseran, maka Task 1b menyimpan pergeseran dan keduanya memakai bruto − pergeseran. Review tiap task: Approved, tanpa Critical/Important tersisa.
+- 20-11-2026: invarian golden (17 kasus; 6 baru: TER, annualized, campuran, intern, `daily`, setting off) dibandingkan dengan kalkulator `d6d90ec`: PPh21, TaxableIncome, DPP, BPJS TK dan Kes identik di semua kasus; bruto baru − pergeseran = bruto lama; Δnet 0 di semua kasus kecuali intern K1 (+52.174 = transport + makan sehari); 11 kasus lama hanya mendapat kunci baru bernilai 0. Ruling R2: batas dokumen ≤ Rp3 (tiga pembulatan terpisah), hasil teramati 0.
+- 20-11-2026: PR ke development: [erp-paddy#37](https://github.com/wit-id-indonesia/erp-paddy/pull/37) (fix wave review akhir `0d0b105` ikut di PR ini). Branch sudah di-rebase ke `origin/development` 778d0bd (EPIC-123); hash commit di atas adalah hash setelah rebase, tes payroll dan akuntansi lulus tanpa DB. Catatan minor yang ditunda: komentar usang di `golden_test.go`, tes integrasi acuan belum menegaskan net/PPh, pergeseran multi-toko non-nol baru diuji di domain.
+- 20-11-2026 20.55 WIB: atas perintah user ("merge PR #37 lalu deploy ke staging"), PR #37 di-merge ke `development` (8fb548b). Backup `/mnt/hdd1/backup/paddydev/staging-db-before-epic124-20261120-205459.dump` (mode 600), deploy staging image `local-20261120-205512` (sebelumnya `local-20261120-183733`), 1 migrasi (`20261221090000_payroll_leave_allowance_shift.sql`), verify 12.395 objek 0 selisih, `/api/ready` 200; kolom `leave_allowance_shift` ada di kedua tabel. Run payroll November di staging masih `draft` dan belum dihitung ulang: QA HR menghitung ulang run itu lalu membandingkan slip Shafa Triya Auliya dengan sheet manual. Production belum; rilis berikutnya butuh gladi ulang.
+- 20-11-2026 21.38 WIB: gladi atas izin user ("ya siapkan") di salinan production (`/mnt/hdd1/backup/paddydev/prod-copy-gladi-epic124-20261120-213847.dump`, mode 600; satu-satunya perintah di production adalah `pg_dump`). Run November (draft, 285 slip) dihitung dengan kode production 778d0bd lalu 8fb548b (+ migrasi `20261221090000`) dalam transaksi yang di-rollback; kode lama cocok 285/285 dengan slip production. Hasil: 40 slip berubah (25 sakit, 13 Izin Pribadi, 2 keduanya), THP berubah ±1–2 rupiah di 15 slip (total −Rp6), PPh/DPP/BPJS identik 285/285 (setting production PPh & BPJS off; diuji juga dengan PPh/BPJS on), bruto lama = bruto baru − shift 285/285, total biaya tenaga kerja sama (938.775.340). Shafa Triya Auliya cocok dengan sheet HR (transport/makan 600.000, Izin Sakit 104.348, Izin Pribadi 130.435, THP 2.765.217). Temuan kecil: 1 karyawan dua toko memindahkan Rp0,01 biaya tenaga kerja antar toko (pembagian kolom bruto dan shift terpisah); total run sama. Tidak ada intern dengan Izin Pribadi di November. Rekomendasi: go.
+- 20-11-2026: atas perintah user ("Fix it first"), selisih Rp0,01 antar toko diperbaiki: pergeseran per toko = bruto toko − bagian toko dari bruto lama, jadi bruto − pergeseran per toko sama sampai sen dengan pembagian lama. Commit 2090a39, PR [erp-paddy#38](https://github.com/wit-id-indonesia/erp-paddy/pull/38) ke development (belum merge). Tes `TestSplitColumnsKeepsPreShiftGrossPerStore` 20.000 kasus acak RED→GREEN; review lulus.
+- 20-11-2026 22.36 WIB: atas perintah user ("Merge + staging"), PR #38 di-merge ke `development` (5516b16). Backup `/mnt/hdd1/backup/paddydev/staging-db-before-epic124b-20261120-223556.dump` (mode 600), staging image `local-20261120-223604`, `/api/ready` 200, tanpa migrasi baru. Production belum; rilis production berikutnya butuh gladi ulang dari 5516b16 dan izin jam rilis.
+- 20-11-2026 22.46 WIB: gladi ulang kandidat 5516b16 atas izin user ("Yes, prepare it") di salinan production `/mnt/hdd1/backup/paddydev/prod-copy-gladi-epic124b-20261120-224614.dump` (mode 600; di production hanya `pg_dump`). Kode lama 778d0bd cocok 285/285 slip dan 317/317 alokasi dengan data production. Migrasi `20261221090000` apply + verify 12.395 objek 0 selisih. Invarian lulus dengan setting production (PPh/BPJS off) dan PPh/BPJS on: PPh, DPP, BPJS, Tapera, subsidi, YTD Desember identik 285/285; bruto − pergeseran per alokasi sama sampai sen 317/317 (termasuk 7 slip multi-toko); biaya tenaga kerja 39 toko dan payload jurnal akrual per perusahaan/toko sama. 40 slip berubah, THP ±2 di 15 slip (total −Rp6). Shafa cocok sheet HR. Smoke di jaringan Docker `--internal`: image baru 223604 sehat (ready, login, health 200, 0 respons 5xx); rollback image lama 183733 di skema baru juga sehat. Verdict: go.
+- Langkah rilis production EPIC-124 (menunggu jam dari user):
+  1. Backup DB production (`ssh paddy-prod`, `pg_dump` ke `~/backups/prod-db-before-rilis-epic124-<ts>.dump`) dan salinan `~/paddydev-src`.
+  2. PR `development` → `production` (tree 5516b16), merge.
+  3. `git archive origin/production` → rsync `--delete` ke `paddydev-src` (kecuali `node_modules`/`.next`), lalu `bootstrap.sh` + `deploy-paddydev.sh` (`PADDYDEV_URL=https://paddyadorable.biz.id`); migrasi jalan sebelum container baru; tunggu `EXIT=0`.
+  4. Verifikasi: image baru, `/api/ready` 200, kolom `leave_allowance_shift` ada, verify 0 selisih.
+  5. HR menghitung ulang run payroll November (draft) dan mengecek slip Shafa Triya Auliya.
+  6. Rollback bila perlu: deploy ulang dari salinan `paddydev-src` sebelum rilis (image lama terbukti jalan di skema baru), lalu hitung ulang run draft sebelum ditandai dibayar.
+- **20-11-2026 23.09–23.12 WIB: rilis production ke-5 (EPIC-124) SUKSES**, atas perintah user ("Release now"). Backup `~/backups/prod-db-before-rilis-epic124-20261120-2309.dump` (mode 600) dan salinan `~/paddydev-src.before-rilis-epic124-20261120-2309`. PR #39 development→production di-merge (cb75813, tree = 5516b16). rsync `git archive origin/production` (`--delete`, kecuali node_modules/.next): 17 berkas berubah, 0 dihapus. Deploy `local-20261120-231050`, 1 migrasi (`20261221090000`), verify 12.395 objek 0 selisih, `/api/ready` dan `/login` 200, kedua container healthy, 0 error di log API. Run payroll November masih `draft` (terakhir dihitung 23.09, sebelum rilis): HR perlu menghitung ulang agar slip menampilkan pembagian baru, lalu cek slip Shafa Triya Auliya.
+- 20-11-2026: Review akhir seluruh branch: tanpa Critical, siap merge dengan perbaikan. Diperbaiki: (1) `labor_cost` per toko (laporan Biaya Gaji per Toko, ekspor CSV/XLSX, ringkasan toko di halaman run) = bruto − pergeseran + beban perusahaan, kolom bruto tetap bruto slip, catatan kaki di UI, tes integrasi menegaskan angkanya; (2) teks bantuan pengaturan Izin Sakit/Izin Pribadi di UI memakai aturan baru; (3) komentar usang `golden_test.go`; (4) dokumen: kata-kata baris Izin Sakit (tanpa pembagian ganda), baris 19/20 menyebut intern (K1), langkah rilis menambah urutan migrasi dan catatan rollback. Minor yang ditunda: tes integrasi acuan belum menegaskan net/PPh (sudah dijaga tes domain, golden, dan uji properti 200.000 kasus, selisih net maks Rp2); pergeseran multi-toko non-nol baru diuji di domain; gaya COALESCE di `branchCosts`. `allowance_days` tetap menyimpan hari hadir saja.
+- Langkah rilis (setelah PR disetujui):
+  1. Merge PR ke `development`.
+  2. Gladi di salinan production. Migrasi `20261221090000_payroll_leave_allowance_shift.sql` jalan bersama deploy (aditif, default 0). Migrasi harus diterapkan sebelum API baru dijalankan: `tools/deploy-paddydev.sh` sudah berurutan begitu; pada deploy manual jalankan migrasi dulu, karena API baru tanpa kolom itu gagal (500) saat hitung, saat tandai dibayar, dan saat YTD Desember.
+  Rollback: jika biner lama dipulihkan, hitung ulang run draft sebelum ditandai dibayar. Slip yang dihitung biner baru membawa bruto lebih besar, yang akan dibukukan biner lama ke jurnal akrual dan fallback YTD.
+  3. Setelah rilis, HR menghitung ulang run payroll November yang masih draft supaya slip menampilkan pembagian baru. Run final/dibayar tidak diubah: pergeseran tersimpannya 0, jadi YTD pajak dan jurnal mereka tetap.
+  4. QA HR membandingkan slip Shafa Triya Auliya dengan sheet manual (Izin Sakit 104.348, Izin Pribadi 130.435, THP 2.765.217).
+  Rilis digabung dengan EPIC-118 s.d. 123.

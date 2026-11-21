@@ -78,3 +78,4 @@ Rencana: `docs/superpowers/plans/2026-11-05-lembur-lebih-4-jam.md`.
   - Data demo dan berkas dihapus.
 
 - 2026-11-09 13.18 WIB: **LIVE production** lewat rilis gabungan PR #86 (main `bd9ff4db`, image `local-20261109-130944`; 10 migrasi EPIC-087..095, verify 0 berbeda). Backup `~/backups/prod-db-before-rilis-20261109-125740.dump` (VPS + lokal); rollback image `local-20261103-150738`, source lama `~/paddydev-src.before-rilis-20261109-130930`. Verifikasi read-only: `/login` dan `/api/ready` 200, container sehat, log API bersih. Sisa: QA HR di production.
+- 13-11-2026: **direvisi EPIC-109** — batas periode turun dari 72 ke 32 jam/periode (permintaan user 13-11); 18 jam/minggu tetap.

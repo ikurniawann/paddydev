@@ -110,3 +110,4 @@ Rencana: `docs/superpowers/plans/2026-11-03-ketentuan-lembur.md`.
     - md5 saldo sama;
     - `/login` dan `/api/ready` 200.
   - Runner: `~/Desktop/paddydev-backups/prod084/run.sh`.
+- 13-11-2026: **direvisi EPIC-109** — batas periode turun dari 72 ke 32 jam/periode (permintaan user 13-11); 18 jam/minggu tetap.
