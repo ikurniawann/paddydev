@@ -26,9 +26,16 @@ Kasus acuan: 21-11-2026 seorang karyawan mengajukan koreksi absen untuk 06-11-20
 - [x] Aturan lain tetap: Cuti Tahunan H-3, Cuti Ibadah H-30, Sakit hari H, lembur milik sendiri H+1, HR untuk karyawan lain bebas H-n.
 - [ ] QA HR di production setelah rilis.
 
+## Catatan rilis untuk HR
+- Karyawan sekarang bisa mengajukan koreksi absen, cuti/izin, dan lembur untuk periode lalu sampai **akhir hari closing** (contoh periode 21 Okt–20 Nov: sampai 22 Nov).
+- Pengajuan yang masuk di hari closing perlu diputus **sebelum hari closing berakhir**:
+  - Pengajuan absensi yang masih pending saat periode tertutup tidak bisa disetujui (409 "sudah di-closing"); hari itu tetap kosong untuk payroll kecuali HR menolaknya atau membuka ulang periode.
+  - Cuti/lembur yang disetujui sesudah closing tidak ikut ke run payroll yang sudah diproses. Run hanya bisa dihitung ulang selama masih **draft**; kalau sudah tidak draft, hapus dan buat ulang run sebelum ditandai dibayar, atau sesuaikan di periode berikutnya.
+
 ## Follow-up
-- Approve cuti/lembur untuk tanggal di periode yang sudah closed belum dijaga (sudah begitu sebelum EPIC-125). Karena pengajuan kini bisa masuk sampai hari closing, kasus ini lebih mungkin terjadi: periksa pengajuan pending sebelum closing, lalu hitung ulang payroll sebelum ditandai dibayar.
+- Approve cuti/lembur untuk tanggal di periode yang sudah closed belum dijaga (sudah begitu sebelum EPIC-125). Karena pengajuan kini bisa masuk sampai hari closing, kasus ini lebih mungkin terjadi. Pilihan perbaikan berikutnya: tolak approve di periode closed, atau ingatkan HR (notifikasi/ringkasan pengajuan pending) sebelum closing otomatis.
 
 ## Automation Log
 - 21-11-2026: plan ditulis atas permintaan user; eksekusi native ("Native, fast"). Kode `erp-paddy` branch `fix/epic125-pengajuan-sampai-closing`, commit 3a29b47. Tes paket `hris` di DB tes sementara: baseline lulus, `TestSubmissionOpenUntilClosing` RED (409 "sudah lewat cut off") → GREEN, paket lulus. Tanpa migrasi.
+- Review akhir (opus): siap merge dengan perbaikan dokumen; 0 Critical, 1 Important (catatan follow-up salah soal hitung ulang payroll + perlu catatan rilis HR) diperbaiki di dokumen ini; komentar usang `leaves.go` diperbaiki (b822882); teks aturan lama di K-19, EPIC-084 R6 dan judul ES-13 diperbarui. Minor ditunda: tes cuti di hari closing dan closing manual belum ada.
 - Langkah rilis: PR ke `development`, deploy staging, gladi di salinan production, rilis production atas izin user. Setelah rilis tidak ada langkah data.

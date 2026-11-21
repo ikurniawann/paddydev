@@ -112,7 +112,7 @@ Acuan:
     - tanpa `end_date` (PKWTT) → `probation_end_date` kosong atau < ulang tahun;
     - tanpa kontrak → lolos hanya bila `employment_status = 'permanent'`.
 - **R5 Izin Pribadi.** Ditolak bila sisa cuti tahunan yang tersedia pada tanggal mulai ≥ 1 hari: "Izin Pribadi hanya untuk yang belum punya hak cuti atau cutinya habis — sisa Cuti Tahunan Anda {n} hari". Kuota 3/bulan tetap.
-- **R6 Lembur H+1 (K-19).** Lembur milik sendiri ditolak bila hari ini (WIB) > tanggal lembur + 1: "Lembur diajukan paling lambat H+1 ({tanggal})". Aturan EPIC-066 (input setelah selesai) tetap. Bila H+1 jatuh sesudah cut off, kunci R3 menang (payroll final); HR tetap bisa menginput lewat jalur HR.
+- **R6 Lembur H+1 (K-19).** Lembur milik sendiri ditolak bila hari ini (WIB) > tanggal lembur + 1: "Lembur diajukan paling lambat H+1 ({tanggal})". Aturan EPIC-066 (input setelah selesai) tetap. Bila H+1 jatuh sesudah periode di-closing, kunci periode menang (EPIC-125 mengganti R3); HR tetap bisa menginput lewat jalur HR.
 - **R7 Prorata cuti tahunan (tahun ≥ 2027).** A = join + 12 bulan.
   - A.tahun > Y → 0.
   - A.tahun < Y → 12.
