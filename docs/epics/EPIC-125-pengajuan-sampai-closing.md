@@ -1,6 +1,6 @@
 # EPIC-125: Pengajuan Karyawan Terbuka sampai Closing Periode (`MODULE-HRIS`)
 
-status: review
+status: ready-for-qa
 environment: dev
 retries: 0
 
@@ -40,3 +40,5 @@ Kasus acuan: 21-11-2026 seorang karyawan mengajukan koreksi absen untuk 06-11-20
 - Review akhir (opus): siap merge dengan perbaikan dokumen; 0 Critical, 1 Important (catatan follow-up salah soal hitung ulang payroll + perlu catatan rilis HR) diperbaiki di dokumen ini; komentar usang `leaves.go` diperbaiki (b822882); teks aturan lama di K-19, EPIC-084 R6 dan judul ES-13 diperbarui. Minor ditunda: tes cuti di hari closing dan closing manual belum ada.
 - Langkah rilis: PR ke `development`, deploy staging, gladi di salinan production, rilis production atas izin user. Setelah rilis tidak ada langkah data.
 - 21-11-2026 09.20 WIB: PR [erp-paddy#40](https://github.com/wit-id-indonesia/erp-paddy/pull/40) di-merge ke `development` (bdd86d7). Backup `/mnt/hdd1/backup/paddydev/staging-db-before-epic125-20261121-091958.dump` (mode 600), staging image `local-20261121-092008`, `/api/ready` 200, tanpa migrasi. Production belum.
+- 21-11-2026 09.39 WIB: gladi atas izin user ("Rehearse + release") di salinan production `/mnt/hdd1/backup/paddydev/prod-copy-gladi-epic125-20261121-093902.dump` (mode 600; di production hanya `pg_dump`): 0 migrasi tertunda, verify 12.395 objek 0 selisih; koreksi absen 06-11 ditolak kode lama ("sudah lewat cut off") dan diterima kode baru (201, pending); image baru 092008 dan rollback ke image lama 223604 sehat. Verdict: go.
+- **21-11-2026 09.43–09.46 WIB: rilis production ke-6 (EPIC-125) SUKSES.** Backup `~/backups/prod-db-before-rilis-epic125-20261121-0943.dump` (mode 600) dan salinan `~/paddydev-src.before-rilis-epic125-20261121-0943`. PR #41 development→production di-merge (6462b08, tree = bdd86d7). rsync: 5 berkas berubah, 0 dihapus. Deploy `local-20261121-094459`, tanpa migrasi, verify 0 selisih, `/api/ready` dan `/login` 200, kedua container healthy, 0 error di log API. Periode November (closing 22-11) kini menerima pengajuan karyawan sampai akhir hari closing.
